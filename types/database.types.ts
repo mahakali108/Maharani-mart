@@ -1057,6 +1057,10 @@ export interface Database {
         Args: { p_product_id: string; p_retailer_id: string };
         Returns: number;
       };
+      is_phone_registered: {
+        Args: { p_phone: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       user_role: UserRoleEnum;
