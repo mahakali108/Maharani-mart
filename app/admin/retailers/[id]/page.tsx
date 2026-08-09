@@ -6,7 +6,7 @@ import { RetailerRowActions } from '@/components/admin/retailer-row-actions';
 import { RetailerAreaReassignForm } from '@/components/admin/retailer-area-reassign-form';
 import { RetailerDocumentsManager, type RetailerDocument } from '@/components/admin/retailer-documents-manager';
 
-interface RetailerDetail {
+interface RetailerBaseDetail {
   id: string;
   shop_name: string;
   gstin: string | null;
@@ -17,6 +17,9 @@ interface RetailerDetail {
   status: 'pending_approval' | 'active' | 'suspended';
   approved_at: string | null;
   created_at: string;
+}
+
+interface RetailerDetail extends RetailerBaseDetail {
   areas: { name: string } | null;
   profiles: { full_name: string; phone: string } | null;
 }
@@ -36,14 +39,14 @@ const STATUS_LABELS: Record<RetailerDetail['status'], string> = {
 export default async function RetailerDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const [{ data: retailer }, { data: areaData }, { data: docData }] = await Promise.all([
+  const [{ data: retailerBase }, { data: areaData }, { data: docData }] = await Promise.all([
     supabase
       .from('retailers')
       .select(
-        'id, shop_name, gstin, area_id, address, credit_limit, outstanding_balance, status, approved_at, created_at, areas ( name ), profiles ( full_name, phone )'
+        'id, shop_name, gstin, area_id, address, credit_limit, outstanding_balance, status, approved_at, created_at'
       )
       .eq('id', params.id)
-      .single<RetailerDetail>(),
+      .single<RetailerBaseDetail>(),
     supabase.from('areas').select('id, name').eq('is_active', true).order('name'),
     supabase
       .from('retailer_documents')
@@ -52,8 +55,24 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
       .order('created_at', { ascending: false }),
   ]);
 
-  if (!retailer) notFound();
-  const r = retailer!;
+  if (!retailerBase) notFound();
+
+  // Same reasoning as app/admin/retailers/page.tsx: fetched separately
+  // instead of embedded, so a profile/area lookup issue can never make
+  // an otherwise-real retailer 404 via .single() finding nothing.
+  const [{ data: profileRow }, { data: areaRow }] = await Promise.all([
+    supabase.from('profiles').select('full_name, phone').eq('id', retailerBase.id).maybeSingle<{
+      full_name: string;
+      phone: string;
+    }>(),
+    supabase.from('areas').select('name').eq('id', retailerBase.area_id).maybeSingle<{ name: string }>(),
+  ]);
+
+  const r: RetailerDetail = {
+    ...retailerBase,
+    profiles: profileRow ? { full_name: profileRow.full_name, phone: profileRow.phone } : null,
+    areas: areaRow ? { name: areaRow.name } : null,
+  };
 
   const documents: RetailerDocument[] = await Promise.all(
     ((docData ?? []) as { id: string; doc_type: string; file_url: string; file_name: string; created_at: string }[]).map(
