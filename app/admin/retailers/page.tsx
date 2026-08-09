@@ -17,6 +17,15 @@ interface RetailerRow {
   profiles: { full_name: string; phone: string } | null;
 }
 
+interface RetailerBaseRow {
+  id: string;
+  shop_name: string;
+  address: string | null;
+  status: 'pending_approval' | 'active' | 'suspended';
+  created_at: string;
+  area_id: string;
+}
+
 const STATUS_STYLES: Record<RetailerRow['status'], string> = {
   pending_approval: 'bg-amber-50 text-amber-700',
   active: 'bg-green-50 text-green-700',
@@ -33,12 +42,56 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
   const supabase = createClient();
   const q = searchParams.q?.trim().toLowerCase() ?? '';
 
-  const { data } = await supabase
+  // Deliberately NOT using PostgREST's embedded-resource syntax
+  // (`areas ( name ), profiles ( full_name, phone )`) here. retailers.id
+  // is itself a foreign key to profiles.id (a 1:1 "extends" relationship,
+  // not a regular nullable FK column), and PostgREST resolves that as a
+  // strict to-one join — if the embed can't resolve for a given row for
+  // ANY reason, the whole retailer row is silently dropped from the
+  // result instead of just coming back with a null profiles/areas field.
+  // That's what caused "Total Retailers: 2" on the dashboard (a plain,
+  // unjoined count against the same table) while this page showed none.
+  // Fetching retailers, profiles, and areas as separate plain queries
+  // and merging them in JS sidesteps that entirely, uses the exact same
+  // RLS-respecting server client as everywhere else, and is guaranteed
+  // to show every retailer row the admin's RLS policies allow them to
+  // see — which the dashboard count already proves is correct.
+  const { data: retailerRows } = await supabase
     .from('retailers')
-    .select('id, shop_name, address, status, created_at, areas ( name ), profiles ( full_name, phone )')
+    .select('id, shop_name, address, status, created_at, area_id')
     .order('created_at', { ascending: false });
 
-  let retailers = (data ?? []) as unknown as RetailerRow[];
+  const baseRows = (retailerRows ?? []) as unknown as RetailerBaseRow[];
+
+  const retailerIds = baseRows.map((r) => r.id);
+  const areaIds = [...new Set(baseRows.map((r) => r.area_id))];
+
+  const [{ data: profileRows }, { data: areaRows }] = await Promise.all([
+    retailerIds.length > 0
+      ? supabase.from('profiles').select('id, full_name, phone').in('id', retailerIds)
+      : Promise.resolve({ data: [] as unknown[] }),
+    areaIds.length > 0
+      ? supabase.from('areas').select('id, name').in('id', areaIds)
+      : Promise.resolve({ data: [] as unknown[] }),
+  ]);
+
+  const profileById = new Map(
+    ((profileRows ?? []) as unknown as { id: string; full_name: string; phone: string }[]).map((p) => [p.id, p])
+  );
+  const areaById = new Map(((areaRows ?? []) as unknown as { id: string; name: string }[]).map((a) => [a.id, a]));
+
+  let retailers: RetailerRow[] = baseRows.map((r) => ({
+    id: r.id,
+    shop_name: r.shop_name,
+    address: r.address,
+    status: r.status,
+    created_at: r.created_at,
+    areas: areaById.get(r.area_id) ? { name: areaById.get(r.area_id)!.name } : null,
+    profiles: profileById.get(r.id)
+      ? { full_name: profileById.get(r.id)!.full_name, phone: profileById.get(r.id)!.phone }
+      : null,
+  }));
+
   if (q) {
     retailers = retailers.filter(
       (r) =>
