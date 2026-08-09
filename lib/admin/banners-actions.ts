@@ -120,6 +120,13 @@ export async function reorderBannerAction(bannerId: string, direction: 'up' | 'd
 
   const a = rows[index];
   const b = rows[swapIndex];
+  // With `noUncheckedIndexedAccess` enabled, TypeScript can't infer
+  // from the bounds check above that these are defined — the check
+  // guards the *numeric* indices, not the array-access expressions
+  // themselves. This guard makes that guarantee explicit for the
+  // compiler (same pattern as swapSortOrder in products-actions.ts).
+  if (!a || !b) return;
+
   await Promise.all([
     supabase.from('banners').update({ sort_order: b.sort_order } as unknown as never).eq('id', a.id),
     supabase.from('banners').update({ sort_order: a.sort_order } as unknown as never).eq('id', b.id),
