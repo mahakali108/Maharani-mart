@@ -61,7 +61,7 @@ export async function createStaffAction(_prevState: TeamFormState, formData: For
   // the handle_new_user() trigger would abort the whole auth.users
   // insert (see supabase/migrations/0012_fix_registration_phone_conflict.sql).
   const supabase = createClient();
-  const { data: phoneTaken } = await supabase.rpc('is_phone_registered', { p_phone: phone });
+  const { data: phoneTaken } = await supabase.rpc('is_phone_registered' as never, { p_phone: phone } as never);
   if (phoneTaken) {
     return { error: 'This phone number is already registered.' };
   }
@@ -164,4 +164,4 @@ export async function toggleStaffActiveAction(staffId: string, isActive: boolean
   const { error } = await supabase.from('profiles').update(payload as unknown as never).eq('id', staffId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/team');
-}
+    }
