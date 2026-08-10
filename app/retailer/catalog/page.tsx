@@ -1,37 +1,25 @@
-import { notFound } from 'next/navigation';
-import Image from 'next/image';
-import { ImageOff } from 'lucide-react';
+import { Package } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { Card } from '@/components/ui/card';
-import { PackSelector } from '@/components/retailer/pack-selector';
+import { Input } from '@/components/ui/input';
+import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ProductCard } from '@/components/retailer/product-card';
 
-interface ProductDetailRow {
+interface ProductListRow {
   id: string;
   name: string;
   sku_code: string;
-  gst_percent: number;
   is_new_launch: boolean;
   brands: { name: string } | null;
-  categories: { name: string } | null;
-  product_images: { id: string; image_url: string; sort_order: number }[];
+  product_images: { image_url: string; sort_order: number }[];
+  product_packs: { ptr: number | null; base_price: number; is_active: boolean }[];
 }
 
-interface PackRow {
-  id: string;
-  pack_name: string;
-  pack_sku_code: string;
-  units_per_case: number;
-  base_price: number;
-  ptr: number | null;
-  mrp: number | null;
-  moq: number;
-}
-
-export default async function ProductDetailPage({ params }: { params: { id: string } }) {
+export default async function RetailerCatalogPage({ searchParams }: { searchParams: { q?: string } }) {
   const user = await requireUser();
   const supabase = createClient();
+  const q = searchParams.q?.trim() ?? '';
 
   const { data: retailer } = await supabase
     .from('retailers')
@@ -39,80 +27,76 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     .eq('id', user.id)
     .maybeSingle<{ area_id: string }>();
 
-  const [{ data: product }, { data: packData }] = await Promise.all([
-    supabase
-      .from('products')
-      .select('id, name, sku_code, gst_percent, is_new_launch, brands ( name ), categories ( name ), product_images ( id, image_url, sort_order )')
-      .eq('id', params.id)
-      .eq('is_active', true)
-      .maybeSingle<ProductDetailRow>(),
-    supabase
-      .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, ptr, mrp, moq')
-      .eq('product_id', params.id)
-      .eq('is_active', true)
-      .order('sort_order')
-      .returns<PackRow[]>(),
-  ]);
+  // Same embedded-select pattern already used successfully for
+  // products elsewhere (app/admin/products/page.tsx, the retailer
+  // product-detail page) — brand_id/product_id here are regular
+  // nullable foreign keys, not the shared-primary-key case that broke
+  // the retailers list, so this embed is safe.
+  let query = supabase
+    .from('products')
+    .select(
+      'id, name, sku_code, is_new_launch, brands ( name ), product_images ( image_url, sort_order ), product_packs ( ptr, base_price, is_active )'
+    )
+    .eq('is_active', true)
+    .order('name');
 
-  if (!product) notFound();
+  if (q) {
+    query = query.or(`name.ilike.%${q}%,sku_code.ilike.%${q}%`);
+  }
 
-  const override = await getProductPriceOverride(supabase, params.id, user.id, retailer?.area_id ?? null);
-  const packs = (packData ?? []).map((pack) => ({
-    ...pack,
-    effectivePrice: resolvePackPrice(pack, override),
-  }));
+  const { data: productRows } = await query.returns<ProductListRow[]>();
+  const products = productRows ?? [];
 
-  const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
+  // Reuses the exact same single-product pricing rule the product
+  // detail, cart, and checkout pages already call — this file
+  // deliberately does not add a second pricing implementation.
+  const overrides = await Promise.all(
+    products.map((p) => getProductPriceOverride(supabase, p.id, user.id, retailer?.area_id ?? null))
+  );
+
+  const cards = products.map((product, i) => {
+    const activePacks = product.product_packs.filter((pack) => pack.is_active);
+    const prices = activePacks.map((pack) => resolvePackPrice(pack, overrides[i] ?? null));
+    const fromPrice = prices.length > 0 ? Math.min(...prices) : null;
+    const sortedImages = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
+
+    return {
+      id: product.id,
+      name: product.name,
+      brandName: product.brands?.name,
+      imageUrl: sortedImages[0]?.image_url,
+      isNewLaunch: product.is_new_launch,
+      fromPrice,
+    };
+  });
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        <div className="space-y-2">
-          <div className="relative aspect-square overflow-hidden rounded-2xl bg-ink-50">
-            {images[0] ? (
-              <Image src={images[0].image_url} alt={product.name} fill className="object-cover" unoptimized />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-ink-300">
-                <ImageOff className="h-12 w-12" />
-              </div>
-            )}
-          </div>
-          {images.length > 1 ? (
-            <div className="flex gap-2 overflow-x-auto">
-              {images.map((img) => (
-                <div key={img.id} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-ink-50">
-                  <Image src={img.image_url} alt="" fill className="object-cover" unoptimized />
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-3">
-          {product.brands?.name ? <p className="text-sm text-ink-400">{product.brands.name}</p> : null}
-          <h1 className="text-xl font-semibold text-ink-950">
-            {product.name}
-            {product.is_new_launch ? (
-              <span className="ml-2 rounded-full bg-primary-50 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase text-primary-600">
-                New
-              </span>
-            ) : null}
-          </h1>
-          <p className="font-mono text-xs text-ink-400">{product.sku_code}</p>
-          {product.categories?.name ? (
-            <p className="text-xs text-ink-500">Category: {product.categories.name}</p>
-          ) : null}
-          <p className="text-xs text-ink-500">GST: {product.gst_percent}%</p>
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold text-ink-950">Catalog</h1>
+        <p className="mt-1 text-sm text-ink-500">Browse products available for your shop.</p>
       </div>
 
-      {packs.length === 0 ? (
-        <Card>
-          <p className="text-sm text-ink-500">No pack sizes are available for this product yet.</p>
-        </Card>
+      <form method="get">
+        <Input name="q" defaultValue={q} placeholder="Search by product name or SKU" />
+      </form>
+
+      {cards.length === 0 ? (
+        <AdminEmptyState
+          icon={Package}
+          title={q ? 'No products match your search' : 'No products available yet'}
+          body={
+            q
+              ? 'Try a different search term.'
+              : 'Your distributor is setting up the product catalog. Check back shortly.'
+          }
+        />
       ) : (
-        <PackSelector packs={packs} gstPercent={product.gst_percent} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {cards.map((card) => (
+            <ProductCard key={card.id} {...card} />
+          ))}
+        </div>
       )}
     </div>
   );
