@@ -37,3 +37,15 @@ next-env.d.ts
 # supabase local
 supabase/.branches
 supabase/.temp
+
+# Capacitor / Android — the native project is generated fresh by the
+# GitHub Actions workflow on every run (npx cap add android), not
+# committed, so a partially-generated or stale copy can never get
+# checked in by accident. Also blocks any keystore/signing secrets
+# from ever being committed if someone generates a release build
+# locally.
+/android
+/ios
+*.keystore
+*.jks
+local.properties
