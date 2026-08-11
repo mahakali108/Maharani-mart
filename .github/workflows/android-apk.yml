@@ -1,0 +1,105 @@
+name: Android Debug APK
+
+# Builds a DEBUG-signed APK of the Capacitor wrapper around the
+# existing production site (https://maharani-mart-one.vercel.app).
+# This does NOT touch the Next.js app, Vercel deployment, or Supabase
+# in any way — it only builds a native Android shell whose WebView
+# points at the already-live site.
+#
+# No Play Store credentials or release keystore are used anywhere in
+# this workflow: `assembleDebug` is signed by Gradle's own
+# auto-generated debug keystore (created fresh in $HOME/.android on
+# the runner, never committed, never a secret).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
+      - 'www/**'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up JDK 17 (required by Android Gradle Plugin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install project dependencies
+        run: npm install
+
+      # Generates the android/ native project fresh on every run,
+      # reading appId/appName/server.url from capacitor.config.ts.
+      # It is intentionally NOT committed to the repo (see .gitignore)
+      # so there is never a stale or partially-hand-edited copy.
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor config into the native project
+        run: npx cap sync android
+
+      # Standard, well-documented Capacitor Android customization:
+      # makes the hardware/gesture back button navigate the WebView's
+      # own history first, and only exit the app when there's nothing
+      # left to go back to (requirement: back should navigate inside
+      # the web app when possible instead of immediately closing it).
+      # This fully replaces Capacitor's generated MainActivity.java —
+      # not a sed patch — so it doesn't depend on guessing the exact
+      # generated template text.
+      - name: Configure Android back-button behavior
+        run: |
+          MAIN_ACTIVITY_DIR="android/app/src/main/java/com/maharanitraders/app"
+          mkdir -p "$MAIN_ACTIVITY_DIR"
+          cat > "$MAIN_ACTIVITY_DIR/MainActivity.java" << 'EOF'
+          package com.maharanitraders.app;
+
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onBackPressed() {
+                  WebView webView = this.bridge != null ? this.bridge.getWebView() : null;
+                  if (webView != null && webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
+                  }
+              }
+          }
+          EOF
+
+      - name: Grant execute permission to Gradle wrapper
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maharani-traders-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
