@@ -12,12 +12,24 @@ interface RetailerRow {
   address: string | null;
   area_id: string;
   status: 'pending_approval' | 'active' | 'suspended';
+  credit_limit: number;
+  outstanding_balance: number;
+}
+
+interface RecentOrderRow {
+  id: string;
+  retailer_id: string;
+  order_number: string;
+  status: string;
+  grand_total: number;
+  placed_at: string;
 }
 
 interface RetailerCard extends RetailerRow {
   areaName: string | null;
   ownerName: string | null;
   phone: string | null;
+  recentOrder: RecentOrderRow | null;
 }
 
 const STATUS_STYLES: Record<RetailerRow['status'], string> = {
@@ -36,7 +48,7 @@ export default async function SalesmanRetailersPage({ searchParams }: { searchPa
   // profiles relationship is intentionally not embedded through PostgREST.
   const { data: retailerData } = await supabase
     .from('retailers')
-    .select('id, shop_name, address, area_id, status')
+    .select('id, shop_name, address, area_id, status, credit_limit, outstanding_balance')
     .eq('assigned_salesman_id', user.id)
     .order('shop_name')
     .returns<RetailerRow[]>();
@@ -44,12 +56,19 @@ export default async function SalesmanRetailersPage({ searchParams }: { searchPa
   const retailers = retailerData ?? [];
   const retailerIds = retailers.map((retailer) => retailer.id);
   const areaIds = [...new Set(retailers.map((retailer) => retailer.area_id))];
-  const [{ data: profileData }, { data: areaData }] = await Promise.all([
+  const [{ data: profileData }, { data: areaData }, { data: orderData }] = await Promise.all([
     retailerIds.length
       ? supabase.from('profiles').select('id, full_name, phone').in('id', retailerIds)
       : Promise.resolve({ data: [] as unknown[] }),
     areaIds.length
       ? supabase.from('areas').select('id, name').in('id', areaIds)
+      : Promise.resolve({ data: [] as unknown[] }),
+    retailerIds.length
+      ? supabase
+          .from('orders')
+          .select('id, retailer_id, order_number, status, grand_total, placed_at')
+          .in('retailer_id', retailerIds)
+          .order('placed_at', { ascending: false })
       : Promise.resolve({ data: [] as unknown[] }),
   ]);
 
@@ -59,12 +78,21 @@ export default async function SalesmanRetailersPage({ searchParams }: { searchPa
   const areaById = new Map(
     ((areaData ?? []) as unknown as { id: string; name: string }[]).map((area) => [area.id, area.name])
   );
+  const recentOrderByRetailer = new Map<string, RecentOrderRow>();
+  for (const order of (orderData ?? []) as unknown as RecentOrderRow[]) {
+    // The query is newest-first, so the first row retained per retailer
+    // is that retailer's latest authorized order.
+    if (!recentOrderByRetailer.has(order.retailer_id)) {
+      recentOrderByRetailer.set(order.retailer_id, order);
+    }
+  }
 
   let cards: RetailerCard[] = retailers.map((retailer) => ({
     ...retailer,
     areaName: areaById.get(retailer.area_id) ?? null,
     ownerName: profileById.get(retailer.id)?.full_name ?? null,
     phone: profileById.get(retailer.id)?.phone ?? null,
+    recentOrder: recentOrderByRetailer.get(retailer.id) ?? null,
   }));
 
   if (q) {
@@ -117,6 +145,34 @@ export default async function SalesmanRetailersPage({ searchParams }: { searchPa
                   <p>{retailer.areaName ?? 'Area unavailable'}</p>
                   {retailer.address ? <p className="line-clamp-2">{retailer.address}</p> : null}
                 </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-ink-100 pt-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-ink-400">Credit limit</p>
+                    <p className="text-xs font-medium text-ink-800">
+                      {retailer.credit_limit > 0 ? `₹${retailer.credit_limit.toFixed(2)}` : 'Not set'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-ink-400">Outstanding</p>
+                    <p className="text-xs font-medium text-ink-800">₹{retailer.outstanding_balance.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                {retailer.recentOrder ? (
+                  <div className="mt-3 border-t border-ink-100 pt-3 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono font-medium text-ink-700">{retailer.recentOrder.order_number}</span>
+                      <span className="font-semibold text-ink-900">₹{retailer.recentOrder.grand_total.toFixed(2)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-ink-400">
+                      <span>{new Date(retailer.recentOrder.placed_at).toLocaleDateString('en-IN')}</span>
+                      <span className="capitalize">{retailer.recentOrder.status}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 border-t border-ink-100 pt-3 text-xs text-ink-400">No orders yet</p>
+                )}
               </Card>
             </Link>
           ))}

@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { requirePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { DispatchButton } from '@/components/staff/dispatch-button';
 
@@ -21,6 +22,7 @@ interface OrderItemRow {
 }
 
 export default async function StaffOrderDetailPage({ params }: { params: { id: string } }) {
+  await requirePermission('orders.view.all');
   const supabase = createClient();
 
   const [{ data: order }, { data: itemData }] = await Promise.all([

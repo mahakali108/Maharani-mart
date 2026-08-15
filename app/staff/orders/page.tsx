@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Truck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { requirePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 
@@ -21,6 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default async function StaffOrdersPage() {
+  await requirePermission('orders.view.all');
   const supabase = createClient();
 
   const { data } = await supabase
