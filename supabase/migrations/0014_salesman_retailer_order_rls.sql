@@ -38,6 +38,7 @@ as $$
 $$;
 
 -- Salesmen may read the contact profile only for retailers assigned to them.
+drop policy if exists "profiles_assigned_retailer_select" on profiles;
 create policy "profiles_assigned_retailer_select" on profiles
   for select using (
     current_user_role() = 'salesman'
@@ -46,6 +47,7 @@ create policy "profiles_assigned_retailer_select" on profiles
 
 -- Price overrides needed to quote an assigned retailer. Explicit target checks
 -- prevent a salesman from reading another salesman's retailer-level pricing.
+drop policy if exists "price_lists_salesman_assigned_read" on price_lists;
 create policy "price_lists_salesman_assigned_read" on price_lists
   for select using (
     current_user_role() = 'salesman'
@@ -99,6 +101,7 @@ create policy "order_items_select" on order_items
     )
   );
 
+drop policy if exists "order_items_authorized_insert" on order_items;
 create policy "order_items_authorized_insert" on order_items
   for insert with check (
     exists (
@@ -132,6 +135,7 @@ create policy "order_status_history_retailer_read" on order_status_history
 -- Notification helpers use the caller's RLS-scoped client. These policies let
 -- self-checkout notify the retailer and let a salesman notify only an assigned
 -- retailer (including delivery updates), never an arbitrary profile.
+drop policy if exists "notifications_authorized_insert" on notifications;
 create policy "notifications_authorized_insert" on notifications
   for insert with check (
     recipient_id = auth.uid()
@@ -142,6 +146,7 @@ create policy "notifications_authorized_insert" on notifications
     )
   );
 
+drop policy if exists "notification_logs_salesman_assigned_insert" on notification_logs;
 create policy "notification_logs_salesman_assigned_insert" on notification_logs
   for insert with check (
     current_user_role() = 'salesman'
@@ -151,8 +156,10 @@ create policy "notification_logs_salesman_assigned_insert" on notification_logs
 -- A direct PostgREST call must not be able to log a visit against an
 -- unassigned retailer merely by setting salesman_id to auth.uid().
 drop policy if exists "visits_owner_or_staff" on visits;
+drop policy if exists "visits_owner_or_staff_read" on visits;
 create policy "visits_owner_or_staff_read" on visits
   for select using (salesman_id = auth.uid() or is_staff_or_above());
+drop policy if exists "visits_assigned_salesman_insert" on visits;
 create policy "visits_assigned_salesman_insert" on visits
   for insert with check (
     is_staff_or_above()
@@ -162,6 +169,7 @@ create policy "visits_assigned_salesman_insert" on visits
       and is_retailer_assigned_to_current_salesman(retailer_id)
     )
   );
+drop policy if exists "visits_assigned_salesman_update" on visits;
 create policy "visits_assigned_salesman_update" on visits
   for update
   using (
