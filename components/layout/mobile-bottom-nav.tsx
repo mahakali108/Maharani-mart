@@ -17,7 +17,13 @@ export function MobileBottomNav({ navItems }: { navItems: NavItem[] }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-stretch border-t border-ink-100 bg-white/95 backdrop-blur lg:hidden">
       {navItems.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(item.href + '/');
+        const hasMoreSpecificMatch = navItems.some(
+          (candidate) =>
+            candidate.href !== item.href &&
+            candidate.href.startsWith(item.href + '/') &&
+            (pathname === candidate.href || pathname.startsWith(candidate.href + '/'))
+        );
+        const active = !hasMoreSpecificMatch && (pathname === item.href || pathname.startsWith(item.href + '/'));
         const Icon = item.icon;
         return (
           <Link

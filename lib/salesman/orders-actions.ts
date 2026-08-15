@@ -10,21 +10,31 @@ export type DeliveryResult = { error?: string } | { success: true };
 interface OrderForDelivery {
   status: string;
   retailer_id: string;
+  collected_by: string | null;
   order_number: string;
   notes: string | null;
 }
 
 export async function markDeliveredAction(orderId: string, deliveryNote: string): Promise<DeliveryResult> {
-  await requirePermission('orders.deliver');
+  const user = await requirePermission('orders.deliver');
   const supabase = createClient();
 
   const { data: order } = await supabase
     .from('orders')
-    .select('status, retailer_id, order_number, notes')
+    .select('status, retailer_id, collected_by, order_number, notes')
     .eq('id', orderId)
     .maybeSingle<OrderForDelivery>();
 
   if (!order) return { error: 'Order not found.' };
+  if (user.role === 'salesman' && order.collected_by !== user.id) {
+    const { data: assignment } = await supabase
+      .from('retailers')
+      .select('id')
+      .eq('id', order.retailer_id)
+      .eq('assigned_salesman_id', user.id)
+      .maybeSingle<{ id: string }>();
+    if (!assignment) return { error: 'Order not found or no longer assigned to you.' };
+  }
   if (order.status !== 'dispatched') return { error: 'Only dispatched orders can be marked delivered.' };
 
   const trimmedNote = deliveryNote.trim();

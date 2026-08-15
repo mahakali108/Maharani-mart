@@ -36,6 +36,7 @@ export type Permission =
   | 'retailers.view'
   | 'retailers.approve'
   | 'retailers.suspend'
+  | 'retailers.assign_salesman'
   | 'team.manage'
   | 'reports.view.all'
   | 'reports.view.area'
@@ -50,7 +51,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
-    'retailers.view', 'retailers.approve', 'retailers.suspend',
+    'retailers.view', 'retailers.approve', 'retailers.suspend', 'retailers.assign_salesman',
     'team.manage', 'reports.view.all', 'banners.manage', 'routes.manage.all',
   ],
   admin: [
@@ -58,7 +59,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
-    'retailers.view', 'retailers.approve', 'retailers.suspend',
+    'retailers.view', 'retailers.approve', 'retailers.suspend', 'retailers.assign_salesman',
     'reports.view.all', 'banners.manage', 'routes.manage.all',
   ],
   staff: [

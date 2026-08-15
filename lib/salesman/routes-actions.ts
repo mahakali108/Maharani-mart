@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth/session';
+import { requireSalesman } from '@/lib/salesman/guard';
 
 export type RouteResult = { error?: string } | { success: true };
 
@@ -22,7 +22,7 @@ export async function reorderRouteStopAction(
   stopId: string,
   direction: 'up' | 'down'
 ): Promise<RouteResult> {
-  await requireUser();
+  await requireSalesman();
   const supabase = createClient();
 
   const { data } = await supabase

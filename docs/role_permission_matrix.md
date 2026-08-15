@@ -23,6 +23,7 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | View retailers | ✅ | ✅ | ✅ | ✅ (own) | — |
 | Approve retailer registration | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Suspend retailer | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Assign / reassign retailer to salesman | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Manage staff / salesman accounts | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Manage banners | ✅ | ✅ | ✅ | ❌ | ❌ |
 | View all reports | ✅ | ✅ | area-scoped | own-area | own orders |

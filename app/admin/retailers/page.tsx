@@ -15,6 +15,7 @@ interface RetailerRow {
   created_at: string;
   areas: { name: string } | null;
   profiles: { full_name: string; phone: string } | null;
+  assignedSalesmanName: string | null;
 }
 
 interface RetailerBaseRow {
@@ -24,6 +25,7 @@ interface RetailerBaseRow {
   status: 'pending_approval' | 'active' | 'suspended';
   created_at: string;
   area_id: string;
+  assigned_salesman_id: string | null;
 }
 
 const STATUS_STYLES: Record<RetailerRow['status'], string> = {
@@ -58,17 +60,21 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
   // see — which the dashboard count already proves is correct.
   const { data: retailerRows } = await supabase
     .from('retailers')
-    .select('id, shop_name, address, status, created_at, area_id')
+    .select('id, shop_name, address, status, created_at, area_id, assigned_salesman_id')
     .order('created_at', { ascending: false });
 
   const baseRows = (retailerRows ?? []) as unknown as RetailerBaseRow[];
 
   const retailerIds = baseRows.map((r) => r.id);
+  const profileIds = [...new Set([
+    ...retailerIds,
+    ...baseRows.flatMap((r) => (r.assigned_salesman_id ? [r.assigned_salesman_id] : [])),
+  ])];
   const areaIds = [...new Set(baseRows.map((r) => r.area_id))];
 
   const [{ data: profileRows }, { data: areaRows }] = await Promise.all([
-    retailerIds.length > 0
-      ? supabase.from('profiles').select('id, full_name, phone').in('id', retailerIds)
+    profileIds.length > 0
+      ? supabase.from('profiles').select('id, full_name, phone').in('id', profileIds)
       : Promise.resolve({ data: [] as unknown[] }),
     areaIds.length > 0
       ? supabase.from('areas').select('id, name').in('id', areaIds)
@@ -90,6 +96,9 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
     profiles: profileById.get(r.id)
       ? { full_name: profileById.get(r.id)!.full_name, phone: profileById.get(r.id)!.phone }
       : null,
+    assignedSalesmanName: r.assigned_salesman_id
+      ? profileById.get(r.assigned_salesman_id)?.full_name ?? null
+      : null,
   }));
 
   if (q) {
@@ -97,7 +106,8 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
       (r) =>
         r.shop_name.toLowerCase().includes(q) ||
         r.profiles?.full_name.toLowerCase().includes(q) ||
-        r.profiles?.phone.includes(q)
+        r.profiles?.phone.includes(q) ||
+        r.assignedSalesmanName?.toLowerCase().includes(q)
     );
   }
   const pending = retailers.filter((r) => r.status === 'pending_approval');
@@ -164,6 +174,7 @@ function RetailerTable({ retailers }: { retailers: RetailerRow[] }) {
             <th className="px-5 py-3 font-medium">Shop</th>
             <th className="px-5 py-3 font-medium">Owner</th>
             <th className="px-5 py-3 font-medium">Area</th>
+            <th className="px-5 py-3 font-medium">Salesman</th>
             <th className="px-5 py-3 font-medium">Status</th>
             <th className="px-5 py-3 font-medium" />
           </tr>
@@ -182,6 +193,7 @@ function RetailerTable({ retailers }: { retailers: RetailerRow[] }) {
                 {r.profiles?.phone ? <p className="text-xs text-ink-400">{r.profiles.phone}</p> : null}
               </td>
               <td className="px-5 py-3 text-ink-600">{r.areas?.name ?? '—'}</td>
+              <td className="px-5 py-3 text-ink-600">{r.assignedSalesmanName ?? 'Unassigned'}</td>
               <td className="px-5 py-3">
                 <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[r.status]}`}>
                   {STATUS_LABELS[r.status]}

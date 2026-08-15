@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth/session';
+import { requireSalesman } from '@/lib/salesman/guard';
 import type { Database } from '@/types/database.types';
 
 type VisitInsert = Database['public']['Tables']['visits']['Insert'];
@@ -14,8 +14,16 @@ export async function checkInVisitAction(
   lat: number | null,
   lng: number | null
 ): Promise<VisitResult> {
-  const user = await requireUser();
+  const user = await requireSalesman();
   const supabase = createClient();
+
+  const { data: assignedRetailer } = await supabase
+    .from('retailers')
+    .select('id')
+    .eq('id', retailerId)
+    .eq('assigned_salesman_id', user.id)
+    .maybeSingle<{ id: string }>();
+  if (!assignedRetailer) return { error: 'This retailer is not assigned to you.' };
 
   const payload: VisitInsert = {
     salesman_id: user.id,
@@ -40,7 +48,7 @@ export async function checkInVisitAction(
 }
 
 export async function checkOutVisitAction(visitId: string, notes: string): Promise<VisitResult> {
-  const user = await requireUser();
+  const user = await requireSalesman();
   const supabase = createClient();
 
   const { error } = await supabase
@@ -61,8 +69,16 @@ export async function checkOutVisitAction(visitId: string, notes: string): Promi
 }
 
 export async function skipVisitAction(retailerId: string, notes: string): Promise<VisitResult> {
-  const user = await requireUser();
+  const user = await requireSalesman();
   const supabase = createClient();
+
+  const { data: assignedRetailer } = await supabase
+    .from('retailers')
+    .select('id')
+    .eq('id', retailerId)
+    .eq('assigned_salesman_id', user.id)
+    .maybeSingle<{ id: string }>();
+  if (!assignedRetailer) return { error: 'This retailer is not assigned to you.' };
 
   const payload: VisitInsert = {
     salesman_id: user.id,

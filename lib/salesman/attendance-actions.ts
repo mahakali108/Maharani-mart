@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/auth/session';
+import { requireSalesman } from '@/lib/salesman/guard';
 import type { Database } from '@/types/database.types';
 
 type AttendanceInsert = Database['public']['Tables']['attendance']['Insert'];
@@ -14,7 +14,7 @@ function todayDate(): string {
 }
 
 export async function checkInAction(lat: number | null, lng: number | null): Promise<AttendanceResult> {
-  const user = await requireUser();
+  const user = await requireSalesman();
   const supabase = createClient();
 
   const { data: existing } = await supabase
@@ -41,7 +41,7 @@ export async function checkInAction(lat: number | null, lng: number | null): Pro
 }
 
 export async function checkOutAction(lat: number | null, lng: number | null): Promise<AttendanceResult> {
-  const user = await requireUser();
+  const user = await requireSalesman();
   const supabase = createClient();
 
   const { data: existing } = await supabase

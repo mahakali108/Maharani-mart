@@ -67,6 +67,43 @@ export async function reactivateRetailerAction(retailerId: string) {
 
 export type RetailerFormState = { error?: string } | null;
 
+export async function assignSalesmanToRetailerAction(
+  retailerId: string,
+  _prevState: RetailerFormState,
+  formData: FormData
+): Promise<RetailerFormState> {
+  await requirePermission('retailers.assign_salesman');
+
+  const salesmanId = formData.get('salesmanId');
+  if (typeof salesmanId !== 'string') return { error: 'Select a valid salesman.' };
+  if (salesmanId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(salesmanId)) {
+    return { error: 'Select a valid salesman.' };
+  }
+
+  const supabase = createClient();
+  if (salesmanId) {
+    const { data: salesman } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', salesmanId)
+      .eq('role', 'salesman')
+      .eq('is_active', true)
+      .maybeSingle<{ id: string }>();
+    if (!salesman) return { error: 'The selected salesman is not active or no longer exists.' };
+  }
+
+  const payload: RetailerUpdate = { assigned_salesman_id: salesmanId || null };
+  const { error } = await supabase.from('retailers').update(payload as unknown as never).eq('id', retailerId);
+  if (error) return { error: error.message };
+
+  revalidatePath('/admin/retailers');
+  revalidatePath(`/admin/retailers/${retailerId}`);
+  revalidatePath('/salesman/dashboard');
+  revalidatePath('/salesman/retailers');
+  revalidatePath('/salesman/orders');
+  return null;
+}
+
 export async function reassignRetailerAreaAction(
   retailerId: string,
   _prevState: RetailerFormState,

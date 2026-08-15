@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { MarkDeliveredButton } from '@/components/salesman/mark-delivered-button';
 
@@ -9,6 +10,8 @@ interface OrderRow {
   status: string;
   grand_total: number;
   notes: string | null;
+  retailer_id: string;
+  collected_by: string | null;
   retailers: { shop_name: string; address: string | null } | null;
 }
 
@@ -20,22 +23,31 @@ interface OrderItemRow {
 }
 
 export default async function SalesmanOrderDetailPage({ params }: { params: { id: string } }) {
+  const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: order }, { data: itemData }] = await Promise.all([
-    supabase
-      .from('orders')
-      .select('id, order_number, status, grand_total, notes, retailers ( shop_name, address )')
-      .eq('id', params.id)
-      .maybeSingle<OrderRow>(),
-    supabase
-      .from('order_items')
-      .select('id, quantity, products ( name ), product_packs ( pack_name )')
-      .eq('order_id', params.id),
-  ]);
+  const { data: order } = await supabase
+    .from('orders')
+    .select('id, order_number, status, grand_total, notes, retailer_id, collected_by, retailers ( shop_name, address )')
+    .eq('id', params.id)
+    .maybeSingle<OrderRow>();
 
   if (!order) notFound();
 
+  if (order.collected_by !== user.id) {
+    const { data: assignment } = await supabase
+      .from('retailers')
+      .select('id')
+      .eq('id', order.retailer_id)
+      .eq('assigned_salesman_id', user.id)
+      .maybeSingle<{ id: string }>();
+    if (!assignment) notFound();
+  }
+
+  const { data: itemData } = await supabase
+    .from('order_items')
+    .select('id, quantity, products ( name ), product_packs ( pack_name )')
+    .eq('order_id', params.id);
   const items = (itemData ?? []) as unknown as OrderItemRow[];
 
   return (

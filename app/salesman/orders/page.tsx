@@ -28,30 +28,46 @@ export default async function SalesmanOrdersPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  // Orders for retailers assigned to this salesman, or ones this
-  // salesman personally collected in the field.
-  const { data } = await supabase
+  const { data: assignedData } = await supabase
+    .from('retailers')
+    .select('id')
+    .eq('assigned_salesman_id', user.id);
+  const assignedIds = ((assignedData ?? []) as { id: string }[]).map((retailer) => retailer.id);
+
+  // Keep the application query on orders' own columns (PostgREST does
+  // not reliably support OR filters spanning embedded resources). RLS
+  // independently enforces the same assigned-or-collected boundary.
+  let query = supabase
     .from('orders')
-    .select('id, order_number, status, grand_total, placed_at, retailers!inner ( shop_name, assigned_salesman_id, areas ( name ) )')
-    .or(`collected_by.eq.${user.id},retailers.assigned_salesman_id.eq.${user.id}`)
+    .select('id, order_number, status, grand_total, placed_at, retailers ( shop_name, areas ( name ) )')
     .order('placed_at', { ascending: false });
 
+  query = assignedIds.length > 0
+    ? query.or(`collected_by.eq.${user.id},retailer_id.in.(${assignedIds.join(',')})`)
+    : query.eq('collected_by', user.id);
+
+  const { data } = await query;
   const orders = (data ?? []) as unknown as OrderRow[];
   const dispatched = orders.filter((o) => o.status === 'dispatched');
   const others = orders.filter((o) => o.status !== 'dispatched');
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-ink-950">Assigned Orders</h1>
-        <p className="mt-1 text-sm text-ink-500">Orders for your retailers, grouped by area.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-ink-950">My Orders</h1>
+          <p className="mt-1 text-sm text-ink-500">Orders you collected and orders belonging to your assigned retailers.</p>
+        </div>
+        <Link href="/salesman/orders/new" className="shrink-0 rounded-xl bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700">
+          New order
+        </Link>
       </div>
 
       {orders.length === 0 ? (
         <AdminEmptyState
           icon={ClipboardList}
-          title="No assigned orders yet"
-          body="Orders from retailers assigned to your route will show up here."
+          title="No orders yet"
+          body="Orders you capture and orders from your assigned retailers will show up here."
         />
       ) : (
         <>
