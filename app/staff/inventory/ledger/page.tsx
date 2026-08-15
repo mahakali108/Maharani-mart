@@ -1,5 +1,6 @@
 import { History } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { requirePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ export default async function InventoryLedgerPage({
 }: {
   searchParams: { warehouse?: string; page?: string };
 }) {
+  await requirePermission('inventory.view');
   const supabase = createClient();
   const warehouseFilter = searchParams.warehouse ?? '';
   const page = Math.max(1, Number(searchParams.page) || 1);

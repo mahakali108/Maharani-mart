@@ -1,18 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import { LayoutDashboard, Package, Warehouse, ShoppingCart, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Warehouse, ShoppingCart } from 'lucide-react';
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import type { UserRole } from '@/lib/auth/roles';
+import { can } from '@/lib/permissions/permissions';
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/staff/dashboard', icon: LayoutDashboard },
-  { label: 'Products', href: '/staff/products', icon: Package },
-  { label: 'Inventory', href: '/staff/inventory', icon: Warehouse },
-  { label: 'Orders', href: '/staff/orders', icon: ShoppingCart },
-  { label: 'Performance', href: '/staff/performance', icon: BarChart3 },
-];
+function navigationForRole(role: UserRole): NavItem[] {
+  const items: NavItem[] = [
+    { label: 'Dashboard', href: '/staff/dashboard', icon: LayoutDashboard },
+  ];
+
+  if (can(role, 'inventory.view')) {
+    items.push({ label: 'Inventory', href: '/staff/inventory', icon: Warehouse });
+  }
+  if (can(role, 'orders.view.all')) {
+    items.push({ label: 'Orders', href: '/staff/orders', icon: ShoppingCart });
+  }
+
+  return items;
+}
 
 export function StaffShell({
   fullName,
@@ -24,11 +32,12 @@ export function StaffShell({
   children: React.ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const navItems = navigationForRole(role);
 
   return (
     <div className="flex min-h-screen bg-ink-50">
       <Sidebar
-        navItems={NAV_ITEMS}
+        navItems={navItems}
         brandLabel="Staff Console"
         open={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}

@@ -4,6 +4,7 @@ import { getSignedUrl } from '@/lib/storage/signed-url';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { RetailerRowActions } from '@/components/admin/retailer-row-actions';
 import { RetailerAreaReassignForm } from '@/components/admin/retailer-area-reassign-form';
+import { SalesmanAssignmentForm } from '@/components/admin/salesman-assignment-form';
 import { RetailerDocumentsManager, type RetailerDocument } from '@/components/admin/retailer-documents-manager';
 
 interface RetailerBaseDetail {
@@ -16,6 +17,7 @@ interface RetailerBaseDetail {
   outstanding_balance: number;
   status: 'pending_approval' | 'active' | 'suspended';
   approved_at: string | null;
+  assigned_salesman_id: string | null;
   created_at: string;
 }
 
@@ -39,11 +41,11 @@ const STATUS_LABELS: Record<RetailerDetail['status'], string> = {
 export default async function RetailerDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const [{ data: retailerBase }, { data: areaData }, { data: docData }] = await Promise.all([
+  const [{ data: retailerBase }, { data: areaData }, { data: docData }, { data: salesmanData }] = await Promise.all([
     supabase
       .from('retailers')
       .select(
-        'id, shop_name, gstin, area_id, address, credit_limit, outstanding_balance, status, approved_at, created_at'
+        'id, shop_name, gstin, area_id, address, credit_limit, outstanding_balance, status, approved_at, assigned_salesman_id, created_at'
       )
       .eq('id', params.id)
       .single<RetailerBaseDetail>(),
@@ -53,6 +55,11 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
       .select('id, doc_type, file_url, file_name, created_at')
       .eq('retailer_id', params.id)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('profiles')
+      .select('id, full_name, is_active')
+      .eq('role', 'salesman')
+      .order('full_name'),
   ]);
 
   if (!retailerBase) notFound();
@@ -139,6 +146,27 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
             </dd>
           </div>
         </dl>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Salesman assignment</CardTitle>
+        </CardHeader>
+        <p className="mb-3 text-sm text-ink-500">
+          Currently assigned: <span className="font-medium text-ink-800">
+            {((salesmanData ?? []) as { id: string; full_name: string; is_active: boolean }[]).find((salesman) => salesman.id === r.assigned_salesman_id)?.full_name ?? 'No salesman'}
+          </span>
+        </p>
+        <SalesmanAssignmentForm
+          retailerId={r.id}
+          currentSalesmanId={r.assigned_salesman_id}
+          salesmen={((salesmanData ?? []) as { id: string; full_name: string; is_active: boolean }[])
+            .filter((salesman) => salesman.is_active || salesman.id === r.assigned_salesman_id)
+            .map((salesman) => ({
+              id: salesman.id,
+              full_name: salesman.is_active ? salesman.full_name : `${salesman.full_name} (inactive)`,
+            }))}
+        />
       </Card>
 
       <Card>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Boxes, History } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { requirePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { StockAdjustmentForm } from '@/components/admin/stock-adjustment-form';
@@ -19,6 +20,7 @@ interface Option {
 }
 
 export default async function StaffInventoryPage() {
+  await requirePermission('inventory.view');
   const supabase = createClient();
 
   const [{ data: stockData }, { data: productData }, { data: warehouseData }] = await Promise.all([
