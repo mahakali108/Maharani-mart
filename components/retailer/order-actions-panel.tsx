@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Loader2, XCircle, RotateCcw, Undo2 } from 'lucide-react';
-import { cancelOrderAction, repeatOrderAction, requestReturnAction } from '@/lib/retailer/order-actions';
+import { XCircle, RotateCcw, Undo2 } from 'lucide-react';
+import { cancelOrderAction, requestReturnAction } from '@/lib/retailer/order-actions';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -29,24 +30,6 @@ export function RetailerOrderActions({ orderId, status }: { orderId: string; sta
       } else {
         setShowCancelForm(false);
         router.refresh();
-      }
-    });
-  }
-
-  function handleRepeat() {
-    setError(null);
-    setNotice(null);
-    startTransition(async () => {
-      const result = await repeatOrderAction(orderId);
-      if ('error' in result && result.error) {
-        setError(result.error);
-      } else {
-        const skipped = 'skippedCount' in result ? result.skippedCount ?? 0 : 0;
-        setNotice(
-          skipped > 0
-            ? `Added to cart. ${skipped} item(s) were skipped because they're no longer available.`
-            : 'All items added to your cart.'
-        );
       }
     });
   }
@@ -79,10 +62,12 @@ export function RetailerOrderActions({ orderId, status }: { orderId: string; sta
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" disabled={isPending} onClick={handleRepeat}>
-          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Repeat order
-        </Button>
+        <Link href={`/retailer/orders/${orderId}/reorder`}>
+          <Button variant="outline" size="sm">
+            <RotateCcw className="h-4 w-4" />
+            Reorder
+          </Button>
+        </Link>
 
         {canCancel ? (
           <Button variant="outline" size="sm" disabled={isPending} onClick={() => setShowCancelForm((s) => !s)}>

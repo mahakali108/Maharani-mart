@@ -7,6 +7,7 @@ import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RetailerOrderActions } from '@/components/retailer/order-actions-panel';
+import { OrderStatusTimeline, type TrackedStatus, type StatusHistoryEntry } from '@/components/retailer/order-status-timeline';
 
 type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'packed' | 'dispatched' | 'delivered' | 'cancelled' | 'returned';
 
@@ -99,26 +100,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       </span>
 
       {history.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Status timeline</CardTitle>
-          </CardHeader>
-          <ol className="space-y-3">
-            {history.map((h, index) => (
-              <li key={h.id} className="flex gap-3 text-sm">
-                <div className="flex flex-col items-center">
-                  <span className={`h-2.5 w-2.5 rounded-full ${index === history.length - 1 ? 'bg-primary-600' : 'bg-ink-300'}`} />
-                  {index < history.length - 1 ? <span className="mt-1 h-full w-px flex-1 bg-ink-100" /> : null}
-                </div>
-                <div className="pb-3">
-                  <p className="font-medium text-ink-900">{h.status.charAt(0).toUpperCase() + h.status.slice(1)}</p>
-                  <p className="text-xs text-ink-400">{new Date(h.created_at).toLocaleString('en-IN')}</p>
-                  {h.note ? <p className="mt-0.5 text-xs text-ink-500">{h.note}</p> : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </Card>
+        <OrderStatusTimeline status={order.status as TrackedStatus} history={history as StatusHistoryEntry[]} />
       ) : null}
 
       <Card>

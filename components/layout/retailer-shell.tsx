@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, LayoutGrid, ShoppingCart, ClipboardList, Bell } from 'lucide-react';
+import { Home, LayoutGrid, Zap, ShoppingCart, ClipboardList, Bell } from 'lucide-react';
 import { Topbar } from '@/components/layout/topbar';
 import { MobileBottomNav, type NavItem } from '@/components/layout/mobile-bottom-nav';
 import type { UserRole } from '@/lib/auth/roles';
@@ -8,6 +8,7 @@ import type { UserRole } from '@/lib/auth/roles';
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/retailer/home', icon: Home },
   { label: 'Catalog', href: '/retailer/catalog', icon: LayoutGrid },
+  { label: 'Quick', href: '/retailer/quick-order', icon: Zap },
   { label: 'Cart', href: '/retailer/cart', icon: ShoppingCart },
   { label: 'Orders', href: '/retailer/orders', icon: ClipboardList },
   { label: 'Alerts', href: '/retailer/notifications', icon: Bell },

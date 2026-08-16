@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { Card } from '@/components/ui/card';
 import { PackSelector } from '@/components/retailer/pack-selector';
+import { FavoriteToggle } from '@/components/retailer/favorite-toggle';
 
 interface ProductDetailRow {
   id: string;
@@ -57,7 +58,15 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
 
   if (!product) notFound();
 
-  const override = await getProductPriceOverride(supabase, params.id, user.id, retailer?.area_id ?? null);
+  const [{ data: favoriteRow }, override] = await Promise.all([
+    supabase
+      .from('retailer_favorites')
+      .select('id')
+      .eq('retailer_id', user.id)
+      .eq('product_id', params.id)
+      .maybeSingle<{ id: string }>(),
+    getProductPriceOverride(supabase, params.id, user.id, retailer?.area_id ?? null),
+  ]);
   const packs = (packData ?? []).map((pack) => ({
     ...pack,
     effectivePrice: resolvePackPrice(pack, override),
@@ -104,6 +113,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             <p className="text-xs text-ink-500">Category: {product.categories.name}</p>
           ) : null}
           <p className="text-xs text-ink-500">GST: {product.gst_percent}%</p>
+          <div>
+            <FavoriteToggle productId={product.id} initialFavorite={!!favoriteRow} />
+          </div>
         </div>
       </div>
 
