@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
+import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 import type { Database } from '@/types/database.types';
 
 type ReturnRequestInsert = Database['public']['Tables']['return_requests']['Insert'];
-type CartItemInsert = Database['public']['Tables']['cart_items']['Insert'];
 
 export type RetailerOrderActionResult = { error?: string } | { success: true; skippedCount?: number };
 
@@ -36,15 +36,46 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
   return { success: true };
 }
 
-interface PastOrderItem {
-  pack_id: string | null;
+interface ReorderLine {
+  packId: string;
   quantity: number;
-  product_packs: { is_active: boolean; moq: number } | null;
+}
+
+interface PackForReorder {
+  id: string;
+  moq: number;
+  is_active: boolean;
   products: { is_active: boolean } | null;
 }
 
-export async function repeatOrderAction(orderId: string): Promise<RetailerOrderActionResult> {
+/**
+ * Adds the retailer's chosen reorder lines (packId + edited quantity,
+ * from the /orders/[id]/reorder review screen) into their existing
+ * cart.
+ *
+ * Never trusts the browser beyond "which pack, which quantity":
+ *   - retailer identity comes from the server session, never the client;
+ *   - the source order is verified to belong to the caller;
+ *   - every pack is re-read from product_packs NOW, and any line whose
+ *     pack/product went inactive, deleted, or whose quantity is a
+ *     non-integer / below the CURRENT MOQ is skipped server-side and
+ *     reported back — old quantities, old MOQs, and old prices are
+ *     never carried forward (cart/checkout already resolve the current
+ *     effective price via get_effective-price helpers, so stale money
+ *     values structurally cannot re-enter the flow here).
+ *
+ * RLS stays the enforcement boundary: cart_owner restricts writes to
+ * retailer_id = auth.uid().
+ */
+export async function addReorderLinesToCartAction(
+  orderId: string,
+  lines: ReorderLine[]
+): Promise<RetailerOrderActionResult> {
   const user = await requirePermission('orders.create');
+  if (user.role !== 'retailer') return { error: 'Only a retailer can reorder into this cart.' };
+  if (lines.length === 0) return { error: 'Select at least one item to reorder.' };
+  if (lines.length > 200) return { error: 'Too many order lines.' };
+
   const supabase = createClient();
 
   const { data: order } = await supabase
@@ -56,39 +87,54 @@ export async function repeatOrderAction(orderId: string): Promise<RetailerOrderA
 
   if (!order) return { error: 'Order not found.' };
 
-  const { data: itemData } = await supabase
+  // Only packs that actually appeared in THIS order may be reordered —
+  // the page only renders those, so rejecting anything else here also
+  // closes the "add an arbitrary pack through the reorder endpoint"
+  // tampering path.
+  const { data: ownedItemData } = await supabase
     .from('order_items')
-    .select('pack_id, quantity, product_packs ( is_active, moq ), products ( is_active )')
+    .select('pack_id')
     .eq('order_id', orderId);
+  const allowedPackIds = new Set(
+    ((ownedItemData ?? []) as { pack_id: string | null }[])
+      .map((row) => row.pack_id)
+      .filter((id): id is string => !!id)
+  );
 
-  const items = (itemData ?? []) as unknown as PastOrderItem[];
+  const requestedLines = new Map<string, number>();
+  for (const line of lines) {
+    if (!line.packId || requestedLines.has(line.packId)) continue;
+    if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 100000) continue;
+    if (!allowedPackIds.has(line.packId)) continue;
+    requestedLines.set(line.packId, line.quantity);
+  }
+  if (requestedLines.size === 0) return { error: 'None of the submitted items belong to this order.' };
+
+  const { data: packData } = await supabase
+    .from('product_packs')
+    .select('id, moq, is_active, products ( is_active )')
+    .in('id', [...requestedLines.keys()]);
+
+  const validLines: { packId: string; quantity: number }[] = [];
   let skippedCount = 0;
+  const packById = new Map(((packData ?? []) as unknown as PackForReorder[]).map((pack) => [pack.id, pack]));
 
-  for (const item of items) {
-    if (!item.pack_id || !item.product_packs?.is_active || !item.products?.is_active) {
+  for (const [packId, quantity] of requestedLines) {
+    const pack = packById.get(packId);
+    if (!pack || !pack.is_active || !pack.products?.is_active || quantity < pack.moq) {
       skippedCount += 1;
       continue;
     }
-
-    const quantity = Math.max(item.quantity, item.product_packs.moq);
-
-    const { data: existing } = await supabase
-      .from('cart_items')
-      .select('id, quantity')
-      .eq('retailer_id', user.id)
-      .eq('pack_id', item.pack_id)
-      .maybeSingle<{ id: string; quantity: number }>();
-
-    if (existing) {
-      await supabase
-        .from('cart_items')
-        .update({ quantity: existing.quantity + quantity } as unknown as never)
-        .eq('id', existing.id);
-    } else {
-      const payload: CartItemInsert = { retailer_id: user.id, pack_id: item.pack_id, quantity };
-      await supabase.from('cart_items').insert(payload as unknown as never);
-    }
+    validLines.push({ packId, quantity });
   }
+
+  if (validLines.length === 0) {
+    return { error: 'None of those items can be reordered right now — they are unavailable or below the current minimum quantity.' };
+  }
+
+  // Same merge path as manual catalog adds — one implementation,
+  // one semantic (increment existing cart lines, insert new ones).
+  await mergeLinesIntoCart(supabase, user.id, validLines);
 
   revalidatePath('/retailer/cart');
   return { success: true, skippedCount };

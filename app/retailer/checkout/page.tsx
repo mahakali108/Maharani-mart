@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
+import { CreditSummary } from '@/components/retailer/credit-summary';
 
 interface CartItemDetail {
   id: string;
@@ -17,6 +18,11 @@ interface PriceOverrideRow {
   product_id: string;
   scope: 'retailer' | 'area';
   price: number;
+}
+
+interface RetailerCreditRow {
+  credit_limit: number;
+  outstanding_balance: number;
 }
 
 export default async function CheckoutPage() {
@@ -83,6 +89,16 @@ export default async function CheckoutPage() {
 
   const grandTotal = subtotal + gstTotal;
 
+  // Credit display only (Requirement E) — the authoritative credit
+  // check remains the server-side validation inside
+  // createOrderForRetailer, which re-reads these same two fields and
+  // rejects orders that exceed available credit.
+  const { data: credit } = await supabase
+    .from('retailers')
+    .select('credit_limit, outstanding_balance')
+    .eq('id', user.id)
+    .maybeSingle<RetailerCreditRow>();
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -120,6 +136,14 @@ export default async function CheckoutPage() {
           <span>₹{grandTotal.toFixed(2)}</span>
         </div>
       </Card>
+
+      {credit ? (
+        <CreditSummary
+          creditLimit={credit.credit_limit}
+          outstandingBalance={credit.outstanding_balance}
+          orderImpact={grandTotal}
+        />
+      ) : null}
 
       <CheckoutForm />
     </div>

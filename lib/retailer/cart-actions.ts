@@ -3,9 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import type { Database } from '@/types/database.types';
-
-type CartItemInsert = Database['public']['Tables']['cart_items']['Insert'];
+import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 
 interface PackValidationRow {
   id: string;
@@ -44,24 +42,9 @@ export async function addToCartAction(packId: string, quantity: number): Promise
 
   const supabase = createClient();
 
-  const { data: existing } = await supabase
-    .from('cart_items')
-    .select('id, quantity')
-    .eq('retailer_id', user.id)
-    .eq('pack_id', packId)
-    .maybeSingle<{ id: string; quantity: number }>();
-
-  if (existing) {
-    const { error } = await supabase
-      .from('cart_items')
-      .update({ quantity: existing.quantity + quantity } as unknown as never)
-      .eq('id', existing.id);
-    if (error) return { error: error.message };
-  } else {
-    const payload: CartItemInsert = { retailer_id: user.id, pack_id: packId, quantity };
-    const { error } = await supabase.from('cart_items').insert(payload as unknown as never);
-    if (error) return { error: error.message };
-  }
+  // The merge (increment-or-insert) semantics live in exactly one
+  // place so quick-order adds and reorder adds stay identical.
+  await mergeLinesIntoCart(supabase, user.id, [{ packId, quantity }]);
 
   revalidatePath('/retailer/cart');
   return { success: true };

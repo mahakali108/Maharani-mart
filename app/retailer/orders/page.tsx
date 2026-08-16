@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, FileText } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
@@ -99,26 +99,34 @@ export default async function OrdersPage({
         <>
           <div className="space-y-2">
             {orders.map((order) => (
-              <Link key={order.id} href={`/retailer/orders/${order.id}`}>
-                <Card className="flex items-center justify-between p-4">
-                  <div>
-                    <p className="font-mono text-sm font-medium text-ink-900">{order.order_number}</p>
-                    <p className="text-xs text-ink-400">
-                      {new Date(order.placed_at).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-ink-900">₹{order.grand_total.toFixed(2)}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[order.status]}`}>
-                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                    </span>
-                  </div>
-                </Card>
-              </Link>
+              <Card key={order.id} className="flex items-center justify-between p-4">
+                <Link href={`/retailer/orders/${order.id}`} className="min-w-0 flex-1">
+                  <p className="font-mono text-sm font-medium text-ink-900">{order.order_number}</p>
+                  <p className="text-xs text-ink-400">
+                    {new Date(order.placed_at).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </Link>
+                {['confirmed', 'processing', 'packed', 'dispatched', 'delivered'].includes(order.status) ? (
+                  <Link
+                    href={`/retailer/orders/${order.id}/invoice`}
+                    className="mr-3 inline-flex items-center gap-1 rounded-full bg-ink-50 px-2.5 py-1 text-xs font-medium text-primary-600"
+                    aria-label={`Invoice for ${order.order_number}`}
+                  >
+                    <FileText className="h-3 w-3" />
+                    Invoice
+                  </Link>
+                ) : null}
+                <Link href={`/retailer/orders/${order.id}`} className="shrink-0 text-right">
+                  <p className="font-semibold text-ink-900">₹{order.grand_total.toFixed(2)}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[order.status]}`}>
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </span>
+                </Link>
+              </Card>
             ))}
           </div>
 

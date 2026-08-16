@@ -615,6 +615,37 @@ export interface Database {
         ];
       };
 
+      retailer_favorites: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          product_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          product_id: string;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_favorites']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_favorites_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retailer_favorites_product_id_fkey';
+            columns: ['product_id'];
+            isOneToOne: false;
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
       orders: {
         Row: {
           id: string;
