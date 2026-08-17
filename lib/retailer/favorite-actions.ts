@@ -41,6 +41,8 @@ export async function toggleFavoriteAction(productId: string): Promise<FavoriteA
     if (error) return { error: error.message };
 
     revalidatePath('/retailer/home');
+    revalidatePath('/retailer/catalog');
+    revalidatePath('/retailer/favorites');
     revalidatePath(`/retailer/catalog/${productId}`);
     return { success: true, isFavorite: false };
   }
@@ -50,6 +52,8 @@ export async function toggleFavoriteAction(productId: string): Promise<FavoriteA
   if (error) return { error: error.message };
 
   revalidatePath('/retailer/home');
+  revalidatePath('/retailer/catalog');
+  revalidatePath('/retailer/favorites');
   revalidatePath(`/retailer/catalog/${productId}`);
   return { success: true, isFavorite: true };
 }

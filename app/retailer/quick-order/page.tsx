@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
-import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
 import { QuickOrderRow, type QuickOrderPack } from '@/components/retailer/quick-order-row';
 
 interface QuickOrderProductRow {
@@ -40,7 +41,7 @@ const MAX_RESULTS = 30;
 export default async function QuickOrderPage({ searchParams }: { searchParams: { q?: string } }) {
   const user = await requireUser();
   const supabase = createClient();
-  const q = searchParams.q?.trim() ?? '';
+  const q = sanitizeSearchTerm(searchParams.q ?? '');
 
   const { data: retailer } = await supabase
     .from('retailers')
@@ -63,18 +64,21 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
       .from('products')
       .select('id, name, sku_code, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, mrp, moq, is_active )')
       .eq('is_active', true)
-      .or(`name.ilike.%${q}%,sku_code.ilike.%${q}%`)
+      .or(`name.ilike."%${q}%",sku_code.ilike."%${q}%"`)
       .order('name')
       .limit(MAX_RESULTS)
       .returns<QuickOrderProductRow[]>();
 
     const products = productRows ?? [];
-    const overrides = await Promise.all(
-      products.map((product) => getProductPriceOverride(supabase, product.id, user.id, retailer?.area_id ?? null))
+    const overrides = await getProductPriceOverrides(
+      supabase,
+      products.map((product) => product.id),
+      user.id,
+      retailer?.area_id ?? null
     );
 
     cards = products
-      .map((product, index) => {
+      .map((product) => {
         const packs: QuickOrderPack[] = product.product_packs
           .filter((pack) => pack.is_active)
           .map((pack) => ({
@@ -83,7 +87,7 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
             unitsPerCase: pack.units_per_case,
             moq: pack.moq,
             mrp: pack.mrp,
-            effectivePrice: resolvePackPrice(pack, overrides[index] ?? null),
+            effectivePrice: resolvePackPrice(pack, overrides.get(product.id) ?? null),
           }));
         const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
         return {

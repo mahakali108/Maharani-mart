@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
@@ -47,7 +48,14 @@ export async function addToCartAction(packId: string, quantity: number): Promise
   await mergeLinesIntoCart(supabase, user.id, [{ packId, quantity }]);
 
   revalidatePath('/retailer/cart');
+  revalidatePath('/retailer', 'layout');
   return { success: true };
+}
+
+export async function buyNowAction(packId: string, quantity: number): Promise<CartActionResult> {
+  const result = await addToCartAction(packId, quantity);
+  if ('error' in result) return result;
+  redirect('/retailer/checkout');
 }
 
 export async function updateCartQuantityAction(cartItemId: string, quantity: number): Promise<CartActionResult> {
@@ -74,6 +82,7 @@ export async function updateCartQuantityAction(cartItemId: string, quantity: num
 
   if (error) return { error: error.message };
   revalidatePath('/retailer/cart');
+  revalidatePath('/retailer', 'layout');
   return { success: true };
 }
 
@@ -85,5 +94,6 @@ export async function removeCartItemAction(cartItemId: string): Promise<CartActi
   if (error) return { error: error.message };
 
   revalidatePath('/retailer/cart');
+  revalidatePath('/retailer', 'layout');
   return { success: true };
 }
