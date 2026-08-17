@@ -4,11 +4,16 @@ import { useState, useTransition } from 'react';
 import { Heart, Loader2 } from 'lucide-react';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 
-/**
- * Wishlist heart toggle. Sends only the productId — retailer identity
- * is resolved entirely server-side from the auth session.
- */
-export function FavoriteToggle({ productId, initialFavorite }: { productId: string; initialFavorite: boolean }) {
+/** Retailer identity is resolved server-side; the client sends only productId. */
+export function FavoriteToggle({
+  productId,
+  initialFavorite,
+  compact = false,
+}: {
+  productId: string;
+  initialFavorite: boolean;
+  compact?: boolean;
+}) {
   const [isFavorite, setIsFavorite] = useState(initialFavorite);
   const [isPending, startTransition] = useTransition();
 
@@ -26,18 +31,16 @@ export function FavoriteToggle({ productId, initialFavorite }: { productId: stri
       disabled={isPending}
       aria-label={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
       aria-pressed={isFavorite}
-      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors ${
+      className={`flex items-center justify-center gap-1.5 border font-bold shadow-sm backdrop-blur transition ${
+        compact ? 'h-10 w-10 rounded-xl bg-white/95 p-0 text-xs' : 'h-10 rounded-xl px-3.5 text-xs'
+      } ${
         isFavorite
-          ? 'border-primary-600 bg-primary-50 text-primary-600'
-          : 'border-ink-200 bg-white text-ink-500 hover:border-primary-300 hover:text-primary-600'
-      } disabled:opacity-50`}
+          ? 'border-primary-200 bg-primary-50 text-primary-600'
+          : 'border-slate-200 bg-white text-slate-500 hover:border-primary-300 hover:text-primary-600'
+      } disabled:opacity-60`}
     >
-      {isPending ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : (
-        <Heart className={`h-4 w-4 ${isFavorite ? 'fill-primary-600 text-primary-600' : ''}`} />
-      )}
-      {isFavorite ? 'Saved' : 'Save'}
+      {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className={`h-4 w-4 ${isFavorite ? 'fill-primary-600 text-primary-600' : ''}`} />}
+      {!compact ? (isFavorite ? 'Saved' : 'Save') : null}
     </button>
   );
 }

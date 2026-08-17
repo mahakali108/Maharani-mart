@@ -5,9 +5,14 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
   }
   body {
     @apply bg-ink-50 text-ink-900 antialiased;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
   }
   ::selection {
     @apply bg-primary-600/20 text-primary-700;
@@ -23,6 +28,21 @@
     height: 6px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-ink-200 rounded-full;
+    @apply rounded-full bg-ink-200;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .marketplace-grid {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

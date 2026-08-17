@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Info, RotateCcw, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
@@ -33,16 +33,6 @@ interface ReorderItemRow {
   } | null;
 }
 
-/**
- * Reorder review screen (Requirement B): shows the items of a past
- * order with their CURRENT pack data, current effective price, current
- * GST rate, and current MOQ — the retailer edits quantities here and
- * only then are valid lines merged into the existing cart. Old prices
- * and old MOQs are deliberately never consulted: price display uses
- * the same getProductPriceOverride/resolvePackPrice pair the cart and
- * checkout pages use, and line validation re-happens server-side in
- * addReorderLinesToCartAction at submit time.
- */
 export default async function ReorderPage({ params }: { params: { id: string } }) {
   const user = await requireUser();
   const supabase = createClient();
@@ -53,26 +43,19 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     .eq('id', params.id)
     .eq('retailer_id', user.id)
     .maybeSingle<OrderRow>();
-
   if (!order) notFound();
 
   const [{ data: retailer }, { data: itemData }] = await Promise.all([
     supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<{ area_id: string }>(),
     supabase
       .from('order_items')
-      .select(
-        'id, pack_id, quantity, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, moq, is_active )'
-      )
+      .select('id, pack_id, quantity, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, moq, is_active )')
       .eq('order_id', order.id),
   ]);
 
   const items = (itemData ?? []) as unknown as ReorderItemRow[];
-
-  // Resolve the CURRENT product-level override once per distinct
-  // product — the exact same pricing rule cart/checkout resolve, so
-  // the retailer can never be shown (or charged) yesterday's price.
   const overrideByProduct = new Map<string, number | null>();
-  const distinctProductIds = [...new Set(items.map((i) => i.products?.id).filter((id): id is string => !!id))];
+  const distinctProductIds = [...new Set(items.map((item) => item.products?.id).filter((id): id is string => !!id))];
   const overrides = await Promise.all(
     distinctProductIds.map(async (productId) => [
       productId,
@@ -86,20 +69,16 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     .map((item) => {
       const pack = item.product_packs!;
       const product = item.products;
-      const currentUnitPrice = resolvePackPrice(
-        pack,
-        product ? overrideByProduct.get(product.id) ?? null : null
-      );
+      const currentUnitPrice = resolvePackPrice(pack, product ? overrideByProduct.get(product.id) ?? null : null);
       const unavailable = !pack.is_active || !product?.is_active;
-      const moq = pack.moq;
       return {
         packId: item.pack_id!,
         productName: product?.name ?? 'Unknown product',
         packName: pack.pack_name,
         imageUrl: product?.product_images[0]?.image_url,
         previousQuantity: item.quantity,
-        suggestedQuantity: Math.max(item.quantity, moq),
-        moq,
+        suggestedQuantity: Math.max(item.quantity, pack.moq),
+        moq: pack.moq,
         gstPercent: product?.gst_percent ?? 0,
         currentUnitPrice,
         unavailable,
@@ -107,34 +86,18 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     });
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-ink-950">Reorder</h1>
-          <p className="mt-1 text-sm text-ink-500">
-            From <span className="font-mono">{order.order_number}</span> ·{' '}
-            {new Date(order.placed_at).toLocaleDateString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </p>
-        </div>
-        <Link
-          href={`/retailer/orders/${order.id}`}
-          className="flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Link>
-      </div>
+    <div className="space-y-5 sm:space-y-6">
+      <nav className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs"><Link href="/retailer/orders" className="hover:text-primary-600">My orders</Link><ChevronRight className="h-3 w-3" /><Link href={`/retailer/orders/${order.id}`} className="font-mono hover:text-primary-600">{order.order_number}</Link><ChevronRight className="h-3 w-3" /><span className="text-slate-800">Reorder</span></nav>
 
-      <p className="rounded-xl border border-ink-100 bg-white px-4 py-3 text-sm text-ink-500">
-        Quantities are editable. Prices, GST and minimum quantities shown are the current ones —
-        totals are rechecked again at checkout.
-      </p>
+      <section className="marketplace-grid relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-800 via-primary-700 to-slate-950 p-5 text-white shadow-lg sm:p-8">
+        <RotateCcw className="absolute -bottom-8 -right-4 h-40 w-40 rotate-[-15deg] text-white/5 sm:h-52 sm:w-52" />
+        <div className="relative"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Buy again</p><h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-4xl">Review your reorder</h1><p className="mt-2 text-xs text-primary-100 sm:text-sm">From <span className="font-mono font-semibold text-white">{order.order_number}</span> · {new Date(order.placed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p><Link href={`/retailer/orders/${order.id}`} className="mt-4 inline-flex items-center gap-1 text-[10px] font-bold text-white/80 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back to order details</Link></div>
+      </section>
+
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-[10px] leading-4 text-blue-800 sm:text-xs"><Info className="mt-0.5 h-4 w-4 shrink-0" /><p><span className="font-bold">Current terms apply.</span> Edit quantities before adding. Prices, GST, availability and MOQ shown here are current and will be securely checked again at checkout.</p></div>
 
       <ReorderForm orderId={order.id} lines={lines} />
+      <p className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Original order pricing is never reused.</p>
     </div>
   );
 }
