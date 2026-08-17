@@ -1,13 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Loader2, LockKeyhole, MapPin } from 'lucide-react';
 import { placeOrderAction } from '@/lib/retailer/checkout-actions';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
 
-export function CheckoutForm() {
+export function CheckoutForm({ grandTotal }: { grandTotal: number }) {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -16,39 +13,27 @@ export function CheckoutForm() {
     setError(null);
     startTransition(async () => {
       const result = await placeOrderAction(notes);
-      // On success, placeOrderAction redirects server-side and never
-      // returns to this branch. We only reach here on failure.
-      if (result && 'error' in result) {
-        setError(result.error ?? 'Failed to place order.');
-      }
+      if (result && 'error' in result) setError(result.error ?? 'Failed to place order.');
     });
   }
 
   return (
-    <Card className="space-y-4">
-      <CardHeader>
-        <CardTitle>Delivery notes</CardTitle>
-      </CardHeader>
-      <div>
-        <Label htmlFor="notes">Notes for this order (optional)</Label>
-        <textarea
-          id="notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          placeholder="e.g. preferred delivery time, landmark, special instructions"
-          className="w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-600"
-        />
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5"><MapPin className="h-4 w-4 text-primary-600" /><h2 className="text-sm font-bold text-slate-900">Delivery instructions</h2></div>
+      <div className="space-y-4 p-4">
+        <div>
+          <label htmlFor="notes" className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-slate-500">Notes for this order (optional)</label>
+          <textarea id="notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} placeholder="Preferred delivery time, landmark or special instructions" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 outline-none placeholder:text-slate-400 focus:border-primary-300 focus:ring-2 focus:ring-primary-50" />
+        </div>
+
+        {error ? <div role="alert" className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2.5 text-[10px] font-medium text-primary-700">{error}</div> : null}
+
+        <button type="button" onClick={handlePlaceOrder} disabled={isPending} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60">
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+          {isPending ? 'Placing order…' : `Place order · ₹${grandTotal.toFixed(2)}`}
+        </button>
+        <p className="flex items-start justify-center gap-1.5 text-center text-[9px] leading-4 text-slate-400"><LockKeyhole className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" /> By placing this order, prices, MOQ, GST, credit and availability will be securely rechecked.</p>
       </div>
-
-      {error ? (
-        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{error}</div>
-      ) : null}
-
-      <Button onClick={handlePlaceOrder} disabled={isPending} className="w-full">
-        {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-        {isPending ? 'Placing order…' : 'Place order'}
-      </Button>
-    </Card>
+    </section>
   );
 }

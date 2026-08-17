@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Check, ChevronLeft, ChevronRight, PackageCheck, ReceiptText, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
-import { Card } from '@/components/ui/card';
+import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 
@@ -14,13 +15,8 @@ interface CartItemDetail {
   products: { name: string; gst_percent: number; is_active: boolean } | null;
 }
 
-interface PriceOverrideRow {
-  product_id: string;
-  scope: 'retailer' | 'area';
-  price: number;
-}
-
 interface RetailerCreditRow {
+  area_id: string;
   credit_limit: number;
   outstanding_balance: number;
 }
@@ -29,124 +25,94 @@ export default async function CheckoutPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const { data: cartData } = await supabase
-    .from('cart_items')
-    .select(
-      'id, quantity, product_id, product_packs ( pack_name, base_price, ptr, is_active ), products ( name, gst_percent, is_active )'
-    )
-    .eq('retailer_id', user.id)
-    .order('updated_at', { ascending: false });
+  const [{ data: cartData }, { data: retailer }] = await Promise.all([
+    supabase
+      .from('cart_items')
+      .select('id, quantity, product_id, product_packs ( pack_name, base_price, ptr, is_active ), products ( name, gst_percent, is_active )')
+      .eq('retailer_id', user.id)
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('retailers')
+      .select('area_id, credit_limit, outstanding_balance')
+      .eq('id', user.id)
+      .maybeSingle<RetailerCreditRow>(),
+  ]);
 
   const items = (cartData ?? []) as unknown as CartItemDetail[];
+  if (items.length === 0) redirect('/retailer/cart');
 
-  // Nothing to check out — send them back to build a cart first,
-  // rather than showing an empty/broken review screen.
-  if (items.length === 0) {
-    redirect('/retailer/cart');
-  }
-
-  const productIds = [...new Set(items.map((i) => i.product_id))];
-  const overrideByProduct = new Map<string, number>();
-  const nowIso = new Date().toISOString();
-
-  const { data: overrides } = await supabase
-    .from('price_lists')
-    .select('product_id, scope, price')
-    .in('product_id', productIds)
-    .in('scope', ['retailer', 'area'])
-    .eq('is_active', true)
-    .lte('valid_from', nowIso)
-    .order('priority', { ascending: false })
-    .returns<PriceOverrideRow[]>();
-
-  for (const row of overrides ?? []) {
-    const existing = overrideByProduct.get(row.product_id);
-    if (existing === undefined || row.scope === 'retailer') {
-      overrideByProduct.set(row.product_id, row.price);
-    }
-  }
+  const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
+  const overridePairs = await Promise.all(
+    distinctProductIds.map(async (productId) => [
+      productId,
+      await getProductPriceOverride(supabase, productId, user.id, retailer?.area_id ?? null),
+    ] as const)
+  );
+  const overrideByProduct = new Map(overridePairs);
 
   let subtotal = 0;
   let gstTotal = 0;
   const lines = items.map((item) => {
     const pack = item.product_packs;
     const product = item.products;
-    const unitPrice = pack ? overrideByProduct.get(item.product_id) ?? pack.ptr ?? pack.base_price : 0;
+    const unitPrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
     const lineSubtotal = unitPrice * item.quantity;
     const gstPercent = product?.gst_percent ?? 0;
     const lineGst = (lineSubtotal * gstPercent) / 100;
     subtotal += lineSubtotal;
     gstTotal += lineGst;
-
     return {
       id: item.id,
       quantity: item.quantity,
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
+      unitPrice,
+      gstPercent,
       lineTotal: lineSubtotal + lineGst,
     };
   });
-
   const grandTotal = subtotal + gstTotal;
 
-  // Credit display only (Requirement E) — the authoritative credit
-  // check remains the server-side validation inside
-  // createOrderForRetailer, which re-reads these same two fields and
-  // rejects orders that exceed available credit.
-  const { data: credit } = await supabase
-    .from('retailers')
-    .select('credit_limit, outstanding_balance')
-    .eq('id', user.id)
-    .maybeSingle<RetailerCreditRow>();
-
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-ink-950">Checkout</h1>
-        <Link href="/retailer/cart" className="text-sm font-medium text-primary-600 hover:text-primary-700">
-          Edit cart
-        </Link>
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs"><Link href="/retailer/cart" className="flex items-center gap-1 hover:text-primary-600"><ChevronLeft className="h-3.5 w-3.5" /> Cart</Link><ChevronRight className="h-3 w-3" /><span className="text-slate-800">Checkout</span></div>
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Final review</p><h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">Secure checkout</h1><p className="mt-1 text-xs text-slate-500">Review pricing, GST and credit before placing your order.</p></div>
+        <div className="hidden items-center gap-2 text-[9px] font-bold text-slate-500 sm:flex"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="h-3 w-3" /></span> Cart <span className="h-px w-8 bg-emerald-300" /><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white">2</span> Checkout <span className="h-px w-8 bg-slate-200" /><span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">3</span> Done</div>
       </div>
 
-      <Card className="space-y-3">
-        {lines.map((line) => (
-          <div key={line.id} className="flex items-center justify-between gap-3 text-sm">
-            <div className="min-w-0">
-              <p className="truncate font-medium text-ink-900">{line.productName}</p>
-              <p className="text-xs text-ink-400">
-                {line.packName} × {line.quantity}
-              </p>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_370px] lg:gap-7">
+        <div className="space-y-4">
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-5"><div><h2 className="text-sm font-bold text-slate-900">Order items</h2><p className="mt-0.5 text-[10px] text-slate-500">{lines.length} line item{lines.length === 1 ? '' : 's'}</p></div><PackageCheck className="h-5 w-5 text-primary-600" /></div>
+            <div className="divide-y divide-slate-100 px-4 sm:px-5">
+              {lines.map((line) => (
+                <div key={line.id} className="flex items-center justify-between gap-3 py-4 text-xs">
+                  <div className="min-w-0"><p className="truncate font-bold text-slate-900">{line.productName}</p><p className="mt-1 text-[9px] text-slate-500">{line.packName} · Qty {line.quantity} · ₹{line.unitPrice.toFixed(2)} each</p><p className="mt-0.5 text-[9px] text-slate-400">GST {line.gstPercent}%</p></div>
+                  <p className="shrink-0 text-sm font-bold text-slate-950">₹{line.lineTotal.toFixed(2)}</p>
+                </div>
+              ))}
             </div>
-            <p className="shrink-0 font-medium text-ink-900">₹{line.lineTotal.toFixed(2)}</p>
-          </div>
-        ))}
-      </Card>
+            <Link href="/retailer/cart" className="flex items-center justify-center border-t border-slate-100 bg-slate-50 py-3 text-[10px] font-bold text-primary-600">Edit cart</Link>
+          </section>
 
-      <Card className="space-y-2">
-        <div className="flex justify-between text-sm text-ink-600">
-          <span>Subtotal</span>
-          <span>₹{subtotal.toFixed(2)}</span>
+          {retailer ? <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} orderImpact={grandTotal} /> : null}
         </div>
-        <div className="flex justify-between text-sm text-ink-600">
-          <span>GST</span>
-          <span>₹{gstTotal.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between border-t border-ink-100 pt-2 text-base font-semibold text-ink-950">
-          <span>Total</span>
-          <span>₹{grandTotal.toFixed(2)}</span>
-        </div>
-      </Card>
 
-      {credit ? (
-        <CreditSummary
-          creditLimit={credit.credit_limit}
-          outstandingBalance={credit.outstanding_balance}
-          orderImpact={grandTotal}
-        />
-      ) : null}
-
-      <CheckoutForm />
+        <aside className="space-y-4 lg:sticky lg:top-36">
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
+            <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-5 py-4"><ReceiptText className="h-4 w-4 text-primary-600" /><h2 className="text-sm font-bold text-slate-900">Order total</h2></div>
+            <div className="space-y-3 p-5">
+              <div className="flex justify-between text-xs text-slate-600"><span>Subtotal</span><span className="font-semibold text-slate-800">₹{subtotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-xs text-slate-600"><span>GST</span><span className="font-semibold text-slate-800">₹{gstTotal.toFixed(2)}</span></div>
+              <div className="flex items-end justify-between border-t border-dashed border-slate-200 pt-4"><span className="text-sm font-bold text-slate-900">Grand total</span><span className="text-2xl font-bold tracking-tight text-slate-950">₹{grandTotal.toFixed(2)}</span></div>
+              <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Final totals are validated server-side</div>
+            </div>
+          </section>
+          <CheckoutForm grandTotal={grandTotal} />
+        </aside>
+      </div>
     </div>
   );
 }
-

@@ -1,13 +1,9 @@
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { CreditCard, ShieldCheck, WalletCards } from 'lucide-react';
 
 /**
- * Presentational credit summary (Requirement E). Pure display: all
- * values are read from the retailers table (credit_limit /
- * outstanding_balance) by caller server components, and enforcement
- * stays exactly where it already was — the server-side credit check
- * inside createOrderForRetailer. The "after order" figure shown at
- * checkout mirrors that check's arithmetic (credit_limit > 0 means a
- * limit is configured; 0 means "not set").
+ * Presentational credit summary only. Values come from the retailer
+ * record and the authoritative credit validation remains in
+ * createOrderForRetailer when an order is submitted.
  */
 export function CreditSummary({
   creditLimit,
@@ -16,57 +12,77 @@ export function CreditSummary({
 }: {
   creditLimit: number;
   outstandingBalance: number;
-  /** Current cart/order total to show as "this order" impact (checkout). */
   orderImpact?: number;
 }) {
   const hasLimit = creditLimit > 0;
   const availableCredit = hasLimit ? Math.max(0, creditLimit - outstandingBalance) : null;
+  const usedPercent = hasLimit ? Math.min(100, Math.max(0, (outstandingBalance / creditLimit) * 100)) : 0;
   const availableAfter =
     orderImpact !== undefined && availableCredit !== null
       ? Math.max(0, availableCredit - orderImpact)
       : null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Credit</CardTitle>
-      </CardHeader>
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-ink-400">Limit</p>
-          <p className="mt-1 text-sm font-semibold text-ink-900">
-            {hasLimit ? `₹${creditLimit.toFixed(2)}` : 'Not set'}
-          </p>
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <WalletCards className="h-4.5 w-4.5" />
+          </span>
+          <div>
+            <h2 className="text-xs font-bold text-slate-900">Business credit</h2>
+            <p className="text-[9px] text-slate-500">Secure account limit</p>
+          </div>
         </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-ink-400">Outstanding</p>
-          <p className={`mt-1 text-sm font-semibold ${outstandingBalance > 0 ? 'text-primary-600' : 'text-ink-900'}`}>
-            ₹{outstandingBalance.toFixed(2)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-ink-400">Available</p>
-          <p className="mt-1 text-sm font-semibold text-green-700">
-            {availableCredit === null ? '—' : `₹${availableCredit.toFixed(2)}`}
-          </p>
-        </div>
+        <ShieldCheck className="h-4 w-4 text-emerald-600" />
       </div>
 
-      {orderImpact !== undefined && availableCredit !== null ? (
-        <div className="mt-3 space-y-1.5 border-t border-ink-100 pt-3 text-sm">
-          <div className="flex justify-between text-ink-600">
-            <span>This order</span>
-            <span>₹{orderImpact.toFixed(2)}</span>
+      <div className="p-4">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Available credit</p>
+            <p className="mt-1 text-xl font-bold tracking-tight text-slate-950">
+              {availableCredit === null ? 'Not configured' : `₹${availableCredit.toFixed(2)}`}
+            </p>
           </div>
-          <div className={`flex justify-between font-medium ${availableAfter! > 0 || orderImpact === 0 ? 'text-ink-900' : 'text-primary-600'}`}>
-            <span>Available after this order</span>
-            <span>₹{availableAfter!.toFixed(2)}</span>
-          </div>
-          <p className="text-xs text-ink-400">
-            Your credit is rechecked when the order is placed.
-          </p>
+          {hasLimit ? (
+            <p className="text-right text-[10px] leading-4 text-slate-500">
+              of <span className="font-semibold text-slate-700">₹{creditLimit.toFixed(2)}</span>
+            </p>
+          ) : null}
         </div>
-      ) : null}
-    </Card>
+
+        {hasLimit ? (
+          <>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className={`h-full rounded-full ${usedPercent > 85 ? 'bg-primary-600' : usedPercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                style={{ width: `${usedPercent}%` }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[9px] text-slate-500">
+              <span>{usedPercent.toFixed(0)}% used</span>
+              <span>Outstanding ₹{outstandingBalance.toFixed(2)}</span>
+            </div>
+          </>
+        ) : (
+          <p className="mt-3 text-[10px] leading-4 text-slate-500">Contact your distributor if your shop requires a credit facility.</p>
+        )}
+
+        {orderImpact !== undefined && availableCredit !== null ? (
+          <div className="mt-4 space-y-2 rounded-xl bg-slate-50 p-3 text-xs">
+            <div className="flex justify-between text-slate-600">
+              <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5" /> This order</span>
+              <span className="font-semibold">₹{orderImpact.toFixed(2)}</span>
+            </div>
+            <div className={`flex justify-between border-t border-slate-200 pt-2 font-bold ${availableAfter! > 0 || orderImpact === 0 ? 'text-slate-900' : 'text-primary-600'}`}>
+              <span>Available after order</span>
+              <span>₹{availableAfter!.toFixed(2)}</span>
+            </div>
+            <p className="text-[9px] leading-4 text-slate-400">Credit is securely revalidated when the order is placed.</p>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
