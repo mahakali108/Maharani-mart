@@ -58,5 +58,5 @@ export async function placeOrderAction(notes: string): Promise<CheckoutResult> {
 
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer/orders');
-  redirect(`/retailer/orders/${result.order.id}`);
+  redirect(`/retailer/orders/${result.order.id}?placed=1`);
 }

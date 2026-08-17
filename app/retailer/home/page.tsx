@@ -3,7 +3,6 @@ import Image from 'next/image';
 import {
   ArrowRight,
   BadgeIndianRupee,
-  BellRing,
   Boxes,
   ChevronRight,
   ClipboardList,
@@ -25,21 +24,37 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
-import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { FrequentProductCard } from '@/components/retailer/frequent-product-card';
+import { ProductRail } from '@/components/retailer/product-rail';
+import { PromoBanner } from '@/components/retailer/promo-banner';
+import { RecentlyViewedRail } from '@/components/retailer/recently-viewed';
+import { SectionHeading } from '@/components/retailer/section-heading';
+import { loadFavoriteIds, priceCatalogProducts, PRODUCT_CARD_SELECT, type CatalogProductRow } from '@/lib/retailer/catalog';
+import { greetingForHour } from '@/lib/retailer/format';
+import {
+  getBuyAgainCards,
+  getFrequentlyOrderedCards,
+  OPEN_ORDER_STATUSES,
+  pickDiscoveryRails,
+} from '@/lib/retailer/personalization';
 
 interface BannerRow {
   id: string;
   title: string;
   image_url: string;
   link_url: string | null;
+  area_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
 }
 
 interface CategoryRow {
   id: string;
   name: string;
   image_url: string | null;
+  parent_id: string | null;
+  products: { count: number }[] | null;
 }
 
 interface OrderRow {
@@ -65,33 +80,6 @@ interface SchemeRow {
   ends_at: string;
 }
 
-interface FavoriteRow {
-  product_id: string;
-  products: { id: string; name: string; is_active: boolean } | null;
-}
-
-interface FrequentItemRow {
-  product_id: string;
-  quantity: number;
-  order_id: string;
-  products: {
-    id: string;
-    name: string;
-    is_active: boolean;
-    product_images: { image_url: string; sort_order: number }[];
-    product_packs: {
-      id: string;
-      pack_name: string;
-      base_price: number;
-      ptr: number | null;
-      moq: number;
-      is_active: boolean;
-      sort_order: number;
-    }[];
-  } | null;
-}
-
-const OPEN_ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'packed', 'dispatched'];
 const CATEGORY_ICONS = [Boxes, Cookie, Coffee, Milk, Store, Tag];
 
 const ORDER_STATUS_STYLES: Record<string, string> = {
@@ -104,33 +92,6 @@ const ORDER_STATUS_STYLES: Record<string, string> = {
   cancelled: 'bg-primary-50 text-primary-700 ring-primary-200',
   returned: 'bg-primary-50 text-primary-700 ring-primary-200',
 };
-
-function SectionHeading({
-  eyebrow,
-  title,
-  href,
-  linkLabel = 'View all',
-}: {
-  eyebrow?: string;
-  title: string;
-  href?: string;
-  linkLabel?: string;
-}) {
-  return (
-    <div className="flex items-end justify-between gap-3">
-      <div>
-        {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">{eyebrow}</p> : null}
-        <h2 className="mt-0.5 text-base font-bold tracking-tight text-slate-900 sm:text-xl">{title}</h2>
-      </div>
-      {href ? (
-        <Link href={href} className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-primary-600 hover:text-primary-700 sm:text-xs">
-          {linkLabel}
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Link>
-      ) : null}
-    </div>
-  );
-}
 
 function OrderListRow({ order }: { order: OrderRow }) {
   return (
@@ -166,6 +127,7 @@ export default async function RetailerHomePage() {
     .maybeSingle<RetailerRow>();
 
   const nowIso = new Date().toISOString();
+  const favoriteIds = await loadFavoriteIds(supabase, user.id);
   const [
     { data: bannerRows },
     { data: categoryData },
@@ -173,7 +135,9 @@ export default async function RetailerHomePage() {
     { data: recentOrders },
     { data: lastDelivered },
     { data: schemeData },
-    { data: favoriteData },
+    { data: discoveryRows },
+    frequentCards,
+    buyAgainCards,
   ] = await Promise.all([
     supabase
       .from('banners')
@@ -182,10 +146,9 @@ export default async function RetailerHomePage() {
       .order('sort_order'),
     supabase
       .from('categories')
-      .select('id, name, image_url')
+      .select('id, name, image_url, parent_id, products(count)')
       .eq('is_active', true)
       .order('sort_order')
-      .limit(12)
       .returns<CategoryRow[]>(),
     supabase
       .from('orders')
@@ -220,100 +183,51 @@ export default async function RetailerHomePage() {
       .limit(6)
       .returns<SchemeRow[]>(),
     supabase
-      .from('retailer_favorites')
-      .select('product_id, products ( id, name, is_active )')
-      .eq('retailer_id', user.id)
+      .from('products')
+      .select(PRODUCT_CARD_SELECT)
+      .eq('is_active', true)
       .order('created_at', { ascending: false })
-      .limit(8)
-      .returns<FavoriteRow[]>(),
+      .limit(80)
+      .returns<CatalogProductRow[]>(),
+    getFrequentlyOrderedCards(supabase, user.id, retailer?.area_id ?? null, favoriteIds, 8),
+    getBuyAgainCards(supabase, user.id, retailer?.area_id ?? null, favoriteIds, 8),
   ]);
 
-  const banners = ((bannerRows ?? []) as unknown as (BannerRow & {
-    area_id: string | null;
-    starts_at: string | null;
-    ends_at: string | null;
-  })[]).filter((banner) => {
+  const banners = ((bannerRows ?? []) as unknown as BannerRow[]).filter((banner) => {
     const areaMatches = !banner.area_id || banner.area_id === retailer?.area_id;
     const started = !banner.starts_at || banner.starts_at <= nowIso;
     const notEnded = !banner.ends_at || banner.ends_at >= nowIso;
     return areaMatches && started && notEnded;
   });
 
-  const categories = categoryData ?? [];
+  const categories = [...(categoryData ?? [])]
+    .map((category) => ({
+      ...category,
+      count: category.products?.[0]?.count ?? 0,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const popularCategories = categories.filter((category) => !category.parent_id).slice(0, 10);
   const schemes = schemeData ?? [];
-  const favorites = (favoriteData ?? []).filter((favorite) => favorite.products?.is_active);
   const open = openOrders ?? [];
   const recent = recentOrders ?? [];
   const reorderTarget = lastDelivered?.[0] ?? null;
 
-  const { data: freqOrderIds } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('retailer_id', user.id)
-    .neq('status', 'cancelled')
-    .order('placed_at', { ascending: false })
-    .limit(25)
-    .returns<{ id: string }[]>();
-  const recentOrderIds = (freqOrderIds ?? []).map((order) => order.id);
-  let frequentCards: {
-    id: string;
-    name: string;
-    imageUrl?: string;
-    packId: string | null;
-    packName?: string;
-    moq: number;
-    effectivePrice: number | null;
-    timesOrdered: number;
-  }[] = [];
-
-  if (recentOrderIds.length > 0) {
-    const { data: freqRows } = await supabase
-      .from('order_items')
-      .select('product_id, quantity, order_id, products ( id, name, is_active, product_images ( image_url, sort_order ), product_packs ( id, pack_name, base_price, ptr, moq, is_active, sort_order ) )')
-      .in('order_id', recentOrderIds)
-      .limit(500)
-      .returns<FrequentItemRow[]>();
-
-    const byProduct = new Map<string, { times: number; qty: number; product: NonNullable<FrequentItemRow['products']> }>();
-    for (const row of freqRows ?? []) {
-      if (!row.products?.is_active) continue;
-      const entry = byProduct.get(row.product_id) ?? { times: 0, qty: 0, product: row.products };
-      entry.times += 1;
-      entry.qty += row.quantity;
-      byProduct.set(row.product_id, entry);
-    }
-
-    const top = [...byProduct.entries()]
-      .sort((a, b) => b[1].times - a[1].times || b[1].qty - a[1].qty)
-      .slice(0, 6);
-    const overrides = await Promise.all(
-      top.map(([productId]) => getProductPriceOverride(supabase, productId, user.id, retailer?.area_id ?? null))
-    );
-
-    frequentCards = top.map(([productId, info], index) => {
-      const packs = [...info.product.product_packs]
-        .filter((pack) => pack.is_active)
-        .sort((a, b) => a.sort_order - b.sort_order);
-      const pack = packs[0] ?? null;
-      const images = [...info.product.product_images].sort((a, b) => a.sort_order - b.sort_order);
-      return {
-        id: productId,
-        name: info.product.name,
-        imageUrl: images[0]?.image_url,
-        packId: pack?.id ?? null,
-        packName: pack?.pack_name,
-        moq: pack?.moq ?? 1,
-        effectivePrice: pack ? resolvePackPrice(pack, overrides[index] ?? null) : null,
-        timesOrdered: info.times,
-      };
-    });
-  }
+  const discoveryCards = await priceCatalogProducts(
+    supabase,
+    discoveryRows ?? [],
+    user.id,
+    retailer?.area_id ?? null,
+    favoriteIds
+  );
+  const rails = pickDiscoveryRails(discoveryCards);
+  const favoriteCards = discoveryCards.filter((card) => favoriteIds.has(card.id)).slice(0, 8);
+  const greeting = greetingForHour(new Date().getHours());
 
   return (
     <div className="space-y-6 sm:space-y-8">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Retailer dashboard</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">{greeting}</p>
           <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">
             Welcome, {retailer?.shop_name ?? user.fullName}
           </h1>
@@ -327,7 +241,9 @@ export default async function RetailerHomePage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-900 sm:text-base">Shop by category</h2>
-          <Link href="/retailer/catalog" className="flex items-center gap-0.5 text-[11px] font-bold text-primary-600">All products <ChevronRight className="h-3.5 w-3.5" /></Link>
+          <Link href="/retailer/categories" className="flex items-center gap-0.5 text-[11px] font-bold text-primary-600">
+            View all categories <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
         <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:gap-3">
           <Link href="/retailer/catalog" className="group flex w-[74px] shrink-0 flex-col items-center gap-2 text-center sm:w-24">
@@ -336,7 +252,7 @@ export default async function RetailerHomePage() {
             </span>
             <span className="line-clamp-2 text-[10px] font-semibold leading-3.5 text-slate-700 sm:text-xs">All products</span>
           </Link>
-          {categories.map((category, index) => {
+          {popularCategories.map((category, index) => {
             const Icon = CATEGORY_ICONS[index % CATEGORY_ICONS.length] ?? Boxes;
             return (
               <Link key={category.id} href={`/retailer/catalog?category=${category.id}`} className="group flex w-[74px] shrink-0 flex-col items-center gap-2 text-center sm:w-24">
@@ -348,6 +264,7 @@ export default async function RetailerHomePage() {
                   )}
                 </span>
                 <span className="line-clamp-2 text-[10px] font-semibold leading-3.5 text-slate-700 sm:text-xs">{category.name}</span>
+                {category.count > 0 ? <span className="text-[9px] text-slate-400">{category.count}</span> : null}
               </Link>
             );
           })}
@@ -358,36 +275,27 @@ export default async function RetailerHomePage() {
         <section className="min-w-0">
           {banners.length > 0 ? (
             <div className="scrollbar-none flex snap-x gap-3 overflow-x-auto">
-              {banners.map((banner) => {
-                const bannerContent = (
-                  <>
-                    <Image src={banner.image_url} alt={banner.title} fill className="object-cover transition duration-500 group-hover:scale-105" unoptimized />
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950/70 via-slate-950/10 to-transparent" />
-                    <div className="absolute inset-y-0 left-0 flex max-w-[70%] flex-col justify-end p-5 text-white sm:p-7">
-                      <span className="mb-2 w-fit rounded-full bg-amber-400 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-950">Featured</span>
-                      <h2 className="text-lg font-bold leading-tight drop-shadow sm:text-2xl">{banner.title}</h2>
-                      <span className="mt-3 flex items-center gap-1 text-[11px] font-bold sm:text-xs">Explore offer <ArrowRight className="h-3.5 w-3.5" /></span>
-                    </div>
-                  </>
-                );
-                return banner.link_url ? (
-                  <a key={banner.id} href={banner.link_url} target="_blank" rel="noreferrer" className="group relative aspect-[2/1] w-[92%] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-900 shadow-md sm:w-full">
-                    {bannerContent}
-                  </a>
-                ) : (
-                  <div key={banner.id} className="group relative aspect-[2/1] w-[92%] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-900 shadow-md sm:w-full">
-                    {bannerContent}
-                  </div>
-                );
-              })}
+              {banners.map((banner) => (
+                <PromoBanner key={banner.id} title={banner.title} imageUrl={banner.image_url} linkUrl={banner.link_url} />
+              ))}
             </div>
           ) : (
             <div className="marketplace-grid relative flex min-h-[220px] overflow-hidden rounded-2xl bg-gradient-to-br from-primary-800 via-primary-700 to-primary-950 p-5 text-white shadow-lg sm:min-h-[280px] sm:p-8">
               <div className="relative z-10 max-w-lg self-center">
-                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300"><Sparkles className="h-3.5 w-3.5" /> Built for your business</p>
-                <h2 className="mt-3 text-2xl font-bold leading-tight sm:text-4xl">Fill your shelves.<br />Grow your margins.</h2>
-                <p className="mt-3 max-w-md text-xs leading-5 text-primary-100 sm:text-sm">Browse approved wholesale prices, compare pack sizes and place GST-ready orders in minutes.</p>
-                <Link href="/retailer/catalog" className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-bold text-primary-700 shadow-sm transition hover:bg-amber-50">Start shopping <ArrowRight className="h-4 w-4" /></Link>
+                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
+                  <Sparkles className="h-3.5 w-3.5" /> Built for your business
+                </p>
+                <h2 className="mt-3 text-2xl font-bold leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)] sm:text-4xl">
+                  Fill your shelves.
+                  <br />
+                  Grow your margins.
+                </h2>
+                <p className="mt-3 max-w-md text-xs leading-5 text-primary-50 sm:text-sm">
+                  Browse approved wholesale prices, compare pack sizes and place GST-ready orders in minutes.
+                </p>
+                <Link href="/retailer/catalog" className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-amber-300">
+                  Start shopping <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
               <ShoppingCart className="absolute -bottom-8 -right-6 h-44 w-44 rotate-[-8deg] text-white/10 sm:h-64 sm:w-64" />
             </div>
@@ -412,10 +320,10 @@ export default async function RetailerHomePage() {
               <p className="mt-2 text-xs font-bold text-slate-900">Orders</p>
               <p className="mt-0.5 text-[10px] text-slate-500">Track & reorder</p>
             </Link>
-            <Link href="/retailer/notifications" className="group rounded-xl bg-emerald-50 p-3 transition hover:bg-emerald-100">
-              <BellRing className="h-5 w-5 text-emerald-700" />
-              <p className="mt-2 text-xs font-bold text-slate-900">Updates</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">Alerts & news</p>
+            <Link href="/retailer/favorites" className="group rounded-xl bg-emerald-50 p-3 transition hover:bg-emerald-100">
+              <Heart className="h-5 w-5 text-emerald-700" />
+              <p className="mt-2 text-xs font-bold text-slate-900">Favourites</p>
+              <p className="mt-0.5 text-[10px] text-slate-500">Saved products</p>
             </Link>
           </div>
         </div>
@@ -424,58 +332,96 @@ export default async function RetailerHomePage() {
       {reorderTarget ? (
         <section className="flex flex-col gap-4 overflow-hidden rounded-2xl border border-primary-100 bg-gradient-to-r from-primary-50 via-white to-amber-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm"><RotateCcw className="h-5 w-5" /></span>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+              <RotateCcw className="h-5 w-5" />
+            </span>
             <div className="min-w-0">
               <p className="text-sm font-bold text-slate-900">Restock from your last delivery</p>
-              <p className="mt-0.5 truncate text-[11px] text-slate-500">Review {reorderTarget.order_number} with current prices and MOQ before adding.</p>
+              <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                Review {reorderTarget.order_number} with current prices and MOQ before adding.
+              </p>
             </div>
           </div>
-          <Link href={`/retailer/orders/${reorderTarget.id}/reorder`} className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white transition hover:bg-primary-700">Review & reorder <ArrowRight className="h-4 w-4" /></Link>
+          <Link href={`/retailer/orders/${reorderTarget.id}/reorder`} className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white transition hover:bg-primary-700">
+            Review & reorder <ArrowRight className="h-4 w-4" />
+          </Link>
         </section>
       ) : null}
 
       <section id="deals" className="scroll-mt-36 space-y-3">
-        <SectionHeading eyebrow="Smart savings" title="Deals & active schemes" href="/retailer/catalog" linkLabel="Shop catalog" />
+        <SectionHeading eyebrow="Smart savings" title="Deals & active schemes" href="/retailer/catalog?offers=1" linkLabel="Shop offers" />
         {schemes.length > 0 ? (
           <div className="scrollbar-none -mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
             {schemes.map((scheme, index) => (
-              <article key={scheme.id} className={`relative min-h-[148px] w-[82%] max-w-sm shrink-0 snap-start overflow-hidden rounded-2xl p-5 text-white shadow-md ${index % 2 === 0 ? 'bg-gradient-to-br from-primary-700 to-primary-950' : 'bg-gradient-to-br from-slate-800 to-slate-950'}`}>
+              <article
+                key={scheme.id}
+                className={`relative min-h-[148px] w-[82%] max-w-sm shrink-0 snap-start overflow-hidden rounded-2xl p-5 text-white shadow-md ${index % 2 === 0 ? 'bg-gradient-to-br from-primary-700 to-primary-950' : 'bg-gradient-to-br from-slate-800 to-slate-950'}`}
+              >
                 <Tag className="absolute -bottom-4 -right-2 h-28 w-28 rotate-12 text-white/5" />
                 <div className="relative">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="rounded-full bg-white/15 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider">{scheme.is_festival ? 'Festival offer' : 'Retailer scheme'}</span>
+                    <span className="rounded-full bg-white/15 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider">
+                      {scheme.is_festival ? 'Festival offer' : 'Retailer scheme'}
+                    </span>
                     <BadgeIndianRupee className="h-5 w-5 text-amber-300" />
                   </div>
                   <h3 className="mt-4 text-base font-bold">{scheme.name}</h3>
                   {scheme.description ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-white/75">{scheme.description}</p> : null}
-                  <p className="mt-3 text-[10px] font-semibold text-amber-300">Valid till {new Date(scheme.ends_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  <p className="mt-3 text-[10px] font-semibold text-amber-300">
+                    Valid till {new Date(scheme.ends_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
                 </div>
               </article>
             ))}
           </div>
         ) : (
           <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><WalletCards className="h-5 w-5" /></span>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+              <WalletCards className="h-5 w-5" />
+            </span>
             <div>
               <p className="text-sm font-bold text-slate-900">Your retailer pricing is active</p>
-              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Any eligible area or retailer-specific price is automatically applied in the catalog and revalidated at checkout.</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                Any eligible area or retailer-specific price is automatically applied in the catalog and revalidated at checkout.
+              </p>
             </div>
           </div>
         )}
       </section>
 
+      <ProductRail eyebrow="Deals of the day" title="Today’s wholesale deals" href="/retailer/catalog?offers=1" products={rails.deals} />
+      <ProductRail eyebrow="Best value" title="Best wholesale prices" href="/retailer/catalog?sort=price-low" products={rails.bestPrices} />
+
       {frequentCards.length > 0 ? (
         <section className="space-y-3">
-          <SectionHeading eyebrow="Buy again" title="Frequently ordered" href="/retailer/catalog" linkLabel="Browse more" />
+          <SectionHeading eyebrow="Buy again" title="Frequently ordered" href="/retailer/catalog?sort=frequent" linkLabel="Browse more" />
           <div className="scrollbar-none -mx-3 flex gap-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0 lg:grid-cols-6">
-            {frequentCards.map((card) => <FrequentProductCard key={card.id} {...card} />)}
+            {frequentCards.map((card) => (
+              <FrequentProductCard
+                key={card.id}
+                id={card.id}
+                name={card.name}
+                imageUrl={card.imageUrl}
+                packId={card.defaultPackId ?? null}
+                packName={card.packName}
+                moq={card.moq ?? 1}
+                effectivePrice={card.fromPrice}
+                timesOrdered={card.timesOrdered || 1}
+              />
+            ))}
           </div>
         </section>
       ) : null}
 
+      <ProductRail eyebrow="From your last order" title="Buy again" href="/retailer/orders" products={buyAgainCards} />
+      <ProductRail eyebrow="Just in" title="New arrivals" href="/retailer/catalog?new=1" products={rails.newArrivals} />
+      <ProductRail eyebrow="Easy restock" title="Low-MOQ products" href="/retailer/catalog?maxMoq=2" products={rails.lowMoq} />
+      <RecentlyViewedRail />
+      <ProductRail eyebrow="Saved for later" title="Your favourites" href="/retailer/favorites" products={favoriteCards} />
+
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <SectionHeading title={open.length > 0 ? `Orders in progress (${open.length})` : 'Orders in progress'} href="/retailer/orders" />
+          <SectionHeading title={open.length > 0 ? `Pending orders (${open.length})` : 'Pending orders'} href="/retailer/orders?status=pending" />
           {open.length > 0 ? (
             <div className="mt-2">{open.map((order) => <OrderListRow key={order.id} order={order} />)}</div>
           ) : (
@@ -501,19 +447,6 @@ export default async function RetailerHomePage() {
         </section>
       </div>
 
-      {favorites.length > 0 ? (
-        <section className="space-y-3">
-          <SectionHeading eyebrow="Saved for later" title="Your favourites" />
-          <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            {favorites.map((favorite) => (
-              <Link key={favorite.product_id} href={`/retailer/catalog/${favorite.product_id}`} className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700">
-                <Heart className="h-3.5 w-3.5 fill-primary-100 text-primary-500" /> {favorite.products?.name}
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       <section className="grid gap-3 rounded-2xl bg-slate-950 p-4 text-white sm:grid-cols-3 sm:p-5">
         {[
           { icon: Search, title: 'Easy discovery', body: 'Search by product, brand or SKU.' },
@@ -522,7 +455,10 @@ export default async function RetailerHomePage() {
         ].map((item) => (
           <div key={item.title} className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
             <item.icon className="h-5 w-5 shrink-0 text-amber-300" />
-            <div><p className="text-xs font-bold">{item.title}</p><p className="mt-0.5 text-[10px] text-slate-400">{item.body}</p></div>
+            <div>
+              <p className="text-xs font-bold">{item.title}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">{item.body}</p>
+            </div>
           </div>
         ))}
       </section>

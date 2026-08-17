@@ -1,5 +1,5 @@
-import { DashboardSkeleton } from '@/components/ui/skeleton';
+import { MarketplaceSkeleton } from '@/components/retailer/marketplace-skeleton';
 
 export default function Loading() {
-  return <DashboardSkeleton />;
+  return <MarketplaceSkeleton />;
 }

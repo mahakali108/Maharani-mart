@@ -61,7 +61,13 @@ interface HistoryRow {
   created_at: string;
 }
 
-export default async function OrderDetailPage({ params }: { params: { id: string } }) {
+export default async function OrderDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { placed?: string };
+}) {
   const user = await requireUser();
   const supabase = createClient();
 
@@ -93,6 +99,15 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   return (
     <div className="space-y-5 sm:space-y-6">
+      {searchParams.placed === '1' ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-bold">Order placed successfully</p>
+            <p className="mt-0.5 text-xs">Your order is awaiting confirmation. Pricing, GST and credit were validated server-side.</p>
+          </div>
+        </div>
+      ) : null}
       <nav className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs" aria-label="Breadcrumb">
         <Link href="/retailer/orders" className="flex items-center gap-1 hover:text-primary-600"><ArrowLeft className="h-3.5 w-3.5" /> My orders</Link>
         <ChevronRight className="h-3 w-3" />
@@ -161,6 +176,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           {order.notes ? <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Delivery notes</p><p className="mt-2 text-xs leading-5 text-slate-600">{order.notes}</p></section> : null}
 
           <RetailerOrderActions orderId={order.id} status={order.status} />
+          <Link href={`/retailer/help?topic=order&order=${order.order_number}`} className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-sm hover:border-primary-200 hover:text-primary-600">
+            Contact support about this order
+          </Link>
         </aside>
       </div>
     </div>

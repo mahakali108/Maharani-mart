@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Bell,
-  ChevronRight,
   ClipboardList,
+  Heart,
+  HelpCircle,
   Home,
   LayoutGrid,
   LogOut,
-  Search,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
@@ -19,13 +19,16 @@ import { logoutAction } from '@/lib/auth/actions';
 import { ROLE_LABELS, type UserRole } from '@/lib/auth/roles';
 import { cn } from '@/lib/utils/cn';
 import { MobileBottomNav, type NavItem } from '@/components/layout/mobile-bottom-nav';
+import { SearchField } from '@/components/retailer/search-field';
 
 const DESKTOP_NAV = [
   { label: 'Home', href: '/retailer/home' },
   { label: 'All products', href: '/retailer/catalog' },
+  { label: 'Categories', href: '/retailer/categories' },
   { label: 'Quick order', href: '/retailer/quick-order' },
   { label: 'Deals & offers', href: '/retailer/home#deals' },
   { label: 'My orders', href: '/retailer/orders' },
+  { label: 'Help', href: '/retailer/help' },
 ];
 
 function CountBadge({ count }: { count: number }) {
@@ -94,23 +97,25 @@ export function RetailerShell({
               </span>
             </Link>
 
-            <form action="/retailer/catalog" method="get" className="relative hidden flex-1 lg:block">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                name="q"
-                type="search"
-                placeholder="Search products, brands or SKU codes"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-28 text-sm text-slate-900 outline-none transition focus:border-primary-300 focus:bg-white focus:ring-4 focus:ring-primary-50"
-              />
-              <button
-                type="submit"
-                className="absolute right-1.5 top-1.5 h-8 rounded-lg bg-primary-600 px-5 text-xs font-semibold text-white transition hover:bg-primary-700"
-              >
-                Search
-              </button>
-            </form>
+            <div className="relative hidden flex-1 lg:block">
+              <SearchField />
+            </div>
 
             <div className="ml-auto flex items-center gap-1.5 lg:gap-2">
+              <Link
+                href="/retailer/favorites"
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
+                aria-label="Favourites"
+              >
+                <Heart className="h-5 w-5" />
+              </Link>
+              <Link
+                href="/retailer/help"
+                className="relative hidden h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:flex lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
+                aria-label="Help"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </Link>
               <Link
                 href="/retailer/notifications"
                 className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
@@ -150,22 +155,9 @@ export function RetailerShell({
             </div>
           </div>
 
-          <form action="/retailer/catalog" method="get" className="relative pb-3 lg:hidden">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-[calc(50%+0.375rem)] text-slate-400" />
-            <input
-              name="q"
-              type="search"
-              placeholder="Search products, brands or SKU"
-              className="h-10 w-full rounded-xl border-0 bg-white pl-10 pr-12 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-amber-300"
-            />
-            <button
-              type="submit"
-              className="absolute right-1.5 top-1.5 flex h-7 w-9 items-center justify-center rounded-lg bg-slate-900 text-white"
-              aria-label="Search"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </form>
+          <div className="relative pb-3 lg:hidden">
+            <SearchField />
+          </div>
         </div>
 
         <div className="hidden border-t border-slate-100 lg:block">
