@@ -3,11 +3,13 @@
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { homeForRole, type UserRole } from '@/lib/auth/roles';
+import { normalizePhone } from '@/lib/utils/phone';
 
 export type FormState = {
   error?: string;
+  success?: string;
   fieldErrors?: Record<string, string>;
 } | null;
 
@@ -19,6 +21,21 @@ const loginSchema = z.object({
   email: z.string().email('Enter a valid email address.'),
   password: z.string().min(1, 'Password is required.'),
   redirect: z.string().optional(),
+});
+
+const loginWithPhoneSchema = z.object({
+  phone: z.string().min(1, 'Enter your mobile number.'),
+  password: z.string().min(1, 'Password is required.'),
+  redirect: z.string().optional(),
+});
+
+const requestResetSchema = z.object({
+  email: z.string().email('Enter a valid email address.'),
+});
+
+const updatePasswordSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters.'),
+  confirmPassword: z.string().min(1, 'Please confirm your password.'),
 });
 
 /**
@@ -51,7 +68,10 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
   }
 
   const supabase = createClient();
-  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: parsed.data.email,
+    password: parsed.data.password,
+  });
 
   if (error) {
     return { error: 'Invalid email or password. Please try again.' };
@@ -67,6 +87,159 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
   redirect(safeRedirectPath(parsed.data.redirect) ?? homeForRole(role));
 }
 
+/**
+ * Secure mobile-number + password login for retailers (and any role that
+ * has a phone). Resolution is server-only via service-role client — no
+ * auth data is exposed to the browser. Supports +91 / 0-prefix / spaced
+ * formats via normalizePhone, canonical 10-digit storage.
+ */
+export async function loginWithPhoneAction(_prevState: FormState, formData: FormData): Promise<FormState> {
+  const parsed = loginWithPhoneSchema.safeParse({
+    phone: formData.get('phone'),
+    password: formData.get('password'),
+    redirect: formData.get('redirect') || undefined,
+  });
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  const normalized = normalizePhone(parsed.data.phone);
+  if (!normalized) {
+    return { fieldErrors: { phone: 'Enter a valid 10-digit Indian mobile number.' } };
+  }
+  if (!parsed.data.password) {
+    return { fieldErrors: { password: 'Password is required.' } };
+  }
+
+  // Generic error to avoid account enumeration — same for “phone not found”
+  // and “wrong password”.
+  const genericError: FormState = {
+    error: 'Invalid mobile number or password. Please try again.',
+  };
+
+  try {
+    const adminClient = createServiceRoleClient();
+
+    // Server-only lookup: phone -> profile id -> auth email.
+    // Service-role bypasses RLS, so anon cannot enumerate via PostgREST.
+    const { data: profileByPhone, error: profileErr } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('phone', normalized)
+      .maybeSingle<{ id: string }>();
+
+    if (profileErr || !profileByPhone?.id) {
+      return genericError;
+    }
+
+    const { data: userData, error: userErr } = await adminClient.auth.admin.getUserById(profileByPhone.id);
+    const email = userData?.user?.email;
+    if (userErr || !email) {
+      return genericError;
+    }
+
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password: parsed.data.password,
+    });
+
+    if (error || !data.user) {
+      return genericError;
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single<ProfileRoleRow>();
+
+    const role = profile?.role ?? 'retailer';
+    redirect(safeRedirectPath(parsed.data.redirect) ?? homeForRole(role));
+  } catch {
+    return genericError;
+  }
+}
+
+export async function requestPasswordResetAction(_prevState: FormState, formData: FormData): Promise<FormState> {
+  const parsed = requestResetSchema.safeParse({
+    email: formData.get('email'),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  const supabase = createClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  // Use auth/callback?next=/reset-password so the recovery code is exchanged
+  // server-side and the user lands on the reset form with an active session.
+  const redirectTo = `${siteUrl.replace(/\/$/, '')}/auth/callback?next=/reset-password`;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo,
+  });
+
+  if (error) {
+    // Avoid enumeration: Supabase already does not reveal if email exists,
+    // but surface generic success anyway.
+    return {
+      success:
+        "If an account exists for that email, you will receive a password reset link shortly. Please check your inbox and spam folder.",
+    };
+  }
+
+  return {
+    success:
+      "If an account exists for that email, you will receive a password reset link shortly. Please check your inbox and spam folder.",
+  };
+}
+
+export async function updatePasswordAction(_prevState: FormState, formData: FormData): Promise<FormState> {
+  const parsed = updatePasswordSchema.safeParse({
+    password: formData.get('password'),
+    confirmPassword: formData.get('confirmPassword'),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+  if (parsed.data.password !== parsed.data.confirmPassword) {
+    return { fieldErrors: { confirmPassword: 'Passwords do not match.' } };
+  }
+
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: 'Your reset link is invalid or has expired. Please request a new one.' };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error) {
+    return { error: error.message };
+  }
+
+  // Send retailer to home, others to their home — re-use role lookup
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single<ProfileRoleRow>();
+  const role = profile?.role ?? 'retailer';
+  redirect(homeForRole(role));
+}
+
 export async function logoutAction() {
   const supabase = createClient();
   await supabase.auth.signOut();
@@ -79,7 +252,8 @@ const registerRetailerSchema = z.object({
   shopName: z.string().min(2, 'Enter your shop / firm name.'),
   phone: z
     .string()
-    .regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number.'),
+    .transform((v) => normalizePhone(v) ?? v)
+    .pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number.')),
   email: z.string().email('Enter a valid email address.'),
   areaId: z.string().uuid('Select your area.'),
   address: z.string().min(5, 'Enter your shop address.'),
