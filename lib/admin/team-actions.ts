@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { normalizePhone } from '@/lib/utils/phone';
 import type { Database } from '@/types/database.types';
 
 export type TeamFormState = { error?: string } | null;
@@ -14,7 +15,7 @@ type StaffAssignmentInsert = Database['public']['Tables']['staff_assignments']['
 
 const staffSchema = z.object({
   fullName: z.string().min(2, 'Enter a full name.'),
-  phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number.'),
+  phone: z.string().transform((v) => normalizePhone(v) ?? v).pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number.')),
   email: z.string().email('Enter a valid email address.'),
   password: z.string().min(8, 'Password must be at least 8 characters.'),
   role: z.enum(['staff', 'salesman']),
@@ -106,7 +107,7 @@ export async function createStaffAction(_prevState: TeamFormState, formData: For
 
 const staffEditSchema = z.object({
   fullName: z.string().min(2, 'Enter a full name.'),
-  phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number.'),
+  phone: z.string().transform((v) => normalizePhone(v) ?? v).pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number.')),
   role: z.enum(['staff', 'salesman']),
   areaId: z.string().uuid().optional().or(z.literal('')),
   warehouseId: z.string().uuid().optional().or(z.literal('')),

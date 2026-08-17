@@ -22,6 +22,11 @@ export function RegisterRetailerForm({ areas }: { areas: Area[] }) {
           {state.error}
         </div>
       ) : null}
+      {state?.success ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {state.success}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
@@ -42,7 +47,8 @@ export function RegisterRetailerForm({ areas }: { areas: Area[] }) {
 
         <div>
           <Label htmlFor="phone">Mobile number</Label>
-          <Input id="phone" name="phone" type="tel" inputMode="numeric" maxLength={10} placeholder="98xxxxxxxx" required />
+          <Input id="phone" name="phone" type="tel" inputMode="numeric" placeholder="+91 98765 43210" required />
+          <p className="mt-1 text-xs text-ink-400">10 digits — +91 and spaces allowed, stored as 10 digits.</p>
           {state?.fieldErrors?.phone ? (
             <p className="mt-1 text-xs text-primary-600">{state.fieldErrors.phone}</p>
           ) : null}

@@ -9,10 +9,17 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
+  const next = searchParams.get('next');
 
   if (code) {
     const supabase = createClient();
     await supabase.auth.exchangeCodeForSession(code);
+  }
+
+  // Allow password-recovery flow to land on /reset-password with an active session.
+  // Validate next is a safe internal path.
+  if (next && next.startsWith('/') && !next.startsWith('//') && !next.includes('://')) {
+    return NextResponse.redirect(`${origin}${next}`);
   }
 
   return NextResponse.redirect(`${origin}/`);
