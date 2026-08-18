@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { isFirebaseAdminConfigured } from '@/lib/storage/firebase/env';
+import { remove as removeStoredObject } from '@/lib/storage';
+import { isFirebaseObjectPath } from '@/lib/storage/urls';
 import type { Database } from '@/types/database.types';
 
 export type ProductFormState = { error?: string } | null;
@@ -174,8 +177,20 @@ export async function addProductImageAction(productId: string, imageUrl: string,
 export async function removeProductImageAction(imageId: string, productId: string) {
   await requirePermission('products.edit');
   const supabase = createClient();
-  const { error } = await supabase.from('product_images').delete().eq('id', imageId);
+  const { data, error } = await supabase
+    .from('product_images')
+    .delete()
+    .eq('id', imageId)
+    .select('image_url')
+    .maybeSingle<{ image_url: string }>();
   if (error) throw new Error(error.message);
+  if (data?.image_url && isFirebaseObjectPath(data.image_url) && isFirebaseAdminConfigured()) {
+    try {
+      await removeStoredObject(data.image_url);
+    } catch {
+      // Row is already gone.
+    }
+  }
   revalidatePath(`/admin/products/${productId}`);
 }
 

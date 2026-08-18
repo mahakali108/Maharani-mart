@@ -1,3 +1,11 @@
+/**
+ * LEGACY Supabase Storage helper — kept for rollback.
+ *
+ * New uploads go through `lib/storage/actions.ts` (Firebase Admin,
+ * authorized by the existing Supabase session + permission checks).
+ * Do not delete this file until a live Firebase migration has been
+ * verified and old Supabase objects are intentionally retired.
+ */
 import { createClient } from '@/lib/supabase/client';
 
 export type StorageBucket = 'product-images' | 'banners' | 'avatars' | 'brand-logos' | 'retailer-documents';

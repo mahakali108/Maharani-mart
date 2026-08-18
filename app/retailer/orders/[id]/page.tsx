@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { notFound } from 'next/navigation';
+import { StoredImage } from '@/components/media/stored-image';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -147,7 +147,7 @@ export default async function OrderDetailPage({
               return (
                 <div key={item.id} className="flex items-center gap-3 py-4 sm:gap-4">
                   <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-50 sm:h-20 sm:w-20">
-                    {images[0]?.image_url ? <Image src={images[0].image_url} alt={item.products?.name ?? ''} fill className="object-contain p-1.5" unoptimized /> : <div className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></div>}
+                    {images[0]?.image_url ? <StoredImage src={images[0].image_url} alt={item.products?.name ?? ''} fill className="object-contain p-1.5" /> : <div className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></div>}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm">{item.products?.name ?? 'Unknown product'}</p>

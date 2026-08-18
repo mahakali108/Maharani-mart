@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { ImageOff, Loader2, ShoppingCart } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { addReorderLinesToCartAction } from '@/lib/retailer/order-actions';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -121,7 +121,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
               />
               <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-ink-50">
                 {line.imageUrl ? (
-                  <Image src={line.imageUrl} alt="" fill className="object-cover" unoptimized />
+                  <StoredImage src={line.imageUrl} alt="" fill className="object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-ink-300">
                     <ImageOff className="h-5 w-5" />

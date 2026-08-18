@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { Boxes, ChevronRight, LayoutGrid } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 
@@ -63,7 +63,7 @@ export default async function CategoriesPage() {
                 <Link href={`/retailer/catalog?category=${category.id}`} className="flex items-center gap-3 p-4 hover:bg-slate-50">
                   <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary-50 text-primary-600">
                     {category.image_url ? (
-                      <Image src={category.image_url} alt="" fill className="object-cover" unoptimized />
+                      <StoredImage src={category.image_url} alt="" fill className="object-cover" />
                     ) : (
                       <LayoutGrid className="h-6 w-6" />
                     )}

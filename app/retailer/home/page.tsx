@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import Image from 'next/image';
+import { StoredImage } from '@/components/media/stored-image';
 import {
   ArrowRight,
   BadgeIndianRupee,
@@ -258,7 +258,7 @@ export default async function RetailerHomePage() {
               <Link key={category.id} href={`/retailer/catalog?category=${category.id}`} className="group flex w-[74px] shrink-0 flex-col items-center gap-2 text-center sm:w-24">
                 <span className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50 to-orange-100 text-orange-700 ring-1 ring-orange-100 transition group-hover:-translate-y-0.5 group-hover:shadow-md sm:h-16 sm:w-16">
                   {category.image_url ? (
-                    <Image src={category.image_url} alt="" fill className="object-cover" unoptimized />
+                    <StoredImage src={category.image_url} alt="" fill className="object-cover" />
                   ) : (
                     <Icon className="h-6 w-6" />
                   )}

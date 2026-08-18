@@ -2,8 +2,8 @@
 
 import { useState, useTransition, type MouseEvent } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Check, Heart, ImageOff, Loader2, PackagePlus, ShoppingCart, Sparkles, Tag } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
@@ -84,13 +84,12 @@ export function ProductCard({
       <Link href={`/retailer/catalog/${id}`} className="block p-2 pb-0 sm:p-3 sm:pb-0">
         <div className="relative aspect-[1.08/1] overflow-hidden rounded-lg bg-gradient-to-br from-slate-50 to-slate-100 sm:rounded-xl">
           {imageUrl ? (
-            <Image
+            <StoredImage
               src={imageUrl}
               alt={name}
               fill
               sizes="(max-width: 640px) 45vw, (max-width: 1024px) 28vw, 210px"
               className="object-contain p-2 transition duration-300 group-hover:scale-105"
-              unoptimized
             />
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-300">

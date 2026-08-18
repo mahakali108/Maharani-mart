@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Check, ImageOff, Loader2, RotateCcw, ShoppingCart } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
 
 /** Adds the default active pack at its current MOQ through the existing cart action. */
@@ -42,7 +42,7 @@ export function FrequentProductCard({
       <Link href={`/retailer/catalog/${id}`} className="flex flex-1 flex-col">
         <div className="relative aspect-square overflow-hidden rounded-xl bg-slate-50">
           {imageUrl ? (
-            <Image src={imageUrl} alt={name} fill className="object-contain p-2 transition hover:scale-105" unoptimized />
+            <StoredImage src={imageUrl} alt={name} fill className="object-contain p-2 transition hover:scale-105" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-slate-300"><ImageOff className="h-6 w-6" /></div>
           )}

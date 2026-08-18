@@ -1,10 +1,11 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import Image from 'next/image';
 import { Trash2, Upload, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { uploadFile, buildPath } from '@/lib/storage/upload';
-import { addProductImageAction, removeProductImageAction, reorderProductImageAction } from '@/lib/admin/products-actions';
+import { StoredImage } from '@/components/media/stored-image';
+import { optimizeImageFile } from '@/lib/storage/optimize';
+import { uploadProductImageAction } from '@/lib/storage/actions';
+import { removeProductImageAction, reorderProductImageAction } from '@/lib/admin/products-actions';
 
 interface ProductImage {
   id: string;
@@ -14,11 +15,10 @@ interface ProductImage {
 
 export function ProductImageManager({
   productId,
-  skuCode,
   images,
 }: {
   productId: string;
-  skuCode: string;
+  skuCode?: string;
   images: ProductImage[];
 }) {
   const [isUploading, setIsUploading] = useState(false);
@@ -33,10 +33,11 @@ export function ProductImageManager({
     setError(null);
     setIsUploading(true);
     try {
-      const path = buildPath(skuCode, file);
-      const { publicUrl } = await uploadFile('product-images', file, path);
-      if (!publicUrl) throw new Error('Upload succeeded but no public URL was returned.');
-      await addProductImageAction(productId, publicUrl, images.length);
+      const optimized = await optimizeImageFile(file, 'product');
+      const formData = new FormData();
+      formData.set('file', optimized);
+      const result = await uploadProductImageAction(productId, formData);
+      if (result.error) throw new Error(result.error);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed.');
     } finally {
@@ -57,7 +58,7 @@ export function ProductImageManager({
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
           {images.map((img, index) => (
             <div key={img.id} className="group relative aspect-square overflow-hidden rounded-xl border border-ink-100">
-              <Image src={img.image_url} alt="" fill className="object-cover" unoptimized />
+              <StoredImage src={img.image_url} alt="" fill className="object-cover" />
               <button
                 type="button"
                 disabled={isPending}

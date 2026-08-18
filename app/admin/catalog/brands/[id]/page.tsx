@@ -6,11 +6,16 @@ import { BrandEditForm } from '@/components/admin/brand-edit-form';
 interface BrandDetail {
   id: string;
   name: string;
+  logo_url: string | null;
 }
 
 export default async function EditBrandPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { data: brand } = await supabase.from('brands').select('id, name').eq('id', params.id).single<BrandDetail>();
+  const { data: brand } = await supabase
+    .from('brands')
+    .select('id, name, logo_url')
+    .eq('id', params.id)
+    .single<BrandDetail>();
 
   if (!brand) notFound();
 
@@ -24,7 +29,7 @@ export default async function EditBrandPage({ params }: { params: { id: string }
         <CardHeader>
           <CardTitle>Brand details</CardTitle>
         </CardHeader>
-        <BrandEditForm brandId={brand!.id} name={brand!.name} />
+        <BrandEditForm brandId={brand!.id} name={brand!.name} logoUrl={brand!.logo_url} />
       </Card>
     </div>
   );

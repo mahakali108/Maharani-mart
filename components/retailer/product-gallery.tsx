@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import { ImageOff } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { cn } from '@/lib/utils/cn';
 
 export function ProductGallery({
@@ -24,13 +24,12 @@ export function ProductGallery({
       <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
         <div className="relative aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-slate-50 to-slate-100">
           {current ? (
-            <Image
+            <StoredImage
               src={current.image_url}
               alt={name}
               fill
               sizes="(max-width: 1024px) 100vw, 52vw"
               className="object-contain p-5 sm:p-8"
-              unoptimized
               priority
             />
           ) : (
@@ -56,7 +55,7 @@ export function ProductGallery({
               )}
               aria-label={`View image ${index + 1}`}
             >
-              <Image src={image.image_url} alt={`${name} view ${index + 1}`} fill className="object-contain p-1" unoptimized />
+              <StoredImage src={image.image_url} alt={`${name} view ${index + 1}`} fill className="object-contain p-1" />
             </button>
           ))}
         </div>

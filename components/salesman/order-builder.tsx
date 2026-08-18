@@ -1,7 +1,7 @@
 'use client';
 
-import Image from 'next/image';
 import { useMemo, useState, useTransition } from 'react';
+import { StoredImage } from '@/components/media/stored-image';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, ImageOff, Loader2, Minus, Plus, Search, ShoppingCart } from 'lucide-react';
 import { createSalesmanOrderAction } from '@/lib/salesman/order-creation-actions';
@@ -160,7 +160,7 @@ export function SalesmanOrderBuilder({
               <div className="flex gap-3">
                 <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-ink-50">
                   {product.imageUrl ? (
-                    <Image src={product.imageUrl} alt={product.name} fill className="object-cover" unoptimized />
+                    <StoredImage src={product.imageUrl} alt={product.name} fill className="object-cover" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-ink-300">
                       <ImageOff className="h-5 w-5" />

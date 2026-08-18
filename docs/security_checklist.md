@@ -6,6 +6,8 @@
 - [ ] `WEBHOOK_SECRET` is a long, random value — not a guessable string
 - [ ] `.env.local` is gitignored and has never been committed (check `git log --all --full-history -- .env.local` returns nothing)
 - [ ] No API keys or secrets appear in client-side bundles — the only Supabase key shipped to the browser is `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which is designed to be public and relies on RLS for protection
+- [ ] Firebase Admin private key / service-account credentials are server-only (`FIREBASE_ADMIN_*`) — never prefixed `NEXT_PUBLIC_`, never imported from a Client Component
+- [ ] Browser Firebase config is limited to the public web-app values (`NEXT_PUBLIC_FIREBASE_*`)
 
 ## Database (Postgres / Supabase)
 
@@ -26,6 +28,8 @@
 - [ ] Every storage bucket has explicit RLS policies (`0003_storage_buckets.sql`) — no bucket is public-write
 - [ ] File size limits and MIME type allow-lists are set per bucket (prevents arbitrary file upload abuse)
 - [ ] Avatar uploads are scoped to a path prefixed with the uploader's own `auth.uid()`, preventing one user from overwriting another's file
+- [ ] New Firebase uploads are authorized by the existing permission matrix and written only by the Admin SDK. Storage rules deny all client writes. Marketplace prefixes are public-read; `retailers/{id}/documents/**` is private
+- [ ] Retailer profile uploads, if used, are forced into `retailers/{auth.uid()}/profile/` — callers cannot choose another retailer's folder
 
 ## API routes
 
