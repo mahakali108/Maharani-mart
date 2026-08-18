@@ -7,13 +7,14 @@ interface CategoryDetail {
   id: string;
   name: string;
   parent_id: string | null;
+  image_url: string | null;
 }
 
 export default async function EditCategoryPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
   const [{ data: category }, { data: categoryData }] = await Promise.all([
-    supabase.from('categories').select('id, name, parent_id').eq('id', params.id).single<CategoryDetail>(),
+    supabase.from('categories').select('id, name, parent_id, image_url').eq('id', params.id).single<CategoryDetail>(),
     supabase.from('categories').select('id, name').order('name'),
   ]);
 
@@ -33,6 +34,7 @@ export default async function EditCategoryPage({ params }: { params: { id: strin
           categoryId={category!.id}
           name={category!.name}
           parentId={category!.parent_id}
+          imageUrl={category!.image_url}
           categories={categoryData ?? []}
         />
       </Card>

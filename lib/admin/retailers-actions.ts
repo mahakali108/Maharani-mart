@@ -3,6 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { isFirebaseAdminConfigured } from '@/lib/storage/firebase/env';
+import { remove as removeStoredObject } from '@/lib/storage';
+import { isFirebaseObjectPath } from '@/lib/storage/urls';
 import type { Database } from '@/types/database.types';
 
 type RetailerUpdate = Database['public']['Tables']['retailers']['Update'];
@@ -155,8 +158,25 @@ export async function deleteRetailerDocumentAction(documentId: string, retailerI
   await requirePermission('retailers.approve');
   const supabase = createClient();
 
-  const { error } = await supabase.from('retailer_documents').delete().eq('id', documentId);
+  const { data, error } = await supabase
+    .from('retailer_documents')
+    .delete()
+    .eq('id', documentId)
+    .select('file_url')
+    .maybeSingle<{ file_url: string }>();
   if (error) throw new Error(error.message);
+
+  if (data?.file_url) {
+    if (isFirebaseObjectPath(data.file_url) && isFirebaseAdminConfigured()) {
+      try {
+        await removeStoredObject(data.file_url);
+      } catch {
+        // Row is already gone.
+      }
+    } else if (!/^https?:\/\//i.test(data.file_url)) {
+      await supabase.storage.from('retailer-documents').remove([data.file_url]);
+    }
+  }
 
   revalidatePath(`/admin/retailers/${retailerId}`);
 }

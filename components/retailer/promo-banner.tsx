@@ -1,5 +1,5 @@
-import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 
 export function PromoBanner({
   title,
@@ -12,7 +12,7 @@ export function PromoBanner({
 }) {
   const content = (
     <>
-      <Image src={imageUrl} alt={title} fill className="object-cover transition duration-500 group-hover:scale-105" unoptimized />
+      <StoredImage src={imageUrl} alt={title} fill className="object-cover transition duration-500 group-hover:scale-105" />
       <div className="absolute inset-0 bg-gradient-to-r from-slate-950/88 via-slate-950/55 to-slate-950/20" />
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-slate-950/10" />
       <div className="absolute inset-y-0 left-0 flex max-w-[78%] flex-col justify-end p-5 text-white sm:max-w-[70%] sm:p-7">

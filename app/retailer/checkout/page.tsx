@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { Check, ChevronLeft, ChevronRight, ImageOff, PackageCheck, ReceiptText, ShieldCheck } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
@@ -124,7 +124,7 @@ export default async function CheckoutPage() {
                 <div key={line.id} className="flex items-center gap-3 py-4 text-xs">
                   <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-50">
                     {line.imageUrl ? (
-                      <Image src={line.imageUrl} alt={line.productName} fill className="object-contain p-1" unoptimized />
+                      <StoredImage src={line.imageUrl} alt={line.productName} fill className="object-contain p-1" />
                     ) : (
                       <div className="flex h-full items-center justify-center text-slate-300">
                         <ImageOff className="h-4 w-4" />

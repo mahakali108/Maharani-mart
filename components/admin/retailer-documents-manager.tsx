@@ -2,8 +2,9 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { FileText, Upload, Trash2, Loader2, Download } from 'lucide-react';
-import { uploadFile, buildPath } from '@/lib/storage/upload';
-import { addRetailerDocumentAction, deleteRetailerDocumentAction } from '@/lib/admin/retailers-actions';
+import { optimizeImageFile } from '@/lib/storage/optimize';
+import { uploadRetailerDocumentFileAction } from '@/lib/storage/actions';
+import { deleteRetailerDocumentAction } from '@/lib/admin/retailers-actions';
 import { Select } from '@/components/ui/select';
 
 const DOC_TYPES = [
@@ -41,9 +42,12 @@ export function RetailerDocumentsManager({
     setError(null);
     setIsUploading(true);
     try {
-      const path = buildPath(retailerId, file);
-      const { path: storedPath } = await uploadFile('retailer-documents', file, path);
-      await addRetailerDocumentAction(retailerId, docType, storedPath, file.name);
+      const optimized = file.type === 'application/pdf' ? file : await optimizeImageFile(file, 'retailer_document');
+      const formData = new FormData();
+      formData.set('file', optimized);
+      formData.set('docType', docType);
+      const result = await uploadRetailerDocumentFileAction(retailerId, formData);
+      if (result.error) throw new Error(result.error);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed.');
     } finally {

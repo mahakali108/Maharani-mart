@@ -101,7 +101,6 @@ export default async function EditProductPage({ params }: { params: { id: string
         </CardHeader>
         <ProductImageManager
           productId={params.id}
-          skuCode={product!.sku_code}
           images={(imageData ?? []) as ProductImageRow[]}
         />
       </Card>

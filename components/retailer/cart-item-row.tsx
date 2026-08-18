@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { Heart, ImageOff, Loader2, Trash2 } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { updateCartQuantityAction, removeCartItemAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
@@ -84,7 +84,7 @@ export function CartItemRow({
       <div className="flex gap-3 sm:gap-4">
         <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-50 sm:h-24 sm:w-24">
           {imageUrl ? (
-            <Image src={imageUrl} alt={productName} fill className="object-contain p-1.5" unoptimized />
+            <StoredImage src={imageUrl} alt={productName} fill className="object-contain p-1.5" />
           ) : (
             <div className="flex h-full items-center justify-center text-slate-300">
               <ImageOff className="h-6 w-6" />

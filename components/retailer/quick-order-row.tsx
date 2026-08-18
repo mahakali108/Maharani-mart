@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Check, ChevronRight, ImageOff, Loader2, Minus, Plus, ShoppingCart } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
 
 export interface QuickOrderPack {
@@ -74,12 +74,12 @@ export function QuickOrderRow({
     <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md">
       <div className="grid items-center gap-3 p-3 sm:grid-cols-[72px_minmax(150px,1fr)_minmax(160px,0.8fr)_128px_minmax(140px,0.65fr)] sm:gap-4 sm:p-4">
         <Link href={`/retailer/catalog/${id}`} className="relative hidden h-[72px] w-[72px] overflow-hidden rounded-xl bg-slate-50 sm:block">
-          {imageUrl ? <Image src={imageUrl} alt={name} fill className="object-contain p-1.5" unoptimized /> : <span className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></span>}
+          {imageUrl ? <StoredImage src={imageUrl} alt={name} fill className="object-contain p-1.5" /> : <span className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></span>}
         </Link>
 
         <div className="flex min-w-0 items-center gap-3 sm:block">
           <Link href={`/retailer/catalog/${id}`} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-50 sm:hidden">
-            {imageUrl ? <Image src={imageUrl} alt={name} fill className="object-contain p-1.5" unoptimized /> : <span className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></span>}
+            {imageUrl ? <StoredImage src={imageUrl} alt={name} fill className="object-contain p-1.5" /> : <span className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></span>}
           </Link>
           <div className="min-w-0">
             <p className="truncate text-[9px] font-bold uppercase tracking-wider text-slate-400">{brandName ?? 'Product'}</p>

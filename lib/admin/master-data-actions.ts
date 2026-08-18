@@ -189,6 +189,7 @@ export async function deleteWarehouseAction(warehouseId: string) {
 
 const brandSchema = z.object({
   name: z.string().min(2, 'Enter a brand name.'),
+  logoUrl: z.string().optional().or(z.literal('')),
 });
 
 type BrandInsert = Database['public']['Tables']['brands']['Insert'];
@@ -228,13 +229,16 @@ export async function updateBrandAction(
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
 
-  const parsed = brandSchema.safeParse({ name: formData.get('name') });
+  const parsed = brandSchema.safeParse({ name: formData.get('name'), logoUrl: formData.get('logoUrl') || '' });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
   const supabase = createClient();
-  const payload: Partial<BrandInsert> = { name: parsed.data.name };
+  const payload: Partial<BrandInsert> = {
+    name: parsed.data.name,
+    ...(parsed.data.logoUrl ? { logo_url: parsed.data.logoUrl } : {}),
+  };
   const { error } = await supabase.from('brands').update(payload as unknown as never).eq('id', brandId);
   if (error) {
     return { error: error.message.includes('duplicate') ? 'A brand with this name already exists.' : error.message };
@@ -264,6 +268,7 @@ export async function deleteBrandAction(brandId: string) {
 const categorySchema = z.object({
   name: z.string().min(2, 'Enter a category name.'),
   parentId: z.string().uuid().optional().or(z.literal('')),
+  imageUrl: z.string().optional().or(z.literal('')),
 });
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
@@ -315,6 +320,7 @@ export async function updateCategoryAction(
   const parsed = categorySchema.safeParse({
     name: formData.get('name'),
     parentId: formData.get('parentId'),
+    imageUrl: formData.get('imageUrl') || '',
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
@@ -327,6 +333,7 @@ export async function updateCategoryAction(
   const payload: Partial<CategoryInsert> = {
     name: parsed.data.name,
     parent_id: parsed.data.parentId || null,
+    ...(parsed.data.imageUrl ? { image_url: parsed.data.imageUrl } : {}),
   };
   const { error } = await supabase.from('categories').update(payload as unknown as never).eq('id', categoryId);
   if (error) {

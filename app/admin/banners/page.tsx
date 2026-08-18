@@ -1,5 +1,5 @@
-import Image from 'next/image';
 import { Image as ImageIcon } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -74,7 +74,7 @@ export default async function BannersPage() {
                 <tr key={b.id}>
                   <td className="px-5 py-3">
                     <div className="relative h-10 w-20 overflow-hidden rounded-lg border border-ink-100">
-                      <Image src={b.image_url} alt="" fill className="object-cover" unoptimized />
+                      <StoredImage src={b.image_url} alt="" fill className="object-cover" />
                     </div>
                   </td>
                   <td className="px-5 py-3 font-medium text-ink-900">

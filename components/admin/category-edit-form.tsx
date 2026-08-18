@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useFormState } from 'react-dom';
 import { updateCategoryAction, type MasterDataFormState } from '@/lib/admin/master-data-actions';
+import { uploadCategoryImageAction } from '@/lib/storage/actions';
+import { StorageImageField } from '@/components/admin/storage-image-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -18,15 +21,18 @@ export function CategoryEditForm({
   categoryId,
   name,
   parentId,
+  imageUrl,
   categories,
 }: {
   categoryId: string;
   name: string;
   parentId: string | null;
+  imageUrl?: string | null;
   categories: CategoryOption[];
 }) {
   const boundAction = updateCategoryAction.bind(null, categoryId);
   const [state, formAction] = useFormState(boundAction, initialState);
+  const [image, setImage] = useState(imageUrl ?? '');
   const otherCategories = categories.filter((c) => c.id !== categoryId);
 
   return (
@@ -36,6 +42,7 @@ export function CategoryEditForm({
           {state.error}
         </div>
       ) : null}
+      <input type="hidden" name="imageUrl" value={image} />
       <div>
         <Label htmlFor="name">Category name</Label>
         <Input id="name" name="name" defaultValue={name} required />
@@ -51,6 +58,13 @@ export function CategoryEditForm({
           ))}
         </Select>
       </div>
+      <StorageImageField
+        kind="category"
+        label="Category image"
+        value={image}
+        upload={(formData) => uploadCategoryImageAction(categoryId, formData)}
+        onUploaded={({ path }) => setImage(path)}
+      />
       <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
     </form>
   );

@@ -5,6 +5,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { isFirebaseAdminConfigured } from '@/lib/storage/firebase/env';
+import { remove as removeStoredObject } from '@/lib/storage';
+import { isFirebaseObjectPath, looksLikeStoredRef } from '@/lib/storage/urls';
+import { UUID_RE } from '@/lib/storage/types';
 import type { Database } from '@/types/database.types';
 
 export type BannerFormState = { error?: string } | null;
@@ -14,11 +18,12 @@ type BannerUpdate = Database['public']['Tables']['banners']['Update'];
 
 const bannerSchema = z.object({
   title: z.string().min(2, 'Enter a title.'),
-  imageUrl: z.string().url('Upload an image first.'),
+  imageUrl: z.string().min(1, 'Upload an image first.').refine(looksLikeStoredRef, 'Upload an image first.'),
   linkUrl: z.string().url().optional().or(z.literal('')),
   areaId: z.string().uuid().optional().or(z.literal('')),
   startsAt: z.string().optional().or(z.literal('')),
   endsAt: z.string().optional().or(z.literal('')),
+  bannerId: z.string().uuid().optional().or(z.literal('')),
 });
 
 export async function createBannerAction(_prevState: BannerFormState, formData: FormData): Promise<BannerFormState> {
@@ -31,11 +36,12 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
     areaId: formData.get('areaId') || undefined,
     startsAt: formData.get('startsAt') || undefined,
     endsAt: formData.get('endsAt') || undefined,
+    bannerId: formData.get('bannerId') || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const { title, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
+  const { title, imageUrl, linkUrl, areaId, startsAt, endsAt, bannerId } = parsed.data;
 
   const supabase = createClient();
 
@@ -43,6 +49,7 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   const { count } = await supabase.from('banners').select('id', { count: 'exact', head: true });
 
   const payload: BannerInsert = {
+    ...(bannerId && UUID_RE.test(bannerId) ? { id: bannerId } : {}),
     title,
     image_url: imageUrl,
     link_url: linkUrl || null,
@@ -147,15 +154,26 @@ export async function deleteBannerAction(bannerId: string) {
     .single<{ image_url: string }>();
   if (error) throw new Error(error.message);
 
-  // Same reasoning as products-actions.ts's removeProductImageAction:
-  // also remove the underlying file so deleting a banner doesn't leave
-  // it orphaned in the public banners bucket. image_url is the full
-  // public URL returned by lib/storage/upload.ts's getPublicUrl().
-  const marker = '/banners/';
-  const markerIndex = data?.image_url.indexOf(marker) ?? -1;
-  if (markerIndex !== -1 && data) {
-    const path = data.image_url.slice(markerIndex + marker.length);
-    await supabase.storage.from('banners').remove([path]);
+  // Remove the underlying file. Firebase object paths go through the
+  // storage abstraction; leftover Supabase public URLs still use the
+  // original bucket helper so rollback stays possible.
+  if (data?.image_url) {
+    if (isFirebaseObjectPath(data.image_url)) {
+      if (isFirebaseAdminConfigured()) {
+        try {
+          await removeStoredObject(data.image_url);
+        } catch {
+          // Row is already gone; do not fail the action on an orphan file.
+        }
+      }
+    } else {
+      const marker = '/banners/';
+      const markerIndex = data.image_url.indexOf(marker);
+      if (markerIndex !== -1) {
+        const path = data.image_url.slice(markerIndex + marker.length);
+        await supabase.storage.from('banners').remove([path]);
+      }
+    }
   }
 
   revalidatePath('/admin/banners');

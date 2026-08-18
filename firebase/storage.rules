@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Firebase Storage is used ONLY for files/images.
+// All writes go through the Next.js server (Firebase Admin SDK), which
+// bypasses these rules after the existing Supabase auth + permission
+// checks. Client SDKs must not be able to write arbitrarily.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /products/{productId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /brands/{brandId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /categories/{categoryId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /banners/{bannerId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /retailers/{retailerId}/profile/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // KYC / registration paperwork — never publicly readable.
+    match /retailers/{retailerId}/documents/{allPaths=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}

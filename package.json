@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "storage:migrate": "npx tsx scripts/migrate-supabase-storage-to-firebase.ts",
     "cap:add:android": "cap add android",
     "cap:sync": "cap sync",
     "android:build:debug": "cap sync android && cd android && ./gradlew assembleDebug"
@@ -17,6 +18,7 @@
     "@capacitor/android": "^6.1.2",
     "@capacitor/app": "^6.0.1",
     "@capacitor/core": "^6.1.2",
+    "firebase-admin": "^12.7.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "@vercel/analytics": "^2.0.1",
