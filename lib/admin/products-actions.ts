@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { deleteMedia } from '@/lib/media';
 import type { Database } from '@/types/database.types';
 
 export type ProductFormState = { error?: string } | null;
@@ -174,8 +175,21 @@ export async function addProductImageAction(productId: string, imageUrl: string,
 export async function removeProductImageAction(imageId: string, productId: string) {
   await requirePermission('products.edit');
   const supabase = createClient();
-  const { error } = await supabase.from('product_images').delete().eq('id', imageId);
+
+  const { data, error } = await supabase
+    .from('product_images')
+    .delete()
+    .eq('id', imageId)
+    .select('image_url')
+    .maybeSingle<{ image_url: string }>();
   if (error) throw new Error(error.message);
+
+  // Clean up the stored file too, so removing an image doesn't orphan it.
+  // No-op for legacy Supabase Storage URLs — those are never auto-deleted.
+  if (data) {
+    await deleteMedia(data.image_url);
+  }
+
   revalidatePath(`/admin/products/${productId}`);
 }
 

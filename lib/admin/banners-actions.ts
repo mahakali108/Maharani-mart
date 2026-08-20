@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { deleteMedia, parseMediaRef } from '@/lib/media';
 import type { Database } from '@/types/database.types';
 
 export type BannerFormState = { error?: string } | null;
@@ -12,9 +13,24 @@ export type BannerFormState = { error?: string } | null;
 type BannerInsert = Database['public']['Tables']['banners']['Insert'];
 type BannerUpdate = Database['public']['Tables']['banners']['Update'];
 
+/**
+ * `image_url` holds either an Appwrite reference (`appwrite://<bucket>/<id>`,
+ * produced by lib/media) or a legacy Supabase Storage public URL. Both are
+ * accepted so existing banners can be edited without re-uploading.
+ */
+const mediaRefSchema = z
+  .string()
+  .min(1, 'Upload an image first.')
+  .refine((value) => {
+    const ref = parseMediaRef(value);
+    if (!ref) return false;
+    if (ref.provider === 'appwrite') return true;
+    return /^https?:\/\//i.test(ref.value);
+  }, 'Upload an image first.');
+
 const bannerSchema = z.object({
   title: z.string().min(2, 'Enter a title.'),
-  imageUrl: z.string().url('Upload an image first.'),
+  imageUrl: mediaRefSchema,
   linkUrl: z.string().url().optional().or(z.literal('')),
   areaId: z.string().uuid().optional().or(z.literal('')),
   startsAt: z.string().optional().or(z.literal('')),
@@ -147,15 +163,12 @@ export async function deleteBannerAction(bannerId: string) {
     .single<{ image_url: string }>();
   if (error) throw new Error(error.message);
 
-  // Same reasoning as products-actions.ts's removeProductImageAction:
-  // also remove the underlying file so deleting a banner doesn't leave
-  // it orphaned in the public banners bucket. image_url is the full
-  // public URL returned by lib/storage/upload.ts's getPublicUrl().
-  const marker = '/banners/';
-  const markerIndex = data?.image_url.indexOf(marker) ?? -1;
-  if (markerIndex !== -1 && data) {
-    const path = data.image_url.slice(markerIndex + marker.length);
-    await supabase.storage.from('banners').remove([path]);
+  // Also remove the underlying file so deleting a banner doesn't leave it
+  // orphaned. deleteMedia() is a no-op for legacy Supabase Storage values:
+  // old files are never auto-deleted (see docs/storage.md §Rollback), they
+  // are only ever cleaned up by an operator.
+  if (data) {
+    await deleteMedia(data.image_url);
   }
 
   revalidatePath('/admin/banners');
