@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
+import { cachedSearchSuggestions } from '@/lib/turso/catalog';
 import {
   loadFavoriteIds,
   loadProductsByIds,
@@ -19,10 +20,22 @@ export interface SearchSuggestionResult {
 }
 
 export async function searchSuggestionsAction(rawQuery: string): Promise<SearchSuggestionResult> {
+  // Authorisation happens FIRST and always against Supabase. The optional
+  // Turso cache below is only reached by an already-authorised caller, and
+  // the cached payload is catalog-wide (no prices, no favourites, no
+  // per-retailer data), so a cache hit can never leak anything.
   await requirePermission('products.view');
   const q = sanitizeSearchTerm(rawQuery);
   if (q.length < 2) return { products: [], brands: [], categories: [] };
 
+  // If Turso is unset or unreachable this transparently runs the Supabase
+  // query exactly as before — suggestions are a convenience, never a source
+  // of truth.
+  return cachedSearchSuggestions(q, () => loadSearchSuggestions(q));
+}
+
+/** The authoritative Supabase read behind the suggestions dropdown. */
+async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult> {
   const supabase = createClient();
   const like = `"%${q}%"`;
 

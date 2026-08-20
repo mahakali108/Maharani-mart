@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getSignedUrl } from '@/lib/storage/signed-url';
+import { resolveDocumentUrl } from '@/lib/media/document-url';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { RetailerRowActions } from '@/components/admin/retailer-row-actions';
 import { RetailerAreaReassignForm } from '@/components/admin/retailer-area-reassign-form';
@@ -88,7 +88,7 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
         doc_type: doc.doc_type,
         file_name: doc.file_name,
         created_at: doc.created_at,
-        signedUrl: await getSignedUrl('retailer-documents', doc.file_url),
+        signedUrl: await resolveDocumentUrl(doc.file_url),
       })
     )
   );

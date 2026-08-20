@@ -5,9 +5,27 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { deleteMedia, parseMediaRef } from '@/lib/media';
 import type { Database } from '@/types/database.types';
 
 export type MasterDataFormState = { error?: string } | null;
+
+/**
+ * Optional media reference for `brands.logo_url` / `categories.image_url`.
+ * Accepts an Appwrite reference (`appwrite://<bucket>/<id>`) or a legacy
+ * absolute URL, so values written before the Appwrite rollout still validate.
+ * An empty string clears the column.
+ */
+const optionalMediaRefSchema = z
+  .string()
+  .optional()
+  .or(z.literal(''))
+  .refine((value) => {
+    if (!value) return true;
+    const ref = parseMediaRef(value);
+    if (!ref) return false;
+    return ref.provider === 'appwrite' || /^https?:\/\//i.test(ref.value);
+  }, 'That image could not be attached. Upload it again.');
 
 // ----------------------------------------------------------------------------
 // Areas
@@ -189,6 +207,7 @@ export async function deleteWarehouseAction(warehouseId: string) {
 
 const brandSchema = z.object({
   name: z.string().min(2, 'Enter a brand name.'),
+  logoUrl: optionalMediaRefSchema,
 });
 
 type BrandInsert = Database['public']['Tables']['brands']['Insert'];
@@ -199,13 +218,16 @@ export async function createBrandAction(
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
 
-  const parsed = brandSchema.safeParse({ name: formData.get('name') });
+  const parsed = brandSchema.safeParse({
+    name: formData.get('name'),
+    logoUrl: formData.get('logoUrl') ?? '',
+  });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
   const supabase = createClient();
-  const payload: BrandInsert = { name: parsed.data.name };
+  const payload: BrandInsert = { name: parsed.data.name, logo_url: parsed.data.logoUrl || null };
   const { error } = await supabase.from('brands').insert(payload as unknown as never);
   if (error) return { error: error.message.includes('duplicate') ? 'A brand with this name already exists.' : error.message };
 
@@ -228,16 +250,35 @@ export async function updateBrandAction(
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
 
-  const parsed = brandSchema.safeParse({ name: formData.get('name') });
+  const parsed = brandSchema.safeParse({
+    name: formData.get('name'),
+    logoUrl: formData.get('logoUrl') ?? '',
+  });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
   const supabase = createClient();
-  const payload: Partial<BrandInsert> = { name: parsed.data.name };
+
+  // If the logo was replaced, remember the previous reference so the old
+  // Appwrite file can be cleaned up after the row update succeeds.
+  const { data: existing } = await supabase
+    .from('brands')
+    .select('logo_url')
+    .eq('id', brandId)
+    .maybeSingle<{ logo_url: string | null }>();
+
+  const payload: Partial<BrandInsert> = {
+    name: parsed.data.name,
+    logo_url: parsed.data.logoUrl || null,
+  };
   const { error } = await supabase.from('brands').update(payload as unknown as never).eq('id', brandId);
   if (error) {
     return { error: error.message.includes('duplicate') ? 'A brand with this name already exists.' : error.message };
+  }
+
+  if (existing?.logo_url && existing.logo_url !== payload.logo_url) {
+    await deleteMedia(existing.logo_url);
   }
 
   revalidatePath('/admin/catalog');
@@ -247,13 +288,22 @@ export async function updateBrandAction(
 export async function deleteBrandAction(brandId: string) {
   await requirePermission('master_data.manage');
   const supabase = createClient();
-  const { error } = await supabase.from('brands').delete().eq('id', brandId);
+
+  const { data, error } = await supabase
+    .from('brands')
+    .delete()
+    .eq('id', brandId)
+    .select('logo_url')
+    .maybeSingle<{ logo_url: string | null }>();
   if (error) {
     if (error.message.includes('foreign key') || error.message.includes('violates')) {
       throw new Error('This brand is assigned to one or more products and cannot be deleted. Deactivate it instead.');
     }
     throw new Error(error.message);
   }
+
+  if (data?.logo_url) await deleteMedia(data.logo_url);
+
   revalidatePath('/admin/catalog');
 }
 
@@ -264,6 +314,7 @@ export async function deleteBrandAction(brandId: string) {
 const categorySchema = z.object({
   name: z.string().min(2, 'Enter a category name.'),
   parentId: z.string().uuid().optional().or(z.literal('')),
+  imageUrl: optionalMediaRefSchema,
 });
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
@@ -277,6 +328,7 @@ export async function createCategoryAction(
   const parsed = categorySchema.safeParse({
     name: formData.get('name'),
     parentId: formData.get('parentId'),
+    imageUrl: formData.get('imageUrl') ?? '',
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
@@ -286,6 +338,7 @@ export async function createCategoryAction(
   const payload: CategoryInsert = {
     name: parsed.data.name,
     parent_id: parsed.data.parentId || null,
+    image_url: parsed.data.imageUrl || null,
   };
   const { error } = await supabase.from('categories').insert(payload as unknown as never);
   if (error) return { error: error.message.includes('duplicate') ? 'This category already exists under the selected parent.' : error.message };
@@ -315,6 +368,7 @@ export async function updateCategoryAction(
   const parsed = categorySchema.safeParse({
     name: formData.get('name'),
     parentId: formData.get('parentId'),
+    imageUrl: formData.get('imageUrl') ?? '',
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
@@ -324,15 +378,27 @@ export async function updateCategoryAction(
   }
 
   const supabase = createClient();
+
+  const { data: existing } = await supabase
+    .from('categories')
+    .select('image_url')
+    .eq('id', categoryId)
+    .maybeSingle<{ image_url: string | null }>();
+
   const payload: Partial<CategoryInsert> = {
     name: parsed.data.name,
     parent_id: parsed.data.parentId || null,
+    image_url: parsed.data.imageUrl || null,
   };
   const { error } = await supabase.from('categories').update(payload as unknown as never).eq('id', categoryId);
   if (error) {
     return {
       error: error.message.includes('duplicate') ? 'This category already exists under the selected parent.' : error.message,
     };
+  }
+
+  if (existing?.image_url && existing.image_url !== payload.image_url) {
+    await deleteMedia(existing.image_url);
   }
 
   revalidatePath('/admin/catalog');
@@ -342,12 +408,21 @@ export async function updateCategoryAction(
 export async function deleteCategoryAction(categoryId: string) {
   await requirePermission('master_data.manage');
   const supabase = createClient();
-  const { error } = await supabase.from('categories').delete().eq('id', categoryId);
+
+  const { data, error } = await supabase
+    .from('categories')
+    .delete()
+    .eq('id', categoryId)
+    .select('image_url')
+    .maybeSingle<{ image_url: string | null }>();
   if (error) {
     if (error.message.includes('foreign key') || error.message.includes('violates')) {
       throw new Error('This category has products or subcategories linked to it and cannot be deleted. Deactivate it instead.');
     }
     throw new Error(error.message);
   }
+
+  if (data?.image_url) await deleteMedia(data.image_url);
+
   revalidatePath('/admin/catalog');
 }

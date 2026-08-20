@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
-import { FileText, Upload, Trash2, Loader2, Download } from 'lucide-react';
-import { uploadFile, buildPath } from '@/lib/storage/upload';
+import { useState, useTransition } from 'react';
+import { FileText, Trash2, Download } from 'lucide-react';
+import { MediaUploadField } from '@/components/media/media-upload-field';
 import { addRetailerDocumentAction, deleteRetailerDocumentAction } from '@/lib/admin/retailers-actions';
 import { Select } from '@/components/ui/select';
 
@@ -29,35 +29,10 @@ export function RetailerDocumentsManager({
   documents: RetailerDocument[];
 }) {
   const [docType, setDocType] = useState('gstin_certificate');
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setError(null);
-    setIsUploading(true);
-    try {
-      const path = buildPath(retailerId, file);
-      const { path: storedPath } = await uploadFile('retailer-documents', file, path);
-      await addRetailerDocumentAction(retailerId, docType, storedPath, file.name);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  }
 
   return (
     <div className="space-y-4">
-      {error ? (
-        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{error}</div>
-      ) : null}
-
       {documents.length === 0 ? (
         <p className="text-sm text-ink-500">No documents uploaded yet.</p>
       ) : (
@@ -113,18 +88,14 @@ export function RetailerDocumentsManager({
             </option>
           ))}
         </Select>
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-ink-300 px-4 py-2.5 text-sm font-medium text-ink-600 hover:border-primary-400 hover:text-primary-600">
-          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          {isUploading ? 'Uploading…' : 'Upload document'}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,application/pdf"
-            className="hidden"
-            onChange={handleFileChange}
-            disabled={isUploading}
-          />
-        </label>
+        <MediaUploadField
+          kind="retailer-document"
+          ownerId={retailerId}
+          label="Upload document"
+          onUploaded={(media) =>
+            addRetailerDocumentAction(retailerId, docType, media.ref, media.fileName)
+          }
+        />
       </div>
     </div>
   );
