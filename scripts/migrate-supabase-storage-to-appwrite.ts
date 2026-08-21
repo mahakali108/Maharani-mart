@@ -36,7 +36,8 @@
  *
  * Required env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  *               APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY,
- *               APPWRITE_BUCKET_ID, APPWRITE_PRIVATE_BUCKET_ID
+ *               APPWRITE_STORAGE_BUCKET_ID (legacy alias: APPWRITE_BUCKET_ID),
+ *               APPWRITE_PRIVATE_BUCKET_ID
  *
  * `tsx` is not a project dependency — run it with `npx tsx`, or compile the
  * file first. Keeping it out of package.json avoids shipping a dev-only tool
@@ -344,7 +345,17 @@ async function main(): Promise<void> {
     .setKey(requireEnv('APPWRITE_API_KEY'));
 
   storage = new Storage(appwrite);
-  const publicBucketId = requireEnv('APPWRITE_BUCKET_ID');
+  // Canonical name first, legacy alias second — same order as the app.
+  const publicBucketId =
+    process.env.APPWRITE_STORAGE_BUCKET_ID?.trim() ||
+    process.env.APPWRITE_BUCKET_ID?.trim() ||
+    '';
+  if (!publicBucketId) {
+    console.error(
+      'Missing required environment variable: APPWRITE_STORAGE_BUCKET_ID (or legacy APPWRITE_BUCKET_ID)',
+    );
+    process.exit(1);
+  }
   const privateBucketId = process.env.APPWRITE_PRIVATE_BUCKET_ID?.trim() || publicBucketId;
 
   if (privateBucketId === publicBucketId) {

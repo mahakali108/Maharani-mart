@@ -28,7 +28,7 @@ Storage → Create bucket, twice.
 
 | Setting | Value |
 | --- | --- |
-| Bucket ID | `maharani-media` (or your own; it goes in `APPWRITE_BUCKET_ID`) |
+| Bucket ID | `maharani-media` (or your own; it goes in `APPWRITE_STORAGE_BUCKET_ID`) |
 | Name | Maharani media |
 | **File security** | **Disabled** — permissions are set per-file by the server |
 | Permissions | Leave the bucket-level list **empty** |
@@ -90,7 +90,9 @@ Component to pull the key into the browser bundle.
 APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
 APPWRITE_PROJECT_ID=<project id>
 APPWRITE_API_KEY=<server api key>          # server-only, never NEXT_PUBLIC_
-APPWRITE_BUCKET_ID=maharani-media
+# Canonical bucket variable. The legacy alias APPWRITE_BUCKET_ID is still
+# accepted as a fallback — set exactly ONE of the two.
+APPWRITE_STORAGE_BUCKET_ID=maharani-media
 APPWRITE_PRIVATE_BUCKET_ID=maharani-documents
 
 # Optional browser mirrors, used only to build public file URLs.
