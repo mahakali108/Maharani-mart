@@ -39,7 +39,9 @@ export function getAppwriteConfig(): AppwriteConfig | null {
   const endpoint = readEnv('APPWRITE_ENDPOINT') ?? readEnv('NEXT_PUBLIC_APPWRITE_ENDPOINT');
   const projectId = readEnv('APPWRITE_PROJECT_ID') ?? readEnv('NEXT_PUBLIC_APPWRITE_PROJECT_ID');
   const apiKey = readEnv('APPWRITE_API_KEY');
-  const publicBucketId = readEnv('APPWRITE_BUCKET_ID');
+  // Canonical name is APPWRITE_STORAGE_BUCKET_ID; APPWRITE_BUCKET_ID is the
+  // legacy alias kept so existing deployments keep working. Set exactly ONE.
+  const publicBucketId = readEnv('APPWRITE_STORAGE_BUCKET_ID') ?? readEnv('APPWRITE_BUCKET_ID');
 
   if (!endpoint || !projectId || !apiKey || !publicBucketId) return null;
 
@@ -98,4 +100,36 @@ export function bucketFor(isPrivate: boolean): string | null {
 }
 
 export const APPWRITE_NOT_CONFIGURED_ERROR =
-  'File storage is not configured on this deployment. Set APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY and APPWRITE_BUCKET_ID.';
+  'File storage is not configured on this deployment. Set APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY and APPWRITE_STORAGE_BUCKET_ID.';
+
+export interface AppwriteDiagnostics {
+  /** True only when every required server variable is present. */
+  configured: boolean;
+  endpointConfigured: boolean;
+  projectConfigured: boolean;
+  apiKeyConfigured: boolean;
+  bucketConfigured: boolean;
+}
+
+/**
+ * Presence-only diagnostics for deploy debugging. Reports ONLY booleans —
+ * never a value, never a prefix, never a length. Safe to expose through
+ * `/api/media/diagnostics`.
+ */
+export function getAppwriteDiagnostics(): AppwriteDiagnostics {
+  const endpointConfigured =
+    readEnv('APPWRITE_ENDPOINT') !== null || readEnv('NEXT_PUBLIC_APPWRITE_ENDPOINT') !== null;
+  const projectConfigured =
+    readEnv('APPWRITE_PROJECT_ID') !== null || readEnv('NEXT_PUBLIC_APPWRITE_PROJECT_ID') !== null;
+  const apiKeyConfigured = readEnv('APPWRITE_API_KEY') !== null;
+  const bucketConfigured =
+    readEnv('APPWRITE_STORAGE_BUCKET_ID') !== null || readEnv('APPWRITE_BUCKET_ID') !== null;
+
+  return {
+    configured: endpointConfigured && projectConfigured && apiKeyConfigured && bucketConfigured,
+    endpointConfigured,
+    projectConfigured,
+    apiKeyConfigured,
+    bucketConfigured,
+  };
+}

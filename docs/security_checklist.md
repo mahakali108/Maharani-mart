@@ -37,7 +37,7 @@
 
 See `docs/appwrite_setup.md` for the full configuration.
 
-- [ ] Two buckets exist: a public media bucket (`APPWRITE_BUCKET_ID`) and a **separate** private documents bucket (`APPWRITE_PRIVATE_BUCKET_ID`). If they are the same id, retailer KYC paperwork is sitting in a publicly delivered bucket — fix before production (`hasDedicatedPrivateBucket()` reports this)
+- [ ] Two buckets exist: a public media bucket (`APPWRITE_STORAGE_BUCKET_ID`, legacy alias `APPWRITE_BUCKET_ID`) and a **separate** private documents bucket (`APPWRITE_PRIVATE_BUCKET_ID`). If they are the same id, retailer KYC paperwork is sitting in a publicly delivered bucket — fix before production (`hasDedicatedPrivateBucket()` reports this)
 - [ ] Both buckets have **File Security disabled** and an **empty bucket-level permission list**, so access is decided per file by the server rather than by a bucket-wide grant
 - [ ] Public files carry exactly `read("any")`; private files carry **no permissions at all** and are reachable only through the server API key
 - [ ] Retailer documents are served only via `GET /api/media/private?ref=…`, which re-checks the Supabase session and `retailers.view` (or own-id) before streaming bytes — the raw Appwrite URL is never handed to the browser
