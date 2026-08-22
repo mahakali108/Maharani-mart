@@ -1,5 +1,11 @@
 # Storage / Media Audit — pre-Appwrite baseline
 
+> **Historical record.** This audit was written before an Appwrite media
+> layer was added (PR #8/#9). That layer has since been **reverted** — the
+> application is Supabase-only again. See `docs/storage-buckets.md` for the
+> current bucket inventory and `docs/future-appwrite-migration.md` for the
+> (documentation-only) future migration plan.
+
 Read-only audit performed before any code was changed, on branch
 `arena/01a01fd3-maharani-mart` (branched from `main` @ `f30879f`).
 

@@ -5,16 +5,15 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import { deleteMedia, parseMediaRef } from '@/lib/media';
+import { deleteMedia, isRenderableMediaRef } from '@/lib/media';
 import type { Database } from '@/types/database.types';
 
 export type MasterDataFormState = { error?: string } | null;
 
 /**
  * Optional media reference for `brands.logo_url` / `categories.image_url`.
- * Accepts an Appwrite reference (`appwrite://<bucket>/<id>`) or a legacy
- * absolute URL, so values written before the Appwrite rollout still validate.
- * An empty string clears the column.
+ * Accepts a Supabase Storage public URL or a legacy absolute URL. An empty
+ * string clears the column.
  */
 const optionalMediaRefSchema = z
   .string()
@@ -22,9 +21,7 @@ const optionalMediaRefSchema = z
   .or(z.literal(''))
   .refine((value) => {
     if (!value) return true;
-    const ref = parseMediaRef(value);
-    if (!ref) return false;
-    return ref.provider === 'appwrite' || /^https?:\/\//i.test(ref.value);
+    return isRenderableMediaRef(value);
   }, 'That image could not be attached. Upload it again.');
 
 // ----------------------------------------------------------------------------
@@ -261,7 +258,7 @@ export async function updateBrandAction(
   const supabase = createClient();
 
   // If the logo was replaced, remember the previous reference so the old
-  // Appwrite file can be cleaned up after the row update succeeds.
+  // file can be cleaned up after the row update succeeds.
   const { data: existing } = await supabase
     .from('brands')
     .select('logo_url')

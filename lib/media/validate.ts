@@ -6,7 +6,7 @@ import 'server-only';
  * The browser's `File.type` is attacker-controlled and is NEVER trusted here.
  * Every accepted MIME type is confirmed by sniffing the file's magic bytes,
  * and image dimensions are parsed straight out of the container headers so a
- * decompression-bomb can be rejected before anything reaches Appwrite.
+ * decompression-bomb can be rejected before anything reaches Supabase Storage.
  */
 
 import { fileExtension, sanitizeFileName } from './paths';
@@ -14,7 +14,7 @@ import { MEDIA_KIND_CONFIG, type MediaKind } from './types';
 
 export interface ValidatedFile {
   bytes: Buffer;
-  /** MIME type proven by magic bytes — this is what gets sent to Appwrite. */
+  /** MIME type proven by magic bytes — this is what gets stored. */
   mimeType: string;
   fileName: string;
   size: number;

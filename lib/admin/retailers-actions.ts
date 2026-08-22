@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { deleteMedia } from '@/lib/media';
 import type { Database } from '@/types/database.types';
 
 type RetailerUpdate = Database['public']['Tables']['retailers']['Update'];
@@ -155,8 +156,19 @@ export async function deleteRetailerDocumentAction(documentId: string, retailerI
   await requirePermission('retailers.approve');
   const supabase = createClient();
 
-  const { error } = await supabase.from('retailer_documents').delete().eq('id', documentId);
+  const { data, error } = await supabase
+    .from('retailer_documents')
+    .delete()
+    .eq('id', documentId)
+    .select('file_url')
+    .maybeSingle<{ file_url: string }>();
   if (error) throw new Error(error.message);
+
+  // Best-effort cleanup of the underlying object. A failure here never aborts
+  // the row deletion, and legacy files are never auto-deleted en masse.
+  if (data) {
+    await deleteMedia(data.file_url);
+  }
 
   revalidatePath(`/admin/retailers/${retailerId}`);
 }

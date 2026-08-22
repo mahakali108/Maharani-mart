@@ -10,9 +10,11 @@
  *     If anything fails we fall back to the original file — the server-side
  *     validator is still the authority on what is accepted.
  *
- *  2. DELIVERY-TIME (Appwrite): `resolveMediaUrl()` requests the preview
- *     endpoint with a width + quality + WebP output, so each surface pulls an
- *     appropriately sized render instead of the full-resolution original.
+ *  2. DELIVERY-TIME (Next.js image optimizer): `StoredImage` renders the
+ *     Supabase public URL through `next/image` (which is allowed by the
+ *     `images.remotePatterns` entry in `next.config.mjs`), so each surface
+ *     pulls an appropriately sized render instead of the full-resolution
+ *     original.
  *
  * This module is isomorphic and contains no secrets.
  */

@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import { deleteMedia, parseMediaRef } from '@/lib/media';
+import { deleteMedia, isRenderableMediaRef } from '@/lib/media';
 import type { Database } from '@/types/database.types';
 
 export type BannerFormState = { error?: string } | null;
@@ -14,19 +14,14 @@ type BannerInsert = Database['public']['Tables']['banners']['Insert'];
 type BannerUpdate = Database['public']['Tables']['banners']['Update'];
 
 /**
- * `image_url` holds either an Appwrite reference (`appwrite://<bucket>/<id>`,
- * produced by lib/media) or a legacy Supabase Storage public URL. Both are
- * accepted so existing banners can be edited without re-uploading.
+ * `image_url` holds a Supabase Storage public URL (produced by lib/media), or
+ * a legacy absolute URL from before the storage layer was normalised. Both
+ * are accepted so existing banners can be edited without re-uploading.
  */
 const mediaRefSchema = z
   .string()
   .min(1, 'Upload an image first.')
-  .refine((value) => {
-    const ref = parseMediaRef(value);
-    if (!ref) return false;
-    if (ref.provider === 'appwrite') return true;
-    return /^https?:\/\//i.test(ref.value);
-  }, 'Upload an image first.');
+  .refine((value) => isRenderableMediaRef(value), 'Upload an image first.');
 
 const bannerSchema = z.object({
   title: z.string().min(2, 'Enter a title.'),
@@ -164,9 +159,8 @@ export async function deleteBannerAction(bannerId: string) {
   if (error) throw new Error(error.message);
 
   // Also remove the underlying file so deleting a banner doesn't leave it
-  // orphaned. deleteMedia() is a no-op for legacy Supabase Storage values:
-  // old files are never auto-deleted (see docs/storage.md §Rollback), they
-  // are only ever cleaned up by an operator.
+  // orphaned. deleteMedia() is best-effort and only removes Supabase objects
+  // it can confidently identify; legacy files are never auto-deleted en masse.
   if (data) {
     await deleteMedia(data.image_url);
   }

@@ -185,7 +185,8 @@ export async function removeProductImageAction(imageId: string, productId: strin
   if (error) throw new Error(error.message);
 
   // Clean up the stored file too, so removing an image doesn't orphan it.
-  // No-op for legacy Supabase Storage URLs — those are never auto-deleted.
+  // deleteMedia() is best-effort and only removes Supabase objects it can
+  // confidently identify; legacy files are never auto-deleted en masse.
   if (data) {
     await deleteMedia(data.image_url);
   }
