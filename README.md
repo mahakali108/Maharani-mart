@@ -140,7 +140,7 @@ Nothing in the codebase fabricates data to fill these gaps — every list and st
 
 - **Error boundaries**: `app/error.tsx`, `app/global-error.tsx`, `app/not-found.tsx`, plus a scoped `error.tsx` in every role segment (`admin`/`staff`/`salesman`/`retailer`) so a failure in one area doesn't blank the whole app.
 - **Loading states**: `app/loading.tsx` + per-role `loading.tsx` using a shared `<DashboardSkeleton />`.
-- **File/image storage**: `supabase/migrations/0003_storage_buckets.sql` creates four public buckets (`product-images`, `banners`, `avatars`, `brand-logos`) with RLS — staff+ manage catalog imagery, anyone manages their own avatar. `lib/storage/upload.ts` is the client-side upload/remove helper Phase 2 screens will call.
+- **File/image storage**: Supabase Storage only. Buckets are created in `supabase/migrations/0003_storage_buckets.sql` (public: `product-images`, `banners`, `avatars`, `brand-logos`), `0006_retailer_documents.sql` (private `retailer-documents`), and `0016_storage_paths_category_bucket.sql` (public `category-images`). All uploads/deletes go through the server-side `lib/media` facade (`lib/media/supabase.ts`) with RLS + app-level permission checks; see `docs/storage-buckets.md`.
 - **Notification architecture**: `lib/notifications/notify.ts` writes real rows to `notifications` (in-app) and `notification_logs` (WhatsApp/SMS queue) — the pipeline is live, the outbound provider call is Phase 2.
 - **Activity/audit tracking**: already covered by `audit_logs` + triggers on `products`, `price_lists`, `orders` in `0001_init.sql` — every change is attributed to `auth.uid()` automatically, no separate activity table needed.
 - **Deployment config**: `vercel.json` (Mumbai region `bom1`, security headers).

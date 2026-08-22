@@ -71,8 +71,7 @@ export function MediaUploadField({
 
       await onUploaded({
         ref: result.ref,
-        fileId: result.fileId,
-        bucketId: result.bucketId,
+        bucket: result.bucket,
         path: result.path,
         url: result.url,
         fileName: result.fileName,

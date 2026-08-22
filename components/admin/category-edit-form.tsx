@@ -28,7 +28,7 @@ export function CategoryEditForm({
   name: string;
   parentId: string | null;
   categories: CategoryOption[];
-  /** Existing `categories.image_url` — an Appwrite ref or a legacy Supabase URL. */
+  /** Existing `categories.image_url` — a Supabase public URL (or a legacy absolute URL). */
   imageUrl?: string | null;
 }) {
   const boundAction = updateCategoryAction.bind(null, categoryId);

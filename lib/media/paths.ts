@@ -1,5 +1,5 @@
 /**
- * Deterministic, server-owned file naming.
+ * Deterministic, server-owned file naming for Supabase Storage.
  *
  * The browser never supplies a path, a folder, an owner id, or a file id.
  * It supplies a `MediaKind` plus (optionally) an entity id which the server
@@ -16,10 +16,7 @@ export function isUuid(value: unknown): value is string {
   return typeof value === 'string' && UUID_RE.test(value);
 }
 
-/**
- * Appwrite file ids: max 36 chars, `a-z A-Z 0-9 . - _`, cannot start with a
- * special char. A bare UUID v4 satisfies all of that.
- */
+/** A server-generated, collision-safe unique id used as the object file name. */
 export function newFileId(): string {
   return randomUUID();
 }
@@ -52,10 +49,10 @@ export const EXTENSION_BY_MIME: Record<string, string> = {
 };
 
 /**
- * Logical path stored alongside the file for auditing and migration, e.g.
- * `products/6f1d…/gallery/9c2b…webp`. Appwrite storage is flat, so this is
- * metadata rather than a real directory — but it keeps parity with the
- * Supabase layout and makes the migration script verifiable.
+ * Build the full object path for a validated upload, e.g.
+ * `products/6f1d…/gallery/9c2b….webp`. The object name is a server-generated
+ * UUID + the sniffed extension, so a guessed filename can never collide with,
+ * or reveal, another entity's file.
  */
 export function buildMediaPath(
   kind: MediaKind,

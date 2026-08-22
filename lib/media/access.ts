@@ -5,8 +5,8 @@ import 'server-only';
  *
  * Every upload/delete is authorised against the caller's **Supabase** session
  * and the existing permission matrix (`lib/permissions/permissions.ts`).
- * Appwrite has no concept of our users and is never asked to make an access
- * decision — it only ever receives a request the server has already approved.
+ * Supabase Storage RLS remains the final authority on the actual object
+ * write/delete — this module is a defence-in-depth layer on top of it.
  *
  * Ownership rules are enforced here so a retailer can never write into another
  * retailer's folder even if they tamper with the request payload.
@@ -88,20 +88,4 @@ export async function authorizeMediaWrite(
   }
 
   return { ok: true, user, ownerId };
-}
-
-/**
- * Authorise reading a PRIVATE media reference (retailer documents).
- * Mirrors the Supabase RLS policy on `retailer_documents`:
- * staff and above, or the retailer the document belongs to.
- */
-export async function authorizePrivateMediaRead(
-  retailerId: string | null,
-): Promise<{ ok: true; user: CurrentUser } | { ok: false; error: string }> {
-  const user = await requireUser();
-
-  if (can(user.role, 'retailers.view')) return { ok: true, user };
-  if (retailerId !== null && retailerId === user.id) return { ok: true, user };
-
-  return { ok: false, error: 'Not authorised to view this document.' };
 }

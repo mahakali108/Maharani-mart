@@ -18,7 +18,7 @@ export function BrandEditForm({
 }: {
   brandId: string;
   name: string;
-  /** Existing `brands.logo_url` — an Appwrite ref or a legacy Supabase URL. */
+  /** Existing `brands.logo_url` — a Supabase public URL (or a legacy absolute URL). */
   logoUrl?: string | null;
 }) {
   const boundAction = updateBrandAction.bind(null, brandId);

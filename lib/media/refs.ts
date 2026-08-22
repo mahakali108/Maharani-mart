@@ -1,138 +1,92 @@
 /**
- * Media reference parsing + URL resolution.
+ * Media reference parsing + URL resolution (Supabase-only).
  *
  * IMPORTANT: this module is deliberately isomorphic and secret-free so that
- * `components/media/stored-image.tsx` can use it in the browser. It only ever
- * touches `NEXT_PUBLIC_*` values, which are non-sensitive by definition
- * (an Appwrite endpoint + project id are already visible in any public URL).
+ * `components/media/stored-image.tsx` can use it in the browser. It reads no
+ * environment variables and no secrets — it only inspects the shape of the
+ * stored column value.
  */
 
-import type { AppwriteMediaRef, LegacyMediaRef, MediaRef } from './types';
+/** Parsed form of a stored column value. */
+export type ParsedMediaRef =
+  | { provider: 'supabase-url'; bucket: string; path: string; url: string }
+  | { provider: 'object-path'; value: string }
+  | { provider: 'external-url'; value: string };
 
-export const APPWRITE_REF_PREFIX = 'appwrite://';
+const APPWRITE_REF_PREFIX = 'appwrite://';
+
+/**
+ * Extract the bucket + object path from a Supabase public URL such as
+ * `https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>`.
+ * Returns `null` for anything else (including other external hosts).
+ */
+export function parseSupabasePublicUrl(url: string): { bucket: string; path: string } | null {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/^\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+    if (!match) return null;
+    const bucket = decodeURIComponent(match[1] ?? '');
+    const path = match[2] ?? '';
+    if (!bucket || !path) return null;
+    return { bucket, path };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Parse a stored column value.
  *
- * - `appwrite://<bucketId>/<fileId>` → Appwrite-backed media
- * - anything else (full Supabase public URL, bare storage path, external URL)
- *   → legacy, rendered exactly as before. This is what keeps every image that
- *   already exists in Supabase Storage working with zero data migration.
+ * - a Supabase public URL      → `{ provider: 'supabase-url', bucket, path }`
+ * - a bare object path         → `{ provider: 'object-path' }` (private documents)
+ * - any other absolute/relative URL → `{ provider: 'external-url' }`
+ * - an old `appwrite://…` ref  → `null` (Appwrite is no longer in use; the value
+ *   renders as a placeholder rather than crashing)
+ * - empty / non-string         → `null`
  */
-export function parseMediaRef(value: string | null | undefined): MediaRef | null {
+export function parseMediaRef(value: string | null | undefined): ParsedMediaRef | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (trimmed === '') return null;
 
-  if (trimmed.startsWith(APPWRITE_REF_PREFIX)) {
-    const rest = trimmed.slice(APPWRITE_REF_PREFIX.length);
-    const slash = rest.indexOf('/');
-    if (slash <= 0) return null;
-    const bucketId = rest.slice(0, slash);
-    const fileId = rest.slice(slash + 1).split('?')[0] ?? '';
-    if (bucketId === '' || fileId === '') return null;
-    return { provider: 'appwrite', bucketId, fileId };
+  if (trimmed.startsWith(APPWRITE_REF_PREFIX)) return null;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    const supabase = parseSupabasePublicUrl(trimmed);
+    if (supabase) return { provider: 'supabase-url', ...supabase, url: trimmed };
+    return { provider: 'external-url', value: trimmed };
   }
 
-  return { provider: 'legacy', value: trimmed };
-}
+  if (trimmed.startsWith('/')) return { provider: 'external-url', value: trimmed };
 
-export function buildAppwriteRef(bucketId: string, fileId: string): string {
-  return `${APPWRITE_REF_PREFIX}${bucketId}/${fileId}`;
-}
-
-export function isAppwriteRef(value: string | null | undefined): boolean {
-  return parseMediaRef(value)?.provider === 'appwrite';
-}
-
-/**
- * Endpoint + project id are NOT secrets — they are visible in every public
- * file URL Appwrite serves. The `NEXT_PUBLIC_*` mirrors exist so Client
- * Components can build URLs; the bare names are the server-side source and
- * simply resolve to `undefined` in the browser bundle.
- *
- * `APPWRITE_API_KEY` is deliberately never referenced in this file.
- */
-function publicEndpoint(): string | null {
-  const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? process.env.APPWRITE_ENDPOINT;
-  return endpoint && endpoint.trim() !== '' ? endpoint.trim().replace(/\/+$/, '') : null;
-}
-
-function publicProjectId(): string | null {
-  const project = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID ?? process.env.APPWRITE_PROJECT_ID;
-  return project && project.trim() !== '' ? project.trim() : null;
-}
-
-export interface AppwriteViewOptions {
-  /** Request a resized/re-encoded render from Appwrite's image preview endpoint. */
-  width?: number;
-  height?: number;
-  /** 0-100. Ignored unless a width/height is supplied. */
-  quality?: number;
-}
-
-/**
- * Public (unauthenticated) delivery URL for a file in a *public* Appwrite bucket.
- * Returns `null` when Appwrite is not configured, so callers can fall back.
- */
-export function appwritePublicUrl(
-  ref: AppwriteMediaRef,
-  options: AppwriteViewOptions = {},
-): string | null {
-  const endpoint = publicEndpoint();
-  const project = publicProjectId();
-  if (!endpoint || !project) return null;
-
-  const base = `${endpoint}/storage/buckets/${encodeURIComponent(ref.bucketId)}/files/${encodeURIComponent(ref.fileId)}`;
-  const params = new URLSearchParams({ project });
-
-  const wantsPreview =
-    typeof options.width === 'number' || typeof options.height === 'number';
-
-  if (!wantsPreview) return `${base}/view?${params.toString()}`;
-
-  if (typeof options.width === 'number') params.set('width', String(Math.round(options.width)));
-  if (typeof options.height === 'number') params.set('height', String(Math.round(options.height)));
-  params.set('quality', String(options.quality ?? 80));
-  params.set('output', 'webp');
-  return `${base}/preview?${params.toString()}`;
-}
-
-/**
- * Authorised streaming URL for private media (retailer documents). The route
- * handler re-checks the Supabase session and role before returning bytes.
- */
-export function privateMediaUrl(refValue: string): string {
-  return `/api/media/private?ref=${encodeURIComponent(refValue)}`;
+  return { provider: 'object-path', value: trimmed };
 }
 
 /**
  * Resolve any stored column value to something an `<img>` can use.
  *
- * `null` means "not resolvable here" — e.g. a legacy private object path that
- * needs a server-side signed URL, or Appwrite env vars missing.
+ * `null` means "not resolvable here" — e.g. a private object path that needs a
+ * server-side signed URL, or an unrecognised `appwrite://` value.
  */
-export function resolveMediaUrl(
-  value: string | null | undefined,
-  options: AppwriteViewOptions = {},
-): string | null {
+export function resolveMediaUrl(value: string | null | undefined): string | null {
   const ref = parseMediaRef(value);
   if (!ref) return null;
-  if (ref.provider === 'appwrite') return appwritePublicUrl(ref, options);
-
-  // Legacy Supabase public URLs (and any absolute URL) render as-is.
-  if (/^https?:\/\//i.test(ref.value)) return ref.value;
-  if (ref.value.startsWith('/')) return ref.value;
-
-  // Bare object path — private, needs a signed URL from the server.
+  if (ref.provider === 'supabase-url') return ref.url;
+  if (ref.provider === 'external-url') return ref.value;
   return null;
 }
 
 /** Legacy private Supabase object paths look like `<retailerId>/<timestamp>-<name>`. */
 export function isLegacyObjectPath(value: string | null | undefined): boolean {
-  const ref = parseMediaRef(value);
-  if (!ref || ref.provider !== 'legacy') return false;
-  return !/^https?:\/\//i.test(ref.value) && !ref.value.startsWith('/');
+  return parseMediaRef(value)?.provider === 'object-path';
 }
 
-export type { AppwriteMediaRef, LegacyMediaRef, MediaRef };
+/**
+ * True when a value is directly renderable in an `<img>` (Supabase public URL
+ * or an absolute/root-relative URL). Used by the admin form validators to
+ * accept only values the upload flow actually produces.
+ */
+export function isRenderableMediaRef(value: string | null | undefined): boolean {
+  const ref = parseMediaRef(value);
+  return ref?.provider === 'supabase-url' || ref?.provider === 'external-url';
+}

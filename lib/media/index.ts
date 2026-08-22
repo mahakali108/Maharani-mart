@@ -2,42 +2,37 @@ import 'server-only';
 
 /**
  * Media facade — the ONLY module application code should import for
- * uploading or deleting files.
- *
- * The rest of the app never imports `node-appwrite`, never sees a bucket id,
- * and never builds a storage path. Swapping the storage provider means
- * changing `lib/media/appwrite/*` and nothing else.
+ * uploading or deleting files. Storage is Supabase Storage, full stop.
  *
  * Flow enforced here:
  *   browser  →  Supabase session (requireUser)
  *            →  role/permission + ownership check (lib/media/access)
  *            →  server-side validation (lib/media/validate)
- *            →  Appwrite write (lib/media/appwrite/upload)
+ *            →  Supabase Storage write (lib/media/supabase)
  *            →  caller persists `result.ref` in the existing Supabase column
+ *
+ * The browser never picks a bucket, an object path, or a file id. It names a
+ * `MediaKind` (plus an owner id), and the server derives everything else.
  */
 
 import { authorizeMediaWrite } from './access';
-import { deleteFromAppwrite, type DeleteOutcome } from './appwrite/delete';
-import { uploadToAppwrite } from './appwrite/upload';
-import { isAppwriteConfigured } from './appwrite/server';
-import { validateUpload } from './validate';
 import { isMediaKind, type MediaKind, type UploadMediaResult } from './types';
+import { validateUpload } from './validate';
+import { deleteFromSupabaseStorage, uploadToSupabaseStorage } from './supabase';
+import type { DeleteOutcome } from './supabase';
+import { parseMediaRef } from './refs';
 
-export { isAppwriteConfigured, hasDedicatedPrivateBucket } from './appwrite/server';
-export { deleteFromAppwrite } from './appwrite/delete';
-export { readAppwriteFile } from './appwrite/url';
-export { authorizeMediaWrite, authorizePrivateMediaRead } from './access';
+export { authorizeMediaWrite } from './access';
 export {
   parseMediaRef,
-  buildAppwriteRef,
-  isAppwriteRef,
-  isLegacyObjectPath,
+  parseSupabasePublicUrl,
   resolveMediaUrl,
-  appwritePublicUrl,
-  privateMediaUrl,
+  isLegacyObjectPath,
+  isRenderableMediaRef,
 } from './refs';
 export { MEDIA_KINDS, MEDIA_KIND_CONFIG, isMediaKind } from './types';
-export type { MediaKind, MediaRef, UploadedMedia, UploadMediaResult } from './types';
+export type { MediaKind, UploadedMedia, UploadMediaResult } from './types';
+export type { DeleteOutcome } from './supabase';
 
 /**
  * Authorise, validate and store one file.
@@ -55,14 +50,6 @@ export async function uploadMedia(
   }
   const kind: MediaKind = rawKind;
 
-  if (!isAppwriteConfigured()) {
-    return {
-      ok: false,
-      error:
-        'File storage is not configured on this deployment. Ask an administrator to set the Appwrite environment variables.',
-    };
-  }
-
   // 1. Supabase session + role + ownership. Throws only via requireUser()'s
   //    redirect when there is no session at all.
   const access = await authorizeMediaWrite(kind, rawOwnerId);
@@ -72,8 +59,12 @@ export async function uploadMedia(
   const validated = await validateUpload(kind, file);
   if (!validated.ok) return { ok: false, error: validated.error };
 
-  // 3. Write. Bucket, file id and path are all server-derived.
-  const stored = await uploadToAppwrite({ kind, ownerId: access.ownerId, file: validated.file });
+  // 3. Write. Bucket, object name and path are all server-derived; RLS applies.
+  const stored = await uploadToSupabaseStorage({
+    kind,
+    ownerId: access.ownerId,
+    file: validated.file,
+  });
   if (!stored.ok) return { ok: false, error: stored.error };
 
   return { ok: true, ...stored.media };
@@ -82,9 +73,21 @@ export async function uploadMedia(
 /**
  * Best-effort cleanup of a stored reference.
  *
- * Legacy Supabase Storage values are intentionally ignored — old files are
- * never auto-deleted by this codebase.
+ * Only Supabase objects that can be confidently identified are removed
+ * (a Supabase public URL, or a bare object path in the private
+ * `retailer-documents` bucket). Old files are never auto-deleted en masse,
+ * and a failure here never aborts the caller's DB change.
  */
 export async function deleteMedia(refValue: string | null | undefined): Promise<DeleteOutcome> {
-  return deleteFromAppwrite(refValue);
+  const ref = parseMediaRef(refValue);
+  if (!ref) return 'unrecognized';
+  if (ref.provider === 'supabase-url') {
+    return deleteFromSupabaseStorage(ref.bucket, ref.path);
+  }
+  if (ref.provider === 'object-path') {
+    // The only private bucket is retailer-documents; object paths only appear
+    // in `retailer_documents.file_url`.
+    return deleteFromSupabaseStorage('retailer-documents', ref.value);
+  }
+  return 'not-supabase';
 }

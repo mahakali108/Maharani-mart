@@ -38,8 +38,8 @@ export function BannerEditForm({
 }) {
   const boundAction = updateBannerAction.bind(null, bannerId);
   const [state, formAction] = useFormState(boundAction, initialState);
-  // Starts as the existing value — which may be a legacy Supabase public URL —
-  // and is replaced by an Appwrite reference only if a new file is uploaded.
+  // Starts as the existing value — a Supabase public URL — and is replaced
+  // with a new public URL only if a new file is uploaded.
   const [imageRef, setImageRef] = useState(initialImageUrl);
 
   return (
