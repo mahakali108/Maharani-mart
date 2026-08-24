@@ -4,9 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { notifyOrderEvent } from '@/lib/notifications/notify';
-import type { Database } from '@/types/database.types';
-
-type StockMovementInsert = Database['public']['Tables']['stock_movements']['Insert'];
+import { notifyLowStockIfNeeded } from '@/lib/inventory/alerts';
 
 export type DispatchResult = { error?: string } | { success: true };
 
@@ -22,6 +20,17 @@ interface OrderItemRow {
   quantity: number;
 }
 
+/**
+ * Dispatches an order. Stock deduction is delegated to the
+ * consume_order_stock RPC, which atomically:
+ *   - consumes the FEFO batch allocations recorded at approval time
+ *     (SALE movements, releasing the matching reserved quantities),
+ *   - falls back to a direct FEFO deduction for pre-migration orders
+ *     that have no allocations,
+ *   - is idempotent on retry (an already-dispatched line is never
+ *     deducted twice).
+ * The order's pricing/totals are untouched.
+ */
 export async function dispatchOrderAction(orderId: string): Promise<DispatchResult> {
   const user = await requirePermission('orders.dispatch');
   const supabase = createClient();
@@ -42,39 +51,13 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
   const items = (itemData ?? []) as OrderItemRow[];
   if (items.length === 0) return { error: 'This order has no items.' };
 
-  // Real stock deduction: insert an 'outward' stock_movements row per
-  // line. The existing apply_stock_movement trigger (0001_init.sql)
-  // deducts inventory_stock.quantity automatically — this is the
-  // single source of truth for stock changes, not a separate
-  // application-level decrement.
-  const movementPayloads: StockMovementInsert[] = items.map((item) => ({
-    product_id: item.product_id,
-    warehouse_id: order.warehouse_id!,
-    movement_type: 'outward',
-    quantity: item.quantity,
-    reference_order_id: orderId,
-    reason: 'Order dispatch',
-    performed_by: user.id,
-  }));
-
-  const { error: movementError } = await supabase.from('stock_movements').insert(movementPayloads as unknown as never);
-  if (movementError) return { error: movementError.message };
-
-  // Release the reservation now that stock has actually been deducted.
-  for (const item of items) {
-    const { data: stockRow } = await supabase
-      .from('inventory_stock')
-      .select('id, reserved_quantity')
-      .eq('product_id', item.product_id)
-      .eq('warehouse_id', order.warehouse_id)
-      .maybeSingle<{ id: string; reserved_quantity: number }>();
-
-    if (stockRow) {
-      await supabase
-        .from('inventory_stock')
-        .update({ reserved_quantity: Math.max(0, stockRow.reserved_quantity - item.quantity) } as unknown as never)
-        .eq('id', stockRow.id);
-    }
+  const { error: consumeError } = await supabase.rpc('consume_order_stock' as never, {
+    p_order_id: orderId,
+  } as never);
+  if (consumeError) {
+    const msg = consumeError.message;
+    const match = msg.match(/INSUFFICIENT_STOCK:\s*(.+)$/);
+    return { error: match?.[1] ? match[1].trim() : `Stock could not be deducted: ${msg}` };
   }
 
   const { error: orderError } = await supabase
@@ -95,9 +78,13 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
     linkUrl: `/retailer/orders/${orderId}`,
   });
 
+  // Stock just went out — check reorder levels (anti-spam dedupe inside).
+  await notifyLowStockIfNeeded(items.map((i) => i.product_id));
+
   revalidatePath(`/staff/orders/${orderId}`);
   revalidatePath('/staff/orders');
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
+  revalidatePath('/admin/inventory');
   return { success: true };
 }

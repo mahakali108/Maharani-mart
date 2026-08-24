@@ -1,14 +1,10 @@
 import type { Metadata, Viewport } from 'next';
-import { Poppins } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-sans',
-  display: 'swap',
-});
+// Poppins is self-hosted via @fontsource (imported in globals.css) and the
+// `--font-sans` variable is defined there too — so this layout no longer
+// needs next/font/google, which requires network access at build time.
 
 export const metadata: Metadata = {
   title: 'Maa Kali B2B Ultra Platform',
@@ -24,7 +20,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={poppins.variable}>
+    <html lang="en">
       <body className="font-sans">
         {children}
         <Analytics />

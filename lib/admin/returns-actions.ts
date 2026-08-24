@@ -22,12 +22,22 @@ export async function approveReturnAction(returnId: string, note: string): Promi
 
   const { data: existing } = await supabase
     .from('return_requests')
-    .select('retailer_id, order_id, status')
+    .select('retailer_id, order_id, order_item_id, status')
     .eq('id', returnId)
-    .maybeSingle<ReturnRequestRow>();
+    .maybeSingle<ReturnRequestRow & { order_item_id: string | null }>();
 
   if (!existing) return { error: 'Return request not found.' };
   if (existing.status !== 'requested') return { error: 'This return request has already been resolved.' };
+
+  // Book the returned goods back into inventory (RETURN movements). The
+  // RPC puts stock back into the batches it was dispatched from when the
+  // FEFO allocations are known, otherwise at the aggregate product level.
+  // Runs BEFORE the status flip so a failure cannot approve-without-stock.
+  const { error: returnError } = await supabase.rpc('return_order_stock' as never, {
+    p_order_id: existing.order_id,
+    p_order_item_id: existing.order_item_id,
+  } as never);
+  if (returnError) return { error: `Return could not be booked into stock: ${returnError.message}` };
 
   const payload: ReturnRequestUpdate = {
     status: 'approved',
@@ -49,6 +59,8 @@ export async function approveReturnAction(returnId: string, note: string): Promi
   await queueChannelNotification('whatsapp', notifyInput);
 
   revalidatePath('/admin/returns');
+  revalidatePath('/admin/inventory');
+  revalidatePath('/admin/inventory/batches');
   return { success: true };
 }
 

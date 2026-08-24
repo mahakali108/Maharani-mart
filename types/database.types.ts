@@ -17,7 +17,11 @@ export type NotificationChannelEnum = 'whatsapp' | 'sms' | 'push' | 'in_app';
 export type NotificationStatusEnum = 'queued' | 'sent' | 'delivered' | 'failed';
 export type OrderStatusEnum =
   | 'pending' | 'confirmed' | 'processing' | 'packed' | 'dispatched' | 'delivered' | 'cancelled' | 'returned';
-export type StockMovementTypeEnum = 'inward' | 'outward' | 'damage' | 'return' | 'transfer' | 'adjustment';
+export type StockMovementTypeEnum =
+  | 'inward' | 'outward' | 'damage' | 'return' | 'transfer' | 'adjustment'
+  // Added by 0017_inventory_batches_fefo_grn.sql:
+  | 'opening_stock' | 'grn_receipt' | 'sale' | 'sale_reservation' | 'sale_release'
+  | 'expiry' | 'stock_adjustment' | 'transfer_out' | 'transfer_in' | 'manual_correction';
 export type ReturnStatusEnum = 'requested' | 'approved' | 'rejected' | 'completed';
 export type PriceScopeEnum = 'base' | 'area' | 'retailer' | 'scheme' | 'festival';
 export type VisitStatusEnum = 'planned' | 'checked_in' | 'checked_out' | 'skipped';
@@ -261,6 +265,9 @@ export interface Database {
           is_new_launch: boolean;
           is_active: boolean;
           barcode: string | null;
+          min_stock: number;
+          reorder_level: number;
+          max_stock: number;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -281,6 +288,9 @@ export interface Database {
           is_new_launch?: boolean;
           is_active?: boolean;
           barcode?: string | null;
+          min_stock?: number;
+          reorder_level?: number;
+          max_stock?: number;
           created_by?: string | null;
         };
         Update: Partial<Database['public']['Tables']['products']['Insert']>;
@@ -550,6 +560,15 @@ export interface Database {
           reason: string | null;
           performed_by: string;
           created_at: string;
+          // Added by 0017_inventory_batches_fefo_grn.sql:
+          batch_id: string | null;
+          reference_type: string | null;
+          reference_id: string | null;
+          previous_quantity: number | null;
+          new_quantity: number | null;
+          direction: 'in' | 'out' | null;
+          releases_reserved: number;
+          seq: number;
         };
         Insert: {
           id?: string;
@@ -560,6 +579,15 @@ export interface Database {
           reference_order_id?: string | null;
           reason?: string | null;
           performed_by: string;
+          // Added by 0017_inventory_batches_fefo_grn.sql:
+          batch_id?: string | null;
+          reference_type?: string | null;
+          reference_id?: string | null;
+          previous_quantity?: number | null;
+          new_quantity?: number | null;
+          direction?: 'in' | 'out' | null;
+          releases_reserved?: number;
+          seq?: number;
         };
         Update: Partial<Database['public']['Tables']['stock_movements']['Insert']>;
         Relationships: [
@@ -1081,7 +1109,45 @@ export interface Database {
       };
     };
     Views: {
-      [_ in never]: never;
+      // Added by 0017_inventory_batches_fefo_grn.sql
+      inventory_product_totals: {
+        Row: {
+          product_id: string;
+          product_name: string;
+          sku_code: string;
+          quantity_on_hand: number;
+          reserved_quantity: number;
+          available_quantity: number;
+          batch_quantity: number;
+          estimated_value: number;
+          min_stock: number;
+          reorder_level: number;
+          max_stock: number;
+          stock_status: 'healthy' | 'low_stock' | 'out_of_stock';
+          warehouse_count: number | null;
+        };
+        Relationships: [];
+      };
+      inventory_expiry_report: {
+        Row: {
+          batch_id: string;
+          product_id: string;
+          product_name: string;
+          sku_code: string;
+          warehouse_id: string;
+          warehouse_name: string;
+          batch_number: string;
+          manufacturing_date: string | null;
+          expiry_date: string | null;
+          current_quantity: number;
+          reserved_quantity: number;
+          available_quantity: number;
+          estimated_value: number;
+          days_remaining: number | null;
+          expiry_status: 'expired' | 'critical' | 'warning' | 'healthy';
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       get_effective_price: {
@@ -1091,6 +1157,53 @@ export interface Database {
       is_phone_registered: {
         Args: { p_phone: string };
         Returns: boolean;
+      };
+      // Inventory RPCs (0017_inventory_batches_fefo_grn.sql) — all jsonb:
+      reserve_order_stock: {
+        Args: { p_order_id: string };
+        Returns: Record<string, unknown>;
+      };
+      release_order_stock: {
+        Args: { p_order_id: string };
+        Returns: Record<string, unknown>;
+      };
+      consume_order_stock: {
+        Args: { p_order_id: string };
+        Returns: Record<string, unknown>;
+      };
+      confirm_grn: {
+        Args: { p_grn_id: string };
+        Returns: Record<string, unknown>;
+      };
+      cancel_grn: {
+        Args: { p_grn_id: string; p_reason?: string | null };
+        Returns: Record<string, unknown>;
+      };
+      execute_stock_transfer: {
+        Args: { p_transfer_id: string };
+        Returns: Record<string, unknown>;
+      };
+      cancel_stock_transfer: {
+        Args: { p_transfer_id: string; p_reason?: string | null };
+        Returns: Record<string, unknown>;
+      };
+      record_batch_loss: {
+        Args: { p_batch_id: string; p_quantity: number; p_loss_type: string; p_reason: string | null };
+        Returns: Record<string, unknown>;
+      };
+      adjust_product_stock: {
+        Args: {
+          p_product_id: string;
+          p_warehouse_id: string;
+          p_quantity: number;
+          p_reason: string;
+          p_batch_id?: string | null;
+        };
+        Returns: Record<string, unknown>;
+      };
+      return_order_stock: {
+        Args: { p_order_id: string; p_order_item_id?: string | null };
+        Returns: Record<string, unknown>;
       };
     };
     Enums: {
