@@ -10,47 +10,8 @@ type OrderStatusEnum = Database['public']['Enums']['order_status'];
 
 export type OrderActionResult = { error?: string } | { success: true };
 
-interface OrderItemForReservation {
+interface OrderItemForNotification {
   product_id: string;
-  quantity: number;
-}
-
-/**
- * Adjusts (increments or decrements) reserved_quantity on
- * inventory_stock for every line of an order, at a given warehouse.
- * Uses upsert so a first-time reservation at a warehouse that has no
- * inventory_stock row yet still succeeds (starting from 0 stock,
- * reserved going negative would be a real data problem — caught by
- * the reserved_quantity >= 0 check constraint from migration 0009).
- */
-async function adjustReservation(
-  warehouseId: string,
-  items: OrderItemForReservation[],
-  direction: 1 | -1
-) {
-  const supabase = createClient();
-
-  for (const item of items) {
-    const { data: existing } = await supabase
-      .from('inventory_stock')
-      .select('id, reserved_quantity')
-      .eq('product_id', item.product_id)
-      .eq('warehouse_id', warehouseId)
-      .maybeSingle<{ id: string; reserved_quantity: number }>();
-
-    if (existing) {
-      const nextReserved = existing.reserved_quantity + direction * item.quantity;
-      await supabase
-        .from('inventory_stock')
-        .update({ reserved_quantity: Math.max(0, nextReserved) } as unknown as never)
-        .eq('id', existing.id);
-    } else if (direction === 1) {
-      await supabase
-        .from('inventory_stock')
-        .insert({ product_id: item.product_id, warehouse_id: warehouseId, reserved_quantity: item.quantity } as unknown as never);
-    }
-    // direction === -1 with no existing row: nothing to release, skip.
-  }
 }
 
 export async function assignWarehouseAction(orderId: string, warehouseId: string): Promise<OrderActionResult> {
@@ -80,6 +41,16 @@ export async function assignWarehouseAction(orderId: string, warehouseId: string
   return { success: true };
 }
 
+/**
+ * Approves a pending order. Stock reservation is done ATOMICALLY and
+ * SERVER-SIDE by the reserve_order_stock RPC (FEFO across the order's
+ * warehouse): expired batches are excluded, allocations are recorded per
+ * batch, and concurrent approvals/orders can never oversell. If there is
+ * not enough stock the approval fails cleanly and the order stays pending.
+ *
+ * Pricing/GST/MOQ/credit validation remain untouched in the order
+ * creation path (lib/orders/create-order.ts).
+ */
 export async function approveOrderAction(orderId: string): Promise<OrderActionResult> {
   await requirePermission('orders.approve');
   const supabase = createClient();
@@ -94,13 +65,24 @@ export async function approveOrderAction(orderId: string): Promise<OrderActionRe
   if (order.status !== 'pending') return { error: 'Only pending orders can be approved.' };
   if (!order.warehouse_id) return { error: 'Assign a warehouse before approving this order.' };
 
-  const { data: itemData } = await supabase.from('order_items').select('product_id, quantity').eq('order_id', orderId);
-  const items = (itemData ?? []) as OrderItemForReservation[];
+  const { data: reservation, error: reservationError } = await supabase.rpc('reserve_order_stock' as never, {
+    p_order_id: orderId,
+  } as never);
 
-  await adjustReservation(order.warehouse_id, items, 1);
+  if (reservationError) {
+    const msg = reservationError.message;
+    const match = msg.match(/INSUFFICIENT_STOCK:\s*(.+)$/);
+    return { error: match?.[1] ? match[1].trim() : `Stock could not be reserved: ${msg}` };
+  }
+  void reservation; // { status: 'reserved' | 'already_reserved', ... }
 
   const { error } = await supabase.from('orders').update({ status: 'confirmed' } as unknown as never).eq('id', orderId);
-  if (error) return { error: error.message };
+  if (error) {
+    // The reservation succeeded but the status flip failed — release the
+    // reservation so stock is not held hostage by a half-approved order.
+    await supabase.rpc('release_order_stock' as never, { p_order_id: orderId } as never);
+    return { error: error.message };
+  }
 
   await notifyOrderEvent({
     recipientId: order.retailer_id,
@@ -112,9 +94,16 @@ export async function approveOrderAction(orderId: string): Promise<OrderActionRe
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
   revalidatePath('/staff/orders');
+  revalidatePath('/admin/inventory');
   return { success: true };
 }
 
+/**
+ * Cancels an order. Reservation release is handled by the database
+ * (trg_release_stock_on_order_cancel fires release_order_stock for ANY
+ * cancellation path — admin, staff, or retailer self-cancel), so stock is
+ * freed exactly once and never leaks.
+ */
 export async function cancelOrderAction(orderId: string, reason: string): Promise<OrderActionResult> {
   await requirePermission('orders.cancel');
   const supabase = createClient();
@@ -131,13 +120,6 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
   }
   if (order.status === 'cancelled') return { error: 'This order is already cancelled.' };
 
-  // If stock was reserved (order had already been approved/packed),
-  // release it back.
-  if (order.warehouse_id && (order.status === 'confirmed' || order.status === 'processing' || order.status === 'packed')) {
-    const { data: itemData } = await supabase.from('order_items').select('product_id, quantity').eq('order_id', orderId);
-    await adjustReservation(order.warehouse_id, (itemData ?? []) as OrderItemForReservation[], -1);
-  }
-
   const { error } = await supabase
     .from('orders')
     .update({ status: 'cancelled', cancelled_reason: reason || null } as unknown as never)
@@ -146,6 +128,7 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
 
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
+  revalidatePath('/admin/inventory');
   return { success: true };
 }
 
@@ -159,4 +142,14 @@ export async function updateOrderStatusAction(orderId: string, status: OrderStat
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
   return { success: true };
+}
+
+/**
+ * Helper for other actions: reads the product ids of an order's items so
+ * low-stock alerts can be raised after stock-decreasing operations.
+ */
+export async function productIdsForOrder(orderId: string): Promise<string[]> {
+  const supabase = createClient();
+  const { data } = await supabase.from('order_items').select('product_id').eq('order_id', orderId);
+  return ((data ?? []) as unknown as OrderItemForNotification[]).map((i) => i.product_id);
 }

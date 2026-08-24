@@ -15,6 +15,8 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | Manage pricing & schemes | ✅ | ✅ | ❌ | ❌ | ❌ |
 | View inventory | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Manage inventory (stock movements) | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Batches / expiry / GRN / transfers (0017) | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Edit inventory settings (expiry windows) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | View all orders | ✅ | ✅ | ✅ | ❌ | ❌ |
 | View own orders | — | — | — | ✅ | ✅ |
 | Create orders (on behalf of retailer) | ✅ | ✅ | ✅ | ✅ | — |

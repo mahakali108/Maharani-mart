@@ -1,8 +1,23 @@
+/* Self-hosted Poppins (via @fontsource) — identical weights to the previous
+   next/font/google setup, but bundled from node_modules so builds work in
+   network-restricted environments and never depend on fonts.googleapis.com
+   at build time. */
+@import '@fontsource/poppins/400.css';
+@import '@fontsource/poppins/500.css';
+@import '@fontsource/poppins/600.css';
+@import '@fontsource/poppins/700.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Previously injected by next/font via `variable: '--font-sans'`; now
+       defined directly so the Poppins switch stays a drop-in replacement. */
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+      Roboto, Arial, sans-serif;
+  }
   html {
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
