@@ -35,6 +35,7 @@ interface ProfileContactRow {
 }
 
 const ACCOUNT_LINKS = [
+  { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, credit and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
   { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
   { href: '/retailer/quick-order', label: 'Quick Order', body: 'Find products by name or SKU', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
   { href: '/retailer/favorites', label: 'Favourites', body: 'Your saved products for faster restocking', icon: Heart, tone: 'bg-rose-50 text-rose-700' },

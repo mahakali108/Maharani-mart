@@ -237,6 +237,12 @@ export default async function RetailerHomePage() {
         </Link>
       </div>
 
+      <Link href="/retailer/ai" className="group flex items-center gap-3 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-blue-800 to-slate-950 p-4 text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl sm:p-5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20"><Sparkles className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-bold sm:text-base">✨ Ask Maharani AI</span><span className="mt-1 block text-[10px] text-blue-100 sm:text-xs">Build a verified order, find deals, check credit or get smart reorder suggestions.</span></span>
+        <ArrowRight className="h-5 w-5 shrink-0 text-blue-200 transition group-hover:translate-x-1" />
+      </Link>
+
       <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
         <div className="mb-3 flex items-center justify-between">
           <div>
