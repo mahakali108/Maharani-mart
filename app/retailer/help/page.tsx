@@ -13,7 +13,7 @@ import {
 const FAQ = [
   {
     q: 'How are wholesale prices calculated?',
-    a: 'Maharani Mart applies your retailer or area price on the server. The price you see is a preview — checkout recalculates it and never trusts a browser-submitted amount.',
+    a: 'Maharani Traders applies your retailer or area price on the server. The price you see is a preview — checkout recalculates it and never trusts a browser-submitted amount.',
   },
   {
     q: 'Why can’t I add less than the MOQ?',
@@ -39,7 +39,7 @@ export default function HelpPage({
   searchParams: { topic?: string; order?: string };
 }) {
   const phone = process.env.COMPANY_PHONE?.trim();
-  const company = process.env.COMPANY_NAME?.trim() || 'Maharani Mart';
+  const company = process.env.COMPANY_NAME?.trim() || 'Maharani Traders';
   const topic = searchParams.topic ?? '';
   const orderNumber = searchParams.order ?? '';
 
@@ -55,7 +55,7 @@ export default function HelpPage({
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Retailer support</p>
         <h1 className="mt-2 text-2xl font-bold sm:text-4xl">Help centre</h1>
         <p className="mt-2 max-w-xl text-xs text-slate-300 sm:text-sm">
-          Get help with orders, payments, products and delivery — without leaving Maharani Mart.
+          Get help with orders, payments, products and delivery — without leaving Maharani Traders.
         </p>
       </section>
 
@@ -94,7 +94,7 @@ export default function HelpPage({
           </a>
         ) : (
           <p className="mt-4 rounded-xl bg-slate-50 px-3 py-3 text-xs text-slate-600">
-            A support phone number has not been configured yet. Ask your Maharani Mart distributor for the shop helpline.
+            A support phone number has not been configured yet. Ask your Maharani Traders distributor for the shop helpline.
           </p>
         )}
       </section>

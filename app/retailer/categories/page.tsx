@@ -46,7 +46,7 @@ export default async function CategoriesPage() {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Shop by category</p>
         <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">All categories</h1>
-        <p className="mt-1 text-xs text-slate-500">Browse Maharani Mart wholesale aisles. Subcategories appear only when they exist in the catalog.</p>
+        <p className="mt-1 text-xs text-slate-500">Browse Maharani Traders wholesale aisles. Subcategories appear only when they exist in the catalog.</p>
       </div>
 
       {parents.length === 0 ? (
