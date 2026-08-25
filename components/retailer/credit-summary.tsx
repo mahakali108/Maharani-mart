@@ -1,4 +1,5 @@
 import { CreditCard, ShieldCheck, WalletCards } from 'lucide-react';
+import { calculateCreditPosition } from '@/lib/orders/credit';
 
 /**
  * Presentational credit summary only. Values come from the retailer
@@ -14,13 +15,11 @@ export function CreditSummary({
   outstandingBalance: number;
   orderImpact?: number;
 }) {
-  const hasLimit = creditLimit > 0;
-  const availableCredit = hasLimit ? Math.max(0, creditLimit - outstandingBalance) : null;
-  const usedPercent = hasLimit ? Math.min(100, Math.max(0, (outstandingBalance / creditLimit) * 100)) : 0;
-  const availableAfter =
-    orderImpact !== undefined && availableCredit !== null
-      ? Math.max(0, availableCredit - orderImpact)
-      : null;
+  const position = calculateCreditPosition(creditLimit, outstandingBalance, orderImpact);
+  const hasLimit = position.hasConfiguredLimit;
+  const availableCredit = position.availableCredit;
+  const usedPercent = hasLimit ? Math.min(100, Math.max(0, (position.outstandingBalance / position.creditLimit) * 100)) : 0;
+  const availableAfter = orderImpact !== undefined ? position.availableAfterOrder : null;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

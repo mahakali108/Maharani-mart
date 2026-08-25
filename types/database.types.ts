@@ -1107,7 +1107,32 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['audit_logs']['Insert']>;
         Relationships: [];
       };
+      ai_business_memory: {
+        Row: { id: string; user_id: string; memory_key: string; memory_value: string; source: string; created_at: string; updated_at: string };
+        Insert: { id?: string; user_id: string; memory_key: string; memory_value: string; source?: string };
+        Update: Partial<Database['public']['Tables']['ai_business_memory']['Insert']>;
+        Relationships: [];
+      };
+      ai_audit_logs: {
+        Row: { id: number; request_id: string; user_id: string; surface: string; provider: string | null; model: string | null; request_type: string; tool_name: string | null; duration_ms: number; success: boolean; error_code: string | null; input_tokens: number | null; output_tokens: number | null; total_tokens: number | null; created_at: string };
+        Insert: { request_id: string; user_id: string; surface: string; provider?: string | null; model?: string | null; request_type: string; tool_name?: string | null; duration_ms?: number; success: boolean; error_code?: string | null; input_tokens?: number | null; output_tokens?: number | null; total_tokens?: number | null };
+        Update: never;
+        Relationships: [];
+      };
+      ai_rate_limit_windows: {
+        Row: { user_id: string; bucket: string; window_started_at: string; request_count: number };
+        Insert: { user_id: string; bucket: string; window_started_at: string; request_count?: number };
+        Update: Partial<Database['public']['Tables']['ai_rate_limit_windows']['Insert']>;
+        Relationships: [];
+      };
+      ai_confirmed_actions: {
+        Row: { nonce: string; user_id: string; consumed_at: string };
+        Insert: { nonce: string; user_id: string };
+        Update: never;
+        Relationships: [];
+      };
     };
+
     Views: {
       // Added by 0017_inventory_batches_fefo_grn.sql
       inventory_product_totals: {
@@ -1150,6 +1175,18 @@ export interface Database {
       };
     };
     Functions: {
+      consume_ai_rate_limit: {
+        Args: { p_bucket: string; p_limit: number; p_window_seconds: number };
+        Returns: { allowed: boolean; remaining: number; retry_after_seconds: number };
+      };
+      consume_ai_confirmation: {
+        Args: { p_nonce: string };
+        Returns: boolean;
+      };
+      get_retailer_product_availability: {
+        Args: { p_product_ids: string[] };
+        Returns: { product_id: string; available_quantity: number; stock_status: string }[];
+      };
       get_effective_price: {
         Args: { p_product_id: string; p_retailer_id: string };
         Returns: number;

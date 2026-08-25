@@ -14,6 +14,7 @@ import {
   Image as ImageIcon,
   Bell,
   MapPin,
+  Sparkles,
 } from 'lucide-react';
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -21,6 +22,7 @@ import type { UserRole } from '@/lib/auth/roles';
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+  { label: 'Business Copilot', href: '/admin/ai', icon: Sparkles },
   { label: 'Products', href: '/admin/products', icon: Package },
   { label: 'Categories & Brands', href: '/admin/catalog', icon: Tags },
   { label: 'Areas', href: '/admin/areas', icon: MapPin },
