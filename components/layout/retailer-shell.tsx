@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Bell,
-  ClipboardList,
   Heart,
   HelpCircle,
   Home,
@@ -13,7 +12,8 @@ import {
   ShieldCheck,
   ShoppingCart,
   Sparkles,
-  Zap,
+  Tag,
+  UserRound,
 } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
 import { ROLE_LABELS, type UserRole } from '@/lib/auth/roles';
@@ -23,11 +23,9 @@ import { SearchField } from '@/components/retailer/search-field';
 
 const DESKTOP_NAV = [
   { label: 'Home', href: '/retailer/home' },
-  { label: 'All products', href: '/retailer/catalog' },
-  { label: 'Categories', href: '/retailer/categories' },
-  { label: 'Quick order', href: '/retailer/quick-order' },
-  { label: 'Deals & offers', href: '/retailer/home#deals' },
-  { label: 'My orders', href: '/retailer/orders' },
+  { label: 'Catalog', href: '/retailer/catalog' },
+  { label: 'Schemes', href: '/retailer/schemes' },
+  { label: 'Orders', href: '/retailer/orders' },
   { label: 'Help', href: '/retailer/help' },
 ];
 
@@ -62,16 +60,18 @@ export function RetailerShell({
     .join('')
     .toUpperCase();
 
+  // Keep quick actions such as orders and quick order discoverable, while the
+  // five-item mobile navigation stays reserved for the locked marketplace IA.
   const mobileNav: NavItem[] = [
     { label: 'Home', href: '/retailer/home', icon: Home },
-    { label: 'Products', href: '/retailer/catalog', icon: LayoutGrid },
-    { label: 'Quick', href: '/retailer/quick-order', icon: Zap },
-    { label: 'Orders', href: '/retailer/orders', icon: ClipboardList },
+    { label: 'Catalog', href: '/retailer/catalog', icon: LayoutGrid },
+    { label: 'Schemes', href: '/retailer/schemes', icon: Tag },
     { label: 'Cart', href: '/retailer/cart', icon: ShoppingCart, badge: cartCount },
+    { label: 'Account', href: '/retailer/account', icon: UserRound },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f4f6f8] pb-24 text-slate-900 lg:pb-0">
+    <div className="retailer-theme min-h-screen bg-[#f4f6f8] pb-24 text-slate-900 lg:pb-0">
       <div className="hidden bg-slate-950 text-white lg:block">
         <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-6 text-[11px]">
           <p className="flex items-center gap-2 text-slate-300">
@@ -82,15 +82,15 @@ export function RetailerShell({
         </div>
       </div>
 
-      <header className="sticky top-0 z-40 border-b border-primary-700 bg-primary-600 text-white shadow-[0_4px_18px_rgba(127,29,29,0.18)] lg:border-slate-200 lg:bg-white lg:text-slate-900 lg:shadow-sm">
+      <header className="sticky top-0 z-40 border-b border-primary-700 bg-primary-600 text-white shadow-[0_4px_18px_rgba(30,64,175,0.18)] lg:border-slate-200 lg:bg-white lg:text-slate-900 lg:shadow-sm">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="flex h-14 items-center gap-3 lg:h-[4.5rem] lg:gap-6">
-            <Link href="/retailer/home" className="group flex shrink-0 items-center gap-2" aria-label="Maharani Mart home">
+            <Link href="/retailer/home" className="group flex shrink-0 items-center gap-2" aria-label="Maharani Traders home">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-base font-black text-primary-600 shadow-sm lg:bg-primary-600 lg:text-white">
                 M
               </span>
               <span className="leading-none">
-                <span className="block text-[15px] font-bold tracking-tight lg:text-lg">Maharani Mart</span>
+                <span className="block text-[15px] font-bold tracking-tight lg:text-lg">Maharani Traders</span>
                 <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.22em] text-primary-100 lg:block lg:text-primary-600">
                   Wholesale marketplace
                 </span>
@@ -133,25 +133,29 @@ export function RetailerShell({
                 <CountBadge count={cartCount} />
               </Link>
 
-              <div className="ml-1 hidden items-center gap-2 border-l border-slate-200 pl-3 lg:flex">
+              <Link
+                href="/retailer/account"
+                className="ml-1 hidden items-center gap-2 border-l border-slate-200 pl-3 lg:flex"
+                aria-label="Account"
+              >
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-xs font-bold text-primary-700">
                   {initials || 'R'}
                 </span>
-                <div className="max-w-[130px] leading-tight">
-                  <p className="truncate text-xs font-semibold text-slate-900">{fullName}</p>
-                  <p className="mt-0.5 text-[10px] text-slate-500">{ROLE_LABELS[role]}</p>
-                </div>
-                <form action={logoutAction}>
-                  <button
-                    type="submit"
-                    className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-primary-50 hover:text-primary-600"
-                    aria-label="Sign out"
-                    title="Sign out"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </form>
-              </div>
+                <span className="max-w-[130px] leading-tight">
+                  <span className="block truncate text-xs font-semibold text-slate-900">{fullName}</span>
+                  <span className="mt-0.5 block text-[10px] text-slate-500">{ROLE_LABELS[role]}</span>
+                </span>
+              </Link>
+              <form action={logoutAction} className="hidden lg:block">
+                <button
+                  type="submit"
+                  className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-primary-50 hover:text-primary-600"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </form>
             </div>
           </div>
 

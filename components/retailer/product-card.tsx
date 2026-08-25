@@ -137,7 +137,7 @@ export function ProductCard({
       <div className={cn('flex flex-1 flex-col px-2.5 pb-2.5 pt-2', compact ? 'sm:px-2.5 sm:pb-2.5' : 'sm:px-3.5 sm:pb-3.5')}>
         <Link href={`/retailer/catalog/${id}`} className="block">
           <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[11px]">
-            {brandName ?? 'Maharani Mart'}
+            {brandName ?? 'Maharani Traders'}
           </p>
           <h3 className="mt-0.5 line-clamp-2 min-h-[2.5rem] text-xs font-semibold leading-5 text-slate-800 transition group-hover:text-primary-700 sm:text-sm">
             {name}

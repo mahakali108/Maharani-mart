@@ -8,19 +8,18 @@ import {
   ClipboardList,
   Coffee,
   Cookie,
-  Heart,
   LayoutGrid,
   Milk,
   PackageCheck,
   RotateCcw,
   Search,
   ShoppingCart,
+  ShieldCheck,
   Sparkles,
   Store,
   Tag,
   Truck,
   WalletCards,
-  Zap,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
@@ -225,24 +224,27 @@ export default async function RetailerHomePage() {
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-end justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">{greeting}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">{greeting} · Maharani Traders</p>
           <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">
             Welcome, {retailer?.shop_name ?? user.fullName}
           </h1>
-          <p className="mt-1 text-xs text-slate-500 sm:text-sm">Restock faster with wholesale prices made for your business.</p>
+          <p className="mt-1 max-w-xl text-xs text-slate-500 sm:text-sm">Discover wholesale essentials, current offers and reliable restocking for your shop.</p>
         </div>
-        <Link href="/retailer/quick-order" className="hidden h-10 items-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 sm:flex">
-          <Zap className="h-4 w-4" /> Quick order
+        <Link href="/retailer/catalog" className="hidden h-10 items-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 sm:flex">
+          Browse catalog <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 sm:text-base">Shop by category</h2>
-          <Link href="/retailer/categories" className="flex items-center gap-0.5 text-[11px] font-bold text-primary-600">
-            View all categories <ChevronRight className="h-3.5 w-3.5" />
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">Explore the aisles</p>
+            <h2 className="mt-0.5 text-sm font-bold text-slate-900 sm:text-base">Shop by category</h2>
+          </div>
+          <Link href="/retailer/catalog" className="flex items-center gap-0.5 text-[11px] font-bold text-primary-600">
+            View all <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
         <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:gap-3">
@@ -256,7 +258,7 @@ export default async function RetailerHomePage() {
             const Icon = CATEGORY_ICONS[index % CATEGORY_ICONS.length] ?? Boxes;
             return (
               <Link key={category.id} href={`/retailer/catalog?category=${category.id}`} className="group flex w-[74px] shrink-0 flex-col items-center gap-2 text-center sm:w-24">
-                <span className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50 to-orange-100 text-orange-700 ring-1 ring-orange-100 transition group-hover:-translate-y-0.5 group-hover:shadow-md sm:h-16 sm:w-16">
+                <span className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-blue-50 to-sky-100 text-blue-700 ring-1 ring-blue-100 transition group-hover:-translate-y-0.5 group-hover:shadow-md sm:h-16 sm:w-16">
                   {category.image_url ? (
                     <Image src={category.image_url} alt="" fill className="object-cover" unoptimized />
                   ) : (
@@ -304,28 +306,25 @@ export default async function RetailerHomePage() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
           {retailer ? <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} /> : null}
-          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-            <Link href="/retailer/quick-order" className="group rounded-xl bg-primary-50 p-3 transition hover:bg-primary-100">
-              <Zap className="h-5 w-5 text-primary-600" />
-              <p className="mt-2 text-xs font-bold text-slate-900">Quick order</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">Search SKU & add</p>
-            </Link>
-            <Link href="/retailer/cart" className="group rounded-xl bg-amber-50 p-3 transition hover:bg-amber-100">
-              <ShoppingCart className="h-5 w-5 text-amber-700" />
-              <p className="mt-2 text-xs font-bold text-slate-900">My cart</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">Review order</p>
-            </Link>
-            <Link href="/retailer/orders" className="group rounded-xl bg-blue-50 p-3 transition hover:bg-blue-100">
-              <ClipboardList className="h-5 w-5 text-blue-700" />
-              <p className="mt-2 text-xs font-bold text-slate-900">Orders</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">Track & reorder</p>
-            </Link>
-            <Link href="/retailer/favorites" className="group rounded-xl bg-emerald-50 p-3 transition hover:bg-emerald-100">
-              <Heart className="h-5 w-5 text-emerald-700" />
-              <p className="mt-2 text-xs font-bold text-slate-900">Favourites</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">Saved products</p>
-            </Link>
-          </div>
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                <ShieldCheck className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-slate-900">Built for your business</p>
+                <p className="mt-1 text-[10px] leading-4 text-slate-500">Approved pricing, GST-ready invoices and secure credit checks on every order.</p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+              <Link href="/retailer/schemes" className="rounded-lg bg-blue-50 px-3 py-2 text-[10px] font-bold text-blue-700 transition hover:bg-blue-100">
+                View schemes <span className="ml-1">→</span>
+              </Link>
+              <Link href="/retailer/account" className="rounded-lg bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-600 transition hover:bg-slate-100">
+                Open account <span className="ml-1">→</span>
+              </Link>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -349,7 +348,7 @@ export default async function RetailerHomePage() {
       ) : null}
 
       <section id="deals" className="scroll-mt-36 space-y-3">
-        <SectionHeading eyebrow="Smart savings" title="Deals & active schemes" href="/retailer/catalog?offers=1" linkLabel="Shop offers" />
+        <SectionHeading eyebrow="Smart savings" title="Offers for your shop" href="/retailer/schemes" linkLabel="View all schemes" />
         {schemes.length > 0 ? (
           <div className="scrollbar-none -mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
             {schemes.map((scheme, index) => (
@@ -367,9 +366,14 @@ export default async function RetailerHomePage() {
                   </div>
                   <h3 className="mt-4 text-base font-bold">{scheme.name}</h3>
                   {scheme.description ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-white/75">{scheme.description}</p> : null}
-                  <p className="mt-3 text-[10px] font-semibold text-amber-300">
-                    Valid till {new Date(scheme.ends_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-semibold text-amber-300">
+                      Valid till {new Date(scheme.ends_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                    <Link href="/retailer/catalog?offers=1" className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:bg-white/25">
+                      View products
+                    </Link>
+                  </div>
                 </div>
               </article>
             ))}
