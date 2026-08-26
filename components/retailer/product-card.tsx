@@ -3,7 +3,7 @@
 import { useState, useTransition, type MouseEvent } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Check, Heart, ImageOff, Loader2, PackagePlus, ShoppingCart, Sparkles, Tag } from 'lucide-react';
+import { Check, CheckCircle2, CircleAlert, Heart, ImageOff, Loader2, PackagePlus, ShoppingCart, Sparkles, Tag } from 'lucide-react';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
@@ -150,20 +150,27 @@ export function ProductCard({
             </p>
           ) : null}
 
-          <div className="mt-2 flex flex-wrap items-baseline gap-x-1.5">
-            <p className="text-base font-bold tracking-tight text-slate-950 sm:text-lg">
-              {fromPrice !== null ? formatInr(fromPrice) : 'Price on request'}
-            </p>
-            {mrp && fromPrice !== null && mrp > fromPrice ? (
-              <p className="text-[10px] text-slate-400 line-through sm:text-xs">{formatInr(mrp)}</p>
-            ) : null}
+          <div className="mt-2">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Retailer price</p>
+            <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
+              <p className="text-base font-bold tracking-tight text-slate-950 sm:text-lg">
+                {fromPrice !== null ? formatInr(fromPrice) : 'Price on request'}
+              </p>
+              {mrp && fromPrice !== null && mrp > fromPrice ? (
+                <p className="text-[10px] text-slate-400 line-through sm:text-xs">MRP {formatInr(mrp)}</p>
+              ) : null}
+            </div>
           </div>
           {savings > 0 ? (
             <p className="text-[10px] font-semibold text-emerald-700">You save {formatInr(savings)}</p>
           ) : null}
-          <p className="text-[9px] text-slate-400 sm:text-[10px]">
-            Wholesale · GST{gstPercent != null ? ` ${gstPercent}%` : ''} extra
-          </p>
+          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[9px] sm:text-[10px]">
+            <p className="text-slate-400">Wholesale · GST{gstPercent != null ? ` ${gstPercent}%` : ''} extra</p>
+            <span className={cn('inline-flex items-center gap-1 font-semibold', unavailable ? 'text-slate-500' : 'text-emerald-700')}>
+              {unavailable ? <CircleAlert className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+              {unavailable ? 'Currently unavailable' : 'Available to order'}
+            </span>
+          </div>
         </Link>
 
         <div className="mt-auto space-y-2 pt-2.5">

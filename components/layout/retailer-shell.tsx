@@ -3,16 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  BadgeCheck,
   Bell,
   Heart,
-  HelpCircle,
   Home,
   LayoutGrid,
   LogOut,
-  ShieldCheck,
   ShoppingCart,
   Sparkles,
-  Tag,
   UserRound,
 } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
@@ -23,16 +21,16 @@ import { SearchField } from '@/components/retailer/search-field';
 
 const DESKTOP_NAV = [
   { label: 'Home', href: '/retailer/home' },
-  { label: 'Catalog', href: '/retailer/catalog' },
-  { label: 'Schemes', href: '/retailer/schemes' },
-  { label: 'Orders', href: '/retailer/orders' },
-  { label: 'Help', href: '/retailer/help' },
+  { label: 'Categories', href: '/retailer/categories' },
+  { label: 'Brands', href: '/retailer/brands' },
+  { label: 'Cart', href: '/retailer/cart' },
+  { label: 'Account', href: '/retailer/account' },
 ];
 
 function CountBadge({ count }: { count: number }) {
   if (count < 1) return null;
   return (
-    <span className="absolute -right-1.5 -top-1.5 flex min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-amber-400 px-1 text-[9px] font-bold leading-[14px] text-slate-950">
+    <span className="absolute -right-1.5 -top-1.5 flex min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-primary-600 px-1 text-[9px] font-bold leading-[14px] text-white">
       {count > 99 ? '99+' : count}
     </span>
   );
@@ -60,38 +58,28 @@ export function RetailerShell({
     .join('')
     .toUpperCase();
 
-  // Keep quick actions such as orders and quick order discoverable, while the
-  // five-item mobile navigation stays reserved for the locked marketplace IA.
+  // Keep the primary retail IA reserved for shopping. Operational tools stay
+  // in Account and contextual links rather than taking a bottom-nav slot.
   const mobileNav: NavItem[] = [
     { label: 'Home', href: '/retailer/home', icon: Home },
-    { label: 'Catalog', href: '/retailer/catalog', icon: LayoutGrid },
-    { label: 'Schemes', href: '/retailer/schemes', icon: Tag },
+    { label: 'Categories', href: '/retailer/categories', icon: LayoutGrid },
+    { label: 'Brands', href: '/retailer/brands', icon: BadgeCheck },
     { label: 'Cart', href: '/retailer/cart', icon: ShoppingCart, badge: cartCount },
     { label: 'Account', href: '/retailer/account', icon: UserRound },
   ];
 
   return (
     <div className="retailer-theme min-h-screen bg-[#f4f6f8] pb-24 text-slate-900 lg:pb-0">
-      <div className="hidden bg-slate-950 text-white lg:block">
-        <div className="mx-auto flex h-8 max-w-7xl items-center justify-between px-6 text-[11px]">
-          <p className="flex items-center gap-2 text-slate-300">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            Verified wholesale pricing · GST-ready orders · Secure retailer credit
-          </p>
-          <p className="text-slate-400">B2B marketplace for retailers</p>
-        </div>
-      </div>
-
-      <header className="sticky top-0 z-40 border-b border-primary-700 bg-primary-600 text-white shadow-[0_4px_18px_rgba(30,64,175,0.18)] lg:border-slate-200 lg:bg-white lg:text-slate-900 lg:shadow-sm">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="flex h-14 items-center gap-3 lg:h-[4.5rem] lg:gap-6">
-            <Link href="/retailer/home" className="group flex shrink-0 items-center gap-2" aria-label="Maharani Traders home">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-base font-black text-primary-600 shadow-sm lg:bg-primary-600 lg:text-white">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white text-slate-900 shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
+        <div className="mx-auto max-w-7xl px-3 sm:px-6">
+          <div className="flex h-14 items-center gap-2 lg:h-[4.5rem] lg:gap-6">
+            <Link href="/retailer/home" className="group flex min-w-0 shrink items-center gap-2" aria-label="Maharani Traders home">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white shadow-sm lg:h-9 lg:w-9 lg:text-base">
                 M
               </span>
-              <span className="leading-none">
-                <span className="block text-[15px] font-bold tracking-tight lg:text-lg">Maharani Traders</span>
-                <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.22em] text-primary-100 lg:block lg:text-primary-600">
+              <span className="min-w-0 leading-none">
+                <span className="block truncate text-[13px] font-bold tracking-tight text-slate-900 lg:text-lg">Maharani Traders</span>
+                <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.22em] text-primary-600 lg:block">
                   Wholesale marketplace
                 </span>
               </span>
@@ -101,47 +89,41 @@ export function RetailerShell({
               <SearchField />
             </div>
 
-            <div className="ml-auto flex items-center gap-1.5 lg:gap-2">
-              <Link
-                href="/retailer/favorites"
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
-                aria-label="Favourites"
-              >
-                <Heart className="h-5 w-5" />
-              </Link>
-              <Link
-                href="/retailer/help"
-                className="relative hidden h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:flex lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
-                aria-label="Help"
-              >
-                <HelpCircle className="h-5 w-5" />
-              </Link>
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1 lg:gap-2">
               <Link
                 href="/retailer/notifications"
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
+                className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:h-10 lg:w-10 lg:border lg:border-slate-200"
                 aria-label="Notifications"
               >
-                <Bell className="h-5 w-5" />
+                <Bell className="h-[18px] w-[18px] lg:h-5 lg:w-5" />
                 <CountBadge count={unreadCount} />
               </Link>
               <Link
+                href="/retailer/favorites"
+                className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:h-10 lg:w-10 lg:border lg:border-slate-200"
+                aria-label="Favourites"
+              >
+                <Heart className="h-[18px] w-[18px] lg:h-5 lg:w-5" />
+              </Link>
+              <Link
                 href="/retailer/cart"
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
+                className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:h-10 lg:w-10 lg:border lg:border-slate-200"
                 aria-label="Cart"
               >
-                <ShoppingCart className="h-5 w-5" />
+                <ShoppingCart className="h-[18px] w-[18px] lg:h-5 lg:w-5" />
                 <CountBadge count={cartCount} />
               </Link>
 
               <Link
                 href="/retailer/account"
-                className="ml-1 hidden items-center gap-2 border-l border-slate-200 pl-3 lg:flex"
+                className="ml-0.5 flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:ml-1 lg:h-auto lg:w-auto lg:items-center lg:gap-2 lg:rounded-none lg:border-l lg:border-slate-200 lg:pl-3 lg:text-slate-900 lg:hover:bg-transparent"
                 aria-label="Account"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-xs font-bold text-primary-700">
+                <UserRound className="h-[18px] w-[18px] lg:hidden" />
+                <span className="hidden h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-xs font-bold text-primary-700 lg:flex">
                   {initials || 'R'}
                 </span>
-                <span className="max-w-[130px] leading-tight">
+                <span className="hidden max-w-[130px] leading-tight lg:block">
                   <span className="block truncate text-xs font-semibold text-slate-900">{fullName}</span>
                   <span className="mt-0.5 block text-[10px] text-slate-500">{ROLE_LABELS[role]}</span>
                 </span>

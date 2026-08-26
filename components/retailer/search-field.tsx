@@ -111,7 +111,7 @@ export function SearchField({
         className={cn(
           'w-full rounded-xl border-0 bg-white text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400',
           variant === 'header'
-            ? 'h-10 pl-10 pr-20 focus:ring-2 focus:ring-amber-300 lg:h-11 lg:border lg:border-slate-200 lg:bg-slate-50 lg:pr-28 lg:focus:border-primary-300 lg:focus:bg-white lg:focus:ring-4 lg:focus:ring-primary-50'
+            ? 'h-10 border border-slate-200 bg-slate-50 pl-10 pr-20 focus:border-primary-300 focus:bg-white focus:ring-2 focus:ring-primary-100 lg:h-11 lg:pr-28 lg:focus:ring-4 lg:focus:ring-primary-50'
             : 'h-12 pl-11 pr-24 focus:ring-2 focus:ring-amber-300'
         )}
       />
@@ -142,7 +142,7 @@ export function SearchField({
       {variant === 'header' ? (
         <button
           type="submit"
-          className="absolute right-1.5 top-1.5 flex h-7 w-9 items-center justify-center rounded-lg bg-slate-900 text-white lg:hidden"
+          className="absolute right-1.5 top-1.5 flex h-7 w-9 items-center justify-center rounded-lg bg-primary-600 text-white transition hover:bg-primary-700 lg:hidden"
           aria-label="Search"
         >
           <Search className="h-3.5 w-3.5" />
