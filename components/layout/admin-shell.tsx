@@ -16,6 +16,7 @@ import {
   Bell,
   MapPin,
   Sparkles,
+  Settings,
 } from 'lucide-react';
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -23,6 +24,7 @@ import type { UserRole } from '@/lib/auth/roles';
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+  { label: 'Control Center', href: '/admin/control-center', icon: Settings, roles: ['super_admin'] },
   { label: 'Command Center', href: '/admin/command-center', icon: Gauge, roles: ['super_admin'] },
   { label: 'Business Copilot', href: '/admin/ai', icon: Sparkles },
   { label: 'Products', href: '/admin/products', icon: Package },

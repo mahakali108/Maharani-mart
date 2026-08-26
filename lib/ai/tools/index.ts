@@ -12,6 +12,7 @@ import { analyticsTools } from '@/lib/ai/tools/analytics';
 import { forecastTools } from '@/lib/ai/tools/forecast';
 import { memoryTools } from '@/lib/ai/tools/memory';
 import { superAdminTools } from '@/lib/ai/tools/super-admin';
+import { controlCenterTools } from '@/lib/ai/tools/control-center';
 import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { logAIEvent } from '@/lib/ai/observability';
 import { verificationFailure } from '@/lib/ai/safety/constants';
@@ -29,6 +30,7 @@ const baseTools: AIToolDefinition[] = [
   ...forecastTools,
   ...memoryTools,
   ...superAdminTools,
+  ...controlCenterTools,
 ];
 
 function alias(name: string, targetName: string, description: string): AIToolDefinition {
@@ -62,6 +64,10 @@ function inheritsExistingPermission(tool: AIToolDefinition, context: Pick<AITool
   }
   if (['get_credit_risk_report', 'get_retailer_health_report'].includes(tool.name)) {
     return canAny(role, ['retailers.view']);
+  }
+  // Control Center tools — super_admin only, mapped to command_center.view
+  if (['get_users_expiring_soon', 'get_disabled_features', 'get_expired_retailers', 'get_suspended_users', 'get_recent_permission_changes'].includes(tool.name)) {
+    return canAny(role, ['command_center.view']);
   }
   if (tool.name.includes('product') || tool.name === 'search_categories' || tool.name === 'search_brands') return canAny(role, ['products.view']);
   return true;
