@@ -79,6 +79,9 @@ Computed nightly (and on-demand) by a Supabase Edge Function (`compute-ai-insigh
 
 All of this is **empty and inert** until real orders exist — no synthetic numbers are ever generated.
 
+### 4.1b Maharani AI Demand Forecasting
+An explainable, statistical demand-forecasting engine (`lib/ai/forecast/`) reads **real, RLS-authorized** order and inventory data through the caller's cookie-bound Supabase client and produces per-product 7/30-day demand estimates, demand direction, stock-out risk, reorder quantity, overstock/dead-stock warnings, and an honest confidence score. AI copilot tools (`get_demand_forecast`, `get_reorder_recommendation`, `get_inventory_risk`) are registered for admin/staff only and are read-only. The admin **Forecast** dashboard lives at `/admin/inventory/forecast`. Backed by the `ai_product_demand_daily` view (migration 0019). See `docs/ai-intelligence.md`.
+
 ### 4.2 Advanced Ordering
 - **Smart Cart** — persists per-retailer in `cart_items`, survives across devices/sessions.
 - **Reorder in One Click** — clones a past `order` + `order_items` into a new cart, re-validates current price & stock before checkout.

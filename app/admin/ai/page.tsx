@@ -12,5 +12,8 @@ export default async function AdminAIPage() {
     { label: 'Inventory Health', prompt: 'Current inventory health aur stock valuation summary do.' },
     { label: 'Pending Orders', prompt: 'Pending orders ka summary do.' },
     { label: 'Reorder Stock', prompt: 'Configured thresholds ke basis par inventory reorder recommendations do.' },
+    { label: 'Demand Forecast', prompt: 'Last 60 days ke data se demand forecast banao, rising demand aur stock-out risk highlights karke.' },
+    { label: 'Stock-out Risk', prompt: 'Kaunse products next 7 days mein khatam ho sakte hain? Demand forecast se batao.' },
+    { label: 'Inventory Risk', prompt: 'Abhi ka complete inventory risk report do — stock-out, overstock, dead-stock aur expiry risk.' },
   ]} />;
 }

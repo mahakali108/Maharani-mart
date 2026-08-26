@@ -37,7 +37,7 @@ Every order/cart preview calls `quoteOrderForRetailer`, the same server-only val
 - Safe memory contains only allow-listed compact business preferences and can be reset. Chat context stays browser-side and is bounded to 12 messages / 12,000 characters.
 - Scheme savings are not invented: the current schema has scheme price rows but no minimum/benefit formula or order attribution. The tool reports this limitation.
 
-## Required migration
+## Required migrations
 
 Apply `supabase/migrations/0018_maharani_ai_security.sql`. It adds:
 
@@ -47,7 +47,14 @@ Apply `supabase/migrations/0018_maharani_ai_security.sql`. It adds:
 - one-time confirmation nonce storage and RPC;
 - retailer-safe aggregate availability RPC.
 
-No existing authentication, pricing, GST, MOQ, credit, checkout, order-state or inventory mutation logic is changed.
+Then apply `supabase/migrations/0019_ai_demand_forecast.sql` for the demand
+forecasting capability:
+
+- RLS-guarded `ai_product_demand_daily` view (staff+ only) aggregating real,
+  non-cancelled order demand plus cancellation/return context;
+- optional `ai_demand_forecasts` snapshot table for observability.
+
+No existing authentication, pricing, GST, MOQ, credit, checkout, order-state or inventory mutation logic is changed. See [`ai-intelligence.md`](./ai-intelligence.md) for the full forecasting description.
 
 ## Environment
 
