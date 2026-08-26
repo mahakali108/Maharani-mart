@@ -10,10 +10,13 @@ export function CreditSummary({
   creditLimit,
   outstandingBalance,
   orderImpact,
+  title = 'Business credit',
 }: {
   creditLimit: number;
   outstandingBalance: number;
   orderImpact?: number;
+  /** Presentation label; calculations always use the same credit record. */
+  title?: string;
 }) {
   const position = calculateCreditPosition(creditLimit, outstandingBalance, orderImpact);
   const hasLimit = position.hasConfiguredLimit;
@@ -29,7 +32,7 @@ export function CreditSummary({
             <WalletCards className="h-4.5 w-4.5" />
           </span>
           <div>
-            <h2 className="text-xs font-bold text-slate-900">Business credit</h2>
+            <h2 className="text-xs font-bold text-slate-900">{title}</h2>
             <p className="text-[9px] text-slate-500">Secure account limit</p>
           </div>
         </div>

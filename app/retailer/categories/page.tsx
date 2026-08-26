@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import Image from 'next/image';
-import { Boxes, ChevronRight, LayoutGrid } from 'lucide-react';
+import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { CategoryDirectory, type DirectoryCategory } from '@/components/retailer/category-directory';
 
 interface CategoryRow {
   id: string;
@@ -24,76 +24,56 @@ export default async function CategoriesPage() {
 
   const categories = (data ?? []).map((category) => ({
     ...category,
-    count: category.products?.[0]?.count ?? 0,
+    productCount: category.products?.[0]?.count ?? 0,
   }));
   const parents = categories.filter((category) => !category.parent_id);
-  const childrenByParent = new Map<string, typeof categories>();
-  for (const category of categories) {
-    if (!category.parent_id) continue;
-    const list = childrenByParent.get(category.parent_id) ?? [];
-    list.push(category);
-    childrenByParent.set(category.parent_id, list);
-  }
+  const rootCategories = parents.length > 0 ? parents : categories;
+  const directoryCategories: DirectoryCategory[] = rootCategories.map((category) => ({
+    id: category.id,
+    name: category.name,
+    image_url: category.image_url,
+    productCount: category.productCount,
+    children: categories
+      .filter((child) => child.parent_id === category.id)
+      .map((child) => ({
+        id: child.id,
+        name: child.name,
+        image_url: child.image_url,
+        productCount: child.productCount,
+      })),
+  }));
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-5 sm:space-y-7">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
         <Link href="/retailer/home" className="hover:text-primary-600">Home</Link>
         <ChevronRight className="h-3 w-3" />
         <span className="text-slate-800">Categories</span>
       </div>
 
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Shop by category</p>
-        <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">All categories</h1>
-        <p className="mt-1 text-xs text-slate-500">Browse Maharani Traders wholesale aisles. Subcategories appear only when they exist in the catalog.</p>
-      </div>
-
-      {parents.length === 0 ? (
-        <section className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white text-center shadow-sm">
-          <Boxes className="h-8 w-8 text-slate-300" />
-          <p className="mt-3 text-sm font-semibold text-slate-700">No categories yet</p>
-        </section>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {parents.map((category) => {
-            const children = childrenByParent.get(category.id) ?? [];
-            return (
-              <article key={category.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <Link href={`/retailer/catalog?category=${category.id}`} className="flex items-center gap-3 p-4 hover:bg-slate-50">
-                  <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary-50 text-primary-600">
-                    {category.image_url ? (
-                      <Image src={category.image_url} alt="" fill className="object-cover" unoptimized />
-                    ) : (
-                      <LayoutGrid className="h-6 w-6" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-sm font-bold text-slate-900">{category.name}</h2>
-                    <p className="mt-0.5 text-[11px] text-slate-500">
-                      {category.count} product{category.count === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-300" />
-                </Link>
-                {children.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 border-t border-slate-100 px-4 py-3">
-                    {children.map((child) => (
-                      <Link
-                        key={child.id}
-                        href={`/retailer/catalog?category=${child.id}`}
-                        className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600 hover:bg-primary-50 hover:text-primary-700"
-                      >
-                        {child.name}
-                        {child.count > 0 ? ` · ${child.count}` : ''}
-                      </Link>
-                    ))}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
+      <section className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-5 sm:p-7">
+        <div className="flex items-start gap-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+            <LayoutGrid className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Browse the marketplace</p>
+            <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">Shop by category</h1>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 sm:text-sm">
+              Explore product aisles, then continue to the existing wholesale listing with your category already selected.
+            </p>
+          </div>
         </div>
+      </section>
+
+      {directoryCategories.length > 0 ? (
+        <CategoryDirectory categories={directoryCategories} />
+      ) : (
+        <section className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 text-center">
+          <LayoutGrid className="h-8 w-8 text-slate-300" />
+          <p className="mt-3 text-sm font-semibold text-slate-700">No categories yet</p>
+          <p className="mt-1 text-xs text-slate-500">Categories will appear as the marketplace catalog is updated.</p>
+        </section>
       )}
     </div>
   );

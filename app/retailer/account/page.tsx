@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {
   ArrowRight,
+  BadgePercent,
   Bell,
   ChevronRight,
   CircleHelp,
@@ -14,6 +15,7 @@ import {
   ShoppingBag,
   Sparkles,
   UserRound,
+  WalletCards,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
@@ -35,12 +37,14 @@ interface ProfileContactRow {
 }
 
 const ACCOUNT_LINKS = [
-  { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, credit and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
+  { href: '#wallet-credit', label: 'Wallet & credit', body: 'Available credit and outstanding balance', icon: WalletCards, tone: 'bg-emerald-50 text-emerald-700' },
   { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
   { href: '/retailer/quick-order', label: 'Quick Order', body: 'Find products by name or SKU', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
   { href: '/retailer/favorites', label: 'Favourites', body: 'Your saved products for faster restocking', icon: Heart, tone: 'bg-rose-50 text-rose-700' },
   { href: '/retailer/notifications', label: 'Notifications', body: 'Order and account updates', icon: Bell, tone: 'bg-violet-50 text-violet-700' },
-  { href: '/retailer/help', label: 'Help', body: 'FAQs and distributor support', icon: CircleHelp, tone: 'bg-emerald-50 text-emerald-700' },
+  { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-indigo-50 text-indigo-700' },
+  { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, credit and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
+  { href: '/retailer/help', label: 'Help & support', body: 'FAQs and distributor support', icon: CircleHelp, tone: 'bg-emerald-50 text-emerald-700' },
 ];
 
 export default async function RetailerAccountPage() {
@@ -166,7 +170,9 @@ export default async function RetailerAccountPage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-36">
-          {retailer ? <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} /> : null}
+          <div id="wallet-credit" className="scroll-mt-36">
+            {retailer ? <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} title="Wallet & credit" /> : null}
+          </div>
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">At a glance</p>
             <div className="mt-3 grid grid-cols-2 gap-2">

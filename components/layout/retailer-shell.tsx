@@ -3,16 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  BadgeCheck,
   Bell,
-  Heart,
-  HelpCircle,
   Home,
   LayoutGrid,
   LogOut,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
-  Tag,
   UserRound,
 } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
@@ -23,10 +21,10 @@ import { SearchField } from '@/components/retailer/search-field';
 
 const DESKTOP_NAV = [
   { label: 'Home', href: '/retailer/home' },
-  { label: 'Catalog', href: '/retailer/catalog' },
-  { label: 'Schemes', href: '/retailer/schemes' },
-  { label: 'Orders', href: '/retailer/orders' },
-  { label: 'Help', href: '/retailer/help' },
+  { label: 'Categories', href: '/retailer/categories' },
+  { label: 'Brands', href: '/retailer/brands' },
+  { label: 'Cart', href: '/retailer/cart' },
+  { label: 'Account', href: '/retailer/account' },
 ];
 
 function CountBadge({ count }: { count: number }) {
@@ -60,12 +58,12 @@ export function RetailerShell({
     .join('')
     .toUpperCase();
 
-  // Keep quick actions such as orders and quick order discoverable, while the
-  // five-item mobile navigation stays reserved for the locked marketplace IA.
+  // Keep the primary retail IA reserved for shopping. Operational tools stay
+  // in Account and contextual links rather than taking a bottom-nav slot.
   const mobileNav: NavItem[] = [
     { label: 'Home', href: '/retailer/home', icon: Home },
-    { label: 'Catalog', href: '/retailer/catalog', icon: LayoutGrid },
-    { label: 'Schemes', href: '/retailer/schemes', icon: Tag },
+    { label: 'Categories', href: '/retailer/categories', icon: LayoutGrid },
+    { label: 'Brands', href: '/retailer/brands', icon: BadgeCheck },
     { label: 'Cart', href: '/retailer/cart', icon: ShoppingCart, badge: cartCount },
     { label: 'Account', href: '/retailer/account', icon: UserRound },
   ];
@@ -103,20 +101,6 @@ export function RetailerShell({
 
             <div className="ml-auto flex items-center gap-1.5 lg:gap-2">
               <Link
-                href="/retailer/favorites"
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
-                aria-label="Favourites"
-              >
-                <Heart className="h-5 w-5" />
-              </Link>
-              <Link
-                href="/retailer/help"
-                className="relative hidden h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:flex lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
-                aria-label="Help"
-              >
-                <HelpCircle className="h-5 w-5" />
-              </Link>
-              <Link
                 href="/retailer/notifications"
                 className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:border lg:border-slate-200 lg:text-slate-600 lg:hover:bg-slate-50"
                 aria-label="Notifications"
@@ -135,13 +119,14 @@ export function RetailerShell({
 
               <Link
                 href="/retailer/account"
-                className="ml-1 hidden items-center gap-2 border-l border-slate-200 pl-3 lg:flex"
+                className="ml-1 flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:h-auto lg:w-auto lg:items-center lg:gap-2 lg:rounded-none lg:border-l lg:border-slate-200 lg:pl-3 lg:text-slate-900 lg:hover:bg-transparent"
                 aria-label="Account"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-xs font-bold text-primary-700">
+                <UserRound className="h-5 w-5 lg:hidden" />
+                <span className="hidden h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-xs font-bold text-primary-700 lg:flex">
                   {initials || 'R'}
                 </span>
-                <span className="max-w-[130px] leading-tight">
+                <span className="hidden max-w-[130px] leading-tight lg:block">
                   <span className="block truncate text-xs font-semibold text-slate-900">{fullName}</span>
                   <span className="mt-0.5 block text-[10px] text-slate-500">{ROLE_LABELS[role]}</span>
                 </span>

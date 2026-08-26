@@ -5,10 +5,13 @@ export function PromoBanner({
   title,
   imageUrl,
   linkUrl,
+  carousel = false,
 }: {
   title: string;
   imageUrl: string;
   linkUrl?: string | null;
+  /** Makes the banner occupy one full slide inside PromoCarousel. */
+  carousel?: boolean;
 }) {
   const content = (
     <>
@@ -35,7 +38,7 @@ export function PromoBanner({
         href={linkUrl}
         target="_blank"
         rel="noreferrer"
-        className="group relative aspect-[2/1] w-[92%] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-900 shadow-md sm:w-full"
+        className={`group relative aspect-[2/1] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-900 shadow-md ${carousel ? 'w-full min-w-full' : 'w-[92%] sm:w-full'}`}
       >
         {content}
       </a>
@@ -43,7 +46,7 @@ export function PromoBanner({
   }
 
   return (
-    <div className="group relative aspect-[2/1] w-[92%] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-900 shadow-md sm:w-full">
+    <div className={`group relative aspect-[2/1] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-900 shadow-md ${carousel ? 'w-full min-w-full' : 'w-[92%] sm:w-full'}`}>
       {content}
     </div>
   );
