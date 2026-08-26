@@ -104,11 +104,10 @@ export default async function RetailerHomePage() {
     favoriteIds
   );
   const discovery = pickDiscoveryRails(discoveryCards);
-  const selectedProducts = frequentCards.length > 0
-    ? frequentCards
-    : discovery.deals.length > 0
-      ? discovery.deals
-      : discovery.bestPrices;
+  // Retailers can only access their own order history. Use it for the
+  // best-selling rail when present, then fall back to the existing catalog
+  // discovery ranking without exposing cross-retailer purchasing data.
+  const bestSellingProducts = frequentCards.length > 0 ? frequentCards : discovery.bestPrices;
 
   return (
     <div className="space-y-7 sm:space-y-10">
@@ -167,21 +166,30 @@ export default async function RetailerHomePage() {
       </section>
 
       <ProductRail
-        eyebrow="Picked for your shop"
-        title="Selected & best-selling products"
+        eyebrow="Chosen for your shelves"
+        title="Best selling products"
         href="/retailer/catalog?sort=frequent"
         linkLabel="View products"
-        products={selectedProducts}
-        emptyMessage="Selected products will appear here as your marketplace catalog grows."
+        products={bestSellingProducts}
+        emptyMessage="Best-selling products will appear here as your marketplace catalog grows."
       />
 
       <ProductRail
         eyebrow="Fresh on the shelves"
-        title="New & featured products"
+        title="New arrivals"
         href="/retailer/catalog?new=1"
         linkLabel="View new products"
         products={discovery.newArrivals}
-        emptyMessage="New launches and featured products will appear here."
+        emptyMessage="New launches will appear here."
+      />
+
+      <ProductRail
+        eyebrow="Value for your shop"
+        title="Featured products & offers"
+        href="/retailer/catalog?offers=1"
+        linkLabel="View offers"
+        products={discovery.deals}
+        emptyMessage="Featured offers will appear here when they are available."
       />
     </div>
   );
