@@ -9,6 +9,7 @@ import { cartTools } from '@/lib/ai/tools/cart';
 import { orderTools } from '@/lib/ai/tools/orders';
 import { inventoryTools } from '@/lib/ai/tools/inventory';
 import { analyticsTools } from '@/lib/ai/tools/analytics';
+import { forecastTools } from '@/lib/ai/tools/forecast';
 import { memoryTools } from '@/lib/ai/tools/memory';
 import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { logAIEvent } from '@/lib/ai/observability';
@@ -24,6 +25,7 @@ const baseTools: AIToolDefinition[] = [
   ...orderTools,
   ...inventoryTools,
   ...analyticsTools,
+  ...forecastTools,
   ...memoryTools,
 ];
 
@@ -47,7 +49,7 @@ function inheritsExistingPermission(tool: AIToolDefinition, context: Pick<AITool
   if (inventory.includes(tool.name)) return canAny(role, ['inventory.view']);
   if (tool.name.includes('cart') || tool.name === 'calculate_order_preview') return canAny(role, ['orders.create']);
   if (tool.name.includes('order') || tool.name.includes('invoice')) return canAny(role, ['orders.view.own', 'orders.view.all', 'orders.create']);
-  if (['get_sales_summary', 'get_top_products', 'get_best_sellers', 'get_slow_products', 'get_purchase_trends', 'get_customer_purchase_pattern', 'get_order_trends', 'get_retailer_trends', 'get_scheme_performance', 'get_predicted_stockouts'].includes(tool.name)) {
+  if (['get_sales_summary', 'get_top_products', 'get_best_sellers', 'get_slow_products', 'get_purchase_trends', 'get_customer_purchase_pattern', 'get_order_trends', 'get_retailer_trends', 'get_scheme_performance', 'get_predicted_stockouts', 'get_demand_forecast', 'get_reorder_recommendation', 'get_inventory_risk'].includes(tool.name)) {
     return canAny(role, ['reports.view.own', 'reports.view.area', 'reports.view.all']);
   }
   if (tool.name.includes('product') || tool.name === 'search_categories' || tool.name === 'search_brands') return canAny(role, ['products.view']);

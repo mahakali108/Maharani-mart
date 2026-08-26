@@ -1131,6 +1131,62 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      ai_demand_forecasts: {
+        Row: {
+          id: string;
+          product_id: string;
+          snapshot_days: number;
+          demand_7_day: number | null;
+          demand_30_day: number | null;
+          direction: 'rising' | 'stable' | 'falling';
+          trend_change_percent: number | null;
+          confidence: number | null;
+          confidence_label: 'High' | 'Medium' | 'Low' | 'Insufficient' | null;
+          available_stock: number | null;
+          stockout_days: number | null;
+          stockout_date: string | null;
+          stockout_risk: 'none' | 'low' | 'medium' | 'high' | 'critical' | null;
+          reorder_quantity: number | null;
+          overstock_warning: boolean;
+          dead_stock_warning: boolean;
+          data_basis: string | null;
+          method: string | null;
+          created_by: string | null;
+          computed_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          snapshot_days: number;
+          demand_7_day?: number | null;
+          demand_30_day?: number | null;
+          direction: 'rising' | 'stable' | 'falling';
+          trend_change_percent?: number | null;
+          confidence?: number | null;
+          confidence_label?: 'High' | 'Medium' | 'Low' | 'Insufficient' | null;
+          available_stock?: number | null;
+          stockout_days?: number | null;
+          stockout_date?: string | null;
+          stockout_risk?: 'none' | 'low' | 'medium' | 'high' | 'critical' | null;
+          reorder_quantity?: number | null;
+          overstock_warning?: boolean;
+          dead_stock_warning?: boolean;
+          data_basis?: string | null;
+          method?: string | null;
+          created_by?: string | null;
+          computed_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['ai_demand_forecasts']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'ai_demand_forecasts_product_id_fkey';
+            columns: ['product_id'];
+            isOneToOne: false;
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
     };
 
     Views: {
@@ -1170,6 +1226,17 @@ export interface Database {
           estimated_value: number;
           days_remaining: number | null;
           expiry_status: 'expired' | 'critical' | 'warning' | 'healthy';
+        };
+        Relationships: [];
+      };
+      ai_product_demand_daily: {
+        Row: {
+          product_id: string;
+          demand_date: string;
+          quantity: number;
+          order_count: number;
+          cancelled_units: number;
+          return_units: number;
         };
         Relationships: [];
       };

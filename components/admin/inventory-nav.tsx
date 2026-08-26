@@ -11,6 +11,7 @@ const TABS = [
   { label: 'Movements', href: '/admin/inventory/movements' },
   { label: 'Expiry', href: '/admin/inventory/expiry' },
   { label: 'Low Stock', href: '/admin/inventory/low-stock' },
+  { label: 'Forecast', href: '/admin/inventory/forecast' },
   { label: 'GRNs', href: '/admin/inventory/grn' },
   { label: 'Transfers', href: '/admin/inventory/transfers' },
   { label: 'Reports', href: '/admin/inventory/reports' },
