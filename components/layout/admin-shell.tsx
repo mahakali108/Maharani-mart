@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   LayoutDashboard,
+  Gauge,
   Package,
   Tags,
   Warehouse,
@@ -22,6 +23,7 @@ import type { UserRole } from '@/lib/auth/roles';
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+  { label: 'Command Center', href: '/admin/command-center', icon: Gauge, roles: ['super_admin'] },
   { label: 'Business Copilot', href: '/admin/ai', icon: Sparkles },
   { label: 'Products', href: '/admin/products', icon: Package },
   { label: 'Categories & Brands', href: '/admin/catalog', icon: Tags },
@@ -47,12 +49,13 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(role));
 
   return (
     <div className="flex min-h-screen bg-ink-50">
       <Sidebar
-        navItems={NAV_ITEMS}
-        brandLabel="Admin Console"
+        navItems={visibleNavItems}
+        brandLabel={role === 'super_admin' ? 'Super Admin Console' : 'Admin Console'}
         open={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}
       />

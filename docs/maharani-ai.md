@@ -77,3 +77,7 @@ All are server-only.
 - Stock-out prediction is shown only when the existing `ai_predictions` job has written a fresh result.
 - Invoices are the platform's existing order-generated tax invoices, not a separate invoice ledger.
 - Reorder intervals are explicitly labeled estimates and require at least two purchase occurrences.
+
+## Super Admin Command Center
+
+The `/admin/command-center` dashboard (super_admin only, `command_center.view` permission) reuses this agent with the existing `admin` surface and adds eight read-only, zero-argument executive tools (`lib/ai/tools/super-admin.ts`) that are visible only to `super_admin`. Executive answers must label facts, metrics, forecasts and recommendations, and recommendations must state reason, expected impact, risk and required approval. The copilot never mutates data; the only write path in the feature is the smart-alerts server action, which reuses the existing notification pipeline with its link_url dedupe/cooldown pattern. See `docs/command-center.md`.

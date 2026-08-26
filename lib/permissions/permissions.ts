@@ -43,7 +43,8 @@ export type Permission =
   | 'reports.view.own'
   | 'banners.manage'
   | 'routes.manage.own'
-  | 'routes.manage.all';
+  | 'routes.manage.all'
+  | 'command_center.view';
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
@@ -53,6 +54,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'orders.deliver', 'orders.return.manage', 'returns.manage',
     'retailers.view', 'retailers.approve', 'retailers.suspend', 'retailers.assign_salesman',
     'team.manage', 'reports.view.all', 'banners.manage', 'routes.manage.all',
+    'command_center.view',
   ],
   admin: [
     'products.view', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',

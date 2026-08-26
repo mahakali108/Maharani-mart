@@ -9,6 +9,8 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** When set, the item is only rendered for that role (e.g. Command Center for super_admin). */
+  roles?: string[];
 }
 
 export function Sidebar({

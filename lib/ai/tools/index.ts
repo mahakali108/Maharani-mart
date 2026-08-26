@@ -11,6 +11,7 @@ import { inventoryTools } from '@/lib/ai/tools/inventory';
 import { analyticsTools } from '@/lib/ai/tools/analytics';
 import { forecastTools } from '@/lib/ai/tools/forecast';
 import { memoryTools } from '@/lib/ai/tools/memory';
+import { superAdminTools } from '@/lib/ai/tools/super-admin';
 import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { logAIEvent } from '@/lib/ai/observability';
 import { verificationFailure } from '@/lib/ai/safety/constants';
@@ -27,6 +28,7 @@ const baseTools: AIToolDefinition[] = [
   ...analyticsTools,
   ...forecastTools,
   ...memoryTools,
+  ...superAdminTools,
 ];
 
 function alias(name: string, targetName: string, description: string): AIToolDefinition {
@@ -51,6 +53,15 @@ function inheritsExistingPermission(tool: AIToolDefinition, context: Pick<AITool
   if (tool.name.includes('order') || tool.name.includes('invoice')) return canAny(role, ['orders.view.own', 'orders.view.all', 'orders.create']);
   if (['get_sales_summary', 'get_top_products', 'get_best_sellers', 'get_slow_products', 'get_purchase_trends', 'get_customer_purchase_pattern', 'get_order_trends', 'get_retailer_trends', 'get_scheme_performance', 'get_predicted_stockouts', 'get_demand_forecast', 'get_reorder_recommendation', 'get_inventory_risk'].includes(tool.name)) {
     return canAny(role, ['reports.view.own', 'reports.view.area', 'reports.view.all']);
+  }
+  // Super Admin executive tools — mapped to the existing report/retailer
+  // permissions the super_admin role already holds (defense-in-depth on top
+  // of the per-tool role allowlist).
+  if (['get_command_overview', 'get_business_risks', 'get_executive_action_plan', 'get_audit_activity', 'get_system_health', 'get_supplier_status'].includes(tool.name)) {
+    return canAny(role, ['reports.view.all']);
+  }
+  if (['get_credit_risk_report', 'get_retailer_health_report'].includes(tool.name)) {
+    return canAny(role, ['retailers.view']);
   }
   if (tool.name.includes('product') || tool.name === 'search_categories' || tool.name === 'search_brands') return canAny(role, ['products.view']);
   return true;
