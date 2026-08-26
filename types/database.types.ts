@@ -25,6 +25,10 @@ export type StockMovementTypeEnum =
 export type ReturnStatusEnum = 'requested' | 'approved' | 'rejected' | 'completed';
 export type PriceScopeEnum = 'base' | 'area' | 'retailer' | 'scheme' | 'festival';
 export type VisitStatusEnum = 'planned' | 'checked_in' | 'checked_out' | 'skipped';
+// Added by 0020_super_admin_control_center.sql:
+export type AccessStatusEnum = 'active' | 'expiring_soon' | 'expired' | 'suspended' | 'unlimited';
+export type FeatureTargetTypeEnum = 'global' | 'role' | 'user';
+export type MaintenanceScopeEnum = 'entire_platform' | 'retailer' | 'salesman' | 'admin' | 'staff' | 'warehouse';
 
 export interface Database {
   public: {
@@ -1187,6 +1191,151 @@ export interface Database {
           }
         ];
       };
+
+      // Added by 0020_super_admin_control_center.sql
+      platform_features: {
+        Row: {
+          id: string;
+          key: string;
+          name: string;
+          description: string | null;
+          icon: string | null;
+          route: string | null;
+          is_enabled: boolean;
+          is_implemented: boolean;
+          target_type: FeatureTargetTypeEnum;
+          target_roles: string[] | null;
+          target_user_id: string | null;
+          expires_at: string | null;
+          sort_order: number;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          name: string;
+          description?: string | null;
+          icon?: string | null;
+          route?: string | null;
+          is_enabled?: boolean;
+          is_implemented?: boolean;
+          target_type?: FeatureTargetTypeEnum;
+          target_roles?: string[] | null;
+          target_user_id?: string | null;
+          expires_at?: string | null;
+          sort_order?: number;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['platform_features']['Insert']>;
+        Relationships: [];
+      };
+
+      user_feature_overrides: {
+        Row: {
+          id: string;
+          user_id: string;
+          feature_key: string;
+          is_enabled: boolean;
+          expires_at: string | null;
+          reason: string | null;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          feature_key: string;
+          is_enabled: boolean;
+          expires_at?: string | null;
+          reason?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['user_feature_overrides']['Insert']>;
+        Relationships: [];
+      };
+
+      user_access_periods: {
+        Row: {
+          id: string;
+          user_id: string;
+          role: UserRoleEnum;
+          status: AccessStatusEnum;
+          started_at: string;
+          expires_at: string | null;
+          created_by: string | null;
+          updated_by: string | null;
+          reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          role: UserRoleEnum;
+          status?: AccessStatusEnum;
+          started_at?: string;
+          expires_at?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          reason?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['user_access_periods']['Insert']>;
+        Relationships: [];
+      };
+
+      platform_settings: {
+        Row: {
+          id: string;
+          key: string;
+          value: Record<string, unknown>;
+          description: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          value: Record<string, unknown>;
+          description?: string | null;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['platform_settings']['Insert']>;
+        Relationships: [];
+      };
+
+      super_admin_audit_logs: {
+        Row: {
+          id: string;
+          actor_id: string;
+          target_id: string | null;
+          action: string;
+          before_data: Record<string, unknown> | null;
+          after_data: Record<string, unknown> | null;
+          reason: string | null;
+          ip_address: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_id: string;
+          target_id?: string | null;
+          action: string;
+          before_data?: Record<string, unknown> | null;
+          after_data?: Record<string, unknown> | null;
+          reason?: string | null;
+          ip_address?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['super_admin_audit_logs']['Insert']>;
+        Relationships: [];
+      };
     };
 
     Views: {
@@ -1309,6 +1458,19 @@ export interface Database {
         Args: { p_order_id: string; p_order_item_id?: string | null };
         Returns: Record<string, unknown>;
       };
+      // Added by 0020_super_admin_control_center.sql
+      is_user_access_valid: {
+        Args: { p_user_id: string };
+        Returns: boolean;
+      };
+      get_active_access: {
+        Args: { p_user_id: string };
+        Returns: { status: string; started_at: string; expires_at: string | null }[];
+      };
+      is_feature_enabled_for_user: {
+        Args: { p_user_id: string; p_feature_key: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       user_role: UserRoleEnum;
@@ -1320,6 +1482,10 @@ export interface Database {
       price_scope: PriceScopeEnum;
       visit_status: VisitStatusEnum;
       return_status: ReturnStatusEnum;
+      // Added by 0020_super_admin_control_center.sql
+      access_status: AccessStatusEnum;
+      feature_target_type: FeatureTargetTypeEnum;
+      maintenance_scope: MaintenanceScopeEnum;
     };
     CompositeTypes: {
       [_ in never]: never;

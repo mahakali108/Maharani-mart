@@ -12,7 +12,12 @@ interface RetailerStatusRow {
   status: RetailerStatusEnum;
 }
 
-const PUBLIC_PATHS = ['/login', '/register-retailer', '/auth/callback', '/unauthorized'];
+interface AccessPeriodRow {
+  status: string;
+  expires_at: string | null;
+}
+
+const PUBLIC_PATHS = ['/login', '/register-retailer', '/auth/callback', '/unauthorized', '/access-expired'];
 const PROTECTED_PREFIXES = ['/admin', '/staff', '/salesman', '/retailer', '/pending-approval'];
 
 function isPublicPath(pathname: string) {
@@ -21,6 +26,34 @@ function isPublicPath(pathname: string) {
 
 function isProtectedPath(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
+
+/**
+ * Check if a user's access period is still valid.
+ * Super Admin is NEVER blocked by the access period system.
+ */
+async function isAccessValid(supabase: ReturnType<typeof updateSession> extends Promise<infer R> ? (R extends { supabase: infer S } ? S : never) : never, userId: string, role: UserRole): Promise<boolean> {
+  // Super Admin always has unlimited access
+  if (role === 'super_admin') return true;
+
+  const { data: accessPeriod } = await supabase
+    .from('user_access_periods')
+    .select('status, expires_at')
+    .eq('user_id', userId)
+    .in('status', ['active', 'expiring_soon', 'unlimited'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<AccessPeriodRow>();
+
+  // No access record = allow (backward compatibility)
+  if (!accessPeriod) return true;
+
+  // Unlimited access
+  if (accessPeriod.status === 'unlimited') return true;
+
+  // Check expiry
+  if (!accessPeriod.expires_at) return true;
+  return new Date(accessPeriod.expires_at) > new Date();
 }
 
 export async function middleware(request: NextRequest) {
@@ -51,6 +84,15 @@ export async function middleware(request: NextRequest) {
     }
 
     const role = profile.role;
+
+    // Check access period (7-day expiry system).
+    // Super Admin is NEVER blocked.
+    if (role !== 'super_admin' && isProtectedPath(pathname) && pathname !== '/access-expired') {
+      const accessValid = await isAccessValid(supabase, user.id, role);
+      if (!accessValid) {
+        return NextResponse.redirect(new URL('/access-expired', request.url));
+      }
+    }
 
     if (role === 'retailer' && pathname !== '/pending-approval') {
       const { data: retailer } = await supabase
