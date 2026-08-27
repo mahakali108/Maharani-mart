@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import {
   ArrowRight,
+  BadgePercent,
   ChevronLeft,
   Info,
   PackageCheck,
   ReceiptText,
-  ShieldCheck,
   ShoppingCart,
   Truck,
 } from 'lucide-react';
@@ -13,6 +13,8 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { CartItemRow } from '@/components/retailer/cart-item-row';
+import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
+import { CartCheckoutBar } from '@/components/retailer/cart-checkout-bar';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { ProductRail } from '@/components/retailer/product-rail';
 import { RecentlyViewedRail } from '@/components/retailer/recently-viewed';
@@ -28,6 +30,7 @@ interface CartItemDetail {
   product_packs: {
     id: string;
     pack_name: string;
+    pack_sku_code: string;
     base_price: number;
     ptr: number | null;
     mrp: number | null;
@@ -36,10 +39,24 @@ interface CartItemDetail {
   } | null;
   products: {
     name: string;
+    sku_code: string;
     gst_percent: number;
     is_active: boolean;
+    brands: { name: string } | null;
     product_images: { image_url: string; sort_order: number }[];
   } | null;
+}
+
+function Breadcrumb() {
+  return (
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
+      <Link href="/retailer/home" className="hover:text-primary-600">
+        Home
+      </Link>
+      <span aria-hidden="true">/</span>
+      <span className="text-slate-800">Cart</span>
+    </nav>
+  );
 }
 
 export default async function CartPage() {
@@ -49,7 +66,9 @@ export default async function CartPage() {
   const [{ data: cartData }, { data: retailer }, favoriteIds] = await Promise.all([
     supabase
       .from('cart_items')
-      .select('id, quantity, pack_id, product_id, product_packs ( id, pack_name, base_price, ptr, mrp, moq, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )')
+      .select(
+        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, pack_sku_code, base_price, ptr, mrp, moq, is_active ), products ( name, sku_code, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+      )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
     supabase
@@ -66,23 +85,25 @@ export default async function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="space-y-5">
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
-          <Link href="/retailer/home" className="hover:text-primary-600">Home</Link>
-          <span>/</span>
-          <span className="text-slate-800">Cart</span>
-        </div>
-        <section className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-center shadow-sm">
+      <div className="space-y-5 sm:space-y-6">
+        <Breadcrumb />
+        <section className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-12 text-center shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
           <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-50 text-primary-600">
-            <ShoppingCart className="h-9 w-9" />
+            <ShoppingCart className="h-9 w-9" aria-hidden="true" />
           </span>
-          <h1 className="mt-5 text-xl font-bold text-slate-950 sm:text-2xl">Your cart is ready for a restock</h1>
-          <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">Browse wholesale products or use Quick Order to add products by name and SKU.</p>
+          <h1 className="mt-5 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Your cart is empty</h1>
+          <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">Browse Maharani Traders products and start shopping.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <Link href="/retailer/catalog" className="flex h-10 items-center gap-2 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700">
-              Browse products <ArrowRight className="h-4 w-4" />
+            <Link
+              href="/retailer/catalog"
+              className="flex h-11 items-center gap-2 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2"
+            >
+              Continue shopping <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
-            <Link href="/retailer/quick-order" className="flex h-10 items-center rounded-xl border border-slate-200 bg-white px-5 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600">
+            <Link
+              href="/retailer/quick-order"
+              className="flex h-11 items-center rounded-xl border border-slate-200 bg-white px-5 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+            >
               Quick order
             </Link>
           </div>
@@ -119,6 +140,8 @@ export default async function CartPage() {
       quantity: item.quantity,
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
+      brandName: product?.brands?.name ?? null,
+      skuCode: pack?.pack_sku_code || product?.sku_code || null,
       imageUrl: images[0]?.image_url,
       unitPrice,
       gstPercent,
@@ -135,12 +158,8 @@ export default async function CartPage() {
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
-        <Link href="/retailer/home" className="hover:text-primary-600">Home</Link>
-        <span>/</span>
-        <span className="text-slate-800">Cart</span>
-      </div>
+    <div className="space-y-5 pb-24 sm:space-y-6 lg:pb-0">
+      <Breadcrumb />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -150,72 +169,49 @@ export default async function CartPage() {
             {items.length} line item{items.length === 1 ? '' : 's'} · {totalQuantity} pack{totalQuantity === 1 ? '' : 's'}
           </p>
         </div>
-        <Link href="/retailer/catalog" className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600">
-          <ChevronLeft className="h-3.5 w-3.5" /> Continue shopping
+        <Link
+          href="/retailer/catalog"
+          className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Continue shopping
         </Link>
       </div>
 
       {hasUnavailable ? (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
             <span className="font-bold">Cart update required.</span> Unavailable products are clearly marked and will be excluded when the order is validated.
           </p>
         </div>
       ) : null}
 
+      {savings > 0 ? (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 px-4 py-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm">
+            <BadgePercent className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <p className="min-w-0 text-xs leading-5 text-emerald-900 sm:text-sm">
+            <span className="font-bold">You save {formatInr(savings)}</span> on this order compared to MRP.
+          </p>
+        </div>
+      ) : null}
+
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-7">
-        <section className="space-y-3">
+        <section className="space-y-3" aria-label="Cart items">
           {lines.map((line) => (
             <CartItemRow key={line.id} {...line} />
           ))}
         </section>
 
         <aside className="space-y-3 lg:sticky lg:top-36">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
-            <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
-              <h2 className="text-sm font-bold text-slate-900">Order summary</h2>
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                {availableCount} orderable item{availableCount === 1 ? '' : 's'}
-              </p>
-            </div>
-            <div className="space-y-3 p-5">
-              <div className="flex justify-between text-xs text-slate-600">
-                <span>Item subtotal</span>
-                <span className="font-semibold text-slate-800">{formatInr(subtotal)}</span>
-              </div>
-              {[...gstByRate.entries()].map(([rate, amount]) => (
-                <div key={rate} className="flex justify-between text-xs text-slate-600">
-                  <span>GST {rate}%</span>
-                  <span className="font-semibold text-slate-800">{formatInr(amount)}</span>
-                </div>
-              ))}
-              {savings > 0 ? (
-                <div className="flex justify-between text-xs font-semibold text-emerald-700">
-                  <span>Total savings</span>
-                  <span>{formatInr(savings)}</span>
-                </div>
-              ) : null}
-              <div className="flex justify-between border-t border-dashed border-slate-200 pt-4">
-                <span className="text-sm font-bold text-slate-900">Grand total</span>
-                <span className="text-xl font-bold tracking-tight text-slate-950">{formatInr(grandTotal)}</span>
-              </div>
-              <p className="text-right text-[9px] text-slate-400">Inclusive of calculated GST</p>
-
-              {availableCount > 0 ? (
-                <Link href="/retailer/checkout" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700">
-                  Proceed to checkout <ArrowRight className="h-4 w-4" />
-                </Link>
-              ) : (
-                <span className="flex h-12 w-full cursor-not-allowed items-center justify-center rounded-xl bg-slate-200 text-xs font-bold text-slate-500">
-                  No orderable items
-                </span>
-              )}
-              <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Secure server-side validation
-              </div>
-            </div>
-          </section>
+          <CartOrderSummary
+            subtotal={subtotal}
+            gstByRate={[...gstByRate.entries()].map(([rate, amount]) => ({ rate, amount }))}
+            savings={savings}
+            grandTotal={grandTotal}
+            orderableCount={availableCount}
+          />
 
           {retailer ? (
             <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} orderImpact={grandTotal} />
@@ -229,7 +225,7 @@ export default async function CartPage() {
                 { icon: Truck, title: 'Track fulfillment', body: 'Status updates after ordering' },
               ].map((item) => (
                 <div key={item.title} className="flex items-start gap-2.5">
-                  <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                  <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
                   <div>
                     <p className="text-[10px] font-bold text-slate-800">{item.title}</p>
                     <p className="mt-0.5 text-[9px] text-slate-400">{item.body}</p>
@@ -240,6 +236,8 @@ export default async function CartPage() {
           </section>
         </aside>
       </div>
+
+      <CartCheckoutBar grandTotal={grandTotal} orderableCount={availableCount} />
 
       <ProductRail eyebrow="Add more" title="Frequently bought products" products={recommended} href="/retailer/catalog" />
     </div>
