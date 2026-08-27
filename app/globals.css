@@ -59,6 +59,17 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+  /* Hide native number-input spinners so the quantity field renders a clean,
+     fixed-width value that can never overflow its card on narrow screens. */
+  .no-spinner::-webkit-outer-spin-button,
+  .no-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .no-spinner {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
   .marketplace-grid {
     background-image: linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
