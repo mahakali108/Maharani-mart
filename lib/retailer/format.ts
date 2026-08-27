@@ -14,6 +14,77 @@ export function calcSavings(mrp: number | null | undefined, price: number | null
   return (mrp - price) * quantity;
 }
 
+/**
+ * Calculates retailer gross profit margin on MRP: ((MRP - Price) / MRP) * 100.
+ * Returns null if MRP is unavailable or not greater than price.
+ * Never invents a margin percentage when authoritative comparison data is missing.
+ */
+export function calcRetailerMargin(
+  mrp: number | null | undefined,
+  price: number | null | undefined
+): number | null {
+  if (mrp == null || price == null || mrp <= price) return null;
+  const margin = ((mrp - price) / mrp) * 100;
+  return Math.round(margin * 100) / 100;
+}
+
+export function formatMargin(margin: number | null | undefined): string | null {
+  if (margin == null || margin <= 0) return null;
+  return `${margin.toFixed(2)}%`;
+}
+
+/**
+ * Resolves the unit price for a pack: effectivePrice divided by unitsPerCase.
+ * If unitsPerCase <= 1, unit price is equal to effectivePrice.
+ */
+export function resolveUnitPrice(effectivePrice: number, unitsPerCase: number): number {
+  if (unitsPerCase > 1) {
+    return Math.round((effectivePrice / unitsPerCase) * 100) / 100;
+  }
+  return effectivePrice;
+}
+
+/**
+ * Identifies the best-value pack tier based on the lowest unit price.
+ * Only identifies a best-value tier when there are at least two packs and
+ * a strictly lower unit price exists compared to the reference (highest unit price) pack.
+ */
+export function determineBestValueTier<T extends { id: string; unitPrice: number; pack_name?: string }>(
+  packs: T[]
+): { bestPackId: string | null; savingsVsRef: number | null; refPackName: string | null } {
+  if (!packs || packs.length <= 1) {
+    return { bestPackId: null, savingsVsRef: null, refPackName: null };
+  }
+
+  let minPrice = Infinity;
+  let maxPrice = -Infinity;
+  let bestPack: T | null = null;
+  let refPack: T | null = null;
+
+  for (const pack of packs) {
+    if (pack.unitPrice < minPrice) {
+      minPrice = pack.unitPrice;
+      bestPack = pack;
+    }
+    if (pack.unitPrice > maxPrice) {
+      maxPrice = pack.unitPrice;
+      refPack = pack;
+    }
+  }
+
+  // Only declare a best-value tier if there is a real price advantage (at least 0.01/unit)
+  if (bestPack && refPack && bestPack.id !== refPack.id && maxPrice - minPrice >= 0.005) {
+    const savingsVsRef = Math.round((maxPrice - minPrice) * 100) / 100;
+    return {
+      bestPackId: bestPack.id,
+      savingsVsRef,
+      refPackName: refPack.pack_name ?? null,
+    };
+  }
+
+  return { bestPackId: null, savingsVsRef: null, refPackName: null };
+}
+
 export function greetingForHour(hour: number): string {
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
