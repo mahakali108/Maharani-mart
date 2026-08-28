@@ -12,7 +12,9 @@
     "test": "vitest run",
     "cap:add:android": "cap add android",
     "cap:sync": "cap sync",
-    "android:build:debug": "cap sync android && cd android && ./gradlew assembleDebug"
+    "capacitor:sync:after": "node scripts/android-postsync.mjs",
+    "android:build:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "android:build:release": "cap sync android && cd android && ./gradlew bundleRelease"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",
