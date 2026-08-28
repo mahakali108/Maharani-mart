@@ -1,0 +1,116 @@
+# ==========================================================================
+# Android Debug APK workflow — FIXED version.
+#
+# WHY THIS FILE IS IN docs/: the automation that prepared this fix does
+# not have the `workflows` permission on the GitHub App token, so
+# pushes touching .github/workflows/** are rejected by GitHub. To
+# activate the fix, a human with normal repo write access replaces
+# the existing workflow with this file:
+#
+#     mv docs/android-workflow-apk.yml .github/workflows/android-apk.yml
+#     git add .github/workflows/android-apk.yml docs/
+#     git commit -m "Android CI: fix APK build, modernize actions"
+#     git push
+#
+# CHANGES vs the original workflow:
+#   1. Uses pnpm (corepack + --frozen-lockfile) instead of npm install
+#      to match the project's declared packageManager (pnpm@9.15.9)
+#      and pnpm-lock.yaml — guarantees deterministic installs.
+#   2. Explicitly installs Android SDK platform 34 + build-tools 34.0.0
+#      via sdkmanager. android-actions/setup-android@v3 only installs
+#      cmdline-tools and platform-tools by default; without the
+#      platform and build-tools Gradle's auto-download fails
+#      intermittently on fresh runners, which was the root cause of
+#      exit code 1 during :app:assembleDebug.
+#   3. Bumps to current supported action versions to eliminate the
+#      Node 20 deprecation warnings: actions/checkout@v5,
+#      actions/setup-node@v5, actions/setup-java@v5 (android-actions/
+#      setup-android stays at v3 which is current).
+#   4. Removes the inline "Configure Android back-button behavior"
+#      heredoc step — back-button handling, brand icon/splash copy,
+#      and version stamping are now performed automatically by the
+#      capacitor:sync:after hook (scripts/android-postsync.mjs), which
+#      runs both in CI and on local builds. Single source of truth.
+#   5. Locates the APK with `find` before upload so a renamed output
+#      never silently breaks the artifact.
+#   6. Adds --stacktrace to gradlew for better diagnostics on failure.
+# ==========================================================================
+name: Android Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'www/**'
+      - 'resources/**'
+      - 'scripts/**'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js (LTS)
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Enable pnpm via corepack
+        run: corepack enable && corepack prepare pnpm@9.15.9 --activate
+
+      - name: Set up JDK 17 (required by Android Gradle Plugin)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor config into the native project
+        run: npx cap sync android
+        env:
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+
+      - name: Grant execute permission to Gradle wrapper
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -maxdepth 2 -name "*.apk" | head -n 1)
+          echo "Found APK: $APK_PATH"
+          test -n "$APK_PATH"
+          test -s "$APK_PATH"
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "size=$(stat -c%s "$APK_PATH")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maharani-traders-debug-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
