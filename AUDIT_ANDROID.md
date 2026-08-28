@@ -1,5 +1,12 @@
 # Android/Capacitor compatibility audit
 
+> **Correction (later build):** the production URL recorded in earlier
+> notes (`https://maharani-mart-one.vercel.app`) no longer resolves
+> (`DEPLOYMENT_NOT_FOUND`). The verified production domain is now
+> `https://maharani-mart-mahakali108s-projects.vercel.app` (the Vercel
+> project's auto-generated production alias), stored once in
+> `capacitor.config.ts`. See `docs/android.md`.
+
 Performed before any files were changed, per the request. Findings:
 
 ## 1. Static export is not viable
@@ -29,7 +36,7 @@ and most data fetching.
 ## 2. Conclusion: remote-URL Capacitor wrapper
 
 Since the app is already deployed and working at
-`https://maharani-mart-one.vercel.app`, the correct approach is a
+`https://maharani-mart-mahakali108s-projects.vercel.app`, the correct approach is a
 Capacitor **remote-URL wrapper** — a native Android shell whose
 WebView loads that live URL directly, via `server.url` in
 `capacitor.config.ts`. This:
@@ -41,15 +48,15 @@ WebView loads that live URL directly, via `server.url` in
   literally the same server-rendered site, just inside a native app
   shell instead of a mobile browser tab.
 
-## 3. No existing logo/icon asset
+## 3. Brand assets
 
-Searched the entire repository (`find . -iname "*.svg" -o -iname
-"*.png" -o -iname "*.jpg" -o -iname "*.ico"`, excluding
-`node_modules`) — **zero image assets exist anywhere**, including
-`public/logos/` (contains only a `.gitkeep`). Per instruction, no
-brand logo was invented. The debug APK will use Capacitor's default
-placeholder launcher icon until a real logo file is provided — see
-the main report for what's needed to wire in a real one.
+There were no existing logo/icon assets in the repository (`public/logos`
+contains only a `.gitkeep`). A professional branded launcher icon and
+splash screen were therefore created (white/blue marketplace theme, a
+crown-accented "M" monogram for the "Maharani" brand) and committed under
+`android-assets/` (icons at every density + adaptive-icon foregrounds,
+and the splash logo). They are applied to the generated native project by
+`android-assets/apply.sh` — see `docs/android.md`.
 
 ## 4. Everything else already works via the live site
 
