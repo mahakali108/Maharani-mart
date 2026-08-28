@@ -1,39 +1,54 @@
 # ==========================================================================
-# Android Debug APK workflow — FIXED version.
+# Android Debug APK workflow — MODERNIZED, PROMOTABLE VERSION.
 #
-# WHY THIS FILE IS IN docs/: the automation that prepared this fix does
-# not have the `workflows` permission on the GitHub App token, so
-# pushes touching .github/workflows/** are rejected by GitHub. To
-# activate the fix, a human with normal repo write access replaces
-# the existing workflow with this file:
+# WHY THIS FILE IS IN docs/: the automation that maintains this repo uses
+# a GitHub App token WITHOUT the `workflows` permission, so any push
+# touching .github/workflows/** is rejected by GitHub
+# ("refusing to allow a GitHub App to create or update workflow …
+# without `workflows` permission" — re-confirmed on 2026-08-28). To
+# activate this modernized workflow, a human with normal repo write
+# access promotes it:
 #
-#     mv docs/android-workflow-apk.yml .github/workflows/android-apk.yml
-#     git add .github/workflows/android-apk.yml docs/
-#     git commit -m "Android CI: fix APK build, modernize actions"
+#     cp docs/android-workflow-apk.yml .github/workflows/android-apk.yml
+#     git add .github/workflows/android-apk.yml
+#     git commit -m "CI: promote modernized Android APK workflow"
 #     git push
 #
-# CHANGES vs the original workflow:
+# The ACTIVE workflow (.github/workflows/android-apk.yml) keeps working
+# as-is; this copy only adds robustness and removes deprecation
+# warnings. Changes vs the active workflow:
 #   1. Uses pnpm (corepack + --frozen-lockfile) instead of npm install
 #      to match the project's declared packageManager (pnpm@9.15.9)
-#      and pnpm-lock.yaml — guarantees deterministic installs.
+#      and pnpm-lock.yaml — deterministic installs.
 #   2. Explicitly installs Android SDK platform 34 + build-tools 34.0.0
 #      via sdkmanager. android-actions/setup-android@v3 only installs
-#      cmdline-tools and platform-tools by default; without the
-#      platform and build-tools Gradle's auto-download fails
-#      intermittently on fresh runners, which was the root cause of
-#      exit code 1 during :app:assembleDebug.
-#   3. Bumps to current supported action versions to eliminate the
-#      Node 20 deprecation warnings: actions/checkout@v5,
-#      actions/setup-node@v5, actions/setup-java@v5 (android-actions/
-#      setup-android stays at v3 which is current).
-#   4. Removes the inline "Configure Android back-button behavior"
-#      heredoc step — back-button handling, brand icon/splash copy,
-#      and version stamping are now performed automatically by the
+#      cmdline-tools and platform-tools by default; relying on Gradle's
+#      SDK auto-download failed intermittently on fresh runners, and
+#      the setup step itself failed transiently at least once
+#      (run 33167788423).
+#   3. Bumps deprecated action versions: actions/checkout@v5,
+#      actions/setup-node@v5, actions/setup-java@v5
+#      (android-actions/setup-android@v3 kept — current major).
+#   4. Node 20 (EOL April 2026) -> Node 22 (supported LTS); JDK stays
+#      temurin 17 (required by Android Gradle Plugin 8.2.1).
+#   5. Removes the inline "Configure Android back-button behavior"
+#      heredoc step — back-button handling, brand icon/splash copy
+#      (with Android resource-qualifier-order validation, e.g.
+#      drawable-port-night-hdpi, never drawable-night-port-hdpi) and
+#      version stamping are performed automatically by the
 #      capacitor:sync:after hook (scripts/android-postsync.mjs), which
 #      runs both in CI and on local builds. Single source of truth.
-#   5. Locates the APK with `find` before upload so a renamed output
-#      never silently breaks the artifact.
-#   6. Adds --stacktrace to gradlew for better diagnostics on failure.
+#   6. Locates the APK with `find` (no hardcoded filename) and then
+#      VERIFIES its metadata with the Android SDK's aapt (package
+#      com.maharanitraders.app, label "Maharani Traders",
+#      versionName 0.1.0) before anything is uploaded.
+#   7. Adds --stacktrace to gradlew for better diagnostics on failure,
+#      and widens the push trigger paths to resources/** and scripts/**
+#      so brand-resource changes build the APK.
+#
+# Artifact name is unchanged: maharani-traders-debug-apk
+# (with if-no-files-found: error, so an empty artifact can never be
+# published).
 # ==========================================================================
 name: Android Debug APK
 
@@ -60,7 +75,7 @@ jobs:
       - name: Set up Node.js (LTS)
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Enable pnpm via corepack
         run: corepack enable && corepack prepare pnpm@9.15.9 --activate
@@ -107,6 +122,28 @@ jobs:
           test -s "$APK_PATH"
           echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
           echo "size=$(stat -c%s "$APK_PATH")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify debug APK metadata
+        run: |
+          set -euo pipefail
+          APK_PATH="${{ steps.apk.outputs.path }}"
+          echo "Verifying APK: $APK_PATH (${{ steps.apk.outputs.size }} bytes)"
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          AAPT="$(find "$SDK/build-tools" -name aapt -type f 2>/dev/null | sort -V | tail -n 1)"
+          AAPT2="$(find "$SDK/build-tools" -name aapt2 -type f 2>/dev/null | sort -V | tail -n 1)"
+          if [ -n "$AAPT" ]; then
+            BADGING="$("$AAPT" dump badging "$APK_PATH")"
+          elif [ -n "$AAPT2" ]; then
+            BADGING="$("$AAPT2" dump badging "$APK_PATH")"
+          else
+            echo "ERROR: no aapt/aapt2 found under $SDK/build-tools" >&2
+            exit 1
+          fi
+          printf '%s\n' "$BADGING" | head -n 5
+          printf '%s\n' "$BADGING" > /tmp/badging.txt
+          grep -q "^package: name='com.maharanitraders.app' versionCode='[0-9]*' versionName='0.1.0'" /tmp/badging.txt
+          grep -q "application-label:'Maharani Traders'" /tmp/badging.txt
+          echo "APK metadata verified: package id, app name and version all match."
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
