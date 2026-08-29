@@ -15,11 +15,11 @@
  *      adaptive-icon background color, and all drawable-land/-port[-night]
  *      splash densities. Directory names are validated against Android's
  *      canonical resource-qualifier order before anything is copied (see
- *      findInvalidResourceDirs below), so an invalid name such as
- *      drawable-night-port-hdpi can never reach Gradle again. The hook is
- *      a plain recursive copy — deterministic, no network, no native
- *      image libraries, so it cannot silently fail in CI. No placeholder
- *      icon ships in any build.
+ *      scripts/android-resource-validation.mjs, which is shared with the
+ *      CI workflow), so an invalid name such as drawable-night-port-hdpi
+ *      can never reach Gradle again. The hook is a plain recursive copy —
+ *      deterministic, no network, no native image libraries, so it cannot
+ *      silently fail in CI. No placeholder icon ships in any build.
  *   2. versionName stamped from package.json (single source of
  *      truth) and versionCode from $ANDROID_VERSION_CODE (defaults
  *      to 1; CI can pass a monotonically increasing number).
@@ -33,9 +33,13 @@
  * packaging. It does nothing at all if the android/ platform has not
  * been added.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  INVALID_DIR_HELP,
+  findInvalidResourceDirs,
+} from './android-resource-validation.mjs';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const androidDir = join(repo, 'android');
@@ -73,74 +77,11 @@ if (!existsSync(resSrc)) {
  * sw<N>dp/w<N>dp/h<N>dp, b+47 tags, …) cause that directory to be skipped,
  * so the check can never reject a valid directory it doesn't understand.
  */
-const RESOURCE_TYPES = new Set([
-  'anim', 'animator', 'color', 'drawable', 'font', 'interpolator', 'layout',
-  'menu', 'mipmap', 'navigation', 'raw', 'string', 'style', 'transition',
-  'values', 'xml',
-]);
-
-// Fixed-name qualifier token -> canonical precedence (Table 2 order).
-const QUALIFIER_PRECEDENCE = {
-  ldltr: 3, ldrtl: 3,
-  small: 7, normal: 7, large: 7, xlarge: 7,
-  long: 8, notlong: 8,
-  round: 9, notround: 9,
-  widecg: 10, nowidecg: 10,
-  highdr: 11, lowdr: 11,
-  port: 12, land: 12,
-  car: 13, desk: 13, television: 13, appliance: 13, watch: 13, vrheadset: 13,
-  night: 14, notnight: 14,
-  ldpi: 15, mdpi: 15, hdpi: 15, xhdpi: 15, xxhdpi: 15, xxxhdpi: 15,
-  nodpi: 15, tvdpi: 15, anydpi: 15,
-  notouch: 16, finger: 16,
-  keysexposed: 17, keyshidden: 17, keyssoft: 17,
-  nokeys: 18, qwerty: 18, '12key': 18,
-  navexposed: 19, navhidden: 19,
-  nonav: 20, dpad: 20, trackball: 20, wheel: 20,
-};
-
-const qualifierPrecedence = (token) => {
-  if (Object.prototype.hasOwnProperty.call(QUALIFIER_PRECEDENCE, token)) {
-    return QUALIFIER_PRECEDENCE[token];
-  }
-  if (/^\d+dpi$/.test(token)) return 15; // non-standard density (e.g. 480dpi)
-  if (/^v\d+$/.test(token)) return 22; // platform version is always last
-  return undefined; // unrecognized → caller skips this directory
-};
-
-const findInvalidResourceDirs = (rootDir) => {
-  const invalid = [];
-  for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const name = entry.name;
-    const firstDash = name.indexOf('-');
-    if (firstDash === -1) continue; // plain "drawable"/"values"/… — nothing to check
-    if (!RESOURCE_TYPES.has(name.slice(0, firstDash))) continue; // unknown type — not ours to judge
-    let prev = 0;
-    for (const token of name.slice(firstDash + 1).split('-')) {
-      const precedence = qualifierPrecedence(token);
-      if (precedence === undefined) break; // unrecognized token — skip this directory
-      if (precedence <= prev) {
-        invalid.push(name);
-        break; // reported once; no need to keep checking this dir
-      }
-      prev = precedence;
-    }
-  }
-  return invalid;
-};
-
 const invalidDirs = findInvalidResourceDirs(resSrc);
 if (invalidDirs.length > 0) {
   console.error('[android-postsync] ERROR: invalid Android resource directory name(s) in resources/android-res:');
   for (const dir of invalidDirs) console.error(`  - ${dir}`);
-  console.error(
-    'Qualifiers must follow the canonical order of Table 2 at\n' +
-    'https://developer.android.com/guide/topics/resources/providing-resources#table2\n' +
-    '(orientation before night mode before density — e.g. drawable-port-night-hdpi,\n' +
-    'never drawable-night-port-hdpi). Gradle would reject these in\n' +
-    ':app:mergeDebugResources with "Invalid resource directory name".'
-  );
+  console.error(INVALID_DIR_HELP);
   process.exit(1);
 }
 
