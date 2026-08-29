@@ -1,0 +1,127 @@
+<!doctype html>
+<!--
+  BROWSER PWA offline fallback for Maharani Traders.
+
+  This is intentionally SEPARATE from Capacitor's www/offline.html. The Android
+  app's WebView shows www/offline.html (Capacitor server.errorPath) when the
+  remote production URL cannot load. This file is the offline screen shown by
+  the service worker (public/sw.js) when a BROWSER navigation fails because the
+  device is offline.
+
+  It deliberately does NOT fake any app functionality: no cached products,
+  prices, cart, orders, stock, or user data. It only tells the user the
+  connection is down and offers a Retry.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="viewport-fit=cover, width=device-width, initial-scale=1, user-scalable=no"
+    />
+    <title>Maharani Traders</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        background: #ffffff;
+        color: #1a1a1a;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+      }
+      .wrap {
+        max-width: 340px;
+      }
+      .mark {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 20px;
+        border-radius: 18px;
+        background: #c8102e;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      p.brand {
+        font-size: 13px;
+        font-weight: 600;
+        color: #c8102e;
+        margin-bottom: 24px;
+        letter-spacing: 0.3px;
+      }
+      p.msg {
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: #6d6d6d;
+        margin-bottom: 28px;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        cursor: pointer;
+        background: #c8102e;
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        padding: 13px 40px;
+        border-radius: 12px;
+        width: 100%;
+      }
+      button:active {
+        background: #a80c26;
+      }
+      .status {
+        margin-top: 14px;
+        font-size: 12.5px;
+        color: #888888;
+        min-height: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="mark" aria-hidden="true">MT</div>
+      <h1>Maharani Traders is offline.</h1>
+      <p class="brand">Maharani Traders</p>
+      <p class="msg">
+        You need an internet connection to use Maharani Traders. Please check
+        your connection and try again.
+      </p>
+      <button id="retry" type="button">Retry</button>
+      <div class="status" id="status" role="status"></div>
+    </div>
+    <script>
+      var statusEl = document.getElementById('status');
+      function retry() {
+        statusEl.textContent = 'Reconnecting…';
+        window.location.reload();
+      }
+      document.getElementById('retry').addEventListener('click', retry);
+      // Auto-retry once the OS reports connectivity is back.
+      window.addEventListener('online', retry);
+      if (!navigator.onLine) {
+        statusEl.textContent = 'Waiting for network…';
+      }
+    </script>
+  </body>
+</html>
