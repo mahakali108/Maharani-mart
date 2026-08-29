@@ -120,6 +120,20 @@ middleware.ts                  # Role-based route protection (runs on every requ
 
 ---
 
+## 5b. Android app (`Maharani Traders`)
+
+A Capacitor Android wrapper (package `com.maharanitraders.app`, version
+`0.1.0`) loads the deployed production site in a native WebView. It ships
+no business logic — the server stays authoritative for pricing, GST,
+orders, credit, roles and RLS.
+
+- Build: **Actions → Android Debug APK → Run workflow**; download the
+  `maharani-traders-debug-apk` artifact.
+- Release AAB requires the owner's upload keystore/secrets.
+- Full docs: [`docs/android.md`](docs/android.md).
+
+---
+
 ## 6. What's intentionally NOT in Phase 1
 
 Per spec, this phase ships **zero business data**. The following are stubbed as empty states and are Phase 2+ work per `ARCHITECTURE.md`:

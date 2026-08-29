@@ -1,0 +1,402 @@
+# =============================================================================
+# Maharani Traders — Android Debug APK (+ optional Release AAB)
+# TARGET WORKFLOW — PROMOTE TO .github/workflows/android-apk.yml
+#
+# STATUS: this file is the FINALIZED workflow. It is NOT yet active, because
+# the automation that maintains this repository uses a GitHub App token
+# WITHOUT the `workflows` permission, so GitHub refuses any push that
+# touches .github/workflows/**:
+#
+#     ! [remote rejected] … (refusing to allow a GitHub App to create or
+#       update workflow `.github/workflows/android-apk.yml` without
+#       `workflows` permission)
+#
+# To activate it, a human with normal repo write access runs:
+#
+#     cp docs/android-workflow-apk-aab.yml .github/workflows/android-apk.yml
+#     git add .github/workflows/android-apk.yml
+#     git commit -m "CI: promote finalized Android APK/AAB workflow"
+#     git push
+#
+# Until that happens, the ACTIVE workflow is the previous version of
+# .github/workflows/android-apk.yml (actions/checkout@v4, setup-node@v4,
+# Node 20, `npm install`, Debug APK only). It still builds the same APK
+# artifact (maharani-traders-debug-apk) and is unaffected by this change.
+#
+# What promoting this file adds over the currently active workflow:
+#   - actions/checkout@v5, actions/setup-node@v5, actions/setup-java@v5
+#   - Node 22 LTS + pnpm (corepack, --frozen-lockfile) instead of Node 20 +
+#     `npm install`, matching package.json#packageManager
+#   - Web quality gates before the native build: pnpm typecheck, pnpm lint,
+#     pnpm test, pnpm build (Next.js)
+#   - Explicit Android resource-qualifier validation step
+#     (node scripts/android-resource-validation.mjs)
+#   - Explicit `sdkmanager "platforms;android-34" "build-tools;34.0.0"`
+#   - APK existence assertion, then aapt/aapt2 `dump badging` verification
+#     of package ID, application label and versionName
+#   - Conditional Release AAB (bundleRelease) + artifact upload, executed
+#     ONLY when the owner's four signing secrets are present; skipped with a
+#     visible notice otherwise. No key or credential is ever fabricated.
+#   - Job summary table, least-privilege `permissions: contents: read`,
+#     concurrency cancellation
+#
+# Documentation: docs/android.md
+# =============================================================================
+# -------------------------------- BEGIN WORKFLOW ----------------------------
+# =============================================================================
+# Maharani Traders — Android Debug APK (+ optional Release AAB)
+#
+# Builds a native Android shell (Capacitor) around the EXISTING production
+# site. The Android app contains no business logic: the WebView loads
+# https://maharani-mart-mahakali108s-projects.vercel.app, which is the same
+# Next.js deployment that serves the web app, backed by the same Supabase
+# project with the same auth and the same RLS policies. Nothing here touches
+# Supabase, the database schema, RLS, pricing, GST, orders, inventory or any
+# other Maharani Traders business rule.
+#
+# PIPELINE
+#   1.  Checkout
+#   2.  Node 22 LTS
+#   3.  pnpm (via corepack, version pinned by package.json#packageManager)
+#   4.  Install dependencies (frozen lockfile)
+#   5.  Web quality gates: typecheck, lint, unit tests
+#   6.  Build the Next.js application (proves the web app still builds)
+#   7.  Capacitor: add platform + sync
+#   8.  Validate Android resource directory names
+#   9.  Install Android SDK platform 34 / build-tools 34.0.0
+#   10. Build the Debug APK
+#   11. Verify the APK exists
+#   12. Verify the APK package ID (`aapt` badging)
+#   13. Verify the APK application label
+#   14. Verify the APK version
+#   15. Upload the APK as a GitHub Actions artifact
+#   16. Build the Release AAB ONLY when real signing credentials exist
+#
+# SIGNING
+#   Debug builds are signed by Gradle's own auto-generated debug keystore
+#   (created fresh on the runner, never committed, never a secret), so this
+#   workflow always works with no configuration.
+#
+#   Release AAB signing requires the owner's upload keystore/secrets. When
+#   the four ANDROID_KEYSTORE_* / ANDROID_KEY_* secrets are NOT configured,
+#   the release steps are SKIPPED with a visible notice and the Debug APK is
+#   still produced and uploaded. This workflow NEVER generates, guesses or
+#   fabricates a signing key, keystore or credential.
+#
+#   Required (optional) repository secrets for the AAB step — see
+#   docs/android.md § "Release signing":
+#     ANDROID_KEYSTORE_BASE64     base64 of the .keystore/.jks file
+#     ANDROID_KEYSTORE_PASSWORD   keystore password
+#     ANDROID_KEY_ALIAS           upload key alias
+#     ANDROID_KEY_PASSWORD        upload key password
+# =============================================================================
+name: Android Debug APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'www/**'
+      - 'resources/**'
+      - 'scripts/**'
+      - '.github/workflows/android-apk.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'www/**'
+      - 'resources/**'
+      - 'scripts/**'
+      - '.github/workflows/android-apk.yml'
+
+# Least privilege: this workflow only needs to read the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    name: Build Android Debug APK
+    runs-on: ubuntu-latest
+    steps:
+      # ---------------------------------------------------------------- 1
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # ---------------------------------------------------------------- 2
+      - name: Set up Node.js 22 LTS
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # ---------------------------------------------------------------- 3
+      - name: Enable pnpm via corepack
+        run: |
+          corepack enable
+          # package.json#packageManager is "pnpm@<version>"; corepack needs the
+          # "pnpm@" prefix — a bare version is rejected with
+          # "Unsupported package manager specification".
+          corepack prepare "pnpm@$(node -p "require('./package.json').packageManager.split('@').pop()")" --activate
+          pnpm --version
+
+      # ---------------------------------------------------------------- 4
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ---------------------------------------------------------------- 5
+      - name: Web checks (typecheck, lint, unit tests)
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          pnpm typecheck
+          pnpm lint
+          pnpm test
+
+      # ---------------------------------------------------------------- 6
+      - name: Build the Next.js application
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: pnpm build
+
+      # ---------------------------------------------------------------- 7
+      # The android/ project is generated fresh on every run, reading
+      # appId / appName / server.url from capacitor.config.ts. It is
+      # intentionally NOT committed (see .gitignore) so a stale or
+      # hand-edited copy can never be built.
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor config into the native project
+        run: npx cap sync android
+        env:
+          # Monotonically increasing versionCode (Play Store requirement).
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+
+      # ---------------------------------------------------------------- 8
+      # Second line of defence: the same validator the sync hook uses
+      # (scripts/android-resource-validation.mjs) is re-run here because the
+      # Capacitor CLI does not fail the sync when a task hook exits non-zero.
+      # This is the step that actually gates the build on resource names such
+      # as drawable-port-night-hdpi (never drawable-night-port-hdpi).
+      - name: Validate Android resource directories
+        run: node scripts/android-resource-validation.mjs
+
+      # ---------------------------------------------------------------- 9
+      - name: Set up JDK 17 (required by Android Gradle Plugin 8.2.1)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager --list_installed | grep -E "platforms;android-34|build-tools;34.0.0"
+
+      # --------------------------------------------------------------- 10
+      - name: Grant execute permission to Gradle wrapper
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # --------------------------------------------------------------- 11
+      - name: Locate APK
+        id: apk
+        run: |
+          set -euo pipefail
+          APK_PATH=$(find android/app/build/outputs/apk/debug -maxdepth 2 -name '*.apk' | head -n 1)
+          echo "Found APK: $APK_PATH"
+          test -n "$APK_PATH"
+          test -s "$APK_PATH"
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "size=$(stat -c%s "$APK_PATH")" >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------- 12, 13, 14
+      - name: Verify APK identity (package id, app name, version)
+        run: |
+          set -euo pipefail
+          APK_PATH="${{ steps.apk.outputs.path }}"
+          echo "Verifying APK: $APK_PATH (${{ steps.apk.outputs.size }} bytes)"
+
+          # Expected values read from the project itself — single source of truth.
+          EXPECTED_ID=$(grep -oP "(?<=appId: ')[^']+" capacitor.config.ts | head -n 1)
+          EXPECTED_NAME=$(grep -oP "(?<=appName: ')[^']+" capacitor.config.ts | head -n 1)
+          EXPECTED_VERSION=$(node -p "require('./package.json').version")
+          echo "Expected: id=$EXPECTED_ID name=$EXPECTED_NAME version=$EXPECTED_VERSION"
+          test -n "$EXPECTED_ID" && test -n "$EXPECTED_NAME" && test -n "$EXPECTED_VERSION"
+
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          AAPT="$(find "$SDK/build-tools" -name aapt -type f 2>/dev/null | sort -V | tail -n 1)"
+          AAPT2="$(find "$SDK/build-tools" -name aapt2 -type f 2>/dev/null | sort -V | tail -n 1)"
+          if [ -n "$AAPT" ]; then
+            echo "Using aapt: $AAPT"
+            "$AAPT" dump badging "$APK_PATH" > /tmp/badging.txt
+          elif [ -n "$AAPT2" ]; then
+            echo "Using aapt2: $AAPT2"
+            "$AAPT2" dump badging "$APK_PATH" > /tmp/badging.txt
+          else
+            echo "ERROR: no aapt/aapt2 found under $SDK/build-tools" >&2
+            exit 1
+          fi
+          head -n 5 /tmp/badging.txt
+
+          echo "--- package id ---"
+          grep -E "^package: name='$EXPECTED_ID' " /tmp/badging.txt
+          echo "--- application label ---"
+          grep -F "application-label:'$EXPECTED_NAME'" /tmp/badging.txt
+          echo "--- version ---"
+          grep -E "^package: name='$EXPECTED_ID' versionCode='[0-9]+' versionName='$EXPECTED_VERSION'" /tmp/badging.txt
+
+          {
+            echo "### Android Debug APK"
+            echo ""
+            echo "- Package ID: \`$EXPECTED_ID\` ✅"
+            echo "- App name: \`$EXPECTED_NAME\` ✅"
+            echo "- Version: \`$EXPECTED_VERSION\` ✅"
+            echo "- Size: ${{ steps.apk.outputs.size }} bytes"
+            echo "- Path: \`${APK_PATH}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "APK identity verified."
+
+      # --------------------------------------------------------------- 15
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maharani-traders-debug-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      # --------------------------------------------------------------- 16
+      - name: Detect release signing configuration
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] \
+             && [ -n "${ANDROID_KEY_ALIAS:-}" ] && [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Release signing secrets detected — the Release AAB will be built and signed."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release AAB signing requires the owner's upload keystore/secrets. They are not configured, so the Release AAB step is skipped. The Debug APK above is unaffected."
+            {
+              echo "### Release AAB"
+              echo ""
+              echo "⏭️ Skipped — release signing secrets are not configured."
+              echo ""
+              echo "Release AAB signing requires the owner's upload keystore/secrets."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Materialise upload keystore (never committed)
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/maharanitraders-upload.keystore"
+          test -s "$RUNNER_TEMP/maharanitraders-upload.keystore"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/maharanitraders-upload.keystore" >> "$GITHUB_ENV"
+
+      # The signing wiring is created HERE, inside the AAB-only path, so a
+      # Debug build — the one that runs on every push — is built from exactly
+      # the project `npx cap sync` produced, with no extra Gradle files.
+      - name: Wire release signing (only when credentials exist)
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          cat > android/signing.gradle <<'GRADLE'
+          // GENERATED by the Android workflow — never committed (android/ is
+          // gitignored). Reads the upload keystore + passwords from
+          // environment variables ONLY, so no credential is ever stored in
+          // the repository.
+          android {
+              signingConfigs {
+                  release {
+                      def keystoreFile = System.getenv('ANDROID_KEYSTORE_FILE')
+                      if (keystoreFile != null && keystoreFile != '') {
+                          storeFile file(keystoreFile)
+                          storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                          keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                          keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+                          // minSdk is 22, so JAR (v1) signing must stay on for
+                          // pre-Android 7 devices; v2 on top of it.
+                          enableV1Signing true
+                          enableV2Signing true
+                      }
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          GRADLE
+          if ! grep -q 'signing.gradle' android/app/build.gradle; then
+            printf '\napply from: "../signing.gradle"\n' >> android/app/build.gradle
+          fi
+          echo "Release signing wired from environment variables."
+
+      - name: Build release AAB
+        if: steps.signing.outputs.enabled == 'true'
+        # ANDROID_KEYSTORE_FILE arrives via $GITHUB_ENV from the
+        # "Materialise upload keystore" step; the other three come from secrets.
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Locate and verify AAB
+        id: aab
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          AAB_PATH=$(find android/app/build/outputs/bundle/release -maxdepth 2 -name '*.aab' | head -n 1)
+          echo "Found AAB: $AAB_PATH"
+          test -n "$AAB_PATH"
+          test -s "$AAB_PATH"
+          echo "path=$AAB_PATH" >> "$GITHUB_OUTPUT"
+          echo "size=$(stat -c%s "$AAB_PATH")" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Android Release AAB"
+            echo ""
+            echo "- Package ID: $(grep -oP "(?<=appId: ')[^']+" capacitor.config.ts | head -n 1)"
+            echo "- Version: $(node -p "require('./package.json').version")"
+            echo "- Size: $(stat -c%s "$AAB_PATH") bytes"
+            echo "- Path: \`${AAB_PATH}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release AAB artifact
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: maharani-traders-release-aab
+          path: ${{ steps.aab.outputs.path }}
+          if-no-files-found: error
+
+      - name: Remove keystore from runner
+        if: always() && steps.signing.outputs.enabled == 'true'
+        run: rm -f "$RUNNER_TEMP/maharanitraders-upload.keystore"
