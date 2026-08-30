@@ -23,15 +23,30 @@ Full system design lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 ## 1. Supabase project setup
 
 1. Create a new project at [supabase.com](https://supabase.com).
-2. In the SQL Editor, run the migrations **in order**:
+2. In the SQL Editor, run the migrations **in order** — every file in
+   `supabase/migrations/` (currently `0001`–`0021`), not just the first few.
+   The ones that matter most:
    - `supabase/migrations/0001_init.sql` — full schema, enums, RLS policies (no seed data)
    - `supabase/migrations/0002_auth_trigger.sql` — auto-creates `profiles` rows on signup, adds retailer self-registration policy
    - `supabase/migrations/0003_storage_buckets.sql` — creates the `product-images`, `banners`, `avatars`, `brand-logos` storage buckets with RLS
+   - `supabase/migrations/0006_retailer_documents.sql` — private `retailer-documents` bucket
+   - `supabase/migrations/0013_rls_and_storage_hardening.sql` — storage policy hardening
+   - `supabase/migrations/0016_storage_paths_category_bucket.sql` — creates the public `category-images` bucket (category image uploads fail with “Bucket not found” without it)
+   - `supabase/migrations/0021_ensure_category_images_bucket.sql` — idempotent ensure-safe re-check of `category-images`; applies cleanly whether or not 0016 ran
+
+   Skipping any of these leaves the deployed schema behind the code — e.g.
+   applying only 0001–0003 is exactly why a category image upload can fail with
+   `Upload failed: Bucket not found`.
 
    Or, if you use the Supabase CLI locally:
    ```bash
    supabase link --project-ref <your-project-ref>
    supabase db push
+   ```
+
+   Verify storage end-to-end against the project you just migrated:
+   ```bash
+   node scripts/verify-storage-bucket.mjs   # bucket check + upload/read/delete round-trip
    ```
 
 3. **Auth settings** (Authentication → Settings):

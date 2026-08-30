@@ -10,9 +10,12 @@ Buckets are created by the migrations:
 - `supabase/migrations/0006_retailer_documents.sql`
 - `supabase/migrations/0013_rls_and_storage_hardening.sql`
 - `supabase/migrations/0016_storage_paths_category_bucket.sql` (adds `category-images`, aligns object paths)
+- `supabase/migrations/0021_ensure_category_images_bucket.sql` (idempotent ensure-safe re-check of `category-images`: bucket row + the same minimum policies; converges a project where 0016 was skipped or partially applied, and never creates a second bucket)
 
 Every upload flows through `lib/media` → `lib/media/supabase.ts` →
 Supabase Storage, and the browser never chooses a bucket or object path.
+Migrations are NOT applied automatically by deploys — see
+`docs/deployment_guide.md` §1 and §6.
 
 ## Inventory
 
@@ -36,3 +39,21 @@ Supabase Storage, and the browser never chooses a bucket or object path.
   `resolveDocumentUrl()`.
 
 No `appwrite://…`, `firebase://…` or other external reference is ever written.
+
+## Troubleshooting — `Upload failed: Bucket not found`
+
+`lib/media/supabase.ts` surfaces raw Storage API errors as
+`Upload failed: <message>`. Supabase answers an upload to an unknown bucket
+with exactly `Bucket not found`, which means the bucket row is missing from
+**the project the app's env vars point at** (a skipped storage migration or a
+mismatched project), never from a wrong name in code: the bucket id here is
+the single canonical one in `MEDIA_KIND_CONFIG` (`lib/media/types.ts`), which
+matches the migrations above byte-for-byte.
+
+- Verify: `select id from storage.buckets where id = 'category-images';`
+- Fix: apply `supabase/migrations/0021_ensure_category_images_bucket.sql`
+  (`supabase db push` or the SQL editor). It is idempotent and duplicate-safe.
+- Prove it works for real: `node scripts/verify-storage-bucket.mjs`
+  (server-side env vars; does a throwaway upload → public read → delete).
+- Do not create a differently-named replacement bucket; one canonical name
+  per media kind. See `docs/deployment_guide.md` §6.
