@@ -42,6 +42,7 @@ export function parseSupabasePublicUrl(url: string): { bucket: string; path: str
  * - any other absolute/relative URL → `{ provider: 'external-url' }`
  * - an old `appwrite://…` ref  → `null` (Appwrite is no longer in use; the value
  *   renders as a placeholder rather than crashing)
+ * - a `blob:` / `data:` URL    → `null` (temporary, never a valid stored reference)
  * - empty / non-string         → `null`
  */
 export function parseMediaRef(value: string | null | undefined): ParsedMediaRef | null {
@@ -50,6 +51,12 @@ export function parseMediaRef(value: string | null | undefined): ParsedMediaRef 
   if (trimmed === '') return null;
 
   if (trimmed.startsWith(APPWRITE_REF_PREFIX)) return null;
+
+  // Session-scoped previews must never be treated as stored references: a
+  // `blob:` object URL dies on reload and a `data:` URL bloats the column.
+  // The upload flow always returns a permanent Supabase reference, so anything
+  // shaped like this is bad data — render a placeholder and skip cleanup.
+  if (/^(blob|data):/i.test(trimmed)) return null;
 
   if (/^https?:\/\//i.test(trimmed)) {
     const supabase = parseSupabasePublicUrl(trimmed);

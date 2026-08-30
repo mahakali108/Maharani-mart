@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/server';
 
 import { buildMediaPath, newFileId } from './paths';
 import { MEDIA_KIND_CONFIG, type MediaKind, type UploadedMedia } from './types';
+import { describeStorageUploadError } from './upload-error';
 import type { ValidatedFile } from './validate';
 
 export interface SupabaseUploadInput {
@@ -57,7 +58,10 @@ export async function uploadToSupabaseStorage(
   );
 
   if (error) {
-    return { ok: false, error: `Upload failed: ${error.message}` };
+    // Turns "Bucket not found" (the bucket row was never created in this
+    // project — a missing migration, not a code bug) into an actionable,
+    // non-secret message; every other Storage error keeps its reason.
+    return { ok: false, error: describeStorageUploadError(config.bucket, error) };
   }
 
   let url: string | null = null;

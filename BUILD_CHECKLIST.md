@@ -13,7 +13,7 @@ Run through this before every deploy to `main`.
 
 ## Supabase
 
-- [ ] All three migrations (`0001_init.sql`, `0002_auth_trigger.sql`, `0003_storage_buckets.sql`) applied, in order, to the target project
+- [ ] Every migration in `supabase/migrations/` applied, in order (currently `0001`–`0021`), to the target project — including the storage buckets (`0003`, `0006`, `0016`/`0021`); `node scripts/verify-storage-bucket.mjs` confirms `category-images` exists and round-trips a real upload
 - [ ] `select * from areas;` — confirm it's empty (no seed data) unless you've deliberately added real areas
 - [ ] Auth → Settings → Site URL and Redirect URLs point at the correct environment
 - [ ] At least one `super_admin` profile exists (see README §1.4) or you will be locked out of `/admin`
@@ -37,6 +37,6 @@ Run through this before every deploy to `main`.
 
 ## Explicitly confirm — zero fabricated data
 
-- [ ] No table in Supabase contains rows inserted by a migration (all three migration files contain schema/policy DDL only — no `insert into` statements outside of `storage.buckets`, which are configuration, not business data)
+- [ ] No table in Supabase contains rows inserted by a migration (the migration files contain schema/policy DDL only — no `insert into` statements outside of `storage.buckets`, which are configuration, not business data)
 - [ ] No component renders a hardcoded product, order, retailer, or report number
 - [ ] Every empty list in the UI shows a designed empty state, not a crash or infinite spinner
