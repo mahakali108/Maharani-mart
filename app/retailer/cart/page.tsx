@@ -12,6 +12,8 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { caseLineBreakdown } from '@/lib/retailer/case-pricing';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CartItemRow } from '@/components/retailer/cart-item-row';
 import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
 import { CartCheckoutBar } from '@/components/retailer/cart-checkout-bar';
@@ -33,6 +35,8 @@ interface CartItemDetail {
     pack_sku_code: string;
     base_price: number;
     ptr: number | null;
+    case_price: number;
+    units_per_case: number;
     mrp: number | null;
     moq: number;
     is_active: boolean;
@@ -67,7 +71,7 @@ export default async function CartPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, pack_sku_code, base_price, ptr, mrp, moq, is_active ), products ( name, sku_code, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, units_per_case, mrp, moq, is_active ), products ( name, sku_code, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -116,6 +120,10 @@ export default async function CartPage() {
 
   const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
   const overrideByProduct = await getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null);
+  const tierMap = await loadPackTiers(
+    supabase,
+    items.map((item) => item.pack_id)
+  );
 
   let subtotal = 0;
   let gstTotal = 0;
@@ -124,14 +132,20 @@ export default async function CartPage() {
   const lines = items.map((item) => {
     const pack = item.product_packs;
     const product = item.products;
-    const unitPrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
-    const lineSubtotal = unitPrice * item.quantity;
     const gstPercent = product?.gst_percent ?? 0;
-    const lineGst = (lineSubtotal * gstPercent) / 100;
-    subtotal += lineSubtotal;
-    gstTotal += lineGst;
-    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + lineGst);
-    savings += calcSavings(pack?.mrp, unitPrice, item.quantity);
+    const casePrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
+    const breakdown = caseLineBreakdown({
+      casePrice,
+      unitsPerCase: pack?.units_per_case ?? 1,
+      tiers: pack ? tierMap.get(pack.id) ?? [] : [],
+      packQuantity: item.quantity,
+      gstPercent,
+    });
+    const unitPrice = breakdown.piecePrice * (pack?.units_per_case ?? 1); // per case, GST-inclusive
+    subtotal += breakdown.subtotal;
+    gstTotal += breakdown.gst;
+    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + breakdown.gst);
+    savings += calcSavings(pack?.mrp, breakdown.piecePrice, breakdown.pieces);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
 
     return {
@@ -147,6 +161,9 @@ export default async function CartPage() {
       gstPercent,
       moq: pack?.moq ?? 1,
       mrp: pack?.mrp,
+      unitsPerCase: pack?.units_per_case ?? 1,
+      casePrice,
+      tiers: pack ? tierMap.get(pack.id) ?? [] : [],
       isUnavailable: !pack?.is_active || !product?.is_active,
       isFavorite: favoriteIds.has(item.product_id),
     };

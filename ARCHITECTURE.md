@@ -97,8 +97,8 @@ An explainable, statistical demand-forecasting engine (`lib/ai/forecast/`) reads
 - Live Inventory view subscribes to Supabase Realtime on `stock_movements`.
 
 ### 4.5 Pricing Engine
-- `price_lists` table with `scope` enum (`base`, `area`, `retailer`, `scheme`, `festival`) and `priority` for override resolution, `valid_from`/`valid_to` for festival windows.
-- `get_effective_price()` Postgres function resolves the correct price at order time — pricing logic lives in the DB, not scattered across frontend code, so it can't drift.
+- **Case-based pricing (primary).** The CASE is the selling unit. Every sellable pack carries a fixed, GST-INCLUSIVE `case_price` — the single source of truth. The per-piece selling price is always derived (`case_price / units_per_case`) and is never entered or stored manually. Quantity slabs live in `product_pricing_tiers` (half-open `[min_quantity, max_quantity)` ranges in PIECES, each with a GST-inclusive `price_per_piece`); the matching tier with the largest `min_quantity` wins, so bulk discounts apply automatically as quantity grows. The arithmetic lives in the pure module `lib/retailer/case-pricing.ts`, reused by the authoritative order quote (`lib/orders/quote-order.ts`), cart, checkout and the client pack/cart previews — no client-supplied price is ever trusted.
+- **GST-inclusive end to end.** Selling prices already include GST. GST is *extracted* (`price * gst / (100 + gst)`) for the invoice and order `gst_total`; it is never added on top of a displayed price. The legacy `price_lists` table (`scope` enum: `base`/`area`/`retailer`/`scheme`/`festival`, `priority`, `valid_from`/`valid_to`) remains and its resolved override is applied as a case-price override for the product. The legacy `ptr`/`wholesale_price`/`base_price` columns on `product_packs` are kept for backward compatibility and backfilled into `case_price` by migration `0022_case_based_pricing.sql`.
 
 ### 4.6 Reports
 - Sales, Profit (needs `products.cost_price`, admin-only visibility), Staff Performance, Area Performance — all SQL views over real `orders`/`order_items`/`visits`/`attendance`. No canned report data.

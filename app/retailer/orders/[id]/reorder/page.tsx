@@ -28,6 +28,7 @@ interface ReorderItemRow {
     pack_name: string;
     base_price: number;
     ptr: number | null;
+    case_price: number;
     moq: number;
     is_active: boolean;
   } | null;
@@ -49,7 +50,7 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<{ area_id: string }>(),
     supabase
       .from('order_items')
-      .select('id, pack_id, quantity, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, moq, is_active )')
+      .select('id, pack_id, quantity, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, case_price, moq, is_active )')
       .eq('order_id', order.id),
   ]);
 

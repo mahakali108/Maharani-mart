@@ -18,6 +18,8 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { caseLineBreakdown } from '@/lib/retailer/case-pricing';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { PackSelector } from '@/components/retailer/pack-selector';
 import { FavoriteToggle } from '@/components/retailer/favorite-toggle';
 import { ProductGallery } from '@/components/retailer/product-gallery';
@@ -51,6 +53,7 @@ interface PackRow {
   units_per_case: number;
   base_price: number;
   ptr: number | null;
+  case_price: number;
   mrp: number | null;
   moq: number;
 }
@@ -65,6 +68,8 @@ interface CartItemRow {
     pack_name: string;
     base_price: number;
     ptr: number | null;
+    case_price: number;
+    units_per_case: number;
     mrp: number | null;
     moq: number;
     is_active: boolean;
@@ -102,7 +107,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       .maybeSingle<ProductDetailRow>(),
     supabase
       .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, ptr, mrp, moq')
+      .select('id, pack_name, pack_sku_code, units_per_case, base_price, ptr, case_price, mrp, moq')
       .eq('product_id', params.id)
       .eq('is_active', true)
       .order('sort_order')
@@ -111,7 +116,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     supabase
       .from('cart_items')
       .select(
-        'id, pack_id, quantity, product_id, product_packs ( id, pack_name, base_price, ptr, mrp, moq, is_active ), products ( gst_percent, is_active )'
+        'id, pack_id, quantity, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, is_active ), products ( gst_percent, is_active )'
       )
       .eq('retailer_id', user.id)
       .returns<CartItemRow[]>(),
@@ -149,6 +154,12 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     retailer?.area_id ?? null
   );
 
+  const rawPacks = (packData ?? []) as PackRow[];
+  const packTiers = await loadPackTiers(
+    supabase,
+    rawPacks.map((pack) => pack.id)
+  );
+
   let cartSubtotal = 0;
   let cartGstTotal = 0;
   let cartSavingsTotal = 0;
@@ -161,12 +172,17 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     const p = item.product_packs;
     const pr = item.products;
     if (p && pr) {
-      const uPrice = resolvePackPrice(p, cartOverrides.get(item.product_id) ?? null);
-      const lineSub = uPrice * item.quantity;
-      const lineGst = (lineSub * (pr.gst_percent ?? 0)) / 100;
-      cartSubtotal += lineSub;
-      cartGstTotal += lineGst;
-      cartSavingsTotal += calcSavings(p.mrp, uPrice, item.quantity);
+      const casePrice = resolvePackPrice(p, cartOverrides.get(item.product_id) ?? null);
+      const breakdown = caseLineBreakdown({
+        casePrice,
+        unitsPerCase: p.units_per_case ?? 1,
+        tiers: packTiers.get(item.pack_id) ?? [],
+        packQuantity: item.quantity,
+        gstPercent: pr.gst_percent ?? 0,
+      });
+      cartSubtotal += breakdown.subtotal;
+      cartGstTotal += breakdown.gst;
+      cartSavingsTotal += calcSavings(p.mrp, breakdown.piecePrice, breakdown.pieces);
     }
   }
 
@@ -180,13 +196,15 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         }
       : null;
 
-  // Map product packs with authoritative prices and existing cart items
-  const packs = (packData ?? []).map((pack) => {
+  // Map product packs with authoritative case prices, tiers and existing cart items
+  const packs = rawPacks.map((pack) => {
     const effectivePrice = resolvePackPrice(pack, override);
     const cartInfo = cartItemByPackId.get(pack.id);
     return {
       ...pack,
       effectivePrice,
+      casePrice: effectivePrice,
+      tiers: packTiers.get(pack.id) ?? [],
       initialQuantity: cartInfo?.quantity ?? 0,
       cartItemId: cartInfo?.id ?? null,
     };
@@ -195,8 +213,13 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
   const lowestPrice = packs.length > 0 ? Math.min(...packs.map((pack) => pack.effectivePrice)) : null;
   const startingPack = packs.find((pack) => pack.effectivePrice === lowestPrice) ?? packs[0];
-  const discount = calcDiscountPercent(startingPack?.mrp, lowestPrice);
-  const saveAmount = calcSavings(startingPack?.mrp, lowestPrice);
+  // MRP is per piece; effectivePrice is the GST-inclusive case price — compare on a per-piece basis.
+  const startingPiecePrice =
+    lowestPrice !== null && (startingPack?.units_per_case ?? 1) > 0
+      ? lowestPrice / (startingPack?.units_per_case ?? 1)
+      : lowestPrice;
+  const discount = calcDiscountPercent(startingPack?.mrp, startingPiecePrice);
+  const saveAmount = calcSavings(startingPack?.mrp, startingPiecePrice);
   const schemes = (schemeRows ?? [])
     .map((row) => row.schemes)
     .filter((scheme): scheme is NonNullable<SchemeLinkRow['schemes']> => !!scheme && scheme.is_active);
@@ -324,12 +347,17 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             {/* 4. MRP & WHOLESALE PRICE OVERVIEW */}
             {lowestPrice !== null ? (
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Wholesale price from</p>
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Case price from</p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
                   <p className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
                     {formatInr(lowestPrice)}
                   </p>
-                  {startingPack?.mrp && startingPack.mrp > lowestPrice ? (
+                  {startingPack && startingPack.units_per_case > 1 ? (
+                    <p className="text-sm font-semibold text-slate-500 sm:text-base">
+                      {formatInr(lowestPrice / startingPack.units_per_case)}/pc · {startingPack.units_per_case} pcs
+                    </p>
+                  ) : null}
+                  {startingPack?.mrp && startingPiecePrice != null && startingPack.mrp > startingPiecePrice ? (
                     <p className="text-sm font-medium text-slate-400 line-through sm:text-base">
                       MRP {formatInr(startingPack.mrp)}
                     </p>
@@ -346,7 +374,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   </p>
                 ) : null}
                 <p className="mt-1 text-[10px] text-slate-500">
-                  GST {product.gst_percent}% applied at checkout · Retailer-specific wholesale discount applied
+                  GST {product.gst_percent}% included in the case price · Quantity-based bulk discounts apply automatically
                 </p>
               </div>
             ) : null}

@@ -21,11 +21,11 @@ const productSchema = z.object({
   brandId: z.string().uuid().optional().or(z.literal('')),
   categoryId: z.string().uuid().optional().or(z.literal('')),
   unit: z.string().min(1, 'Enter a unit (e.g. carton, box, pcs).'),
-  unitsPerCase: z.coerce.number().int().min(1).default(1),
-  basePrice: z.coerce.number().min(0, 'Enter a valid base price.'),
+  unitsPerCase: z.coerce.number().int().min(1, 'Units per case must be at least 1.').default(1),
+  basePrice: z.coerce.number().min(0, 'Enter a valid MRP.'),
   costPrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  casePrice: z.coerce.number().min(0, 'Enter a valid case selling price.'),
   gstPercent: z.coerce.number().min(0).max(100).default(0),
-  hsnCode: z.string().optional(),
   barcode: z.string().optional(),
   leadTimeDays: z.coerce.number().int().min(0).default(2),
   isNewLaunch: z.coerce.boolean().default(false),
@@ -41,12 +41,92 @@ function parseProductForm(formData: FormData) {
     unitsPerCase: formData.get('unitsPerCase') || 1,
     basePrice: formData.get('basePrice'),
     costPrice: formData.get('costPrice') || '',
+    casePrice: formData.get('casePrice'),
     gstPercent: formData.get('gstPercent') || 0,
-    hsnCode: formData.get('hsnCode'),
     barcode: formData.get('barcode'),
     leadTimeDays: formData.get('leadTimeDays') || 2,
     isNewLaunch: formData.get('isNewLaunch') === 'on',
   });
+}
+
+/**
+ * Seeds a default case-priced pack for a product, together with its default
+ * and case quantity tiers, so a product created through the Add Product form
+ * is immediately orderable at the configured case price. The default pack's
+ * SKU mirrors the product SKU so updates stay linked.
+ */
+async function seedDefaultPackForProduct(
+  supabase: ReturnType<typeof createClient>,
+  productId: string,
+  user: { id: string },
+  d: {
+    skuCode: string;
+    unit: string;
+    unitsPerCase: number;
+    basePrice: number;
+    costPrice: number | null;
+    casePrice: number;
+    barcode: string | null;
+  }
+) {
+  const piecePrice = Math.round((d.casePrice / Math.max(1, d.unitsPerCase)) * 100) / 100;
+  const { data: pack, error } = await supabase
+    .from('product_packs')
+    .insert({
+      product_id: productId,
+      pack_name: d.unit || 'Default',
+      pack_sku_code: d.skuCode,
+      units_per_case: d.unitsPerCase,
+      base_price: d.basePrice,
+      mrp: d.basePrice,
+      cost_price: d.costPrice,
+      case_price: d.casePrice,
+      barcode: d.barcode,
+      moq: 1,
+      created_by: user.id,
+    } as unknown as never)
+    .select('id')
+    .single<{ id: string }>();
+  if (error || !pack) return;
+
+  // Quantity tiers (in PIECES), half-open [min, max):
+  //  - default: [1, units)  — normal applicable pricing below a full case
+  //  - case:    [units, ∞)  — at a full case the fixed case price applies
+  // For single-piece packs (units=1) one default tier [1, ∞) is enough.
+  const tiers =
+    d.unitsPerCase > 1
+      ? [
+          {
+            product_pack_id: pack.id,
+            min_quantity: 1,
+            max_quantity: d.unitsPerCase,
+            price_per_piece: piecePrice,
+            rule_type: 'default' as const,
+            label: 'Default',
+            created_by: user.id,
+          },
+          {
+            product_pack_id: pack.id,
+            min_quantity: d.unitsPerCase,
+            max_quantity: null,
+            price_per_piece: piecePrice,
+            rule_type: 'case' as const,
+            label: 'Case price',
+            created_by: user.id,
+          },
+        ]
+      : [
+          {
+            product_pack_id: pack.id,
+            min_quantity: 1,
+            max_quantity: null,
+            price_per_piece: piecePrice,
+            rule_type: 'default' as const,
+            label: 'Default',
+            created_by: user.id,
+          },
+        ];
+  await supabase.from('product_pricing_tiers').insert(tiers as unknown as never);
 }
 
 export async function createProductAction(
@@ -62,6 +142,7 @@ export async function createProductAction(
   const d = parsed.data;
 
   const supabase = createClient();
+  const cost = d.costPrice === '' ? null : Number(d.costPrice);
   const payload: ProductInsert = {
     sku_code: d.skuCode,
     name: d.name,
@@ -70,9 +151,8 @@ export async function createProductAction(
     unit: d.unit,
     units_per_case: d.unitsPerCase,
     base_price: d.basePrice,
-    cost_price: d.costPrice === '' ? null : Number(d.costPrice),
+    cost_price: cost,
     gst_percent: d.gstPercent,
-    hsn_code: d.hsnCode || null,
     barcode: d.barcode || null,
     lead_time_days: d.leadTimeDays,
     is_new_launch: d.isNewLaunch,
@@ -93,6 +173,18 @@ export async function createProductAction(
     };
   }
 
+  // Seed a default case-priced pack (with quantity tiers) so the product is
+  // immediately orderable at the configured case price.
+  await seedDefaultPackForProduct(supabase, data.id, user, {
+    skuCode: d.skuCode,
+    unit: d.unit,
+    unitsPerCase: d.unitsPerCase,
+    basePrice: d.basePrice,
+    costPrice: cost,
+    casePrice: d.casePrice,
+    barcode: d.barcode || null,
+  });
+
   revalidatePath('/admin/products');
   redirect(`/admin/products/${data.id}`);
 }
@@ -111,6 +203,7 @@ export async function updateProductAction(
   const d = parsed.data;
 
   const supabase = createClient();
+  const cost = d.costPrice === '' ? null : Number(d.costPrice);
   const payload: ProductUpdate = {
     sku_code: d.skuCode,
     name: d.name,
@@ -119,9 +212,8 @@ export async function updateProductAction(
     unit: d.unit,
     units_per_case: d.unitsPerCase,
     base_price: d.basePrice,
-    cost_price: d.costPrice === '' ? null : Number(d.costPrice),
+    cost_price: cost,
     gst_percent: d.gstPercent,
-    hsn_code: d.hsnCode || null,
     barcode: d.barcode || null,
     lead_time_days: d.leadTimeDays,
     is_new_launch: d.isNewLaunch,
@@ -133,6 +225,36 @@ export async function updateProductAction(
     .eq('id', productId);
 
   if (error) return { error: error.message };
+
+  // Keep the auto-seeded default pack (pack SKU == product SKU) in sync with
+  // the case-based pricing fields so editing the product updates the orderable
+  // case price / units / MRP / cost / barcode, and its default tier price.
+  const { data: defaultPack } = await supabase
+    .from('product_packs')
+    .select('id')
+    .eq('product_id', productId)
+    .eq('pack_sku_code', d.skuCode)
+    .maybeSingle<{ id: string }>();
+  if (defaultPack) {
+    const piecePrice = Math.round((d.casePrice / Math.max(1, d.unitsPerCase)) * 100) / 100;
+    await supabase
+      .from('product_packs')
+      .update({
+        units_per_case: d.unitsPerCase,
+        base_price: d.basePrice,
+        mrp: d.basePrice,
+        cost_price: cost,
+        case_price: d.casePrice,
+        barcode: d.barcode || null,
+      } as unknown as never)
+      .eq('id', defaultPack.id);
+    // Refresh the default/case tier prices to stay anchored to the case price.
+    await supabase
+      .from('product_pricing_tiers')
+      .update({ price_per_piece: piecePrice } as unknown as never)
+      .eq('product_pack_id', defaultPack.id)
+      .in('rule_type', ['default', 'case']);
+  }
 
   revalidatePath('/admin/products');
   revalidatePath(`/admin/products/${productId}`);
@@ -215,12 +337,10 @@ export async function reorderProductImageAction(productId: string, imageId: stri
 const packSchema = z.object({
   packName: z.string().min(1, 'Enter a pack name (e.g. "1 Kg", "5 Kg", "6-pack", "Case of 12").'),
   packSkuCode: z.string().min(1, 'Enter a pack SKU code.'),
-  unitsPerCase: z.coerce.number().int().min(1).default(1),
-  basePrice: z.coerce.number().min(0, 'Enter a valid price.'),
+  unitsPerCase: z.coerce.number().int().min(1, 'Units per case must be at least 1.').default(1),
+  mrp: z.coerce.number().min(0, 'Enter a valid MRP.'),
   costPrice: z.coerce.number().min(0).optional().or(z.literal('')),
-  mrp: z.coerce.number().min(0).optional().or(z.literal('')),
-  ptr: z.coerce.number().min(0).optional().or(z.literal('')),
-  wholesalePrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  casePrice: z.coerce.number().min(0, 'Enter a valid case selling price.'),
   moq: z.coerce.number().int().min(1).default(1),
   barcode: z.string().optional(),
 });
@@ -238,11 +358,9 @@ export async function addProductPackAction(
     packName: formData.get('packName'),
     packSkuCode: formData.get('packSkuCode'),
     unitsPerCase: formData.get('unitsPerCase') || 1,
-    basePrice: formData.get('basePrice'),
+    mrp: formData.get('mrp'),
     costPrice: formData.get('costPrice') || '',
-    mrp: formData.get('mrp') || '',
-    ptr: formData.get('ptr') || '',
-    wholesalePrice: formData.get('wholesalePrice') || '',
+    casePrice: formData.get('casePrice'),
     moq: formData.get('moq') || 1,
     barcode: formData.get('barcode'),
   });
@@ -257,21 +375,63 @@ export async function addProductPackAction(
     pack_name: d.packName,
     pack_sku_code: d.packSkuCode,
     units_per_case: d.unitsPerCase,
-    base_price: d.basePrice,
+    base_price: d.mrp,
+    mrp: d.mrp,
     cost_price: d.costPrice === '' ? null : Number(d.costPrice),
-    mrp: d.mrp === '' ? null : Number(d.mrp),
-    ptr: d.ptr === '' ? null : Number(d.ptr),
-    wholesale_price: d.wholesalePrice === '' ? null : Number(d.wholesalePrice),
+    case_price: d.casePrice,
     moq: d.moq,
     barcode: d.barcode || null,
     created_by: user.id,
   };
 
-  const { error } = await supabase.from('product_packs').insert(payload as unknown as never);
+  const { data: pack, error } = await supabase
+    .from('product_packs')
+    .insert(payload as unknown as never)
+    .select('id')
+    .maybeSingle<{ id: string }>();
   if (error) {
     return {
       error: error.message.includes('duplicate') ? 'A pack with this SKU code or barcode already exists.' : error.message,
     };
+  }
+
+  // Seed default + case tiers anchored to the case price.
+  if (pack) {
+    const piecePrice = Math.round((d.casePrice / Math.max(1, d.unitsPerCase)) * 100) / 100;
+    const tiers =
+      d.unitsPerCase > 1
+        ? [
+            {
+              product_pack_id: pack.id,
+              min_quantity: 1,
+              max_quantity: d.unitsPerCase,
+              price_per_piece: piecePrice,
+              rule_type: 'default' as const,
+              label: 'Default',
+              created_by: user.id,
+            },
+            {
+              product_pack_id: pack.id,
+              min_quantity: d.unitsPerCase,
+              max_quantity: null,
+              price_per_piece: piecePrice,
+              rule_type: 'case' as const,
+              label: 'Case price',
+              created_by: user.id,
+            },
+          ]
+        : [
+            {
+              product_pack_id: pack.id,
+              min_quantity: 1,
+              max_quantity: null,
+              price_per_piece: piecePrice,
+              rule_type: 'default' as const,
+              label: 'Default',
+              created_by: user.id,
+            },
+          ];
+    await supabase.from('product_pricing_tiers').insert(tiers as unknown as never);
   }
 
   revalidatePath(`/admin/products/${productId}`);
@@ -345,5 +505,94 @@ export async function movePackAction(productId: string, packId: string, directio
     .returns<SortableRow[]>();
 
   if (data) await swapSortOrder('product_packs', data, packId, direction);
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+// ----------------------------------------------------------------------------
+// Case-based pricing tiers (quantity slabs) for a pack
+// ----------------------------------------------------------------------------
+
+export type TierFormState = { error?: string } | null;
+
+const tierSchema = z.object({
+  minQuantity: z.coerce.number().int().min(1, 'Minimum quantity must be at least 1.'),
+  maxQuantity: z.coerce.number().int().optional().or(z.literal('')),
+  pricePerPiece: z.coerce.number().min(0, 'Price per piece cannot be negative.'),
+  label: z.string().optional(),
+});
+
+export async function addPricingTierAction(
+  packId: string,
+  productId: string,
+  _prevState: TierFormState,
+  formData: FormData
+): Promise<TierFormState> {
+  const user = await requirePermission('products.edit');
+  const parsed = tierSchema.safeParse({
+    minQuantity: formData.get('minQuantity'),
+    maxQuantity: formData.get('maxQuantity') || '',
+    pricePerPiece: formData.get('pricePerPiece'),
+    label: formData.get('label'),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid pricing rule.' };
+  }
+  const d = parsed.data;
+
+  const supabase = createClient();
+  const { error } = await supabase.from('product_pricing_tiers').insert({
+    product_pack_id: packId,
+    min_quantity: d.minQuantity,
+    max_quantity: d.maxQuantity === '' ? null : Number(d.maxQuantity),
+    price_per_piece: d.pricePerPiece,
+    rule_type: 'bulk',
+    label: d.label?.trim() || 'Bulk discount',
+    created_by: user.id,
+  } as unknown as never);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/products/${productId}`);
+  return null;
+}
+
+export async function updatePricingTierAction(
+  tierId: string,
+  productId: string,
+  _prevState: TierFormState,
+  formData: FormData
+): Promise<TierFormState> {
+  await requirePermission('products.edit');
+  const parsed = tierSchema.safeParse({
+    minQuantity: formData.get('minQuantity'),
+    maxQuantity: formData.get('maxQuantity') || '',
+    pricePerPiece: formData.get('pricePerPiece'),
+    label: formData.get('label'),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid pricing rule.' };
+  }
+  const d = parsed.data;
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('product_pricing_tiers')
+    .update({
+      min_quantity: d.minQuantity,
+      max_quantity: d.maxQuantity === '' ? null : Number(d.maxQuantity),
+      price_per_piece: d.pricePerPiece,
+      label: d.label?.trim() || 'Bulk discount',
+    } as unknown as never)
+    .eq('id', tierId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/products/${productId}`);
+  return null;
+}
+
+export async function deletePricingTierAction(tierId: string, productId: string) {
+  await requirePermission('products.edit');
+  const supabase = createClient();
+  const { error } = await supabase.from('product_pricing_tiers').delete().eq('id', tierId);
+  if (error) throw new Error(error.message);
   revalidatePath(`/admin/products/${productId}`);
 }

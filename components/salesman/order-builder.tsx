@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, ImageOff, Loader2, Minus, Plus, Search, ShoppingCart } from 'lucide-react';
 import { createSalesmanOrderAction } from '@/lib/salesman/order-creation-actions';
+import { gstComponentFromInclusive, round2 } from '@/lib/retailer/case-pricing';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -75,11 +76,13 @@ export function SalesmanOrderBuilder({
   for (const [packId, quantity] of selectedLines) {
     const item = packById.get(packId);
     if (!item) continue;
-    const lineSubtotal = item.pack.effectivePrice * quantity;
-    subtotal += lineSubtotal;
-    gstTotal += (lineSubtotal * item.product.gstPercent) / 100;
+    // effectivePrice is the GST-INCLUSIVE case price — GST is extracted, never added.
+    const lineTotal = round2(item.pack.effectivePrice * quantity);
+    const lineGst = gstComponentFromInclusive(lineTotal, item.product.gstPercent);
+    subtotal += round2(lineTotal - lineGst);
+    gstTotal += lineGst;
   }
-  const estimatedTotal = subtotal + gstTotal;
+  const estimatedTotal = round2(subtotal + gstTotal);
   const availableCredit = credit.limit > 0 ? Math.max(0, credit.limit - credit.outstanding) : null;
 
   function setPackQuantity(pack: OrderPack, nextQuantity: number) {

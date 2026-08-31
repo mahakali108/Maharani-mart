@@ -22,7 +22,7 @@ interface ProductDefaults {
   base_price: number;
   cost_price: number | null;
   gst_percent: number;
-  hsn_code: string | null;
+  case_price: number | null;
   barcode: string | null;
   lead_time_days: number;
   is_new_launch: boolean;
@@ -103,7 +103,7 @@ export function ProductForm({
         </div>
 
         <div>
-          <Label htmlFor="basePrice">Base price (₹)</Label>
+          <Label htmlFor="basePrice">MRP (₹) per piece</Label>
           <Input
             id="basePrice"
             name="basePrice"
@@ -111,14 +111,31 @@ export function ProductForm({
             min={0}
             step="0.01"
             defaultValue={defaults?.base_price}
+            placeholder="e.g. 100"
             required
           />
         </div>
         <div>
-          <Label htmlFor="costPrice">Cost price (₹) — admin only, hidden from retailers</Label>
-          <Input id="costPrice" name="costPrice" type="number" min={0} step="0.01" defaultValue={defaults?.cost_price ?? ''} />
+          <Label htmlFor="costPrice">Cost / purchase price (₹) — admin only, hidden from retailers</Label>
+          <Input id="costPrice" name="costPrice" type="number" min={0} step="0.01" defaultValue={defaults?.cost_price ?? ''} placeholder="e.g. 70" />
         </div>
 
+        <div>
+          <Label htmlFor="casePrice">Case selling price (₹) — GST inclusive</Label>
+          <Input
+            id="casePrice"
+            name="casePrice"
+            type="number"
+            min={0}
+            step="0.01"
+            defaultValue={defaults?.case_price ?? ''}
+            placeholder="e.g. 900"
+            required
+          />
+          <p className="mt-1 text-xs text-ink-400">
+            Fixed price of one full case ({defaults?.units_per_case ?? 1} piece{defaults?.units_per_case === 1 ? '' : 's'}). The per-piece selling price is derived automatically.
+          </p>
+        </div>
         <div>
           <Label htmlFor="gstPercent">GST %</Label>
           <Input
@@ -130,10 +147,7 @@ export function ProductForm({
             step="0.01"
             defaultValue={defaults?.gst_percent ?? 0}
           />
-        </div>
-        <div>
-          <Label htmlFor="hsnCode">HSN code</Label>
-          <Input id="hsnCode" name="hsnCode" defaultValue={defaults?.hsn_code ?? ''} placeholder="Optional" />
+          <p className="mt-1 text-xs text-ink-400">GST-inclusive pricing — GST is never added again at checkout.</p>
         </div>
 
         <div>

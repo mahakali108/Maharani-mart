@@ -8,7 +8,7 @@ import { mapProducts, productCards, type ProductRow } from '@/lib/ai/tools/produ
 
 const roles = ['retailer', 'salesman', 'staff', 'admin', 'super_admin'] as const;
 const surfaces = ['retailer', 'salesman', 'staff', 'admin'] as const;
-const PRODUCT_SELECT = 'id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, mrp, moq, is_active, sort_order )';
+const PRODUCT_SELECT = 'id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, mrp, moq, is_active, sort_order )';
 
 async function taxonomy(kind: 'categories' | 'brands', query: string | undefined, context: AIToolContext) {
   let request = context.supabase.from(kind).select('id, name').eq('is_active', true).order('name').limit(30);

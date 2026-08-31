@@ -30,6 +30,7 @@ interface QuickOrderProductRow {
     units_per_case: number;
     base_price: number;
     ptr: number | null;
+    case_price: number;
     mrp: number | null;
     moq: number;
     is_active: boolean;
@@ -62,7 +63,7 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
   if (q) {
     const { data: productRows } = await supabase
       .from('products')
-      .select('id, name, sku_code, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, mrp, moq, is_active )')
+      .select('id, name, sku_code, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, is_active )')
       .eq('is_active', true)
       .or(`name.ilike."%${q}%",sku_code.ilike."%${q}%"`)
       .order('name')
@@ -87,7 +88,7 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
             unitsPerCase: pack.units_per_case,
             moq: pack.moq,
             mrp: pack.mrp,
-            effectivePrice: resolvePackPrice(pack, overrides.get(product.id) ?? null),
+            casePrice: resolvePackPrice(pack, overrides.get(product.id) ?? null),
           }));
         const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
         return {

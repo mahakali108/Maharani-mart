@@ -146,6 +146,9 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             <span>Grand Total</span>
             <span>₹{order.grand_total.toFixed(2)}</span>
           </div>
+          <p className="pt-1 text-right text-[10px] text-ink-400">
+            All prices are GST-inclusive — the GST component above is already contained in the Grand Total.
+          </p>
         </div>
 
         <p className="mt-8 text-center text-xs text-ink-300">
