@@ -12,7 +12,8 @@ export interface QuickOrderPack {
   unitsPerCase: number;
   moq: number;
   mrp: number | null;
-  effectivePrice: number;
+  /** GST-inclusive CASE selling price. */
+  casePrice: number;
 }
 
 export function QuickOrderRow({
@@ -64,10 +65,11 @@ export function QuickOrderRow({
     });
   }
 
-  const gstAmount = (pack.effectivePrice * gstPercent) / 100;
-  const landedPrice = pack.effectivePrice + gstAmount;
-  const discount = pack.mrp && pack.mrp > pack.effectivePrice
-    ? Math.round(((pack.mrp - pack.effectivePrice) / pack.mrp) * 100)
+  // effectivePrice is now the GST-INCLUSIVE case price — GST is never added again.
+  const landedPrice = pack.casePrice;
+  const piecePrice = pack.unitsPerCase > 0 ? pack.casePrice / pack.unitsPerCase : pack.casePrice;
+  const discount = pack.mrp && pack.mrp > piecePrice
+    ? Math.round(((pack.mrp - piecePrice) / pack.mrp) * 100)
     : 0;
 
   return (
@@ -121,10 +123,10 @@ export function QuickOrderRow({
         <div className="flex items-end justify-between gap-3 border-t border-slate-100 pt-3 sm:block sm:border-0 sm:pt-0 sm:text-right">
           <div>
             <div className="flex items-baseline gap-1.5 sm:justify-end">
-              <p className="text-base font-bold text-slate-950">₹{pack.effectivePrice.toFixed(2)}</p>
-              {pack.mrp && pack.mrp > pack.effectivePrice ? <p className="text-[9px] text-slate-400 line-through">₹{pack.mrp.toFixed(2)}</p> : null}
+              <p className="text-base font-bold text-slate-950">₹{pack.casePrice.toFixed(2)}</p>
+              {pack.mrp && pack.mrp > piecePrice ? <p className="text-[9px] text-slate-400 line-through">₹{pack.mrp.toFixed(2)}</p> : null}
             </div>
-            <p className="text-[9px] text-slate-400">+{gstPercent}% GST · ₹{landedPrice.toFixed(2)} landed</p>
+            <p className="text-[9px] text-slate-400">{gstPercent}% GST incl · {pack.unitsPerCase} pcs/case</p>
             {discount > 0 ? <p className="mt-0.5 text-[9px] font-bold text-emerald-700">Save {discount}%</p> : null}
           </div>
           <button

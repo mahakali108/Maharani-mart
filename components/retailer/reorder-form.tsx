@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ImageOff, Loader2, ShoppingCart } from 'lucide-react';
 import { addReorderLinesToCartAction } from '@/lib/retailer/order-actions';
+import { gstComponentFromInclusive, round2 } from '@/lib/retailer/case-pricing';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,11 +53,13 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
   let gstTotal = 0;
   for (const line of selected) {
     const quantity = Math.max(line.moq, state[line.packId]?.quantity ?? line.moq);
-    const lineSubtotal = line.currentUnitPrice * quantity;
-    subtotal += lineSubtotal;
-    gstTotal += (lineSubtotal * line.gstPercent) / 100;
+    // currentUnitPrice is GST-INCLUSIVE — GST is extracted, never added.
+    const lineTotal = round2(line.currentUnitPrice * quantity);
+    const lineGst = gstComponentFromInclusive(lineTotal, line.gstPercent);
+    subtotal += round2(lineTotal - lineGst);
+    gstTotal += lineGst;
   }
-  const grandTotal = subtotal + gstTotal;
+  const grandTotal = round2(subtotal + gstTotal);
 
   function setQuantity(packId: string, quantity: number, moq: number) {
     setState((prev) => ({
@@ -105,7 +108,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
         {lines.map((line) => {
           const lineState = state[line.packId];
           const quantity = Math.max(line.moq, lineState?.quantity ?? line.moq);
-          const lineTotal = line.currentUnitPrice * quantity * (1 + line.gstPercent / 100);
+          const lineTotal = round2(line.currentUnitPrice * quantity);
           return (
             <Card
               key={line.packId}
@@ -131,7 +134,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink-900">{line.productName}</p>
                 <p className="text-xs text-ink-400">
-                  {line.packName} · ₹{line.currentUnitPrice.toFixed(2)} + {line.gstPercent}% GST
+                  {line.packName} · ₹{line.currentUnitPrice.toFixed(2)} · {line.gstPercent}% GST included
                 </p>
                 <p className="text-xs text-ink-400">
                   Previously {line.previousQuantity} · MOQ now {line.moq}

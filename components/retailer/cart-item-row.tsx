@@ -7,6 +7,7 @@ import { Boxes, CircleAlert, Heart, ImageOff, Loader2, Trash2 } from 'lucide-rea
 import { updateCartQuantityAction, removeCartItemAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
+import { caseLineBreakdown, type PricingTier } from '@/lib/retailer/case-pricing';
 import { QtyStepper } from '@/components/retailer/qty-stepper';
 import { cn } from '@/lib/utils/cn';
 
@@ -23,6 +24,9 @@ export function CartItemRow({
   gstPercent,
   moq,
   mrp,
+  unitsPerCase = 1,
+  casePrice,
+  tiers,
   isUnavailable,
   isFavorite = false,
 }: {
@@ -38,6 +42,9 @@ export function CartItemRow({
   gstPercent: number;
   moq: number;
   mrp?: number | null;
+  unitsPerCase?: number;
+  casePrice?: number | null;
+  tiers?: PricingTier[];
   isUnavailable: boolean;
   isFavorite?: boolean;
 }) {
@@ -81,10 +88,19 @@ export function CartItemRow({
     });
   }
 
-  const landedUnitPrice = unitPrice * (1 + gstPercent / 100);
-  const displayTotal = landedUnitPrice * localQty;
-  const lineSavings = calcSavings(mrp, unitPrice, localQty);
-  const discountPercent = calcDiscountPercent(mrp, unitPrice);
+  // unitPrice is the GST-INCLUSIVE per-case price. The line total re-applies the
+  // Super Admin-configured quantity tier so quantity changes recalculate
+  // automatically, and GST is already inside the price (never added again).
+  const breakdown = caseLineBreakdown({
+    casePrice: casePrice ?? unitPrice,
+    unitsPerCase,
+    tiers: tiers ?? [],
+    packQuantity: localQty,
+    gstPercent,
+  });
+  const displayTotal = breakdown.total;
+  const lineSavings = calcSavings(mrp, breakdown.piecePrice, breakdown.pieces);
+  const discountPercent = calcDiscountPercent(mrp, breakdown.piecePrice);
 
   return (
     <article
@@ -159,7 +175,7 @@ export function CartItemRow({
           {/* Desktop price block */}
           <div className="mt-2.5 hidden flex-wrap items-baseline gap-x-2 gap-y-1 md:flex">
             <p className="text-base font-bold tracking-tight text-slate-950">
-              {formatInr(unitPrice)} <span className="text-[10px] font-medium text-slate-400">/ pack</span>
+              {formatInr(unitPrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
             </p>
             {mrp != null && mrp > unitPrice ? (
               <p className="text-[11px] text-slate-400 line-through">MRP {formatInr(mrp)}</p>
@@ -174,7 +190,7 @@ export function CartItemRow({
       {/* Cell B — mobile price row */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 md:hidden">
         <p className="text-sm font-bold tracking-tight text-slate-950">
-          {formatInr(unitPrice)} <span className="text-[10px] font-medium text-slate-400">/ pack</span>
+          {formatInr(unitPrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
         </p>
         {discountPercent > 0 ? (
           <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
@@ -205,7 +221,7 @@ export function CartItemRow({
           <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Line total incl. GST</p>
           <p className="mt-0.5 text-base font-bold tracking-tight text-slate-950 sm:text-lg">{formatInr(displayTotal)}</p>
           <p className="text-[9px] text-slate-400">
-            {formatInr(unitPrice)} × {localQty} + {gstPercent}% GST
+            {formatInr(unitPrice)} × {localQty} · {gstPercent}% GST included
           </p>
         </div>
       </div>

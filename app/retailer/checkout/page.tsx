@@ -5,6 +5,8 @@ import { Check, ChevronLeft, ChevronRight, ImageOff, PackageCheck, ReceiptText, 
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { caseLineBreakdown } from '@/lib/retailer/case-pricing';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
@@ -13,7 +15,16 @@ interface CartItemDetail {
   id: string;
   quantity: number;
   product_id: string;
-  product_packs: { pack_name: string; base_price: number; ptr: number | null; mrp: number | null; is_active: boolean } | null;
+  pack_id: string;
+  product_packs: {
+    pack_name: string;
+    base_price: number;
+    ptr: number | null;
+    case_price: number;
+    units_per_case: number;
+    mrp: number | null;
+    is_active: boolean;
+  } | null;
   products: {
     name: string;
     gst_percent: number;
@@ -35,7 +46,7 @@ export default async function CheckoutPage() {
   const [{ data: cartData }, { data: retailer }] = await Promise.all([
     supabase
       .from('cart_items')
-      .select('id, quantity, product_id, product_packs ( pack_name, base_price, ptr, mrp, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )')
+      .select('id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )')
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
     supabase
@@ -50,6 +61,10 @@ export default async function CheckoutPage() {
 
   const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
   const overrideByProduct = await getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null);
+  const tierMap = await loadPackTiers(
+    supabase,
+    items.map((item) => item.pack_id)
+  );
 
   let subtotal = 0;
   let gstTotal = 0;
@@ -58,14 +73,20 @@ export default async function CheckoutPage() {
   const lines = items.map((item) => {
     const pack = item.product_packs;
     const product = item.products;
-    const unitPrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
-    const lineSubtotal = unitPrice * item.quantity;
     const gstPercent = product?.gst_percent ?? 0;
-    const lineGst = (lineSubtotal * gstPercent) / 100;
-    subtotal += lineSubtotal;
-    gstTotal += lineGst;
-    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + lineGst);
-    savings += calcSavings(pack?.mrp, unitPrice, item.quantity);
+    const casePrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
+    const breakdown = caseLineBreakdown({
+      casePrice,
+      unitsPerCase: pack?.units_per_case ?? 1,
+      tiers: item.pack_id ? tierMap.get(item.pack_id) ?? [] : [],
+      packQuantity: item.quantity,
+      gstPercent,
+    });
+    const unitPrice = breakdown.piecePrice * (pack?.units_per_case ?? 1); // per case, GST-inclusive
+    subtotal += breakdown.subtotal;
+    gstTotal += breakdown.gst;
+    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + breakdown.gst);
+    savings += calcSavings(pack?.mrp, breakdown.piecePrice, breakdown.pieces);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     return {
       id: item.id,
@@ -75,7 +96,7 @@ export default async function CheckoutPage() {
       imageUrl: images[0]?.image_url,
       unitPrice,
       gstPercent,
-      lineTotal: lineSubtotal + lineGst,
+      lineTotal: breakdown.total,
     };
   });
   const grandTotal = subtotal + gstTotal;
@@ -134,9 +155,9 @@ export default async function CheckoutPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-bold text-slate-900">{line.productName}</p>
                     <p className="mt-1 text-[9px] text-slate-500">
-                      {line.packName} · Qty {line.quantity} · {formatInr(line.unitPrice)} each
+                      {line.packName} · Qty {line.quantity} case{line.quantity === 1 ? '' : 's'} · {formatInr(line.unitPrice)} per case
                     </p>
-                    <p className="mt-0.5 text-[9px] text-slate-400">GST {line.gstPercent}%</p>
+                    <p className="mt-0.5 text-[9px] text-slate-400">GST {line.gstPercent}% included</p>
                   </div>
                   <p className="shrink-0 text-sm font-bold text-slate-950">{formatInr(line.lineTotal)}</p>
                 </div>

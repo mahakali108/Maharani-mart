@@ -354,6 +354,7 @@ export interface Database {
           mrp: number | null;
           ptr: number | null;
           wholesale_price: number | null;
+          case_price: number;
           barcode: string | null;
           moq: number;
           is_active: boolean;
@@ -373,6 +374,7 @@ export interface Database {
           mrp?: number | null;
           ptr?: number | null;
           wholesale_price?: number | null;
+          case_price: number;
           barcode?: string | null;
           moq?: number;
           is_active?: boolean;
@@ -386,6 +388,43 @@ export interface Database {
             columns: ['product_id'];
             isOneToOne: false;
             referencedRelation: 'products';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
+      product_pricing_tiers: {
+        Row: {
+          id: string;
+          product_pack_id: string;
+          min_quantity: number;
+          max_quantity: number | null;
+          price_per_piece: number;
+          rule_type: 'default' | 'case' | 'bulk';
+          label: string | null;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_pack_id: string;
+          min_quantity: number;
+          max_quantity?: number | null;
+          price_per_piece: number;
+          rule_type?: 'default' | 'case' | 'bulk';
+          label?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['product_pricing_tiers']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'product_pricing_tiers_product_pack_id_fkey';
+            columns: ['product_pack_id'];
+            isOneToOne: false;
+            referencedRelation: 'product_packs';
             referencedColumns: ['id'];
           }
         ];

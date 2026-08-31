@@ -19,7 +19,6 @@ interface ProductDetail {
   base_price: number;
   cost_price: number | null;
   gst_percent: number;
-  hsn_code: string | null;
   barcode: string | null;
   lead_time_days: number;
   is_new_launch: boolean;
@@ -41,10 +40,20 @@ interface ProductPackRow {
   units_per_case: number;
   base_price: number;
   mrp: number | null;
-  ptr: number | null;
-  wholesale_price: number | null;
+  cost_price: number | null;
+  case_price: number;
   barcode: string | null;
   is_active: boolean;
+  tiers: PackTierRow[];
+}
+
+interface PackTierRow {
+  id: string;
+  min_quantity: number;
+  max_quantity: number | null;
+  price_per_piece: number;
+  rule_type: 'default' | 'case' | 'bulk';
+  label: string | null;
 }
 
 interface Option {
@@ -93,7 +102,7 @@ export default async function EditProductPage({ params }: { params: { id: string
     supabase
       .from('products')
       .select(
-        'id, sku_code, name, brand_id, category_id, unit, units_per_case, base_price, cost_price, gst_percent, hsn_code, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
+        'id, sku_code, name, brand_id, category_id, unit, units_per_case, base_price, cost_price, gst_percent, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
       )
       .eq('id', params.id)
       .single<ProductDetail>(),
@@ -102,7 +111,7 @@ export default async function EditProductPage({ params }: { params: { id: string
     supabase.from('product_images').select('id, image_url, sort_order').eq('product_id', params.id).order('sort_order'),
     supabase
       .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, ptr, wholesale_price, barcode, is_active')
+      .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, cost_price, case_price, barcode, is_active')
       .eq('product_id', params.id)
       .order('sort_order'),
     supabase
@@ -126,6 +135,40 @@ export default async function EditProductPage({ params }: { params: { id: string
   if (!product) {
     notFound();
   }
+
+  const rawPacks = (packData ?? []) as unknown as Omit<ProductPackRow, 'tiers'>[];
+  const packIds = rawPacks.map((pack) => pack.id);
+  const { data: tierData } =
+    packIds.length > 0
+      ? await supabase
+          .from('product_pricing_tiers')
+          .select('id, product_pack_id, min_quantity, max_quantity, price_per_piece, rule_type, label')
+          .in('product_pack_id', packIds)
+          .eq('is_active', true)
+          .order('min_quantity')
+      : ({ data: null } as { data: null });
+
+  const tiersByPack = new Map<string, PackTierRow[]>();
+  for (const row of (tierData ?? []) as (PackTierRow & { product_pack_id: string })[]) {
+    const list = tiersByPack.get(row.product_pack_id) ?? [];
+    list.push({
+      id: row.id,
+      min_quantity: row.min_quantity,
+      max_quantity: row.max_quantity,
+      price_per_piece: row.price_per_piece,
+      rule_type: row.rule_type,
+      label: row.label,
+    });
+    tiersByPack.set(row.product_pack_id, list);
+  }
+
+  const packs = rawPacks.map((pack) => ({ ...pack, tiers: tiersByPack.get(pack.id) ?? [] })) as ProductPackRow[];
+
+  // Case selling price for the product form defaults = the default pack's case
+  // price (pack whose SKU mirrors the product), else the first pack.
+  const defaultPack =
+    packs.find((pack) => pack.pack_sku_code === product!.sku_code) ?? packs[0];
+  const productCasePrice = defaultPack?.case_price ?? null;
 
   const boundUpdateAction = updateProductAction.bind(null, params.id);
 
@@ -151,7 +194,7 @@ export default async function EditProductPage({ params }: { params: { id: string
           action={boundUpdateAction}
           brands={(brandData ?? []) as Option[]}
           categories={(categoryData ?? []) as Option[]}
-          defaults={product!}
+          defaults={{ ...product!, case_price: productCasePrice }}
           submitLabel="Save changes"
         />
       </Card>
@@ -285,9 +328,9 @@ export default async function EditProductPage({ params }: { params: { id: string
 
       <Card>
         <CardHeader>
-          <CardTitle>Pack sizes</CardTitle>
+          <CardTitle>Pack sizes &amp; case pricing</CardTitle>
         </CardHeader>
-        <ProductPackManager productId={params.id} packs={(packData ?? []) as ProductPackRow[]} />
+        <ProductPackManager productId={params.id} packs={packs} />
       </Card>
     </div>
   );

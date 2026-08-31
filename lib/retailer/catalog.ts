@@ -10,7 +10,7 @@ import { calcDiscountPercent } from '@/lib/retailer/format';
 import type { ProductCardProps } from '@/components/retailer/product-card';
 
 export const PRODUCT_CARD_SELECT =
-  'id, name, sku_code, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, mrp, moq, is_active, sort_order )';
+  'id, name, sku_code, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, is_active, sort_order )';
 
 export interface CatalogProductRow {
   id: string;
@@ -28,6 +28,8 @@ export interface CatalogProductRow {
     pack_name: string;
     ptr: number | null;
     base_price: number;
+    case_price: number;
+    units_per_case: number;
     mrp: number | null;
     moq: number;
     is_active: boolean;
@@ -48,7 +50,7 @@ function bestPricedPack(product: CatalogProductRow, override: number | null) {
     .sort((a, b) => a.sort_order - b.sort_order);
   const priced = activePacks.map((pack) => ({
     pack,
-    price: resolvePackPrice(pack, override),
+    price: resolvePackPrice(pack, override), // GST-inclusive case price
   }));
   return priced.sort((a, b) => a.price - b.price)[0] ?? null;
 }
@@ -71,6 +73,8 @@ export function toPricedCard(
     mrp: best?.pack.mrp,
     packName: best?.pack.pack_name,
     moq: best?.pack.moq ?? 1,
+    unitsPerCase: best?.pack.units_per_case ?? 1,
+    casePrice: best?.price ?? null,
     defaultPackId: best?.pack.id ?? null,
     gstPercent: product.gst_percent,
     isFavorite: extras.isFavorite ?? false,

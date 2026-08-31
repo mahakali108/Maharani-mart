@@ -31,7 +31,7 @@ interface ProductRow {
   brands: { name: string } | null;
   categories: { name: string } | null;
   product_images: { image_url: string; sort_order: number }[];
-  product_packs: { id: string; pack_name: string; ptr: number | null; base_price: number; mrp: number | null; moq: number; is_active: boolean; sort_order: number }[];
+  product_packs: { id: string; pack_name: string; ptr: number | null; base_price: number; case_price: number; mrp: number | null; moq: number; is_active: boolean; sort_order: number }[];
 }
 
 interface ProductResult {
@@ -152,7 +152,7 @@ async function searchProducts(input: z.infer<typeof productListSchema>, context:
 
   let query = context.supabase
     .from('products')
-    .select('id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, mrp, moq, is_active, sort_order )')
+    .select('id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, mrp, moq, is_active, sort_order )')
     .eq('is_active', true);
   if (q) query = query.or(`name.ilike.%${q}%,sku_code.ilike.%${q}%,barcode.ilike.%${q}%`);
   if (input.barcode) query = query.eq('barcode', input.barcode);
@@ -182,7 +182,7 @@ export const productTools: AIToolDefinition[] = [
     roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: productIdSchema,
     inputJsonSchema: { type: 'object', additionalProperties: false, required: ['productId'], properties: { productId: { type: 'string', format: 'uuid' } } },
     execute: async ({ productId }, context) => {
-      const { data, error } = await context.supabase.from('products').select('id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, mrp, moq, is_active, sort_order )').eq('id', productId).eq('is_active', true).maybeSingle<ProductRow>();
+      const { data, error } = await context.supabase.from('products').select('id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, mrp, moq, is_active, sort_order )').eq('id', productId).eq('is_active', true).maybeSingle<ProductRow>();
       if (error) return dbFailure();
       if (!data) return unavailable('That product is not available in the current authorized catalog.');
       const products = await mapProducts(context, [data]);
@@ -194,7 +194,7 @@ export const productTools: AIToolDefinition[] = [
     roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: productIdSchema,
     inputJsonSchema: { type: 'object', additionalProperties: false, required: ['productId'], properties: { productId: { type: 'string', format: 'uuid' } } },
     execute: async ({ productId }, context) => {
-      const { data, error } = await context.supabase.from('products').select('id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, mrp, moq, is_active, sort_order )').eq('id', productId).eq('is_active', true).maybeSingle<ProductRow>();
+      const { data, error } = await context.supabase.from('products').select('id, name, sku_code, category_id, gst_percent, is_new_launch, created_at, brands ( name ), categories ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, mrp, moq, is_active, sort_order )').eq('id', productId).eq('is_active', true).maybeSingle<ProductRow>();
       if (error) return dbFailure();
       if (!data) return unavailable('The product price is unavailable.');
       const products = await mapProducts(context, [data]);

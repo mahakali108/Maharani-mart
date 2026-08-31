@@ -20,6 +20,8 @@ export interface ProductCardProps {
   mrp?: number | null;
   packName?: string;
   moq?: number;
+  unitsPerCase?: number;
+  casePrice?: number | null;
   defaultPackId?: string | null;
   skuCode?: string;
   gstPercent?: number;
@@ -38,6 +40,7 @@ export function ProductCard({
   mrp,
   packName,
   moq = 1,
+  unitsPerCase = 1,
   defaultPackId,
   skuCode,
   gstPercent,
@@ -51,8 +54,11 @@ export function ProductCard({
   const [error, setError] = useState(false);
   const [favorite, setFavorite] = useState(isFavorite);
   const [quantity, setQuantity] = useState(Math.max(1, moq));
-  const discount = calcDiscountPercent(mrp, fromPrice);
-  const savings = calcSavings(mrp, fromPrice);
+  // Per-piece derived selling price (case_price / units_per_case) for honest
+  // MRP comparisons — MRP is per piece, while fromPrice is the case price.
+  const piecePrice = fromPrice !== null && unitsPerCase > 0 ? fromPrice / unitsPerCase : fromPrice;
+  const discount = calcDiscountPercent(mrp, piecePrice);
+  const savings = calcSavings(mrp, piecePrice);
   const unavailable = !defaultPackId || fromPrice === null;
 
   function handleQuickAdd() {
@@ -151,11 +157,16 @@ export function ProductCard({
           ) : null}
 
           <div className="mt-2">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Retailer price</p>
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Case price · GST inclusive</p>
             <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
               <p className="text-base font-bold tracking-tight text-slate-950 sm:text-lg">
                 {fromPrice !== null ? formatInr(fromPrice) : 'Price on request'}
               </p>
+              {fromPrice !== null && unitsPerCase > 1 ? (
+                <p className="text-[9px] font-medium text-slate-400 sm:text-[10px]">
+                  {formatInr(fromPrice / unitsPerCase)}/pc · {unitsPerCase} pcs
+                </p>
+              ) : null}
               {mrp && fromPrice !== null && mrp > fromPrice ? (
                 <p className="text-[10px] text-slate-400 line-through sm:text-xs">MRP {formatInr(mrp)}</p>
               ) : null}
@@ -165,7 +176,7 @@ export function ProductCard({
             <p className="text-[10px] font-semibold text-emerald-700">You save {formatInr(savings)}</p>
           ) : null}
           <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[9px] sm:text-[10px]">
-            <p className="text-slate-400">Wholesale · GST{gstPercent != null ? ` ${gstPercent}%` : ''} extra</p>
+            <p className="text-slate-400">GST{gstPercent != null ? ` ${gstPercent}%` : ''} included in price</p>
             <span className={cn('inline-flex items-center gap-1 font-semibold', unavailable ? 'text-slate-500' : 'text-emerald-700')}>
               {unavailable ? <CircleAlert className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
               {unavailable ? 'Currently unavailable' : 'Available to order'}

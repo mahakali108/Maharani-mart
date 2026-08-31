@@ -28,6 +28,7 @@ interface CatalogProduct {
     pack_sku_code: string;
     base_price: number;
     ptr: number | null;
+    case_price: number;
     moq: number;
     is_active: boolean;
     sort_order: number;
@@ -78,7 +79,7 @@ export default async function NewSalesmanOrderPage({
   const { data: productData } = await supabase
     .from('products')
     .select(
-      'id, name, sku_code, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, pack_sku_code, base_price, ptr, moq, is_active, sort_order )'
+      'id, name, sku_code, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, moq, is_active, sort_order )'
     )
     .eq('is_active', true)
     .order('name')

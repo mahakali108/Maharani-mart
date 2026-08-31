@@ -29,8 +29,8 @@ import {
   determineBestValueTier,
   formatInr,
   formatMargin,
-  resolveUnitPrice,
 } from '@/lib/retailer/format';
+import { caseLineBreakdown, piecePriceFromCase, type PricingTier } from '@/lib/retailer/case-pricing';
 
 export interface MultiPricePack {
   id: string;
@@ -41,7 +41,10 @@ export interface MultiPricePack {
   ptr: number | null;
   mrp: number | null;
   moq: number;
+  /** GST-inclusive CASE selling price (source of truth). */
   effectivePrice: number;
+  casePrice: number;
+  tiers: PricingTier[];
   initialQuantity?: number;
   cartItemId?: string | null;
 }
@@ -97,23 +100,36 @@ export function PackSelector({
   const [packSuccess, setPackSuccess] = useState<Record<string, string | null>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  // Compute enriched pack tier display data using authoritative business fields
+  // Compute enriched pack tier display data using authoritative business fields.
+  // effectivePrice is the GST-INCLUSIVE case price; per-piece price is derived.
   const enrichedPacks = packs.map((pack) => {
-    const unitPrice = resolveUnitPrice(pack.effectivePrice, pack.units_per_case);
-    const gstAmount = (pack.effectivePrice * gstPercent) / 100;
-    const landedPrice = pack.effectivePrice + gstAmount;
-    const marginPercent = calcRetailerMargin(pack.mrp, pack.effectivePrice);
-    const savingsPerPack = calcSavings(pack.mrp, pack.effectivePrice);
+    const unitPrice = piecePriceFromCase(pack.effectivePrice, pack.units_per_case);
+    const landedPrice = pack.effectivePrice; // GST already included
+    const marginPercent = calcRetailerMargin(pack.mrp, unitPrice);
+    const savingsPerPack = calcSavings(pack.mrp, unitPrice);
 
     return {
       ...pack,
       unitPrice,
-      gstAmount,
+      gstAmount: 0,
       landedPrice,
       marginPercent,
       savingsPerPack,
     };
   });
+
+  // GST-inclusive line total for a pack at a given quantity (applies the
+  // Super Admin-configured quantity tier automatically).
+  function lineTotalFor(pack: MultiPricePack, qty: number): number {
+    if (qty <= 0) return 0;
+    return caseLineBreakdown({
+      casePrice: pack.effectivePrice,
+      unitsPerCase: pack.units_per_case,
+      tiers: pack.tiers,
+      packQuantity: qty,
+      gstPercent,
+    }).total;
+  }
 
   // Determine the best-value tier based on lowest price/unit (only when >= 2 packs and distinct prices)
   const { bestPackId, savingsVsRef, refPackName } = determineBestValueTier(enrichedPacks);
@@ -286,7 +302,7 @@ export function PackSelector({
 
   const totalSelectedLanded = modifiedPacks.reduce((sum, pack) => {
     const qty = quantities[pack.id] ?? 0;
-    return sum + pack.landedPrice * qty;
+    return sum + lineTotalFor(pack, qty);
   }, 0);
 
   const totalSelectedPacks = modifiedPacks.reduce((sum, pack) => {
@@ -406,7 +422,7 @@ export function PackSelector({
           const packError = packErrors[pack.id];
           const packSuccessMsg = packSuccess[pack.id];
           const isBestValue = pack.id === bestPackId;
-          const lineTotal = pack.landedPrice * qty;
+          const lineTotal = lineTotalFor(pack, qty);
 
           return (
             <article
@@ -463,7 +479,7 @@ export function PackSelector({
                     </p>
                     {pack.units_per_case > 1 ? (
                       <p className="text-[9px] text-slate-500">
-                        {formatInr(pack.effectivePrice)} / pack
+                        {formatInr(pack.effectivePrice)} / case · {pack.units_per_case} pcs
                       </p>
                     ) : null}
                   </div>

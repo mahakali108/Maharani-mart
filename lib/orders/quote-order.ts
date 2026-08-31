@@ -2,7 +2,9 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { calculateCreditPosition, roundMoney, type CreditPosition } from '@/lib/orders/credit';
-import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { getProductPriceOverrides, resolvePackCasePrice } from '@/lib/retailer/effective-price';
+import { caseLineBreakdown } from '@/lib/retailer/case-pricing';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 
 export interface RequestedQuoteLine {
   packId: string;
@@ -14,12 +16,17 @@ export interface QuotedOrderLine {
   productName: string;
   packId: string;
   packName: string;
+  /** Number of packs/cases ordered. */
   quantity: number;
   moq: number;
+  /** Per-case GST-INCLUSIVE selling price (unitPrice = price of one pack/case). */
   unitPrice: number;
   gstPercent: number;
+  /** Line total EXCLUDING the GST component. */
   subtotal: number;
+  /** GST component already contained inside `lineTotal`. */
   gst: number;
+  /** GST-INCLUSIVE line total. */
   lineTotal: number;
 }
 
@@ -35,6 +42,14 @@ export interface OrderQuote {
 
 export type QuoteOrderResult = { error: string } | { quote: OrderQuote };
 
+/**
+ * Legacy GST calculation helper (GST added on top of a pre-tax price).
+ *
+ * The case-based pricing model is GST-INCLUSIVE, so this helper is only kept
+ * for backwards compatibility with older call sites/tests. New pricing paths
+ * use `caseLineBreakdown`, which treats the selling price as inclusive and
+ * extracts the GST component instead of adding it.
+ */
 export function calculateTaxedLine(unitPrice: number, quantity: number, gstPercent: number) {
   const subtotal = roundMoney(unitPrice * quantity);
   const gst = roundMoney((subtotal * gstPercent) / 100);
@@ -55,6 +70,8 @@ interface PackForQuote {
   pack_name: string;
   base_price: number;
   ptr: number | null;
+  case_price: number;
+  units_per_case: number;
   moq: number;
   is_active: boolean;
   products: { id: string; name: string; gst_percent: number; is_active: boolean } | null;
@@ -77,9 +94,14 @@ export function normalizeQuoteLines(lines: RequestedQuoteLine[]): { error: strin
 
 /**
  * Authoritative, read-only order validation and quote path. It reuses the same
- * catalog, MOQ, pricing, GST and credit rules as order creation. Callers may
- * present this quote, but createOrderForRetailer always quotes again before a
- * write so a stale AI/cart quote can never become an order unchecked.
+ * catalog, MOQ, case-based pricing, quantity-tier, GST-inclusive and credit
+ * rules as order creation. Callers may present this quote, but
+ * createOrderForRetailer always quotes again before a write so a stale
+ * AI/cart quote can never become an order unchecked.
+ *
+ * Pricing is derived entirely server-side from the pack's GST-INCLUSIVE
+ * `case_price` + `units_per_case` + quantity `product_pricing_tiers`. No price
+ * is ever accepted from the client.
  */
 export async function quoteOrderForRetailer({
   retailerId,
@@ -105,7 +127,9 @@ export async function quoteOrderForRetailer({
 
   const { data: packData, error: packError } = await supabase
     .from('product_packs')
-    .select('id, product_id, pack_name, base_price, ptr, moq, is_active, products ( id, name, gst_percent, is_active )')
+    .select(
+      'id, product_id, pack_name, base_price, ptr, case_price, units_per_case, moq, is_active, products ( id, name, gst_percent, is_active )'
+    )
     .in('id', [...normalized.keys()]);
   if (packError) return { error: 'The product catalog could not be loaded. Please try again.' };
 
@@ -124,6 +148,7 @@ export async function quoteOrderForRetailer({
 
   const productIds = [...new Set(packs.map((pack) => pack.product_id))];
   const overrides = await getProductPriceOverrides(supabase, productIds, retailer.id, retailer.area_id);
+  const tierMap = await loadPackTiers(supabase, [...normalized.keys()]);
 
   let subtotal = 0;
   let gstTotal = 0;
@@ -131,12 +156,21 @@ export async function quoteOrderForRetailer({
   for (const [packId, quantity] of normalized) {
     const pack = packById.get(packId)!;
     const product = pack.products!;
-    const unitPrice = roundMoney(resolvePackPrice(pack, overrides.get(pack.product_id) ?? null));
-    const taxed = calculateTaxedLine(unitPrice, quantity, product.gst_percent);
-    const lineSubtotal = taxed.subtotal;
-    const lineGst = taxed.gst;
+
+    const casePrice = roundMoney(resolvePackCasePrice(pack, overrides.get(pack.product_id) ?? null));
+    const breakdown = caseLineBreakdown({
+      casePrice,
+      unitsPerCase: pack.units_per_case,
+      tiers: tierMap.get(packId) ?? [],
+      packQuantity: quantity,
+      gstPercent: product.gst_percent,
+    });
+
+    const lineSubtotal = breakdown.subtotal;
+    const lineGst = breakdown.gst;
     subtotal = roundMoney(subtotal + lineSubtotal);
     gstTotal = roundMoney(gstTotal + lineGst);
+
     quotedLines.push({
       productId: pack.product_id,
       productName: product.name,
@@ -144,11 +178,11 @@ export async function quoteOrderForRetailer({
       packName: pack.pack_name,
       quantity,
       moq: pack.moq,
-      unitPrice,
+      unitPrice: breakdown.piecePrice * pack.units_per_case,
       gstPercent: product.gst_percent,
       subtotal: lineSubtotal,
       gst: lineGst,
-      lineTotal: taxed.total,
+      lineTotal: breakdown.total,
     });
   }
 

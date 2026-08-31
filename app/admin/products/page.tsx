@@ -138,7 +138,7 @@ export default async function ProductsPage({
                 <th className="px-5 py-3 font-medium">Name</th>
                 <th className="px-5 py-3 font-medium">Brand</th>
                 <th className="px-5 py-3 font-medium">Category</th>
-                <th className="px-5 py-3 font-medium">Base Price</th>
+                <th className="px-5 py-3 font-medium">MRP</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium" />
               </tr>

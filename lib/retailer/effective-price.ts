@@ -140,13 +140,30 @@ export async function getActiveOfferProductIds(
 }
 
 /**
- * Given a pack's own pricing fields and any product-level override,
- * returns the final per-unit price a retailer pays for that pack.
+ * Given a pack's own pricing fields and any product-level override, returns
+ * the fixed GST-INCLUSIVE CASE selling price a retailer pays for one case of
+ * that pack (the source of truth in the case-based pricing model).
+ *
+ * An existing `price_lists` override (retailer > area > base) is interpreted
+ * as a case-price override for the whole product. When no override exists the
+ * pack's own `case_price` is used. The legacy `ptr`/`base_price` fields are
+ * kept only as a migration fallback for packs that predate case_price.
+ *
+ * The per-piece price is derived from this case price (case_price /
+ * units_per_case) — it is never read from a stored field here.
  */
-export function resolvePackPrice(
-  pack: { ptr: number | null; base_price: number },
+export function resolvePackCasePrice(
+  pack: { case_price?: number | null; ptr: number | null; base_price: number },
   productOverride: number | null
 ): number {
   if (productOverride !== null) return productOverride;
-  return pack.ptr ?? pack.base_price;
+  return pack.case_price ?? pack.ptr ?? pack.base_price;
+}
+
+/** @deprecated Prefer resolvePackCasePrice — kept for display call-sites. */
+export function resolvePackPrice(
+  pack: { case_price?: number | null; ptr: number | null; base_price: number },
+  productOverride: number | null
+): number {
+  return resolvePackCasePrice(pack, productOverride);
 }
