@@ -255,7 +255,7 @@ export interface Database {
       products: {
         Row: {
           id: string;
-          sku_code: string;
+          sku_code: string | null;
           name: string;
           brand_id: string | null;
           category_id: string | null;
@@ -278,7 +278,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          sku_code: string;
+          sku_code?: string | null;
           name: string;
           brand_id?: string | null;
           category_id?: string | null;
@@ -1383,7 +1383,7 @@ export interface Database {
         Row: {
           product_id: string;
           product_name: string;
-          sku_code: string;
+          sku_code: string | null;
           quantity_on_hand: number;
           reserved_quantity: number;
           available_quantity: number;
@@ -1402,7 +1402,7 @@ export interface Database {
           batch_id: string;
           product_id: string;
           product_name: string;
-          sku_code: string;
+          sku_code: string | null;
           warehouse_id: string;
           warehouse_name: string;
           batch_number: string;

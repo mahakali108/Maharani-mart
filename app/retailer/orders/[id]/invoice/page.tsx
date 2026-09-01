@@ -27,7 +27,7 @@ interface OrderItemRow {
   unit_price: number;
   gst_percent: number;
   line_total: number;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string } | null;
   product_packs: { pack_name: string } | null;
 }
 
@@ -53,7 +53,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
       .maybeSingle<RetailerRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, unit_price, gst_percent, line_total, products ( name, sku_code ), product_packs ( pack_name )')
+      .select('id, quantity, unit_price, gst_percent, line_total, products ( name ), product_packs ( pack_name )')
       .eq('order_id', params.id),
   ]);
 
@@ -114,9 +114,9 @@ export default async function InvoicePage({ params }: { params: { id: string } }
               <tr key={item.id}>
                 <td className="py-2">
                   <p className="font-medium text-ink-900">{item.products?.name ?? '—'}</p>
-                  <p className="font-mono text-xs text-ink-400">
-                    {item.products?.sku_code} · {item.product_packs?.pack_name}
-                  </p>
+                  {item.product_packs?.pack_name ? (
+                    <p className="font-mono text-xs text-ink-400">{item.product_packs.pack_name}</p>
+                  ) : null}
                 </td>
                 <td className="py-2 text-ink-600">{item.quantity}</td>
                 <td className="py-2 text-right text-ink-600">₹{item.unit_price.toFixed(2)}</td>

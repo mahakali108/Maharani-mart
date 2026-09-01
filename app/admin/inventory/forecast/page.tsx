@@ -127,7 +127,7 @@ export default async function ForecastDashboardPage({
                 <li key={f.productId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink-900">{f.productName}</p>
-                    <p className="text-xs text-ink-400">{f.skuCode} · {f.explanation}</p>
+                    <p className="text-xs text-ink-400">{[f.skuCode, f.explanation].filter(Boolean).join(' · ')}</p>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-bold text-blue-700">+{f.reorderQuantity}</p>
@@ -236,7 +236,7 @@ function RiskRow({ f }: { f: ForecastResult }) {
     <li className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-ink-900">{f.productName}</p>
-        <p className="truncate text-xs text-ink-400">{f.skuCode} · cover ≈ {f.stockOutDays ?? '—'} d</p>
+        <p className="truncate text-xs text-ink-400">{f.skuCode ? `${f.skuCode} · ` : ''}cover ≈ {f.stockOutDays ?? '—'} d</p>
       </div>
       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
     </li>
@@ -250,7 +250,7 @@ function ForecastRow({ f, days }: { f: ForecastResult; days: number }) {
     <tr className="align-top">
       <td className="px-5 py-3">
         <Link href={`/admin/products/${f.productId}`} className="font-medium text-ink-900 hover:text-primary-600">{f.productName}</Link>
-        <p className="text-xs text-ink-400">{f.skuCode}</p>
+        {f.skuCode ? <p className="text-xs text-ink-400">{f.skuCode}</p> : null}
         <p className="mt-1 max-w-xs text-[11px] leading-4 text-ink-400">{f.explanation}</p>
         <p className="text-[10px] text-ink-300">{f.dataBasis}</p>
       </td>

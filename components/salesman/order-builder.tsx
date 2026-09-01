@@ -28,7 +28,6 @@ interface OrderPack {
 interface OrderProduct {
   id: string;
   name: string;
-  skuCode: string;
   brandName: string | null;
   imageUrl: string | null;
   gstPercent: number;
@@ -59,7 +58,6 @@ export function SalesmanOrderBuilder({
     return products.filter(
       (product) =>
         product.name.toLowerCase().includes(normalized) ||
-        product.skuCode.toLowerCase().includes(normalized) ||
         product.brandName?.toLowerCase().includes(normalized) ||
         product.packs.some((pack) => pack.name.toLowerCase().includes(normalized) || pack.skuCode.toLowerCase().includes(normalized))
     );
@@ -147,7 +145,7 @@ export function SalesmanOrderBuilder({
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search product, brand, SKU, or pack"
+          placeholder="Search product, brand, or pack"
           className="pl-9"
         />
       </div>
@@ -173,7 +171,7 @@ export function SalesmanOrderBuilder({
                 <div className="min-w-0">
                   <p className="font-medium text-ink-900">{product.name}</p>
                   <p className="text-xs text-ink-400">
-                    {product.brandName ? `${product.brandName} · ` : ''}{product.skuCode} · GST {product.gstPercent}%
+                    {product.brandName ? `${product.brandName} · ` : ''}GST {product.gstPercent}%
                   </p>
                 </div>
               </div>

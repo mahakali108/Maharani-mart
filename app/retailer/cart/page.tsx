@@ -43,7 +43,6 @@ interface CartItemDetail {
   } | null;
   products: {
     name: string;
-    sku_code: string;
     gst_percent: number;
     is_active: boolean;
     brands: { name: string } | null;
@@ -155,7 +154,7 @@ export default async function CartPage() {
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
       brandName: product?.brands?.name ?? null,
-      skuCode: pack?.pack_sku_code || product?.sku_code || null,
+      skuCode: pack?.pack_sku_code || null,
       imageUrl: images[0]?.image_url,
       unitPrice,
       gstPercent,

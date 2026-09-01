@@ -19,7 +19,6 @@ export interface QuickOrderPack {
 export function QuickOrderRow({
   id,
   name,
-  skuCode,
   brandName,
   imageUrl,
   gstPercent,
@@ -27,7 +26,6 @@ export function QuickOrderRow({
 }: {
   id: string;
   name: string;
-  skuCode: string;
   brandName?: string;
   imageUrl?: string;
   gstPercent: number;
@@ -86,7 +84,6 @@ export function QuickOrderRow({
           <div className="min-w-0">
             <p className="truncate text-[9px] font-bold uppercase tracking-wider text-slate-400">{brandName ?? 'Product'}</p>
             <Link href={`/retailer/catalog/${id}`} className="mt-0.5 block line-clamp-2 text-xs font-bold leading-4 text-slate-900 hover:text-primary-600 sm:text-sm">{name}</Link>
-            <p className="mt-1 font-mono text-[9px] text-slate-400">SKU {skuCode}</p>
           </div>
         </div>
 

@@ -13,7 +13,7 @@ interface GrnDetailRow extends GrnRow {
 }
 
 interface GrnItemDetail extends GrnItemRow {
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
 }
 
 interface ReceiptMovement {

@@ -51,7 +51,7 @@ export interface RawOrderItem {
   product_id: string;
   quantity: number;
   line_total: number;
-  products: { name: string; sku_code: string; brand_id: string | null; category_id: string | null } | null;
+  products: { name: string; sku_code: string | null; brand_id: string | null; category_id: string | null } | null;
 }
 
 export interface RawRetailer {
@@ -74,7 +74,7 @@ export interface RawProfile {
 export interface RawInventoryTotal {
   product_id: string;
   product_name: string;
-  sku_code: string;
+  sku_code: string | null;
   quantity_on_hand: number;
   reserved_quantity: number;
   available_quantity: number;
@@ -536,7 +536,7 @@ export function computeRiskCenter(input: RiskInputs): RiskCenter {
           `${t.available_quantity} unit(s) on hand with zero recorded demand in the last 30 days.`,
           'medium',
           'order_items + inventory_product_totals',
-          `/admin/inventory/products?q=${encodeURIComponent(t.sku_code)}`,
+          `/admin/inventory/products?q=${encodeURIComponent(t.sku_code ?? t.product_name)}`,
           `₹${t.estimated_value.toLocaleString('en-IN')}`
         )
       ),

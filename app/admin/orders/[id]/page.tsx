@@ -22,7 +22,7 @@ interface OrderItemRow {
   quantity: number;
   unit_price: number;
   line_total: number;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   product_packs: { pack_name: string } | null;
 }
 

@@ -161,7 +161,7 @@ export async function getSimilarProductCards(
   let query = supabase
     .from('products')
     .select(
-      'id, name, sku_code, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, mrp, moq, is_active, sort_order )'
+      'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, mrp, moq, is_active, sort_order )'
     )
     .eq('is_active', true)
     .neq('id', product.id)

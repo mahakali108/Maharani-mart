@@ -47,7 +47,7 @@ export default async function LowStockPage({
         .select('id, name, sku_code')
         .in('id', movers.map((m) => m.product_id))
     : { data: [] };
-  const nameById = new Map(((moverNames ?? []) as { id: string; name: string; sku_code: string }[]).map((p) => [p.id, p]));
+  const nameById = new Map(((moverNames ?? []) as { id: string; name: string; sku_code: string | null }[]).map((p) => [p.id, p]));
 
   return (
     <div className="space-y-6">

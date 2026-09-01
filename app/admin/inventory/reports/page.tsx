@@ -29,7 +29,7 @@ interface BatchReportRow {
   current_quantity: number;
   reserved_quantity: number;
   unit_cost: number | null;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   warehouses: { name: string } | null;
 }
 
@@ -37,7 +37,7 @@ interface WarehouseReportRow {
   id: string;
   quantity: number;
   reserved_quantity: number;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   warehouses: { name: string } | null;
 }
 
@@ -109,7 +109,7 @@ export default async function InventoryReportsPage({
         filterBase={filterBase}
         headers={['Product', 'Status', 'On hand', 'Reserved', 'Available', 'Reorder level', 'Est. value']}
         rows={rows.map((r) => [
-          `${r.product_name} (${r.sku_code})`,
+          r.sku_code ? `${r.product_name} (${r.sku_code})` : r.product_name,
           r.stock_status.replace(/_/g, ' '),
           String(r.quantity_on_hand),
           String(r.reserved_quantity),

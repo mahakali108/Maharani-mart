@@ -29,7 +29,7 @@ interface MovementRow {
   quantity: number;
   reason: string | null;
   created_at: string;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   warehouses: { name: string } | null;
   profiles: { full_name: string } | null;
 }
