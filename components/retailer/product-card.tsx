@@ -23,7 +23,6 @@ export interface ProductCardProps {
   unitsPerCase?: number;
   casePrice?: number | null;
   defaultPackId?: string | null;
-  skuCode?: string;
   gstPercent?: number;
   isFavorite?: boolean;
   hasOffer?: boolean;
@@ -42,7 +41,6 @@ export function ProductCard({
   moq = 1,
   unitsPerCase = 1,
   defaultPackId,
-  skuCode,
   gstPercent,
   isFavorite = false,
   hasOffer = false,
@@ -148,7 +146,6 @@ export function ProductCard({
           <h3 className="mt-0.5 line-clamp-2 min-h-[2.5rem] text-xs font-semibold leading-5 text-slate-800 transition group-hover:text-primary-700 sm:text-sm">
             {name}
           </h3>
-          {skuCode ? <p className="mt-0.5 font-mono text-[9px] text-slate-400">SKU {skuCode}</p> : null}
           {packName ? (
             <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500 sm:text-[11px]">
               <PackagePlus className="h-3 w-3 shrink-0" />

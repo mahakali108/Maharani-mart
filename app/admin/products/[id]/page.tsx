@@ -10,7 +10,6 @@ import { updateProductAction } from '@/lib/admin/products-actions';
 
 interface ProductDetail {
   id: string;
-  sku_code: string;
   name: string;
   brand_id: string | null;
   category_id: string | null;
@@ -102,7 +101,7 @@ export default async function EditProductPage({ params }: { params: { id: string
     supabase
       .from('products')
       .select(
-        'id, sku_code, name, brand_id, category_id, unit, units_per_case, base_price, cost_price, gst_percent, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
+        'id, name, brand_id, category_id, unit, units_per_case, base_price, cost_price, gst_percent, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
       )
       .eq('id', params.id)
       .single<ProductDetail>(),
@@ -113,7 +112,8 @@ export default async function EditProductPage({ params }: { params: { id: string
       .from('product_packs')
       .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, cost_price, case_price, barcode, is_active')
       .eq('product_id', params.id)
-      .order('sort_order'),
+      .order('sort_order')
+      .order('created_at'),
     supabase
       .from('inventory_stock')
       .select('warehouse_id, quantity, reserved_quantity, warehouses ( name )')
@@ -164,10 +164,10 @@ export default async function EditProductPage({ params }: { params: { id: string
 
   const packs = rawPacks.map((pack) => ({ ...pack, tiers: tiersByPack.get(pack.id) ?? [] })) as ProductPackRow[];
 
-  // Case selling price for the product form defaults = the default pack's case
-  // price (pack whose SKU mirrors the product), else the first pack.
-  const defaultPack =
-    packs.find((pack) => pack.pack_sku_code === product!.sku_code) ?? packs[0];
+  // Case selling price for the product form defaults = the auto-seeded default
+  // pack's case price. That pack is the first one by sort order, matching how
+  // updateProductAction resolves it server-side.
+  const defaultPack = packs[0];
   const productCasePrice = defaultPack?.case_price ?? null;
 
   const boundUpdateAction = updateProductAction.bind(null, params.id);
@@ -183,7 +183,6 @@ export default async function EditProductPage({ params }: { params: { id: string
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-ink-950">{product!.name}</h1>
-        <p className="mt-1 text-sm font-mono text-xs text-ink-500">{product!.sku_code}</p>
       </div>
 
       <Card>

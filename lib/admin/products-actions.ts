@@ -16,7 +16,6 @@ type ProductImageInsert = Database['public']['Tables']['product_images']['Insert
 type ProductPackInsert = Database['public']['Tables']['product_packs']['Insert'];
 
 const productSchema = z.object({
-  skuCode: z.string().min(2, 'Enter a SKU code.'),
   name: z.string().min(2, 'Enter a product name.'),
   brandId: z.string().uuid().optional().or(z.literal('')),
   categoryId: z.string().uuid().optional().or(z.literal('')),
@@ -33,7 +32,6 @@ const productSchema = z.object({
 
 function parseProductForm(formData: FormData) {
   return productSchema.safeParse({
-    skuCode: formData.get('skuCode'),
     name: formData.get('name'),
     brandId: formData.get('brandId'),
     categoryId: formData.get('categoryId'),
@@ -50,17 +48,45 @@ function parseProductForm(formData: FormData) {
 }
 
 /**
+ * Builds the internal pack SKU for the auto-seeded default pack.
+ *
+ * Products no longer carry an admin-entered SKU code (migration 0023), but
+ * `product_packs.pack_sku_code` is still a NOT NULL UNIQUE column, so the
+ * default pack gets a deterministic code derived from the product id. It is
+ * never entered by an admin and is unique per product.
+ */
+function defaultPackSkuCode(productId: string) {
+  return `PK-${productId.replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+}
+
+/**
+ * Resolves the auto-seeded default pack of a product — the first pack by
+ * sort order (then creation time). Before SKU codes were removed this pack was
+ * identified by `pack_sku_code === products.sku_code`; ordering is now the
+ * stable link between the product form and the pack it keeps in sync.
+ */
+async function findDefaultPackId(supabase: ReturnType<typeof createClient>, productId: string) {
+  const { data } = await supabase
+    .from('product_packs')
+    .select('id')
+    .eq('product_id', productId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  return data?.id ?? null;
+}
+
+/**
  * Seeds a default case-priced pack for a product, together with its default
  * and case quantity tiers, so a product created through the Add Product form
- * is immediately orderable at the configured case price. The default pack's
- * SKU mirrors the product SKU so updates stay linked.
+ * is immediately orderable at the configured case price.
  */
 async function seedDefaultPackForProduct(
   supabase: ReturnType<typeof createClient>,
   productId: string,
   user: { id: string },
   d: {
-    skuCode: string;
     unit: string;
     unitsPerCase: number;
     basePrice: number;
@@ -75,7 +101,7 @@ async function seedDefaultPackForProduct(
     .insert({
       product_id: productId,
       pack_name: d.unit || 'Default',
-      pack_sku_code: d.skuCode,
+      pack_sku_code: defaultPackSkuCode(productId),
       units_per_case: d.unitsPerCase,
       base_price: d.basePrice,
       mrp: d.basePrice,
@@ -143,8 +169,9 @@ export async function createProductAction(
 
   const supabase = createClient();
   const cost = d.costPrice === '' ? null : Number(d.costPrice);
+  // `sku_code` is intentionally omitted — it was removed from the product
+  // workflow and the database fills in a generated default (migration 0023).
   const payload: ProductInsert = {
-    sku_code: d.skuCode,
     name: d.name,
     brand_id: d.brandId || null,
     category_id: d.categoryId || null,
@@ -168,7 +195,7 @@ export async function createProductAction(
   if (error) {
     return {
       error: error.message.includes('duplicate')
-        ? 'A product with this SKU code or barcode already exists.'
+        ? 'A product with this barcode already exists.'
         : error.message,
     };
   }
@@ -176,7 +203,6 @@ export async function createProductAction(
   // Seed a default case-priced pack (with quantity tiers) so the product is
   // immediately orderable at the configured case price.
   await seedDefaultPackForProduct(supabase, data.id, user, {
-    skuCode: d.skuCode,
     unit: d.unit,
     unitsPerCase: d.unitsPerCase,
     basePrice: d.basePrice,
@@ -204,8 +230,8 @@ export async function updateProductAction(
 
   const supabase = createClient();
   const cost = d.costPrice === '' ? null : Number(d.costPrice);
+  // `sku_code` is left untouched so historical values survive an edit.
   const payload: ProductUpdate = {
-    sku_code: d.skuCode,
     name: d.name,
     brand_id: d.brandId || null,
     category_id: d.categoryId || null,
@@ -226,16 +252,12 @@ export async function updateProductAction(
 
   if (error) return { error: error.message };
 
-  // Keep the auto-seeded default pack (pack SKU == product SKU) in sync with
-  // the case-based pricing fields so editing the product updates the orderable
-  // case price / units / MRP / cost / barcode, and its default tier price.
-  const { data: defaultPack } = await supabase
-    .from('product_packs')
-    .select('id')
-    .eq('product_id', productId)
-    .eq('pack_sku_code', d.skuCode)
-    .maybeSingle<{ id: string }>();
-  if (defaultPack) {
+  // Keep the auto-seeded default pack (the first pack by sort order) in sync
+  // with the case-based pricing fields so editing the product updates the
+  // orderable case price / units / MRP / cost / barcode, and its default tier
+  // price.
+  const defaultPackId = await findDefaultPackId(supabase, productId);
+  if (defaultPackId) {
     const piecePrice = Math.round((d.casePrice / Math.max(1, d.unitsPerCase)) * 100) / 100;
     await supabase
       .from('product_packs')
@@ -247,12 +269,12 @@ export async function updateProductAction(
         case_price: d.casePrice,
         barcode: d.barcode || null,
       } as unknown as never)
-      .eq('id', defaultPack.id);
+      .eq('id', defaultPackId);
     // Refresh the default/case tier prices to stay anchored to the case price.
     await supabase
       .from('product_pricing_tiers')
       .update({ price_per_piece: piecePrice } as unknown as never)
-      .eq('product_pack_id', defaultPack.id)
+      .eq('product_pack_id', defaultPackId)
       .in('rule_type', ['default', 'case']);
   }
 
