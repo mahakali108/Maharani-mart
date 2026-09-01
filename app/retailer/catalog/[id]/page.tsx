@@ -32,7 +32,6 @@ import { getCoPurchasedCards, getSimilarProductCards } from '@/lib/retailer/pers
 interface ProductDetailRow {
   id: string;
   name: string;
-  sku_code: string;
   unit: string;
   units_per_case: number;
   gst_percent: number;
@@ -100,7 +99,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     supabase
       .from('products')
       .select(
-        'id, name, sku_code, unit, units_per_case, gst_percent, hsn_code, lead_time_days, is_new_launch, brand_id, category_id, brands ( name ), categories ( id, name ), product_images ( id, image_url, sort_order )'
+        'id, name, unit, units_per_case, gst_percent, hsn_code, lead_time_days, is_new_launch, brand_id, category_id, brands ( name ), categories ( id, name ), product_images ( id, image_url, sort_order )'
       )
       .eq('id', params.id)
       .eq('is_active', true)
@@ -342,7 +341,6 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             <h1 className="mt-3 text-xl font-extrabold leading-tight tracking-tight text-slate-950 sm:text-2xl lg:text-3xl">
               {product.name}
             </h1>
-            <p className="mt-1.5 font-mono text-[10px] font-medium text-slate-400">SKU: {product.sku_code}</p>
 
             {/* 4. MRP & WHOLESALE PRICE OVERVIEW */}
             {lowestPrice !== null ? (

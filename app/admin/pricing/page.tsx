@@ -28,7 +28,7 @@ interface PriceListRow {
   priority: number;
   is_active: boolean;
   created_at: string;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   areas: { name: string } | null;
   retailers: { shop_name: string } | null;
 }

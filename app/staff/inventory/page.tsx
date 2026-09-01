@@ -10,7 +10,7 @@ interface StockRow {
   id: string;
   quantity: number;
   reserved_quantity: number;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   warehouses: { name: string } | null;
 }
 

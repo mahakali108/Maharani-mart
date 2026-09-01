@@ -17,7 +17,7 @@ interface OrderRow {
 interface OrderItemRow {
   id: string;
   quantity: number;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   product_packs: { pack_name: string } | null;
 }
 

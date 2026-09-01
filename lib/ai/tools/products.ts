@@ -23,7 +23,7 @@ const productListSchema = z.object({
 interface ProductRow {
   id: string;
   name: string;
-  sku_code: string;
+  sku_code: string | null;
   category_id: string | null;
   gst_percent: number;
   is_new_launch: boolean;
@@ -37,7 +37,7 @@ interface ProductRow {
 interface ProductResult {
   id: string;
   name: string;
-  skuCode: string;
+  skuCode: string | null;
   brand: string | null;
   category: string | null;
   gstPercent: number;

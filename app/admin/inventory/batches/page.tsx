@@ -22,7 +22,7 @@ interface BatchRow {
   damaged_quantity: number;
   expired_quantity: number;
   unit_cost: number | null;
-  products: { id: string; name: string; sku_code: string } | null;
+  products: { id: string; name: string; sku_code: string | null } | null;
   warehouses: { id: string; name: string } | null;
 }
 
@@ -74,7 +74,7 @@ export default async function InventoryBatchesPage({
     ? batches.filter(
         (b) =>
           b.products?.name.toLowerCase().includes(q.toLowerCase()) ||
-          b.products?.sku_code.toLowerCase().includes(q.toLowerCase()) ||
+          (b.products?.sku_code ?? '').toLowerCase().includes(q.toLowerCase()) ||
           b.batch_number.toLowerCase().includes(q.toLowerCase())
       )
     : batches;

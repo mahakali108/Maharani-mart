@@ -99,7 +99,7 @@ async function gatherSalesOptions(supabase: ReturnType<typeof createClient>): Pr
   return {
     brands: (brands.data ?? []) as { id: string; name: string }[],
     categories: (categories.data ?? []) as { id: string; name: string }[],
-    products: ((products.data ?? []) as { id: string; name: string; sku_code: string }[]).map((p) => ({ id: p.id, name: p.name, sku: p.sku_code })),
+    products: ((products.data ?? []) as { id: string; name: string; sku_code: string | null }[]).map((p) => ({ id: p.id, name: p.name, sku: p.sku_code ?? '' })),
     retailers: ((retailers.data ?? []) as { id: string; shop_name: string }[]).map((r) => ({ id: r.id, shopName: r.shop_name })),
     salesmen: (salesmen.data ?? []) as { id: string; name: string }[],
   };

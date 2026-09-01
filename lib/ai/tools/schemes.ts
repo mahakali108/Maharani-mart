@@ -5,7 +5,7 @@ import type { AICard, AIToolContext, AIToolDefinition } from '@/lib/ai/types';
 import { dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
 
 interface SchemeRow { id: string; name: string; description: string | null; is_festival: boolean; starts_at: string; ends_at: string; }
-interface SchemePriceRow { scheme_id: string | null; product_id: string; price: number; products: { name: string; sku_code: string } | null; }
+interface SchemePriceRow { scheme_id: string | null; product_id: string; price: number; products: { name: string; sku_code: string | null } | null; }
 interface EligibleScheme extends SchemeRow {
   products: { id: string; name: string; skuCode: string | null; configuredSchemePrice: number }[];
 }

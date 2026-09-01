@@ -26,7 +26,7 @@ export interface DailyDemandPoint {
 export interface DemandTimeSeries {
   productId: string;
   productName: string;
-  skuCode: string;
+  skuCode: string | null;
   unit: string | null;
   periodStart: string;
   periodEnd: string;
@@ -79,7 +79,7 @@ export interface ForecastParams {
 export interface ForecastResult {
   productId: string;
   productName: string;
-  skuCode: string;
+  skuCode: string | null;
   unit: string | null;
 
   /** How trustworthy this result is: real, estimate, or insufficient. */

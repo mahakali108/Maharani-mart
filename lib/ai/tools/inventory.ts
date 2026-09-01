@@ -12,7 +12,7 @@ const listJson = { type: 'object', additionalProperties: false, properties: { pr
 
 function stockCards(rows: ProductTotalsViewRow[]): AICard[] {
   return rows.slice(0, 30).map((row) => ({
-    type: 'inventory', id: row.product_id, title: row.product_name, subtitle: row.sku_code, badge: row.stock_status.replaceAll('_', ' '), quality: 'verified', source: 'Authorized inventory product totals view',
+    type: 'inventory', id: row.product_id, title: row.product_name, subtitle: row.sku_code ?? 'Inventory totals', badge: row.stock_status.replaceAll('_', ' '), quality: 'verified', source: 'Authorized inventory product totals view',
     metrics: [
       { label: 'On hand', value: String(row.quantity_on_hand), quality: 'verified' },
       { label: 'Reserved', value: String(row.reserved_quantity), quality: 'verified' },
@@ -28,9 +28,9 @@ async function inventoryTotals(input: z.infer<typeof listSchema>, context: AIToo
     if (input.productId) warehouseQuery = warehouseQuery.eq('product_id', input.productId);
     const { data, error } = await warehouseQuery.order('quantity', { ascending: true });
     if (error) return dbFailure();
-    const rows = (data ?? []) as unknown as Array<{ id: string; product_id: string; quantity: number; reserved_quantity: number; products: { name: string; sku_code: string; reorder_level: number } | null; warehouses: { name: string } | null }>;
+    const rows = (data ?? []) as unknown as Array<{ id: string; product_id: string; quantity: number; reserved_quantity: number; products: { name: string; sku_code: string | null; reorder_level: number } | null; warehouses: { name: string } | null }>;
     const filtered = lowOnly ? rows.filter((row) => row.quantity - row.reserved_quantity <= (row.products?.reorder_level ?? 0)) : rows;
-    return verified({ warehouseStock: filtered }, filtered.map((row) => ({ type: 'inventory', id: row.id, title: row.products?.name ?? 'Product', subtitle: `${row.products?.sku_code ?? ''} · ${row.warehouses?.name ?? 'Warehouse'}`, quality: 'verified' as const, source: 'Authorized product × warehouse inventory stock row', metrics: [{ label: 'On hand', value: String(row.quantity), quality: 'verified' as const }, { label: 'Reserved', value: String(row.reserved_quantity), quality: 'verified' as const }, { label: 'Available', value: String(row.quantity - row.reserved_quantity), quality: 'verified' as const }] })));
+    return verified({ warehouseStock: filtered }, filtered.map((row) => ({ type: 'inventory', id: row.id, title: row.products?.name ?? 'Product', subtitle: [row.products?.sku_code, row.warehouses?.name ?? 'Warehouse'].filter(Boolean).join(' · '), quality: 'verified' as const, source: 'Authorized product × warehouse inventory stock row', metrics: [{ label: 'On hand', value: String(row.quantity), quality: 'verified' as const }, { label: 'Reserved', value: String(row.reserved_quantity), quality: 'verified' as const }, { label: 'Available', value: String(row.quantity - row.reserved_quantity), quality: 'verified' as const }] })));
   }
   let query = context.supabase.from('inventory_product_totals').select('*').limit(input.limit ?? 30);
   if (input.productId) query = query.eq('product_id', input.productId);
@@ -59,7 +59,7 @@ async function batchStock(input: z.infer<typeof listSchema>, context: AIToolCont
   if (input.warehouseId) query = query.eq('warehouse_id', input.warehouseId);
   const { data, error } = await query.order('expiry_date', { ascending: true });
   if (error) return dbFailure();
-  const rows = (data ?? []) as unknown as Array<{ id: string; product_id: string; batch_number: string; manufacturing_date: string | null; expiry_date: string | null; current_quantity: number; reserved_quantity: number; unit_cost: number | null; products: { name: string; sku_code: string } | null; warehouses: { name: string } | null }>;
+  const rows = (data ?? []) as unknown as Array<{ id: string; product_id: string; batch_number: string; manufacturing_date: string | null; expiry_date: string | null; current_quantity: number; reserved_quantity: number; unit_cost: number | null; products: { name: string; sku_code: string | null } | null; warehouses: { name: string } | null }>;
   return verified({ batches: rows }, rows.map((row) => ({ type: 'inventory', id: row.id, title: row.products?.name ?? 'Product', subtitle: `Batch ${row.batch_number} · ${row.warehouses?.name ?? 'Warehouse'}`, quality: 'verified', source: 'Authorized inventory batch ledger', metrics: [{ label: 'On hand', value: String(row.current_quantity), quality: 'verified' }, { label: 'Reserved', value: String(row.reserved_quantity), quality: 'verified' }, { label: 'Expiry', value: row.expiry_date ?? 'Not recorded', quality: row.expiry_date ? 'verified' : 'unavailable' }] })));
 }
 

@@ -7,10 +7,13 @@ import { ProductImageManager } from '@/components/admin/product-image-manager';
 import { ProductPackManager } from '@/components/admin/product-pack-manager';
 import { ProductThresholdsForm } from '@/components/admin/product-thresholds-form';
 import { updateProductAction } from '@/lib/admin/products-actions';
+import { defaultPackSkuCandidates } from '@/lib/admin/default-pack';
 
 interface ProductDetail {
   id: string;
-  sku_code: string;
+  /** Legacy column (optional since 0023). Not shown — used only to locate
+   *  old auto-seeded default packs whose code mirrored the product SKU. */
+  sku_code: string | null;
   name: string;
   brand_id: string | null;
   category_id: string | null;
@@ -165,9 +168,10 @@ export default async function EditProductPage({ params }: { params: { id: string
   const packs = rawPacks.map((pack) => ({ ...pack, tiers: tiersByPack.get(pack.id) ?? [] })) as ProductPackRow[];
 
   // Case selling price for the product form defaults = the default pack's case
-  // price (pack whose SKU mirrors the product), else the first pack.
+  // price (the auto-seeded pack, matched via its AUTO- code or the legacy
+  // product SKU), else the first pack.
   const defaultPack =
-    packs.find((pack) => pack.pack_sku_code === product!.sku_code) ?? packs[0];
+    packs.find((pack) => defaultPackSkuCandidates(product!.id, product!.sku_code).includes(pack.pack_sku_code)) ?? packs[0];
   const productCasePrice = defaultPack?.case_price ?? null;
 
   const boundUpdateAction = updateProductAction.bind(null, params.id);
@@ -183,7 +187,6 @@ export default async function EditProductPage({ params }: { params: { id: string
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-ink-950">{product!.name}</h1>
-        <p className="mt-1 text-sm font-mono text-xs text-ink-500">{product!.sku_code}</p>
       </div>
 
       <Card>

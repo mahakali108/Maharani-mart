@@ -47,7 +47,7 @@ async function productPerformance(days: number, context: AIToolContext, ascendin
   if (error) return dbFailure();
   const ids = (orders ?? []).map((row) => row.id);
   if (!ids.length) return verified({ products: [], from, to }, [], sourcePeriod(from, to, 0));
-  type Item = { product_id: string; quantity: number; line_total: number; products: { name: string; sku_code: string } | null };
+  type Item = { product_id: string; quantity: number; line_total: number; products: { name: string; sku_code: string | null } | null };
   const data: Item[] = [];
   for (let index = 0; index < ids.length; index += 40) {
     const chunk = ids.slice(index, index + 40);

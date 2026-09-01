@@ -16,7 +16,7 @@ import type { DailyDemandPoint, DemandTimeSeries, ForecastParams, StockSnapshot 
 export interface ProductMasterRow {
   id: string;
   name: string;
-  sku_code: string;
+  sku_code: string | null;
   unit: string | null;
   lead_time_days: number;
   min_stock: number;

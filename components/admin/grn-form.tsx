@@ -17,7 +17,7 @@ interface Option {
 }
 
 interface ProductOption extends Option {
-  sku_code: string;
+  sku_code: string | null;
 }
 
 interface GrnLine {
@@ -121,7 +121,7 @@ export function GrnForm({ products, warehouses }: { products: ProductOption[]; w
                   >
                     <option value="" disabled>Select product</option>
                     {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.sku_code})</option>
+                      <option key={p.id} value={p.id}>{p.sku_code ? `${p.name} (${p.sku_code})` : p.name}</option>
                     ))}
                   </Select>
                 </div>

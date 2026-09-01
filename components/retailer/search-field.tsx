@@ -102,7 +102,7 @@ export function SearchField({
         value={value}
         autoFocus={autoFocus}
         autoComplete="off"
-        placeholder="Search products, brands or SKU"
+        placeholder="Search products or brands"
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           setValue(event.target.value);
@@ -197,9 +197,11 @@ export function SearchField({
                     <Search className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <span>
                       <span className="block text-xs font-semibold text-slate-800">{product.name}</span>
-                      <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
-                        {product.brandName ? `${product.brandName} · ` : ''}SKU {product.skuCode}
-                      </span>
+                      {product.brandName ? (
+                        <span className="mt-0.5 block font-mono text-[10px] text-slate-400">
+                          {product.brandName}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 </li>

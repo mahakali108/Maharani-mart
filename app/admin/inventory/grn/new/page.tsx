@@ -14,7 +14,7 @@ export default async function NewGrnPage() {
     supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
   ]);
 
-  const products = (productData ?? []) as { id: string; name: string; sku_code: string }[];
+  const products = (productData ?? []) as { id: string; name: string; sku_code: string | null }[];
   const warehouses = (warehouseData ?? []) as { id: string; name: string }[];
 
   return (

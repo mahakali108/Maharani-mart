@@ -158,7 +158,7 @@ export interface InventoryIntel {
   status: SectionStatus;
   inventoryValue: number;
   onHandProducts: number;
-  lowStock: { id: string; name: string; sku: string; available: number; reorderLevel: number }[];
+  lowStock: { id: string; name: string; sku: string | null; available: number; reorderLevel: number }[];
   stockout: {
     id: string;
     name: string;

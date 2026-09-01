@@ -13,7 +13,6 @@ interface Option {
 }
 
 interface ProductDefaults {
-  sku_code: string;
   name: string;
   brand_id: string | null;
   category_id: string | null;
@@ -54,10 +53,6 @@ export function ProductForm({
       ) : null}
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="skuCode">SKU code</Label>
-          <Input id="skuCode" name="skuCode" defaultValue={defaults?.sku_code} placeholder="e.g. MK-BEV-001" required />
-        </div>
         <div>
           <Label htmlFor="name">Product name</Label>
           <Input id="name" name="name" defaultValue={defaults?.name} placeholder="e.g. Tata Tea Gold 1kg" required />

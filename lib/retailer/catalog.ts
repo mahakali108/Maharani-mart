@@ -10,12 +10,11 @@ import { calcDiscountPercent } from '@/lib/retailer/format';
 import type { ProductCardProps } from '@/components/retailer/product-card';
 
 export const PRODUCT_CARD_SELECT =
-  'id, name, sku_code, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, is_active, sort_order )';
+  'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, is_active, sort_order )';
 
 export interface CatalogProductRow {
   id: string;
   name: string;
-  sku_code: string;
   category_id: string | null;
   brand_id: string | null;
   gst_percent: number;
@@ -65,7 +64,6 @@ export function toPricedCard(
   return {
     id: product.id,
     name: product.name,
-    skuCode: product.sku_code,
     brandName: product.brands?.name,
     imageUrl: images[0]?.image_url,
     isNewLaunch: product.is_new_launch,

@@ -139,7 +139,7 @@ export interface StockMovementRow {
 export interface ProductTotalsViewRow {
   product_id: string;
   product_name: string;
-  sku_code: string;
+  sku_code: string | null;
   quantity_on_hand: number;
   reserved_quantity: number;
   available_quantity: number;
@@ -157,7 +157,7 @@ export interface ExpiryReportViewRow {
   batch_id: string;
   product_id: string;
   product_name: string;
-  sku_code: string;
+  sku_code: string | null;
   warehouse_id: string;
   warehouse_name: string;
   batch_number: string;

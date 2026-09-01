@@ -18,7 +18,6 @@ interface AssignedRetailer {
 interface CatalogProduct {
   id: string;
   name: string;
-  sku_code: string;
   gst_percent: number;
   brands: { name: string } | null;
   product_images: { image_url: string; sort_order: number }[];
@@ -79,7 +78,7 @@ export default async function NewSalesmanOrderPage({
   const { data: productData } = await supabase
     .from('products')
     .select(
-      'id, name, sku_code, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, moq, is_active, sort_order )'
+      'id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, moq, is_active, sort_order )'
     )
     .eq('is_active', true)
     .order('name')
@@ -109,7 +108,6 @@ export default async function NewSalesmanOrderPage({
       return {
         id: product.id,
         name: product.name,
-        skuCode: product.sku_code,
         brandName: product.brands?.name ?? null,
         imageUrl: image?.image_url ?? null,
         gstPercent: product.gst_percent,

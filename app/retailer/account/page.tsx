@@ -39,7 +39,7 @@ interface ProfileContactRow {
 const ACCOUNT_LINKS = [
   { href: '#wallet-credit', label: 'Wallet & credit', body: 'Available credit and outstanding balance', icon: WalletCards, tone: 'bg-emerald-50 text-emerald-700' },
   { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
-  { href: '/retailer/quick-order', label: 'Quick Order', body: 'Find products by name or SKU', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
+  { href: '/retailer/quick-order', label: 'Quick Order', body: 'Find products fast by name', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
   { href: '/retailer/favorites', label: 'Favourites', body: 'Your saved products for faster restocking', icon: Heart, tone: 'bg-rose-50 text-rose-700' },
   { href: '/retailer/notifications', label: 'Notifications', body: 'Order and account updates', icon: Bell, tone: 'bg-violet-50 text-violet-700' },
   { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-indigo-50 text-indigo-700' },

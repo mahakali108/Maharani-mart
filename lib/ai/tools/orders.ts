@@ -12,7 +12,7 @@ const orderIdSchema = z.object({ orderId: z.string().uuid() });
 const retailerOptionalSchema = z.object({ retailerId: z.string().uuid().optional(), limit: z.number().int().min(1).max(30).optional(), status: z.enum(['pending', 'confirmed', 'processing', 'packed', 'dispatched', 'delivered', 'cancelled', 'returned']).optional() });
 
 interface OrderRow { id: string; order_number: string; retailer_id: string; status: string; subtotal: number; gst_total: number; discount_total: number; grand_total: number; placed_at: string; notes?: string | null; retailers?: { shop_name: string } | null; }
-interface OrderItemRow { id: string; order_id: string; product_id: string; pack_id: string | null; quantity: number; unit_price: number; gst_percent: number; line_total: number; products: { name: string; sku_code: string } | null; product_packs: { pack_name: string } | null; }
+interface OrderItemRow { id: string; order_id: string; product_id: string; pack_id: string | null; quantity: number; unit_price: number; gst_percent: number; line_total: number; products: { name: string; sku_code: string | null } | null; product_packs: { pack_name: string } | null; }
 
 function orderCard(order: OrderRow, context: AIToolContext, invoice = false): AICard {
   const base = context.actor.surface === 'retailer'

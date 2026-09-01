@@ -106,7 +106,7 @@ export default async function RetailerCatalogPage({
 
   if (q) {
     const like = `"%${q}%"`;
-    const clauses = [`name.ilike.${like}`, `sku_code.ilike.${like}`];
+    const clauses = [`name.ilike.${like}`];
     if (matchingBrandIds.length > 0) clauses.push(`brand_id.in.(${matchingBrandIds.join(',')})`);
     if (matchingCategoryIds.length > 0) clauses.push(`category_id.in.(${matchingCategoryIds.join(',')})`);
     query = query.or(clauses.join(','));
@@ -189,7 +189,7 @@ export default async function RetailerCatalogPage({
               {selectedCategory?.name ?? selectedBrand?.name ?? (q ? `Results for “${q}”` : 'Everything your shop needs')}
             </h1>
             <p className="mt-1 max-w-xl text-xs leading-5 text-slate-200 sm:text-sm">
-              Search by product, SKU, brand or category. Your approved retailer prices stay server-side.
+              Search by product, brand or category. Your approved retailer prices stay server-side.
             </p>
           </div>
           <LayoutGrid className="hidden h-20 w-20 text-white/10 sm:block" />
@@ -293,7 +293,7 @@ export default async function RetailerCatalogPage({
           <AdminEmptyState
             icon={Package}
             title={q ? 'No products match your search' : 'No products available here yet'}
-            body={q ? 'Try a broader product name, brand or SKU, or clear a filter.' : 'Your distributor is updating this catalog.'}
+            body={q ? 'Try a broader product name or brand, or clear a filter.' : 'Your distributor is updating this catalog.'}
           />
           <div className="pb-8 text-center">
             <Link href="/retailer/catalog" className="text-sm font-semibold text-primary-600">Clear filters</Link>

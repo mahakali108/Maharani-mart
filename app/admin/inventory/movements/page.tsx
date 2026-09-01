@@ -45,7 +45,7 @@ interface MovementRow {
   new_quantity: number | null;
   created_at: string;
   seq: number;
-  products: { name: string; sku_code: string } | null;
+  products: { name: string; sku_code: string | null } | null;
   warehouses: { name: string } | null;
   inventory_batches: { batch_number: string } | null;
   profiles: { full_name: string } | null;

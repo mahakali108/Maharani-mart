@@ -20,7 +20,6 @@ import { QuickOrderRow, type QuickOrderPack } from '@/components/retailer/quick-
 interface QuickOrderProductRow {
   id: string;
   name: string;
-  sku_code: string;
   gst_percent: number;
   brands: { name: string } | null;
   product_images: { image_url: string; sort_order: number }[];
@@ -53,7 +52,6 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
   let cards: {
     id: string;
     name: string;
-    skuCode: string;
     brandName?: string;
     imageUrl?: string;
     gstPercent: number;
@@ -63,9 +61,9 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
   if (q) {
     const { data: productRows } = await supabase
       .from('products')
-      .select('id, name, sku_code, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, is_active )')
+      .select('id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, is_active )')
       .eq('is_active', true)
-      .or(`name.ilike."%${q}%",sku_code.ilike."%${q}%"`)
+      .ilike('name', `%${q}%`)
       .order('name')
       .limit(MAX_RESULTS)
       .returns<QuickOrderProductRow[]>();
@@ -94,7 +92,6 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
         return {
           id: product.id,
           name: product.name,
-          skuCode: product.sku_code,
           brandName: product.brands?.name,
           imageUrl: images[0]?.image_url,
           gstPercent: product.gst_percent,
@@ -117,14 +114,14 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
         <div className="relative max-w-3xl">
           <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300"><Sparkles className="h-3.5 w-3.5" /> Fast restocking</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-4xl">Quick Order</h1>
-          <p className="mt-2 max-w-xl text-xs leading-5 text-primary-100 sm:text-sm">Know what you need? Find products by name or SKU, choose a pack and add quantities without leaving this page.</p>
+          <p className="mt-2 max-w-xl text-xs leading-5 text-primary-100 sm:text-sm">Know what you need? Find products by name, choose a pack and add quantities without leaving this page.</p>
 
           <form method="get" className="relative mt-5 max-w-2xl">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               name="q"
               defaultValue={q}
-              placeholder="Try “rice”, “oil” or enter an SKU code"
+              placeholder="Try “rice”, “oil” or your regular brand"
               autoFocus
               className="h-12 w-full rounded-xl border-0 bg-white pl-11 pr-24 text-sm text-slate-900 shadow-md outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-amber-300"
             />
@@ -135,7 +132,7 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
 
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {[
-          { icon: Barcode, title: 'Name or SKU', body: 'Find exact products fast' },
+          { icon: Barcode, title: 'Search by name', body: 'Find exact products fast' },
           { icon: PackageSearch, title: 'Choose pack', body: 'See price and MOQ' },
           { icon: ShoppingCart, title: 'Add instantly', body: 'Cart stays in sync' },
         ].map((item) => (
