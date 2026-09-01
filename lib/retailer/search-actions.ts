@@ -14,7 +14,7 @@ import {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface SearchSuggestionResult {
-  products: { id: string; name: string; skuCode: string; brandName?: string }[];
+  products: { id: string; name: string; brandName?: string }[];
   brands: { id: string; name: string }[];
   categories: { id: string; name: string }[];
 }
@@ -42,12 +42,12 @@ async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult>
   const [{ data: products }, { data: brands }, { data: categories }] = await Promise.all([
     supabase
       .from('products')
-      .select('id, name, sku_code, brands ( name )')
+      .select('id, name, brands ( name )')
       .eq('is_active', true)
-      .or(`name.ilike.${like},sku_code.ilike.${like}`)
+      .ilike('name', like)
       .order('name')
       .limit(6)
-      .returns<{ id: string; name: string; sku_code: string; brands: { name: string } | null }[]>(),
+      .returns<{ id: string; name: string; brands: { name: string } | null }[]>(),
     supabase
       .from('brands')
       .select('id, name')
@@ -70,7 +70,6 @@ async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult>
     products: (products ?? []).map((product) => ({
       id: product.id,
       name: product.name,
-      skuCode: product.sku_code,
       brandName: product.brands?.name,
     })),
     brands: brands ?? [],

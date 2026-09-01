@@ -278,7 +278,12 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          sku_code: string;
+          /**
+           * Legacy internal identifier. Removed from the product workflow in
+           * migration 0023 — optional on insert, where the database fills in a
+           * generated default. Never collected from or shown to a user.
+           */
+          sku_code?: string;
           name: string;
           brand_id?: string | null;
           category_id?: string | null;

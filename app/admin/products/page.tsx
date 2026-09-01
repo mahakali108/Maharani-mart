@@ -12,7 +12,6 @@ import { ProductRowActions } from '@/components/admin/product-row-actions';
 
 interface ProductRow {
   id: string;
-  sku_code: string;
   name: string;
   base_price: number;
   is_active: boolean;
@@ -41,10 +40,10 @@ export default async function ProductsPage({
 
   let query = supabase
     .from('products')
-    .select('id, sku_code, name, base_price, is_active, is_new_launch, brands ( name ), categories ( name )')
+    .select('id, name, base_price, is_active, is_new_launch, brands ( name ), categories ( name )')
     .order('created_at', { ascending: false });
 
-  if (q) query = query.or(`name.ilike.%${q}%,sku_code.ilike.%${q}%`);
+  if (q) query = query.ilike('name', `%${q}%`);
   if (brandFilter) query = query.eq('brand_id', brandFilter);
   if (categoryFilter) query = query.eq('category_id', categoryFilter);
   if (statusFilter === 'active') query = query.eq('is_active', true);
@@ -81,7 +80,7 @@ export default async function ProductsPage({
         <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-5">
           <div className="relative sm:col-span-2">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <Input name="q" defaultValue={q} placeholder="Search name or SKU…" className="pl-9" />
+            <Input name="q" defaultValue={q} placeholder="Search product name…" className="pl-9" />
           </div>
           <Select name="brand" defaultValue={brandFilter}>
             <option value="">All brands</option>
@@ -134,7 +133,6 @@ export default async function ProductsPage({
           <table className="w-full text-sm">
             <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
               <tr>
-                <th className="px-5 py-3 font-medium">SKU</th>
                 <th className="px-5 py-3 font-medium">Name</th>
                 <th className="px-5 py-3 font-medium">Brand</th>
                 <th className="px-5 py-3 font-medium">Category</th>
@@ -146,7 +144,6 @@ export default async function ProductsPage({
             <tbody className="divide-y divide-ink-100">
               {products.map((p) => (
                 <tr key={p.id}>
-                  <td className="px-5 py-3 font-mono text-xs text-ink-500">{p.sku_code}</td>
                   <td className="px-5 py-3 font-medium text-ink-900">
                     <Link href={`/admin/products/${p.id}`} className="hover:text-primary-600">
                       {p.name}

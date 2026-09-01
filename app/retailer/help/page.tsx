@@ -69,7 +69,7 @@ export default function HelpPage({
         {[
           { href: '/retailer/orders', icon: CircleHelp, title: 'Order issue', body: 'Track, invoice, reorder or cancel a pending order.' },
           { href: '/retailer/home', icon: WalletCards, title: 'Payment / credit issue', body: 'Review available credit and outstanding balance.' },
-          { href: '/retailer/catalog', icon: PackageSearch, title: 'Product issue', body: 'Check pack size, SKU, GST or current wholesale price.' },
+          { href: '/retailer/catalog', icon: PackageSearch, title: 'Product issue', body: 'Check pack size, GST or current wholesale price.' },
           { href: '/retailer/orders?status=dispatched', icon: Truck, title: 'Delivery issue', body: 'Follow orders that are packed or on the way.' },
         ].map((item) => (
           <Link key={item.title} href={item.href} className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:border-primary-200 ${topic && item.title.toLowerCase().includes(topic) ? 'border-primary-300 ring-1 ring-primary-200' : 'border-slate-200'}`}>
