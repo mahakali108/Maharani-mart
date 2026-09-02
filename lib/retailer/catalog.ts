@@ -10,7 +10,7 @@ import { calcDiscountPercent } from '@/lib/retailer/format';
 import type { ProductCardProps } from '@/components/retailer/product-card';
 
 export const PRODUCT_CARD_SELECT =
-  'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, is_active, sort_order )';
+  'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, image_url, is_active, sort_order )';
 
 export interface CatalogProductRow {
   id: string;
@@ -31,6 +31,7 @@ export interface CatalogProductRow {
     units_per_case: number;
     mrp: number | null;
     moq: number;
+    image_url: string | null;
     is_active: boolean;
     sort_order: number;
   }[];
@@ -65,7 +66,9 @@ export function toPricedCard(
     id: product.id,
     name: product.name,
     brandName: product.brands?.name,
-    imageUrl: images[0]?.image_url,
+    // Prefer the shown variant's own image (Phase 3), falling back to the
+    // parent product's gallery exactly as before when it has none.
+    imageUrl: best?.pack.image_url ?? images[0]?.image_url,
     isNewLaunch: product.is_new_launch,
     fromPrice: best?.price ?? null,
     mrp: best?.pack.mrp,

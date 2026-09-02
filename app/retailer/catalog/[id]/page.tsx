@@ -274,17 +274,35 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const selectedTiers = selectedPack ? packTiers.get(selectedPack.id) ?? [] : [];
   const discount = calcDiscountPercent(selectedPack?.mrp, selectedPiecePrice);
   const saveAmount = calcSavings(selectedPack?.mrp, selectedPiecePrice);
+  const schemes = (schemeRows ?? [])
+    .map((row) => row.schemes)
+    .filter((scheme): scheme is NonNullable<SchemeLinkRow['schemes']> => !!scheme && scheme.is_active);
+  const hasActiveScheme = schemes.length > 0;
   const selectedAvailable = selectedPack?.is_active ?? false;
-  const variantSwitcher = buildVariantSwitcher(rawPacks, selectedPack?.id ?? null);
+
+  // Real, server-resolved numbers for every size card of the switcher. The
+  // same case_price source of truth + product-level override the quote uses;
+  // the per-piece figure is derived inside buildVariantSwitcher. Nothing is
+  // estimated in the browser and no stock number is exposed (inventory is
+  // product-level and staff-only — see docs/warehouse-gaps.md).
+  const variantPricing = new Map(
+    rawPacks.map((pack) => [
+      pack.id,
+      {
+        casePrice: resolvePackPrice(pack, override),
+        unitsPerCase: pack.units_per_case,
+        mrp: pack.mrp,
+        hasOffer: hasActiveScheme,
+      },
+    ])
+  );
+  const variantSwitcher = buildVariantSwitcher(rawPacks, selectedPack?.id ?? null, variantPricing);
 
   // Main image: the selected variant's own image when it has one, otherwise
   // the parent product's existing gallery (existing fallback behaviour).
   const productImages = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
   const images = variantGalleryImages(selectedPack, productImages);
   const galleryAlt = [product.name, selectedPack?.pack_name].filter(Boolean).join(' — ');
-  const schemes = (schemeRows ?? [])
-    .map((row) => row.schemes)
-    .filter((scheme): scheme is NonNullable<SchemeLinkRow['schemes']> => !!scheme && scheme.is_active);
 
   return (
     <div className="space-y-5 pb-20 sm:space-y-6 lg:pb-8">

@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -58,6 +59,21 @@ function parseProductForm(formData: FormData) {
  */
 function defaultPackSkuCode(productId: string) {
   return `PK-${productId.replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+}
+
+/**
+ * Internal identifier for an admin-created variant/pack.
+ *
+ * SKU codes were removed from the user-facing workflow (migration 0023), but
+ * `product_packs.pack_sku_code` is still a NOT NULL UNIQUE column that legacy
+ * inventory/reporting readers depend on. An admin adding a new size therefore
+ * never types a code: one is generated here, unique per pack, so unlimited
+ * variants (30g, 750g, 2kg, ...) can be created without inventing codes.
+ */
+function generatePackSkuCode(productId: string) {
+  const product = productId.replaceAll('-', '').slice(0, 8).toUpperCase();
+  const unique = randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase();
+  return `PKV-${product}-${unique}`;
 }
 
 /**
@@ -359,7 +375,8 @@ export async function reorderProductImageAction(productId: string, imageId: stri
 
 const packSchema = z.object({
   packName: z.string().min(1, 'Enter a pack name (e.g. "1 Kg", "5 Kg", "6-pack", "Case of 12").'),
-  packSkuCode: z.string().min(1, 'Enter a pack SKU code.'),
+  // Optional: the admin never types a code — one is generated when omitted.
+  packSkuCode: z.string().trim().max(64).optional().default(''),
   unitsPerCase: z.coerce.number().int().min(1, 'Units per case must be at least 1.').default(1),
   mrp: z.coerce.number().min(0, 'Enter a valid MRP.'),
   costPrice: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -390,7 +407,10 @@ export async function addProductPackAction(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const d = parsed.data;
+  const d = {
+    ...parsed.data,
+    packSkuCode: parsed.data.packSkuCode || generatePackSkuCode(productId),
+  };
 
   const supabase = createClient();
   const payload: ProductPackInsert = {
@@ -414,7 +434,9 @@ export async function addProductPackAction(
     .maybeSingle<{ id: string }>();
   if (error) {
     return {
-      error: error.message.includes('duplicate') ? 'A pack with this SKU code or barcode already exists.' : error.message,
+      error: error.message.includes('duplicate')
+        ? 'A pack with this barcode already exists. Check the barcode and try again.'
+        : error.message,
     };
   }
 

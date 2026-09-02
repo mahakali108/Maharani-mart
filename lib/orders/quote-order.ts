@@ -25,7 +25,12 @@ export interface QuotedOrderLine {
   loosePieces: number;
   piecePrice: number;
   casePrice: number;
-  /** Per-case GST-INCLUSIVE selling price (unitPrice = price of one pack/case). */
+  /**
+   * Per-pack (per-case) GST-INCLUSIVE selling price actually charged on this
+   * line, i.e. `lineTotal / quantity` rounded to paise. Derived from the line
+   * total rather than multiplied back out from the per-piece price so the
+   * persisted invoice always reconciles: `unit_price × quantity ≈ line_total`.
+   */
   unitPrice: number;
   gstPercent: number;
   /** Line total EXCLUDING the GST component. */
@@ -190,7 +195,7 @@ export async function quoteOrderForRetailer({
       loosePieces: breakdown.loosePieces,
       piecePrice: breakdown.piecePrice,
       casePrice: breakdown.casePrice,
-      unitPrice: breakdown.piecePrice * pack.units_per_case,
+      unitPrice: roundMoney(breakdown.total / Math.max(quantity, 1)),
       gstPercent: product.gst_percent,
       subtotal: lineSubtotal,
       gst: lineGst,

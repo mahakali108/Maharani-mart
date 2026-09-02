@@ -16,11 +16,22 @@
  *   - the gallery image list for a variant (pack image first, parent
  *     product gallery as the existing fallback)
  *
- * No price is computed here — pricing stays in lib/retailer/case-pricing.ts
- * and remains server-authoritative. No availability is invented: a variant
+ * No NEW price is invented here. The switcher only *presents* numbers the
+ * caller already resolved server-side (the pack's GST-inclusive case_price
+ * plus any product-level override); the per-piece figure is the same derived
+ * value the pricing engine uses (case_price / units_per_case). Pricing stays
+ * in lib/retailer/case-pricing.ts and remains server-authoritative. No availability is invented: a variant
  * is "available" only when its `is_active` flag (and its parent product's)
  * is true, exactly what RLS already exposes to retailers.
+ *
+ * Stock quantities are deliberately NOT surfaced here: inventory lives at
+ * product level (not per pack) and is staff-only under RLS
+ * (`inventory_staff`), so a retailer-facing per-variant stock number would be
+ * both invented and a data leak. See docs/warehouse-gaps.md.
  */
+
+import { piecePriceFromCase, round2 } from '@/lib/retailer/case-pricing';
+import { calcDiscountPercent } from '@/lib/retailer/format';
 
 /** A minimal pack shape needed for switcher/gallery decisions. */
 export interface VariantPackBase {
@@ -60,6 +71,41 @@ export interface VariantSwitcherItem {
    * still re-validates every cart/order line.
    */
   isAvailable: boolean;
+  /**
+   * Real, server-resolved pricing for this variant, present only when the
+   * caller supplied it. Never estimated and never computed in the browser —
+   * the page passes the same numbers the server-side quote would use.
+   */
+  pricing: VariantPricing | null;
+  /**
+   * True for the variant with the strictly lowest per-piece price among the
+   * available variants of this product. Only set when real prices were
+   * supplied for more than one variant and a genuine advantage exists.
+   */
+  isBestValue: boolean;
+}
+
+/** Server-resolved, GST-inclusive numbers for one variant card. */
+export interface VariantPricing {
+  /** GST-INCLUSIVE case selling price (the source of truth). */
+  casePrice: number;
+  /** Derived per-piece price (case_price / units_per_case). Never stored. */
+  piecePrice: number;
+  unitsPerCase: number;
+  /** Printed MRP per piece, when the admin recorded one. */
+  mrp: number | null;
+  /** Saving vs MRP, in %, 0 when there is no real MRP advantage. */
+  discountPercent: number;
+  /** True only when an active scheme/offer row really exists for the product. */
+  hasOffer: boolean;
+}
+
+/** Pricing inputs a page may supply per pack (already resolved server-side). */
+export interface VariantPricingInput {
+  casePrice: number;
+  unitsPerCase: number;
+  mrp?: number | null;
+  hasOffer?: boolean;
 }
 
 export interface VariantSwitcherModel {
@@ -77,20 +123,67 @@ export interface VariantSwitcherModel {
  */
 export function buildVariantSwitcher(
   packs: VariantPackBase[],
-  selectedPackId: string | null
+  selectedPackId: string | null,
+  pricingByPackId?: Map<string, VariantPricingInput> | null
 ): VariantSwitcherModel {
   const ordered = [...(packs ?? [])].sort((a, b) => a.sort_order - b.sort_order);
-  const variants: VariantSwitcherItem[] = ordered.map((pack) => ({
-    packId: pack.id,
-    label: pack.pack_name,
-    href: variantHref(pack.id),
-    isSelected: pack.id === selectedPackId,
-    isAvailable: pack.is_active,
-  }));
+
+  const variants: VariantSwitcherItem[] = ordered.map((pack) => {
+    const input = pricingByPackId?.get(pack.id) ?? null;
+    const pricing: VariantPricing | null = input
+      ? {
+          casePrice: round2(input.casePrice),
+          piecePrice: piecePriceFromCase(input.casePrice, input.unitsPerCase),
+          unitsPerCase: input.unitsPerCase > 0 ? input.unitsPerCase : 1,
+          mrp: input.mrp ?? null,
+          discountPercent: calcDiscountPercent(
+            input.mrp ?? null,
+            piecePriceFromCase(input.casePrice, input.unitsPerCase)
+          ),
+          hasOffer: input.hasOffer === true,
+        }
+      : null;
+
+    return {
+      packId: pack.id,
+      label: pack.pack_name,
+      href: variantHref(pack.id),
+      isSelected: pack.id === selectedPackId,
+      isAvailable: pack.is_active,
+      pricing,
+      isBestValue: false,
+    };
+  });
+
+  markBestValueVariant(variants);
+
   return {
     variants,
     hasSelectableVariants: variants.some((variant) => variant.isAvailable),
   };
+}
+
+/**
+ * Flags the available variant with the strictly lowest per-piece price.
+ *
+ * The badge is only awarded when at least two available variants have real
+ * prices AND there is a genuine advantage (>= ₹0.005/piece) — a product whose
+ * sizes all work out to the same per-piece rate gets no badge rather than an
+ * arbitrary winner. Ties keep the first (lowest sort_order) variant.
+ */
+function markBestValueVariant(variants: VariantSwitcherItem[]): void {
+  const priced = variants.filter((variant) => variant.isAvailable && variant.pricing !== null);
+  if (priced.length < 2) return;
+
+  let best = priced[0]!;
+  let worst = priced[0]!;
+  for (const variant of priced) {
+    if (variant.pricing!.piecePrice < best.pricing!.piecePrice) best = variant;
+    if (variant.pricing!.piecePrice > worst.pricing!.piecePrice) worst = variant;
+  }
+  if (worst.pricing!.piecePrice - best.pricing!.piecePrice >= 0.005) {
+    best.isBestValue = true;
+  }
 }
 
 export interface VariantGalleryImage {
