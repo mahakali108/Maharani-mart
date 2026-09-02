@@ -17,6 +17,7 @@ import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CartItemRow } from '@/components/retailer/cart-item-row';
 import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
 import { CartCheckoutBar } from '@/components/retailer/cart-checkout-bar';
+import { ClearCartButton } from '@/components/retailer/clear-cart-button';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { ProductRail } from '@/components/retailer/product-rail';
 import { RecentlyViewedRail } from '@/components/retailer/recently-viewed';
@@ -32,7 +33,6 @@ interface CartItemDetail {
   product_packs: {
     id: string;
     pack_name: string;
-    pack_sku_code: string;
     base_price: number;
     ptr: number | null;
     case_price: number;
@@ -71,7 +71,7 @@ export default async function CartPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, units_per_case, mrp, moq, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -160,7 +160,6 @@ export default async function CartPage() {
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
       brandName: product?.brands?.name ?? null,
-      skuCode: pack?.pack_sku_code || null,
       imageUrl: lineImage,
       unitPrice,
       gstPercent,
@@ -191,12 +190,15 @@ export default async function CartPage() {
             {items.length} line item{items.length === 1 ? '' : 's'} · {totalQuantity} pack{totalQuantity === 1 ? '' : 's'}
           </p>
         </div>
-        <Link
-          href="/retailer/catalog"
-          className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Continue shopping
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <ClearCartButton itemCount={items.length} />
+          <Link
+            href="/retailer/catalog"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Continue shopping
+          </Link>
+        </div>
       </div>
 
       {hasUnavailable ? (

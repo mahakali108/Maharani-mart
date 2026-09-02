@@ -107,9 +107,46 @@ describe('SKU Code removal — product workflow', () => {
       expect(read('lib/retailer/search-actions.ts')).not.toContain('sku_code.ilike');
     });
 
-    it('keeps the pack SKU on the cart line and the salesman pack list', () => {
-      expect(read('app/retailer/cart/page.tsx')).toContain('pack_sku_code');
+    /**
+     * UPDATED by the retailer enterprise upgrade.
+     *
+     * This assertion previously required the retailer cart to keep selecting
+     * `pack_sku_code`, and `components/retailer/cart-item-row.tsx` rendered it
+     * as "SKU <code>". Business rule 6 ("Internal SKU is not retailer-facing")
+     * forbids that, so the retailer surfaces no longer select, forward or
+     * render any internal code.
+     *
+     * What is deliberately UNCHANGED: the `product_packs.pack_sku_code`
+     * DATABASE COLUMN still exists and is still required (see section 4), the
+     * admin product screens still show it, and the salesman order builder —
+     * internal staff, not a retailer — still uses `pack.skuCode`.
+     */
+    it('never exposes an internal pack SKU on a retailer surface', () => {
+      const retailerSurfaces = [
+        'app/retailer/cart/page.tsx',
+        'app/retailer/catalog/[id]/page.tsx',
+        'components/retailer/cart-item-row.tsx',
+        'components/retailer/pack-selector.tsx',
+      ];
+      for (const file of retailerSurfaces) {
+        expect(read(file)).not.toContain('pack_sku_code');
+        expect(read(file)).not.toContain('skuCode');
+      }
+      expect(read('components/retailer/cart-item-row.tsx')).not.toContain('SKU {');
+    });
+
+    it('keeps the internal pack SKU for staff-side surfaces only', () => {
       expect(read('components/salesman/order-builder.tsx')).toContain('pack.skuCode');
+      expect(read('app/admin/products/[id]/page.tsx')).toContain('pack_sku_code');
+    });
+
+    it('keeps internal codes out of retailer-facing AI cards', () => {
+      const helper = read('lib/ai/tools/helpers.ts');
+      expect(helper).toContain('export function internalCode(');
+      expect(helper).toContain("context.actor.surface === 'retailer'");
+      for (const file of ['lib/ai/tools/products.ts', 'lib/ai/tools/analytics.ts', 'lib/ai/tools/schemes.ts']) {
+        expect(read(file)).toContain('internalCode(');
+      }
     });
   });
 

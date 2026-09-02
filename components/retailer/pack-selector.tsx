@@ -35,7 +35,6 @@ import { caseLineBreakdown, piecePriceFromCase, type PricingTier } from '@/lib/r
 export interface MultiPricePack {
   id: string;
   pack_name: string;
-  pack_sku_code: string;
   units_per_case: number;
   base_price: number;
   ptr: number | null;

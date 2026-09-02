@@ -4,6 +4,7 @@ import type { createClient } from '@/lib/supabase/server';
 import {
   loadProductsByIds,
   priceCatalogProducts,
+  PRODUCT_CARD_SELECT,
   type CatalogProductRow,
   type PricedCatalogCard,
 } from '@/lib/retailer/catalog';
@@ -158,11 +159,16 @@ export async function getSimilarProductCards(
 ): Promise<PricedCatalogCard[]> {
   if (!product.category_id && !product.brand_id) return [];
 
+  // Uses the shared PRODUCT_CARD_SELECT constant on purpose. This query used to
+  // hand-roll its own column list and silently omitted `units_per_case` and
+  // `image_url` from the pack sub-select, while toPricedCard reads both — so
+  // every card on the "Similar products" rail fell back to unitsPerCase = 1 and
+  // displayed the GST-inclusive CASE price as if it were the per-piece price,
+  // and never showed a variant image. Sharing the constant means the two can
+  // never drift apart again.
   let query = supabase
     .from('products')
-    .select(
-      'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, mrp, moq, is_active, sort_order )'
-    )
+    .select(PRODUCT_CARD_SELECT)
     .eq('is_active', true)
     .neq('id', product.id)
     .limit(12);

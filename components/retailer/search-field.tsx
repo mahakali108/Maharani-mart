@@ -102,7 +102,7 @@ export function SearchField({
         value={value}
         autoFocus={autoFocus}
         autoComplete="off"
-        placeholder="Search products, brands or categories"
+        placeholder="Search products, brands, categories or sizes"
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           setValue(event.target.value);
@@ -195,10 +195,14 @@ export function SearchField({
                     className="flex w-full items-start gap-2 px-4 py-2 text-left hover:bg-slate-50"
                   >
                     <Search className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span>
-                      <span className="block text-xs font-semibold text-slate-800">{product.name}</span>
-                      {product.brandName ? (
-                        <span className="mt-0.5 block text-[10px] text-slate-400">{product.brandName}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-slate-800">{product.name}</span>
+                      {product.brandName || product.variantHint ? (
+                        <span className="mt-0.5 block truncate text-[10px] text-slate-400">
+                          {[product.brandName, product.variantHint ? `Size ${product.variantHint}` : null]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
                       ) : null}
                     </span>
                   </button>

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 import type { AICard, AIToolContext, AIToolDefinition } from '@/lib/ai/types';
-import { dbFailure, inr, sourcePeriod, unavailable, verified } from '@/lib/ai/tools/helpers';
+import { dbFailure, internalCode, inr, sourcePeriod, unavailable, verified } from '@/lib/ai/tools/helpers';
 
 const periodSchema = z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(30).optional() });
 const periodJson = { type: 'object', additionalProperties: false, properties: { days: { type: 'integer', minimum: 1, maximum: 365 }, limit: { type: 'integer', minimum: 1, maximum: 30 } } };
@@ -62,7 +62,7 @@ async function productPerformance(days: number, context: AIToolContext, ascendin
   const map = new Map<string, { productId: string; name: string; skuCode: string; quantity: number; revenue: number; rows: number }>();
   for (const item of data ?? []) { const row = map.get(item.product_id) ?? { productId: item.product_id, name: item.products?.name ?? 'Product', skuCode: item.products?.sku_code ?? '', quantity: 0, revenue: 0, rows: 0 }; row.quantity += item.quantity; row.revenue += item.line_total; row.rows += 1; map.set(item.product_id, row); }
   const products = [...map.values()].sort((a, b) => ascending ? a.quantity - b.quantity : b.quantity - a.quantity).slice(0, limit);
-  const cards: AICard[] = products.map((row, index) => ({ type: 'insight', id: row.productId, title: row.name, subtitle: row.skuCode, badge: `#${index + 1}`, quality: 'verified', source: sourcePeriod(from, to, row.rows), metrics: [{ label: 'Quantity', value: String(row.quantity), quality: 'verified' }, { label: context.actor.role === 'retailer' ? 'Purchase value' : 'Revenue', value: inr(row.revenue), quality: 'verified' }] }));
+  const cards: AICard[] = products.map((row, index) => ({ type: 'insight', id: row.productId, title: row.name, subtitle: internalCode(context, row.skuCode) ?? undefined, badge: `#${index + 1}`, quality: 'verified', source: sourcePeriod(from, to, row.rows), metrics: [{ label: 'Quantity', value: String(row.quantity), quality: 'verified' }, { label: context.actor.role === 'retailer' ? 'Purchase value' : 'Revenue', value: inr(row.revenue), quality: 'verified' }] }));
   return verified({ products, from, to }, cards, sourcePeriod(from, to, data?.length ?? 0));
 }
 

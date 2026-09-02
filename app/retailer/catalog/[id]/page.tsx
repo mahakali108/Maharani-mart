@@ -51,7 +51,6 @@ interface ProductDetailRow {
 interface PackRow {
   id: string;
   pack_name: string;
-  pack_sku_code: string;
   units_per_case: number;
   base_price: number;
   ptr: number | null;
@@ -142,7 +141,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       .maybeSingle<ProductDetailRow>(),
     supabase
       .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, ptr, case_price, mrp, moq, image_url, is_active, sort_order')
+      .select('id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, image_url, is_active, sort_order')
       .eq('product_id', productId)
       .order('sort_order')
       .returns<PackRow[]>(),

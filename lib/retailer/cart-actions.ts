@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import { addCartLines, removeCartLine, updateCartLine } from '@/lib/retailer/cart-service';
+import { addCartLines, clearRetailerCart, removeCartLine, updateCartLine } from '@/lib/retailer/cart-service';
 
 export type CartActionResult = { error?: string } | { success: true };
 
@@ -37,6 +37,24 @@ export async function removeCartItemAction(cartItemId: string): Promise<CartActi
   const result = await removeCartLine(createClient(), user.id, cartItemId);
   if ('error' in result) return result;
   revalidatePath('/retailer/cart');
+  revalidatePath('/retailer', 'layout');
+  return { success: true };
+}
+
+/**
+ * Empties the caller's own cart.
+ *
+ * The retailer id comes from the server session — never from the client — and
+ * `clearRetailerCart` scopes the delete to that id on top of the `cart_owner`
+ * RLS policy, so there is no way to clear anyone else's cart. No pricing,
+ * ordering or credit behaviour is involved: this only removes cart lines.
+ */
+export async function clearCartAction(): Promise<CartActionResult> {
+  const user = await requirePermission('orders.create');
+  const result = await clearRetailerCart(createClient(), user.id);
+  if ('error' in result) return result;
+  revalidatePath('/retailer/cart');
+  revalidatePath('/retailer/checkout');
   revalidatePath('/retailer', 'layout');
   return { success: true };
 }
