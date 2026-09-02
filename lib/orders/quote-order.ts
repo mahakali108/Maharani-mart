@@ -19,6 +19,12 @@ export interface QuotedOrderLine {
   /** Number of packs/cases ordered. */
   quantity: number;
   moq: number;
+  unitsPerCase: number;
+  pieces: number;
+  cases: number;
+  loosePieces: number;
+  piecePrice: number;
+  casePrice: number;
   /** Per-case GST-INCLUSIVE selling price (unitPrice = price of one pack/case). */
   unitPrice: number;
   gstPercent: number;
@@ -178,6 +184,12 @@ export async function quoteOrderForRetailer({
       packName: pack.pack_name,
       quantity,
       moq: pack.moq,
+      unitsPerCase: pack.units_per_case,
+      pieces: breakdown.pieces,
+      cases: breakdown.cases,
+      loosePieces: breakdown.loosePieces,
+      piecePrice: breakdown.piecePrice,
+      casePrice: breakdown.casePrice,
       unitPrice: breakdown.piecePrice * pack.units_per_case,
       gstPercent: product.gst_percent,
       subtotal: lineSubtotal,
