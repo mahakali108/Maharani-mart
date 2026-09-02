@@ -23,6 +23,7 @@ interface CartItemDetail {
     case_price: number;
     units_per_case: number;
     mrp: number | null;
+    image_url: string | null;
     is_active: boolean;
   } | null;
   products: {
@@ -46,7 +47,7 @@ export default async function CheckoutPage() {
   const [{ data: cartData }, { data: retailer }] = await Promise.all([
     supabase
       .from('cart_items')
-      .select('id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )')
+      .select('id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, image_url, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )')
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
     supabase
@@ -88,12 +89,14 @@ export default async function CheckoutPage() {
     gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + breakdown.gst);
     savings += calcSavings(pack?.mrp, breakdown.piecePrice, breakdown.pieces);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+    // Prefer the variant's own image (matches the product page size switcher).
+    const lineImage = pack?.image_url ?? images[0]?.image_url;
     return {
       id: item.id,
       quantity: item.quantity,
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
-      imageUrl: images[0]?.image_url,
+      imageUrl: lineImage,
       unitPrice,
       piecePrice: breakdown.piecePrice,
       unitsPerCase: pack?.units_per_case ?? 1,

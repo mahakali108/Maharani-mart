@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { deleteMedia } from '@/lib/media';
+import { isRenderableMediaRef } from '@/lib/media/refs';
 import type { Database } from '@/types/database.types';
 
 export type ProductFormState = { error?: string } | null;
@@ -477,6 +478,50 @@ export async function deleteProductPackAction(packId: string, productId: string)
   const { error } = await supabase.from('product_packs').delete().eq('id', packId);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/products/${productId}`);
+}
+
+/**
+ * Sets or clears a variant's (pack's) own product image.
+ *
+ * The retailer-facing size switcher shows this image as the main product
+ * image for that size, falling back to the parent product's gallery when
+ * null. `imageUrl` must already be an uploaded, renderable media reference
+ * (the MediaUploadField only produces those — raw client URLs are rejected
+ * by `isRenderableMediaRef`). The pack must belong to `productId` so one
+ * product's admin page can never mutate another product's packs. The
+ * previous stored file is cleaned up best-effort, mirroring
+ * removeProductImageAction.
+ */
+export async function setPackImageAction(packId: string, productId: string, imageUrl: string | null) {
+  await requirePermission('products.edit');
+  if (imageUrl !== null && !isRenderableMediaRef(imageUrl)) {
+    throw new Error('Invalid image reference.');
+  }
+
+  const supabase = createClient();
+  const { data: pack, error: fetchError } = await supabase
+    .from('product_packs')
+    .select('id, product_id, image_url')
+    .eq('id', packId)
+    .maybeSingle<{ id: string; product_id: string; image_url: string | null }>();
+  if (fetchError) throw new Error(fetchError.message);
+  if (!pack || pack.product_id !== productId) throw new Error('Pack not found for this product.');
+
+  const { error } = await supabase
+    .from('product_packs')
+    .update({ image_url: imageUrl } as unknown as never)
+    .eq('id', packId)
+    .eq('product_id', productId);
+  if (error) throw new Error(error.message);
+
+  // Best-effort cleanup of the replaced/removed stored file.
+  if (pack.image_url && pack.image_url !== imageUrl) {
+    await deleteMedia(pack.image_url);
+  }
+
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath(`/retailer/catalog/${packId}`);
+  revalidatePath('/retailer/catalog');
 }
 
 interface SortableRow {

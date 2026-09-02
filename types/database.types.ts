@@ -361,6 +361,7 @@ export interface Database {
           wholesale_price: number | null;
           case_price: number;
           barcode: string | null;
+          image_url: string | null;
           moq: number;
           is_active: boolean;
           sort_order: number;
@@ -381,6 +382,7 @@ export interface Database {
           wholesale_price?: number | null;
           case_price: number;
           barcode?: string | null;
+          image_url?: string | null;
           moq?: number;
           is_active?: boolean;
           sort_order?: number;

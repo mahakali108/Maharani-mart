@@ -42,6 +42,7 @@ interface ProductPackRow {
   cost_price: number | null;
   case_price: number;
   barcode: string | null;
+  image_url: string | null;
   is_active: boolean;
   tiers: PackTierRow[];
 }
@@ -110,7 +111,7 @@ export default async function EditProductPage({ params }: { params: { id: string
     supabase.from('product_images').select('id, image_url, sort_order').eq('product_id', params.id).order('sort_order'),
     supabase
       .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, cost_price, case_price, barcode, is_active')
+      .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, cost_price, case_price, barcode, image_url, is_active')
       .eq('product_id', params.id)
       .order('sort_order')
       .order('created_at'),

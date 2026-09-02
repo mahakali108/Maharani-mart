@@ -60,6 +60,8 @@ export interface PackSelectorProps {
   gstPercent: number;
   productName?: string;
   cartSummary?: CartSummaryData | null;
+  /** Pack currently selected via the size/variant switcher (visual highlight only). */
+  selectedPackId?: string | null;
 }
 
 export function PackSelector({
@@ -67,6 +69,7 @@ export function PackSelector({
   gstPercent,
   productName = 'Product',
   cartSummary,
+  selectedPackId = null,
 }: PackSelectorProps) {
   const router = useRouter();
 
@@ -422,15 +425,18 @@ export function PackSelector({
           const packError = packErrors[pack.id];
           const packSuccessMsg = packSuccess[pack.id];
           const isBestValue = pack.id === bestPackId;
+          const isSelectedVariant = pack.id === selectedPackId;
           const lineTotal = lineTotalFor(pack, qty);
 
           return (
             <article
               key={pack.id}
               className={`relative overflow-hidden rounded-2xl border transition-all duration-200 ${
-                isBestValue
-                  ? 'border-primary-500/80 bg-gradient-to-br from-white to-primary-50/30 ring-1 ring-primary-500/30 shadow-sm'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                isSelectedVariant
+                  ? 'border-slate-900 ring-2 ring-slate-900/70 shadow-sm'
+                  : isBestValue
+                    ? 'border-primary-500/80 bg-gradient-to-br from-white to-primary-50/30 ring-1 ring-primary-500/30 shadow-sm'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
             >
               {/* Best Value Banner */}
@@ -459,12 +465,19 @@ export function PackSelector({
                     </p>
                   </div>
 
-                  {isItemInCart ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                      <Check className="h-3 w-3" />
-                      In cart: {inCart?.quantity}
-                    </span>
-                  ) : null}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {isSelectedVariant ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white">
+                        Viewing this size
+                      </span>
+                    ) : null}
+                    {isItemInCart ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        <Check className="h-3 w-3" />
+                        In cart: {inCart?.quantity}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* Pricing & Margin Row */}

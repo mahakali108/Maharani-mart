@@ -8,9 +8,12 @@ import {
   togglePackActiveAction,
   deleteProductPackAction,
   movePackAction,
+  setPackImageAction,
   type PackFormState,
 } from '@/lib/admin/products-actions';
 import { PackPricingTiers, type PackTier } from '@/components/admin/pack-pricing-tiers';
+import { MediaUploadField } from '@/components/media/media-upload-field';
+import { StoredImage } from '@/components/media/stored-image';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SubmitButton } from '@/components/ui/submit-button';
@@ -27,6 +30,7 @@ export interface Pack {
   case_price: number;
   cost_price: number | null;
   barcode: string | null;
+  image_url: string | null;
   is_active: boolean;
   tiers: PackTier[];
 }
@@ -128,6 +132,37 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
                 </table>
                 <div className="border-t border-ink-100 bg-white px-3 py-2">
                   <PackPricingTiers packId={pack.id} productId={productId} tiers={pack.tiers} />
+                </div>
+                <div className="border-t border-ink-100 bg-white px-3 py-3">
+                  <p className="mb-2 text-xs font-medium text-ink-500">
+                    Variant image — shown on the retailer size switcher for <strong>{pack.pack_name}</strong> (falls
+                    back to the product gallery when empty).
+                  </p>
+                  <div className="flex items-center gap-3">
+                    {pack.image_url ? (
+                      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-ink-100">
+                        <StoredImage src={pack.image_url} alt={`${pack.pack_name} image`} size="thumb" fill className="object-contain" />
+                      </div>
+                    ) : null}
+                    <MediaUploadField
+                      kind="product-gallery"
+                      ownerId={productId}
+                      hasExisting={!!pack.image_url}
+                      label={pack.image_url ? 'Replace variant image' : 'Upload variant image'}
+                      onUploaded={(media) => setPackImageAction(pack.id, productId, media.ref)}
+                    />
+                    {pack.image_url ? (
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => startTransition(() => setPackImageAction(pack.id, productId, null))}
+                        className="flex h-9 items-center gap-1.5 rounded-xl border border-ink-200 px-3 text-xs font-medium text-ink-600 transition hover:border-primary-200 hover:text-primary-600 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             );
