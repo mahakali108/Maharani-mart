@@ -49,10 +49,12 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-500">
-        Add every sellable size/pack for this product — e.g. <strong>1 Kg</strong>, <strong>5 Kg</strong>,{' '}
-        <strong>10 Kg</strong>, or a case pack like <strong>Case of 12</strong>. For each pack set the number of pieces
-        per case and the fixed, GST-inclusive <strong>case selling price</strong> — the per-piece selling price is
-        derived automatically.
+        Add every sellable size/variant for this product — <strong>30g</strong>, <strong>100g</strong>,{' '}
+        <strong>500g</strong>, <strong>750g</strong>, <strong>2 Kg</strong>, or a case pack like{' '}
+        <strong>Case of 12</strong>. Sizes are free text, so any current or future size can be added without a code
+        change. For each variant set the number of pieces per case and the fixed, GST-inclusive{' '}
+        <strong>case selling price</strong> — the per-piece selling price is derived automatically, and the internal
+        pack code is generated for you.
       </p>
 
       {packs.length === 0 ? (
@@ -67,7 +69,6 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
                   <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                     <tr>
                       <th className="whitespace-nowrap px-4 py-2.5 font-medium">Pack</th>
-                      <th className="whitespace-nowrap px-4 py-2.5 font-medium">SKU</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-medium">Barcode</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-medium">Units/case</th>
                       <th className="whitespace-nowrap px-4 py-2.5 font-medium">MRP</th>
@@ -80,7 +81,6 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
                   <tbody className="divide-y divide-ink-100">
                     <tr>
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-ink-900">{pack.pack_name}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-ink-500">{pack.pack_sku_code}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-ink-500">{pack.barcode ?? '—'}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">{pack.units_per_case}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">{money(pack.mrp ?? pack.base_price)}</td>
@@ -180,10 +180,6 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
         <div>
           <Label htmlFor="packName">Pack name</Label>
           <Input id="packName" name="packName" placeholder="Case of 12" required />
-        </div>
-        <div>
-          <Label htmlFor="packSkuCode">Pack SKU</Label>
-          <Input id="packSkuCode" name="packSkuCode" placeholder="MK-BEV-001-CASE12" required />
         </div>
         <div>
           <Label htmlFor="barcode">Barcode</Label>

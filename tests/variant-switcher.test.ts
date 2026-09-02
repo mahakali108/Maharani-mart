@@ -219,7 +219,10 @@ describe('product size / variant switcher', () => {
       const page = read('app/retailer/catalog/[id]/page.tsx');
       // The switcher is rendered from server data and builds its model from the raw packs.
       expect(page).toContain('<VariantSwitcher');
-      expect(page).toContain('buildVariantSwitcher(rawPacks, selectedPack?.id ?? null)');
+      expect(page).toContain('buildVariantSwitcher(rawPacks, selectedPack?.id ?? null, variantPricing)');
+      // Every size card is priced from server-resolved data (case price +
+      // units per case + MRP), never from a browser-side estimate.
+      expect(page).toContain('casePrice: resolvePackPrice(pack, override)');
       // A pack id in the URL pins the selected variant.
       expect(page).toContain('requestedPackId ? rawPacks.find((pack) => pack.id === requestedPackId)');
       // The component uses next/link <Link href>, not onClick state updates.

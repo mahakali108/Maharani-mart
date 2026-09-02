@@ -1,4 +1,14 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
+
+/** Constant-time secret comparison — avoids leaking the secret byte by byte. */
+function secretMatches(provided: string | null, expected: string | undefined): boolean {
+  if (!provided || !expected) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 /**
  * Inbound webhook receiver — architecture stub for Phase 2+.
@@ -14,9 +24,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * response pretending an integration exists.
  */
 export async function POST(request: NextRequest) {
-  const secret = request.headers.get('x-webhook-secret');
-
-  if (!secret || secret !== process.env.WEBHOOK_SECRET) {
+  if (!secretMatches(request.headers.get('x-webhook-secret'), process.env.WEBHOOK_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -35,7 +43,12 @@ export async function POST(request: NextRequest) {
   //   await supabase.from('notification_logs')
   //     .update({ status: 'delivered', provider_message_id: body.messageId })
   //     .eq('provider_message_id', body.originalMessageId);
-  console.log('Webhook received (not yet processed by an integration):', body);
+  // Log the SHAPE only. Provider payloads can carry phone numbers and message
+  // text, which must not end up in deployment logs.
+  console.info(
+    'Webhook received (not yet processed by an integration). Payload keys:',
+    body && typeof body === 'object' ? Object.keys(body as Record<string, unknown>) : typeof body
+  );
 
   return NextResponse.json({ received: true });
 }

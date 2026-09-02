@@ -5,7 +5,7 @@ import { Check, ChevronLeft, ChevronRight, ImageOff, PackageCheck, ReceiptText, 
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { caseLineBreakdown } from '@/lib/retailer/case-pricing';
+import { caseLineBreakdown, round2 } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
@@ -83,7 +83,9 @@ export default async function CheckoutPage() {
       packQuantity: item.quantity,
       gstPercent,
     });
-    const unitPrice = breakdown.piecePrice * (pack?.units_per_case ?? 1); // per case, GST-inclusive
+    // Per-case price actually charged, derived from the line total (same rule as
+    // the server quote) so the figure shown here reconciles with the invoice.
+    const unitPrice = round2(breakdown.total / Math.max(item.quantity, 1));
     subtotal += breakdown.subtotal;
     gstTotal += breakdown.gst;
     gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + breakdown.gst);
