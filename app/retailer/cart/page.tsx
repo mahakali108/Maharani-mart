@@ -39,6 +39,7 @@ interface CartItemDetail {
     units_per_case: number;
     mrp: number | null;
     moq: number;
+    image_url: string | null;
     is_active: boolean;
   } | null;
   products: {
@@ -70,7 +71,7 @@ export default async function CartPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, units_per_case, mrp, moq, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, units_per_case, mrp, moq, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -146,6 +147,9 @@ export default async function CartPage() {
     gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + breakdown.gst);
     savings += calcSavings(pack?.mrp, breakdown.piecePrice, breakdown.pieces);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+    // The cart line shows the variant's own image when it has one (same rule
+    // as the product page size switcher), falling back to the product gallery.
+    const lineImage = pack?.image_url ?? images[0]?.image_url;
 
     return {
       id: item.id,
@@ -155,7 +159,7 @@ export default async function CartPage() {
       productName: product?.name ?? 'Unknown product',
       brandName: product?.brands?.name ?? null,
       skuCode: pack?.pack_sku_code || null,
-      imageUrl: images[0]?.image_url,
+      imageUrl: lineImage,
       unitPrice,
       gstPercent,
       moq: pack?.moq ?? 1,

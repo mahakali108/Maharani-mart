@@ -5,6 +5,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronRight,
+  CircleAlert,
   Clock,
   FileText,
   Package,
@@ -20,7 +21,9 @@ import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { caseLineBreakdown } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
+import { buildVariantSwitcher, isUuidLike, variantGalleryImages } from '@/lib/retailer/variants';
 import { PackSelector } from '@/components/retailer/pack-selector';
+import { VariantSwitcher } from '@/components/retailer/variant-switcher';
 import { FavoriteToggle } from '@/components/retailer/favorite-toggle';
 import { ProductGallery } from '@/components/retailer/product-gallery';
 import { ProductRail } from '@/components/retailer/product-rail';
@@ -55,6 +58,9 @@ interface PackRow {
   case_price: number;
   mrp: number | null;
   moq: number;
+  image_url: string | null;
+  is_active: boolean;
+  sort_order: number;
 }
 
 interface CartItemRow {
@@ -88,6 +94,36 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const user = await requireUser();
   const supabase = createClient();
 
+  if (!isUuidLike(params.id)) notFound();
+
+  // The route identifies either the parent product (/retailer/catalog/<product>)
+  // or one exact variant (/retailer/catalog/<pack>) — the URL the size
+  // switcher navigates to. Both render this same product detail page; a pack
+  // id additionally pins the selected variant. RLS already hides inactive
+  // packs from retailers here, so an unknown/inactive variant route 404s.
+  let productId = params.id;
+  let requestedPackId: string | null = null;
+  {
+    const { data: productRef } = await supabase
+      .from('products')
+      .select('id')
+      .eq('id', params.id)
+      .eq('is_active', true)
+      .maybeSingle<{ id: string }>();
+    if (productRef) {
+      productId = productRef.id;
+    } else {
+      const { data: packRef } = await supabase
+        .from('product_packs')
+        .select('id, product_id')
+        .eq('id', params.id)
+        .maybeSingle<{ id: string; product_id: string }>();
+      if (!packRef) notFound();
+      requestedPackId = packRef.id;
+      productId = packRef.product_id;
+    }
+  }
+
   const { data: retailer } = await supabase
     .from('retailers')
     .select('area_id')
@@ -101,14 +137,13 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       .select(
         'id, name, unit, units_per_case, gst_percent, hsn_code, lead_time_days, is_new_launch, brand_id, category_id, brands ( name ), categories ( id, name ), product_images ( id, image_url, sort_order )'
       )
-      .eq('id', params.id)
+      .eq('id', productId)
       .eq('is_active', true)
       .maybeSingle<ProductDetailRow>(),
     supabase
       .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, ptr, case_price, mrp, moq')
-      .eq('product_id', params.id)
-      .eq('is_active', true)
+      .select('id, pack_name, pack_sku_code, units_per_case, base_price, ptr, case_price, mrp, moq, image_url, is_active, sort_order')
+      .eq('product_id', productId)
       .order('sort_order')
       .returns<PackRow[]>(),
     loadFavoriteIds(supabase, user.id),
@@ -127,12 +162,12 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     supabase
       .from('price_lists')
       .select('id, schemes ( name, description, ends_at, is_festival, is_active )')
-      .eq('product_id', params.id)
+      .eq('product_id', productId)
       .in('scope', ['scheme', 'festival'])
       .eq('is_active', true)
       .lte('valid_from', nowIso)
       .returns<SchemeLinkRow[]>(),
-    getProductPriceOverride(supabase, params.id, user.id, retailer?.area_id ?? null),
+    getProductPriceOverride(supabase, productId, user.id, retailer?.area_id ?? null),
     getSimilarProductCards(
       supabase,
       user.id,
@@ -153,7 +188,10 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     retailer?.area_id ?? null
   );
 
+  // Map product packs with authoritative case prices, tiers and existing cart items.
+  // Only ACTIVE packs are orderable — they feed the PackSelector exactly as before.
   const rawPacks = (packData ?? []) as PackRow[];
+  const activePacks = rawPacks.filter((pack) => pack.is_active);
   const packTiers = await loadPackTiers(
     supabase,
     rawPacks.map((pack) => pack.id)
@@ -196,7 +234,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       : null;
 
   // Map product packs with authoritative case prices, tiers and existing cart items
-  const packs = rawPacks.map((pack) => {
+  const packs = activePacks.map((pack) => {
     const effectivePrice = resolvePackPrice(pack, override);
     const cartInfo = cartItemByPackId.get(pack.id);
     return {
@@ -209,16 +247,41 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     };
   });
 
-  const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
+  // ---------------------------------------------------------------------------
+  // Selected variant (pack) — the size switcher's current size.
+  //   /retailer/catalog/<packId>    -> that exact variant is highlighted
+  //   /retailer/catalog/<productId> -> existing default (cheapest active pack)
+  // Every variant-specific value below (image, MRP, case price, units per
+  // case, tiers, discount) is read from the SELECTED pack; the product-level
+  // price override still applies to all packs of the product unchanged.
+  // ---------------------------------------------------------------------------
+  const urlPack = requestedPackId ? rawPacks.find((pack) => pack.id === requestedPackId) ?? null : null;
+  if (requestedPackId && !urlPack) notFound();
+
   const lowestPrice = packs.length > 0 ? Math.min(...packs.map((pack) => pack.effectivePrice)) : null;
-  const startingPack = packs.find((pack) => pack.effectivePrice === lowestPrice) ?? packs[0];
+  const defaultPack = packs.find((pack) => pack.effectivePrice === lowestPrice) ?? packs[0] ?? null;
+  const selectedPack = urlPack ?? defaultPack;
+  const isViewingVariant = urlPack !== null;
+
+  // Selected variant's authoritative numbers (GST-inclusive case price is the
+  // source of truth; the per-piece price is derived, never stored).
+  const selectedCasePrice = selectedPack ? resolvePackPrice(selectedPack, override) : null;
   // MRP is per piece; effectivePrice is the GST-inclusive case price — compare on a per-piece basis.
-  const startingPiecePrice =
-    lowestPrice !== null && (startingPack?.units_per_case ?? 1) > 0
-      ? lowestPrice / (startingPack?.units_per_case ?? 1)
-      : lowestPrice;
-  const discount = calcDiscountPercent(startingPack?.mrp, startingPiecePrice);
-  const saveAmount = calcSavings(startingPack?.mrp, startingPiecePrice);
+  const selectedPiecePrice =
+    selectedCasePrice !== null && (selectedPack?.units_per_case ?? 1) > 0
+      ? selectedCasePrice / (selectedPack?.units_per_case ?? 1)
+      : selectedCasePrice;
+  const selectedTiers = selectedPack ? packTiers.get(selectedPack.id) ?? [] : [];
+  const discount = calcDiscountPercent(selectedPack?.mrp, selectedPiecePrice);
+  const saveAmount = calcSavings(selectedPack?.mrp, selectedPiecePrice);
+  const selectedAvailable = selectedPack?.is_active ?? false;
+  const variantSwitcher = buildVariantSwitcher(rawPacks, selectedPack?.id ?? null);
+
+  // Main image: the selected variant's own image when it has one, otherwise
+  // the parent product's existing gallery (existing fallback behaviour).
+  const productImages = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
+  const images = variantGalleryImages(selectedPack, productImages);
+  const galleryAlt = [product.name, selectedPack?.pack_name].filter(Boolean).join(' — ');
   const schemes = (schemeRows ?? [])
     .map((row) => row.schemes)
     .filter((scheme): scheme is NonNullable<SchemeLinkRow['schemes']> => !!scheme && scheme.is_active);
@@ -257,7 +320,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
           {/* 1. PRODUCT IMAGE / GALLERY */}
           <section aria-label="Product Gallery">
             <ProductGallery
-              name={product.name}
+              name={galleryAlt}
               images={images}
               badges={
                 <>
@@ -332,9 +395,15 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   {product.brands.name}
                 </span>
               ) : null}
-              <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Available to order
-              </span>
+              {selectedAvailable ? (
+                <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Available to order
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+                  <CircleAlert className="h-3.5 w-3.5 text-amber-600" /> Currently unavailable
+                </span>
+              )}
             </div>
 
             {/* 2. PRODUCT NAME */}
@@ -342,22 +411,27 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               {product.name}
             </h1>
 
-            {/* 4. MRP & WHOLESALE PRICE OVERVIEW */}
-            {lowestPrice !== null ? (
+            {/* SIZE / VARIANT SWITCHER — navigates to each variant's own route */}
+            <VariantSwitcher model={variantSwitcher} productName={product.name} />
+
+            {/* 4. MRP & WHOLESALE PRICE OVERVIEW — for the SELECTED variant */}
+            {selectedCasePrice !== null ? (
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Case price from</p>
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                  {isViewingVariant ? `Case price · ${selectedPack?.pack_name}` : 'Case price from'}
+                </p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
                   <p className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-                    {formatInr(lowestPrice)}
+                    {formatInr(selectedCasePrice)}
                   </p>
-                  {startingPack && startingPack.units_per_case > 1 ? (
+                  {selectedPack && selectedPack.units_per_case > 1 ? (
                     <p className="text-sm font-semibold text-slate-500 sm:text-base">
-                      {formatInr(lowestPrice / startingPack.units_per_case)}/pc · {startingPack.units_per_case} pcs
+                      {formatInr(selectedCasePrice / selectedPack.units_per_case)}/pc · {selectedPack.units_per_case} pcs
                     </p>
                   ) : null}
-                  {startingPack?.mrp && startingPiecePrice != null && startingPack.mrp > startingPiecePrice ? (
+                  {selectedPack?.mrp && selectedPiecePrice != null && selectedPack.mrp > selectedPiecePrice ? (
                     <p className="text-sm font-medium text-slate-400 line-through sm:text-base">
-                      MRP {formatInr(startingPack.mrp)}
+                      MRP {formatInr(selectedPack.mrp)}
                     </p>
                   ) : null}
                   {discount > 0 ? (
@@ -374,6 +448,23 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 <p className="mt-1 text-[10px] text-slate-500">
                   GST {product.gst_percent}% included in the case price · Quantity-based bulk discounts apply automatically
                 </p>
+                {/* Selected variant's quantity slabs (product_pricing_tiers for THIS pack) */}
+                {selectedTiers.filter((tier) => tier.is_active !== false && tier.rule_type === 'bulk').length > 0 ? (
+                  <ul className="mt-2.5 space-y-1 rounded-xl bg-slate-50 p-2.5" aria-label="Quantity tier pricing for this size">
+                    {selectedTiers
+                      .filter((tier) => tier.is_active !== false && tier.rule_type === 'bulk')
+                      .sort((a, b) => a.min_quantity - b.min_quantity)
+                      .map((tier) => (
+                        <li key={tier.id ?? tier.min_quantity} className="flex items-center justify-between text-[10px] font-semibold text-slate-600">
+                          <span>
+                            {tier.min_quantity}
+                            {tier.max_quantity != null ? `–${tier.max_quantity - 1}` : '+'} pcs
+                          </span>
+                          <span className="text-slate-900">{formatInr(tier.price_per_piece)}/pc</span>
+                        </li>
+                      ))}
+                  </ul>
+                ) : null}
               </div>
             ) : null}
           </section>
@@ -384,6 +475,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             gstPercent={product.gst_percent}
             productName={product.name}
             cartSummary={cartSummary}
+            selectedPackId={selectedPack?.id ?? null}
           />
 
           {/* 6. DELIVERY INFORMATION */}

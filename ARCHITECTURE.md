@@ -91,6 +91,7 @@ An explainable, statistical demand-forecasting engine (`lib/ai/forecast/`) reads
 ### 4.3 Retailer App
 - Personal price list = resolved view combining `price_lists` (base → area → retailer-specific → active scheme/festival override), computed via `get_effective_price(product_id, retailer_id)` SQL function.
 - My Orders / My Schemes / New Launch Products (`products.is_new_launch = true`, admin-toggled) / Notification Center (`notifications` table, realtime via Supabase Realtime channel).
+- **Size/variant switcher.** `product_packs` are the sellable sizes of a product (e.g. Baby Powder 50g/100g/200g). The product detail route accepts either the product id (classic links, cheapest pack preselected) or a pack id — the switcher renders real `<Link>`s to `/retailer/catalog/<packId>` so the URL identifies the selected variant and browser back works. Switching swaps the hero image (the pack's own `image_url`, falling back to the product gallery), MRP, GST-inclusive case price, units-per-case, that pack's quantity tiers and availability; cart/checkout/order keep operating per `pack_id` exactly as before. A pack may carry its own image, uploaded from the existing admin pack manager (`product_packs.image_url`, migration 0024).
 
 ### 4.4 Inventory System
 - `warehouses`, `inventory_stock` (qty per warehouse per product), `stock_movements` (typed: inward/outward/damage/return/transfer/adjustment) — inventory quantity is **never** edited directly; it's always a derived sum of movements, giving a full audit trail.
