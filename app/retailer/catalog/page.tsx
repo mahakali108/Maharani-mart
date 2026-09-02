@@ -182,6 +182,28 @@ export default async function RetailerCatalogPage({
   if (onlyNew) query = query.eq('is_new_launch', true);
   if (onlyFavorites && favoriteIds.size > 0) query = query.in('id', [...favoriteIds]);
 
+  /**
+   * `frequent` ranks by this retailer's own order history, which is not a
+   * column on `products`, so the ranking itself has to happen in memory
+   * (Mode 2). Left unrestricted, Mode 2 would fetch an *alphabetical* window
+   * of CATALOG_MAX_ROWS and rank only that — silently dropping any
+   * frequently-ordered product whose name happens to sort past the cap.
+   * Restricting the query to the ids in the history makes "Frequent" exactly
+   * the products this retailer has actually ordered, ranked correctly and
+   * completely. The list is ordered most-frequent-first and bounded by the
+   * same cap as the working set, so the `.in()` stays small and the fetched
+   * set still fits in one Mode 2 window. With no order history yet there is
+   * nothing to restrict to, and the existing plain-catalog fallback is
+   * preserved unchanged.
+   */
+  if (sort === 'frequent' && frequency.size > 0) {
+    const frequentIds = [...frequency.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, CATALOG_MAX_ROWS)
+      .map(([productId]) => productId);
+    query = query.in('id', frequentIds);
+  }
+
   // `fav=1` with nothing favourited can never match, so it short-circuits to an
   // empty set without touching the database (unchanged behaviour).
   const noPossibleResults = onlyFavorites && favoriteIds.size === 0;

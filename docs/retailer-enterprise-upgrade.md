@@ -47,6 +47,18 @@ per-retailer resolved prices that cannot be pushed into SQL without changing res
   filter/sort is active, then in-memory filter → sort → paginate. When the cap binds, the
   UI says so and asks the retailer to narrow the search instead of silently truncating.
 
+**Ranking sorts must rank the right set.** `frequent` ranks by how often *this retailer*
+ordered a product (`getOrderFrequencyMap`, from their own `order_items`), which is not a
+column on `products` — so it is a bounded-working-set sort. Unrestricted, that mode would
+fetch an alphabetical slice of the catalog and rank only that slice: a product the
+retailer buys every week but whose name sorts past the cap would silently vanish from the
+"Frequent" tab. The query is therefore restricted to the ids in the retailer's history
+(`.in('id', frequentIds)`), ordered most-frequent-first and bounded by the same cap, so
+the ranking covers their real history completely. With no order history there is nothing
+to restrict to and the existing plain-catalog fallback is preserved. The same reasoning is
+why price/discount/MOQ filters are never pushed into SQL: `price_lists` overrides make a
+DB-level `case_price` comparison semantically wrong for a retailer.
+
 ### G2 — Internal SKU codes were displayed to retailers
 `components/retailer/cart-item-row.tsx` rendered `SKU <pack_sku_code>`; the retailer
 product page selected `pack_sku_code` into a client component's props (so the value was

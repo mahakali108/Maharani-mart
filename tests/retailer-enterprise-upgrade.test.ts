@@ -174,6 +174,48 @@ describe('catalog page wiring', () => {
     expect(page).toContain("sort === 'frequent'");
     expect(page).toContain('getOrderFrequencyMap');
   });
+
+  /**
+   * Order frequency is not a column on `products`, so the `frequent` sort is
+   * ranked in memory. That is only correct if the in-memory working set is the
+   * retailer's actual history — otherwise the ranking silently covers whichever
+   * slice of the catalog the fetch happened to return (alphabetical, capped)
+   * and a frequently-bought product outside that slice disappears from the
+   * "Frequent" tab even though the retailer buys it every week.
+   */
+  it('restricts the frequent sort to the retailer\'s real order history, not the fetch window', () => {
+    const frequentBlock = page.match(
+      /if \(sort === 'frequent' && frequency\.size > 0\) \{[\s\S]*?\n  \}/
+    );
+    expect(frequentBlock, 'frequent sort must restrict the query to the history ids').not.toBeNull();
+    const block = frequentBlock![0];
+    // Ranked most-frequent-first, so if the history ever exceeds the working-set
+    // cap the products kept are the genuinely most-ordered ones.
+    expect(block).toContain('.sort((a, b) => b[1] - a[1])');
+    // Bounded by the same cap as the working set, so the fetched set always fits
+    // in one window and the `.in()` list stays small.
+    expect(block).toContain('.slice(0, CATALOG_MAX_ROWS)');
+    expect(block).toContain("query = query.in('id', frequentIds)");
+    // No history => nothing to restrict to, and the existing plain-catalog
+    // fallback is preserved rather than showing an empty tab.
+    expect(block).toContain('frequency.size > 0');
+  });
+
+  it('ranks the frequent sort by real times-ordered, never an invented popularity score', () => {
+    expect(page).toContain(
+      "if (sort === 'frequent') return b.timesOrdered - a.timesOrdered || Number(b.isNewLaunch) - Number(a.isNewLaunch);"
+    );
+    // `timesOrdered` is derived from this retailer's own order_items, so the
+    // ranking is real history. There is no popularity/bestseller/trending
+    // column in the schema and none is fabricated here: every SQL ORDER BY on
+    // this page must name a column that genuinely exists.
+    const orderByColumns = [...page.matchAll(/\.order\('([a-z_]+)'/g)].map((match) => match[1]);
+    expect(orderByColumns.length).toBeGreaterThan(0);
+    for (const column of orderByColumns) {
+      expect(['name', 'created_at', 'is_new_launch', 'sort_order']).toContain(column);
+    }
+    expect(page).not.toMatch(/\.order\('(popularity|sales_rank|bestseller|trending_score)'/);
+  });
 });
 
 describe('retailer search suggestions', () => {
