@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { resolveDocumentUrl } from '@/lib/media/document-url';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -182,6 +183,123 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
         </CardHeader>
         <RetailerDocumentsManager retailerId={r.id} documents={documents} />
       </Card>
+
+      {/* Order History Section */}
+      <RetailerOrderHistory retailerId={r.id} />
     </div>
   );
           }
+
+// ---------------------------------------------------------------------------
+// Retailer Order History
+// ---------------------------------------------------------------------------
+
+const ORDER_STATUS_STYLES: Record<string, string> = {
+  pending: 'bg-amber-50 text-amber-700',
+  confirmed: 'bg-blue-50 text-blue-700',
+  processing: 'bg-blue-50 text-blue-700',
+  packed: 'bg-violet-50 text-violet-700',
+  dispatched: 'bg-violet-50 text-violet-700',
+  delivered: 'bg-green-50 text-green-700',
+  cancelled: 'bg-primary-50 text-primary-700',
+  returned: 'bg-primary-50 text-primary-700',
+};
+
+interface RetailerOrder {
+  id: string;
+  order_number: string;
+  status: string;
+  grand_total: number;
+  placed_at: string;
+}
+
+async function RetailerOrderHistory({ retailerId }: { retailerId: string }) {
+  const supabase = createClient();
+
+  const [{ data: orderData }, { data: statsData }] = await Promise.all([
+    supabase
+      .from('orders')
+      .select('id, order_number, status, grand_total, placed_at')
+      .eq('retailer_id', retailerId)
+      .order('placed_at', { ascending: false })
+      .limit(15),
+    supabase
+      .from('orders')
+      .select('grand_total, status')
+      .eq('retailer_id', retailerId)
+      .neq('status', 'cancelled'),
+  ]);
+
+  const orders = (orderData ?? []) as RetailerOrder[];
+  const allOrders = (statsData ?? []) as { grand_total: number; status: string }[];
+  const totalSpent = allOrders.reduce((sum, o) => sum + o.grand_total, 0);
+  const totalOrders = allOrders.length;
+  const avgOrder = totalOrders > 0 ? totalSpent / totalOrders : 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Order History</CardTitle>
+      </CardHeader>
+
+      {totalOrders > 0 ? (
+        <div className="mb-4 grid grid-cols-3 gap-3">
+          <div className="rounded-xl bg-ink-50 p-3">
+            <p className="text-xs text-ink-500">Total Orders</p>
+            <p className="mt-1 text-lg font-semibold text-ink-950">{totalOrders}</p>
+          </div>
+          <div className="rounded-xl bg-ink-50 p-3">
+            <p className="text-xs text-ink-500">Total Purchased</p>
+            <p className="mt-1 text-lg font-semibold text-ink-950">₹{totalSpent.toFixed(2)}</p>
+          </div>
+          <div className="rounded-xl bg-ink-50 p-3">
+            <p className="text-xs text-ink-500">Avg. Order</p>
+            <p className="mt-1 text-lg font-semibold text-ink-950">₹{avgOrder.toFixed(2)}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {orders.length === 0 ? (
+        <p className="text-sm text-ink-500">This retailer has not placed any orders yet.</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
+                <tr>
+                  <th className="px-5 py-2 font-medium">Order</th>
+                  <th className="px-5 py-2 font-medium">Date</th>
+                  <th className="px-5 py-2 font-medium">Status</th>
+                  <th className="px-5 py-2 font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className="px-5 py-2">
+                      <Link href={`/admin/orders/${o.id}`} className="font-mono text-xs font-medium text-primary-600 hover:text-primary-700">
+                        {o.order_number}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-2 text-xs text-ink-400">{new Date(o.placed_at).toLocaleDateString('en-IN')}</td>
+                    <td className="px-5 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ORDER_STATUS_STYLES[o.status] ?? 'bg-ink-100 text-ink-600'}`}>
+                        {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-2 font-medium text-ink-900">₹{o.grand_total.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 text-right">
+            <Link href={`/admin/orders?retailer=${retailerId}`} className="text-xs font-medium text-primary-600 hover:text-primary-700">
+              View all orders →
+            </Link>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}

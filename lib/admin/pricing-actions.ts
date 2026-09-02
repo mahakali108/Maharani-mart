@@ -65,19 +65,59 @@ export async function createPriceListAction(
   const { error } = await supabase.from('price_lists').insert(payload as unknown as never);
   if (error) return { error: error.message };
 
+  // Record the price creation in the super admin audit log.
+  await supabase.from('super_admin_audit_logs').insert({
+    actor_id: user.id,
+    action: 'price_created',
+    before_data: null,
+    after_data: {
+      product_id: d.productId,
+      scope: d.scope,
+      price: d.price,
+      priority: d.priority,
+      area_id: d.areaId || null,
+      retailer_id: d.retailerId || null,
+    },
+  } as unknown as never);
+
   revalidatePath('/admin/pricing');
   return null;
 }
 
 export async function deactivatePriceListAction(priceListId: string) {
-  await requirePermission('pricing.manage');
+  const user = await requirePermission('pricing.manage');
   const supabase = createClient();
+
+  // Fetch the current price before deactivating, so we can record the
+  // change in the audit log.
+  const { data: existing } = await supabase
+    .from('price_lists')
+    .select('id, product_id, scope, price, products ( name )')
+    .eq('id', priceListId)
+    .maybeSingle<{ id: string; product_id: string; scope: string; price: number; products: { name: string } | null }>();
 
   const { error } = await supabase
     .from('price_lists')
     .update({ is_active: false } as unknown as never)
     .eq('id', priceListId);
   if (error) throw new Error(error.message);
+
+  // Record the price deactivation in the super admin audit log for
+  // traceability (the standard audit_logs trigger records the raw update
+  // but this gives a clear, human-readable entry).
+  if (existing) {
+    await supabase.from('super_admin_audit_logs').insert({
+      actor_id: user.id,
+      target_id: priceListId,
+      action: 'price_deactivated',
+      before_data: {
+        product: existing.products?.name ?? existing.product_id,
+        scope: existing.scope,
+        price: existing.price,
+      },
+      after_data: { is_active: false },
+    } as unknown as never);
+  }
 
   revalidatePath('/admin/pricing');
 }

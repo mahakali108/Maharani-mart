@@ -685,3 +685,97 @@ export async function deletePricingTierAction(tierId: string, productId: string)
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/products/${productId}`);
 }
+
+// ----------------------------------------------------------------------------
+// Duplicate a product pack (variant) — copies all attributes and tiers
+// ----------------------------------------------------------------------------
+
+/**
+ * Safely duplicates a product pack (variant) within the same product.
+ * The duplicate gets:
+ *   - A new generated pack_sku_code (admin never types one)
+ *   - "(Copy)" appended to the pack_name
+ *   - All pricing tiers duplicated
+ *   - Same image_url, units_per_case, MRP, cost, case_price, MOQ
+ *   - is_active = false by default so the admin can review before activating
+ *
+ * This is a safe operation: it never modifies the source pack, and the
+ * duplicate starts inactive so it doesn't immediately affect retailers.
+ */
+export async function duplicatePackAction(packId: string, productId: string) {
+  const user = await requirePermission('products.edit');
+  const supabase = createClient();
+
+  // Fetch the source pack with its tiers.
+  const { data: source, error: fetchError } = await supabase
+    .from('product_packs')
+    .select('id, product_id, pack_name, units_per_case, base_price, mrp, cost_price, case_price, barcode, image_url, moq, is_active, sort_order')
+    .eq('id', packId)
+    .eq('product_id', productId)
+    .maybeSingle<{
+      id: string;
+      product_id: string;
+      pack_name: string;
+      units_per_case: number;
+      base_price: number;
+      mrp: number | null;
+      cost_price: number | null;
+      case_price: number;
+      barcode: string | null;
+      image_url: string | null;
+      moq: number;
+      is_active: boolean;
+      sort_order: number;
+    }>();
+
+  if (fetchError) throw new Error(fetchError.message);
+  if (!source) throw new Error('Pack not found for this product.');
+
+  // Create the duplicate.
+  const { data: newPack, error: insertError } = await supabase
+    .from('product_packs')
+    .insert({
+      product_id: productId,
+      pack_name: `${source.pack_name} (Copy)`,
+      pack_sku_code: generatePackSkuCode(productId),
+      units_per_case: source.units_per_case,
+      base_price: source.base_price,
+      mrp: source.mrp,
+      cost_price: source.cost_price,
+      case_price: source.case_price,
+      barcode: null, // Don't duplicate barcode (must be unique if set)
+      image_url: source.image_url,
+      moq: source.moq,
+      is_active: false, // Start inactive for review
+      sort_order: source.sort_order + 1,
+      created_by: user.id,
+    } as unknown as never)
+    .select('id')
+    .maybeSingle<{ id: string }>();
+
+  if (insertError) throw new Error(insertError.message);
+  if (!newPack) throw new Error('Failed to create duplicate pack.');
+
+  // Copy pricing tiers from the source.
+  const { data: sourceTiers } = await supabase
+    .from('product_pricing_tiers')
+    .select('min_quantity, max_quantity, price_per_piece, rule_type, label')
+    .eq('product_pack_id', packId)
+    .eq('is_active', true);
+
+  if (sourceTiers && sourceTiers.length > 0) {
+    const tiers = sourceTiers as unknown as { min_quantity: number; max_quantity: number | null; price_per_piece: number; rule_type: string; label: string | null }[];
+    const newTiers = tiers.map((tier) => ({
+      product_pack_id: newPack.id,
+      min_quantity: tier.min_quantity,
+      max_quantity: tier.max_quantity,
+      price_per_piece: tier.price_per_piece,
+      rule_type: tier.rule_type,
+      label: tier.label,
+      created_by: user.id,
+    }));
+    await supabase.from('product_pricing_tiers').insert(newTiers as unknown as never);
+  }
+
+  revalidatePath(`/admin/products/${productId}`);
+}

@@ -17,6 +17,7 @@ import {
   MapPin,
   Sparkles,
   Settings,
+  ScrollText,
 } from 'lucide-react';
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },
+  { label: 'Audit Log', href: '/admin/audit-logs', icon: ScrollText },
 ];
 
 export function AdminShell({
