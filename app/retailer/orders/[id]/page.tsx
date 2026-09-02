@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  CreditCard,
   FileText,
   ImageOff,
   PackageCheck,
@@ -17,6 +18,9 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { RetailerOrderActions } from '@/components/retailer/order-actions-panel';
+import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card';
+import { formatInr } from '@/lib/retailer/format';
+import { calculateCreditPosition } from '@/lib/orders/credit';
 import { OrderStatusTimeline, type TrackedStatus, type StatusHistoryEntry } from '@/components/retailer/order-status-timeline';
 
 type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'packed' | 'dispatched' | 'delivered' | 'cancelled' | 'returned';
@@ -61,6 +65,19 @@ interface HistoryRow {
   created_at: string;
 }
 
+interface OrderRetailerRow {
+  shop_name: string;
+  address: string | null;
+  credit_limit: number;
+  outstanding_balance: number;
+  areas: { name: string; district: string | null } | null;
+}
+
+interface OrderProfileRow {
+  full_name: string;
+  phone: string | null;
+}
+
 export default async function OrderDetailPage({
   params,
   searchParams,
@@ -71,7 +88,7 @@ export default async function OrderDetailPage({
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: order }, { data: itemData }, { data: historyData }] = await Promise.all([
+  const [{ data: order }, { data: itemData }, { data: historyData }, { data: retailer }, { data: profile }] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, status, subtotal, gst_total, discount_total, grand_total, notes, placed_at')
@@ -87,6 +104,14 @@ export default async function OrderDetailPage({
       .select('id, status, note, created_at')
       .eq('order_id', params.id)
       .order('created_at', { ascending: true }),
+    // The retailer's own account row and contact profile — RLS scopes both to
+    // the caller, so this can never render another retailer's address or credit.
+    supabase
+      .from('retailers')
+      .select('shop_name, address, credit_limit, outstanding_balance, areas ( name, district )')
+      .eq('id', user.id)
+      .maybeSingle<OrderRetailerRow>(),
+    supabase.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle<OrderProfileRow>(),
   ]);
 
   if (!order) notFound();
@@ -172,6 +197,67 @@ export default async function OrderDetailPage({
               {order.discount_total > 0 ? <div className="flex justify-between text-xs text-emerald-700"><span>Discount</span><span className="font-bold">−₹{order.discount_total.toFixed(2)}</span></div> : null}
               <div className="flex items-end justify-between border-t border-dashed border-slate-200 pt-4"><span className="text-sm font-bold text-slate-900">Total</span><span className="text-xl font-bold tracking-tight text-slate-950">₹{order.grand_total.toFixed(2)}</span></div>
               <div className="flex items-center justify-center gap-1.5 pt-1 text-[9px] text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Tax and totals recorded securely</div>
+            </div>
+          </section>
+
+          {retailer ? (
+            <DeliveryAddressCard
+              address={{
+                shopName: retailer.shop_name ?? null,
+                contactName: profile?.full_name ?? user.fullName,
+                address: retailer.address ?? null,
+                area: retailer.areas
+                  ? `${retailer.areas.name}${retailer.areas.district ? `, ${retailer.areas.district}` : ''}`
+                  : null,
+                phone: profile?.phone ?? null,
+              }}
+              note="This is the registered shop address on your account. Orders do not store their own address snapshot, so an update to your profile is reflected here too."
+            />
+          ) : null}
+
+          {/*
+            Settlement for this order, from real data only. `orders` has no
+            payment_method column and no credit-terms model, so this reports the
+            order's own recorded GST-inclusive total and the account's CURRENT
+            credit position (clearly labelled as current, not as at order time).
+          */}
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5">
+              <CreditCard className="h-4 w-4 text-primary-600" aria-hidden="true" />
+              <h2 className="text-sm font-bold text-slate-900">Settlement</h2>
+            </div>
+            <div className="space-y-2 p-4 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-600">Order total (incl. GST)</span>
+                <span className="font-bold text-slate-900">{formatInr(order.grand_total)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-600">Method</span>
+                <span className="font-bold text-slate-900">
+                  {retailer && retailer.credit_limit > 0 ? 'Business credit account' : 'No credit facility configured'}
+                </span>
+              </div>
+              {retailer ? (() => {
+                const position = calculateCreditPosition(retailer.credit_limit, retailer.outstanding_balance);
+                return position.hasConfiguredLimit ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3 border-t border-dashed border-slate-200 pt-2">
+                      <span className="text-slate-500">Outstanding on your account now</span>
+                      <span className="font-semibold text-slate-800">{formatInr(position.outstandingBalance)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-slate-500">Available credit now</span>
+                      <span className="font-semibold text-slate-800">{formatInr(position.availableCredit ?? 0)}</span>
+                    </div>
+                  </>
+                ) : null;
+              })() : null}
+              <Link
+                href="/retailer/account/ledger"
+                className="flex h-9 items-center justify-center rounded-lg border border-slate-200 text-[10px] font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600"
+              >
+                View credit &amp; ledger
+              </Link>
             </div>
           </section>
 

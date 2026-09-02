@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
-import { Check, ChevronLeft, ChevronRight, ImageOff, PackageCheck, ReceiptText, ShieldCheck } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, CreditCard, ImageOff, PackageCheck, ReceiptText, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
@@ -9,6 +9,7 @@ import { caseLineBreakdown, round2 } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
+import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
 
 interface CartItemDetail {
@@ -38,13 +39,21 @@ interface RetailerCreditRow {
   area_id: string;
   credit_limit: number;
   outstanding_balance: number;
+  shop_name: string;
+  address: string | null;
+  areas: { name: string; district: string | null } | null;
+}
+
+interface CheckoutProfileRow {
+  full_name: string;
+  phone: string | null;
 }
 
 export default async function CheckoutPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: cartData }, { data: retailer }] = await Promise.all([
+  const [{ data: cartData }, { data: retailer }, { data: profile }] = await Promise.all([
     supabase
       .from('cart_items')
       .select('id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, image_url, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )')
@@ -52,9 +61,10 @@ export default async function CheckoutPage() {
       .order('updated_at', { ascending: false }),
     supabase
       .from('retailers')
-      .select('area_id, credit_limit, outstanding_balance')
+      .select('area_id, credit_limit, outstanding_balance, shop_name, address, areas ( name, district )')
       .eq('id', user.id)
       .maybeSingle<RetailerCreditRow>(),
+    supabase.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle<CheckoutProfileRow>(),
   ]);
 
   const items = (cartData ?? []) as unknown as CartItemDetail[];
@@ -180,6 +190,51 @@ export default async function CheckoutPage() {
 
           {retailer ? (
             <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} orderImpact={grandTotal} />
+          ) : null}
+
+          {/*
+            Settlement method, stated from real data only. The schema has no
+            `payment_method` column and no Net-15/Net-30 terms model, so this
+            reports whether a credit facility actually exists on the account and
+            says plainly that terms are set by the distributor — it never offers
+            a choice that could be manipulated client-side, and it never affects
+            price (which stays server-authoritative).
+          */}
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5">
+              <CreditCard className="h-4 w-4 text-primary-600" aria-hidden="true" />
+              <h2 className="text-sm font-bold text-slate-900">Settlement</h2>
+            </div>
+            <div className="space-y-2 p-4 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-600">Method</span>
+                <span className="font-bold text-slate-900">
+                  {retailer && retailer.credit_limit > 0 ? 'Business credit account' : 'No credit facility configured'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-600">Final payable</span>
+                <span className="font-bold text-slate-900">{formatInr(grandTotal)}</span>
+              </div>
+              <p className="pt-1 text-[10px] leading-4 text-slate-400">
+                Payment terms (for example Net-15 or Net-30) are set by your distributor and are not selectable here.
+                GST is already included in every price above — it is never added again at checkout.
+              </p>
+            </div>
+          </section>
+
+          {retailer ? (
+            <DeliveryAddressCard
+              address={{
+                shopName: retailer.shop_name ?? null,
+                contactName: profile?.full_name ?? user.fullName,
+                address: retailer.address ?? null,
+                area: retailer.areas
+                  ? `${retailer.areas.name}${retailer.areas.district ? `, ${retailer.areas.district}` : ''}`
+                  : null,
+                phone: profile?.phone ?? null,
+              }}
+            />
           ) : null}
         </div>
 

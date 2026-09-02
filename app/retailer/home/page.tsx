@@ -11,7 +11,11 @@ import {
   PRODUCT_CARD_SELECT,
   type CatalogProductRow,
 } from '@/lib/retailer/catalog';
-import { getFrequentlyOrderedCards, pickDiscoveryRails } from '@/lib/retailer/personalization';
+import {
+  getBuyAgainCards,
+  getFrequentlyOrderedCards,
+  pickDiscoveryRails,
+} from '@/lib/retailer/personalization';
 
 interface BannerRow {
   id: string;
@@ -50,7 +54,7 @@ export default async function RetailerHomePage() {
   ]);
 
   const nowIso = new Date().toISOString();
-  const [{ data: bannerRows }, { data: categoryData }, { data: brandData }, { data: discoveryRows }, frequentCards] = await Promise.all([
+  const [{ data: bannerRows }, { data: categoryData }, { data: brandData }, { data: discoveryRows }, frequentCards, buyAgainCards] = await Promise.all([
     supabase
       .from('banners')
       .select('id, title, image_url, link_url, area_id, starts_at, ends_at')
@@ -76,6 +80,12 @@ export default async function RetailerHomePage() {
       .limit(80)
       .returns<CatalogProductRow[]>(),
     getFrequentlyOrderedCards(supabase, user.id, retailer?.area_id ?? null, favoriteIds, 10),
+    // "Recently ordered" — the retailer's OWN last non-cancelled order, read
+    // through their RLS-scoped session. getBuyAgainCards re-resolves today's
+    // price for every product, so nothing here carries a stale amount, and it
+    // returns [] when the shop has no order history yet (the rail then simply
+    // does not render — no placeholder products are ever invented).
+    getBuyAgainCards(supabase, user.id, retailer?.area_id ?? null, favoriteIds, 10),
   ]);
 
   const banners = ((bannerRows ?? []) as BannerRow[]).filter((banner) => {
@@ -164,6 +174,16 @@ export default async function RetailerHomePage() {
           </div>
         )}
       </section>
+
+      {buyAgainCards.length > 0 ? (
+        <ProductRail
+          eyebrow="From your last order"
+          title="Buy again"
+          href="/retailer/orders"
+          linkLabel="View your orders"
+          products={buyAgainCards}
+        />
+      ) : null}
 
       <ProductRail
         eyebrow="Chosen for your shelves"

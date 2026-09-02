@@ -14,7 +14,7 @@ import {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface SearchSuggestionResult {
-  products: { id: string; name: string; brandName?: string }[];
+  products: { id: string; name: string; brandName?: string; variantHint?: string }[];
   brands: { id: string; name: string }[];
   categories: { id: string; name: string }[];
 }
@@ -34,20 +34,48 @@ export async function searchSuggestionsAction(rawQuery: string): Promise<SearchS
   return cachedSearchSuggestions(q, () => loadSearchSuggestions(q));
 }
 
-/** The authoritative Supabase read behind the suggestions dropdown. */
+/** A product matched through one of its variants (pack size) or its barcode. */
+interface PackMatchRow {
+  pack_name: string;
+  product_id: string;
+  products: { id: string; name: string; brands: { name: string } | null } | null;
+}
+
+/**
+ * The authoritative Supabase read behind the suggestions dropdown.
+ *
+ * Matches every real, retailer-visible field: product NAME, BRAND, CATEGORY,
+ * product/pack BARCODE (EAN/UPC) and the VARIANT/SIZE itself — a pack's
+ * `pack_name` IS the size ("50g", "100g", "5L Jar"), so typing a size surfaces
+ * the products that sell it. Internal SKU codes are deliberately not a search
+ * field and are never returned.
+ *
+ * All four queries are selective-column, `is_active`-scoped and hard-limited,
+ * so the dropdown never pulls the catalog into the browser. RLS keeps inactive
+ * packs and other retailers' data out of the match set.
+ */
 async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult> {
   const supabase = createClient();
   const like = `"%${q}%"`;
 
-  const [{ data: products }, { data: brands }, { data: categories }] = await Promise.all([
+  const [{ data: products }, { data: packMatches }, { data: brands }, { data: categories }] = await Promise.all([
     supabase
       .from('products')
       .select('id, name, brands ( name )')
       .eq('is_active', true)
-      .ilike('name', like)
+      .or(`name.ilike.${like},barcode.ilike.${like}`)
       .order('name')
       .limit(6)
       .returns<{ id: string; name: string; brands: { name: string } | null }[]>(),
+    // The parent product's name/brand is embedded here on purpose: it means a
+    // size or barcode hit needs no second round trip to become a suggestion.
+    supabase
+      .from('product_packs')
+      .select('pack_name, product_id, products ( id, name, brands ( name ) )')
+      .eq('is_active', true)
+      .or(`pack_name.ilike.${like},barcode.ilike.${like}`)
+      .limit(6)
+      .returns<PackMatchRow[]>(),
     supabase
       .from('brands')
       .select('id, name')
@@ -66,12 +94,25 @@ async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult>
       .returns<{ id: string; name: string }[]>(),
   ]);
 
+  // Name/barcode hits first (the retailer typed a product), then size/barcode
+  // hits that are not already listed, each labelled with the size that matched.
+  const merged = new Map<string, { id: string; name: string; brandName?: string; variantHint?: string }>();
+  for (const product of products ?? []) {
+    merged.set(product.id, { id: product.id, name: product.name, brandName: product.brands?.name ?? undefined });
+  }
+  for (const match of packMatches ?? []) {
+    const parent = match.products;
+    if (!parent?.id || merged.has(parent.id)) continue;
+    merged.set(parent.id, {
+      id: parent.id,
+      name: parent.name,
+      brandName: parent.brands?.name ?? undefined,
+      variantHint: match.pack_name,
+    });
+  }
+
   return {
-    products: (products ?? []).map((product) => ({
-      id: product.id,
-      name: product.name,
-      brandName: product.brands?.name,
-    })),
+    products: [...merged.values()].slice(0, 6),
     brands: brands ?? [],
     categories: categories ?? [],
   };

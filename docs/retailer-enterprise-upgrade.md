@@ -77,8 +77,9 @@ INSERT/UPDATE privileges are untouched, so admin cost editing keeps working. Vie
 `image_url`, while `toPricedCard` reads both. Result: the per-piece figure on that rail was
 the **case** price (÷1) and the variant image never appeared.
 **Fix:** use the shared `PRODUCT_CARD_SELECT` constant so the two can never drift again.
-Same omission fixed in the AI catalog selects (`lib/ai/tools/products.ts`,
-`discovery.ts`) for future correctness.
+(The AI catalog selects in `lib/ai/tools/` omit the same columns, but they only ever report
+the case price as `price` and never divide by `units_per_case`, so there is no wrong number
+to fix there — left untouched rather than fetching columns nothing reads.)
 
 ### G5 — No retailer ledger / financial history surface
 **Schema reality:** `retailers.credit_limit` and `retailers.outstanding_balance` exist.

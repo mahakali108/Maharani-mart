@@ -17,6 +17,7 @@ import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CartItemRow } from '@/components/retailer/cart-item-row';
 import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
 import { CartCheckoutBar } from '@/components/retailer/cart-checkout-bar';
+import { ClearCartButton } from '@/components/retailer/clear-cart-button';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { ProductRail } from '@/components/retailer/product-rail';
 import { RecentlyViewedRail } from '@/components/retailer/recently-viewed';
@@ -189,12 +190,15 @@ export default async function CartPage() {
             {items.length} line item{items.length === 1 ? '' : 's'} · {totalQuantity} pack{totalQuantity === 1 ? '' : 's'}
           </p>
         </div>
-        <Link
-          href="/retailer/catalog"
-          className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Continue shopping
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <ClearCartButton itemCount={items.length} />
+          <Link
+            href="/retailer/catalog"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Continue shopping
+          </Link>
+        </div>
       </div>
 
       {hasUnavailable ? (
