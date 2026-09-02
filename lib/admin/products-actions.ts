@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { loadPackCost } from '@/lib/admin/cost-access';
 import { deleteMedia } from '@/lib/media';
 import { isRenderableMediaRef } from '@/lib/media/refs';
 import type { Database } from '@/types/database.types';
@@ -707,9 +708,17 @@ export async function duplicatePackAction(packId: string, productId: string) {
   const supabase = createClient();
 
   // Fetch the source pack with its tiers.
+  //
+  // `cost_price` is deliberately NOT part of this select: migration 0025
+  // revokes direct column SELECT on products/product_packs from the
+  // anon/authenticated roles so a retailer session can never read purchase
+  // cost through PostgREST. Admin-only reads go through the SECURITY DEFINER
+  // accessors in lib/admin/cost-access.ts, which re-check the role in the
+  // database. `/admin/**` is admin/super_admin only (lib/auth/roles.ts), so
+  // this call site is already correctly scoped.
   const { data: source, error: fetchError } = await supabase
     .from('product_packs')
-    .select('id, product_id, pack_name, units_per_case, base_price, mrp, cost_price, case_price, barcode, image_url, moq, is_active, sort_order')
+    .select('id, product_id, pack_name, units_per_case, base_price, mrp, case_price, barcode, image_url, moq, is_active, sort_order')
     .eq('id', packId)
     .eq('product_id', productId)
     .maybeSingle<{
@@ -719,7 +728,6 @@ export async function duplicatePackAction(packId: string, productId: string) {
       units_per_case: number;
       base_price: number;
       mrp: number | null;
-      cost_price: number | null;
       case_price: number;
       barcode: string | null;
       image_url: string | null;
@@ -731,6 +739,10 @@ export async function duplicatePackAction(packId: string, productId: string) {
   if (fetchError) throw new Error(fetchError.message);
   if (!source) throw new Error('Pack not found for this product.');
 
+  // Purchase cost of the source pack, so the duplicate carries it forward
+  // exactly as before (admin-only accessor, returns null below admin).
+  const sourceCostPrice = await loadPackCost(supabase, packId);
+
   // Create the duplicate.
   const { data: newPack, error: insertError } = await supabase
     .from('product_packs')
@@ -741,7 +753,7 @@ export async function duplicatePackAction(packId: string, productId: string) {
       units_per_case: source.units_per_case,
       base_price: source.base_price,
       mrp: source.mrp,
-      cost_price: source.cost_price,
+      cost_price: sourceCostPrice,
       case_price: source.case_price,
       barcode: null, // Don't duplicate barcode (must be unique if set)
       image_url: source.image_url,

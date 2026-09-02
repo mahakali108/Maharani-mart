@@ -17,7 +17,6 @@ export function CartItemRow({
   productName,
   brandName,
   packName,
-  skuCode,
   imageUrl,
   quantity,
   unitPrice,
@@ -35,7 +34,6 @@ export function CartItemRow({
   productName: string;
   brandName?: string | null;
   packName: string;
-  skuCode?: string | null;
   imageUrl?: string;
   quantity: number;
   unitPrice: number;
@@ -149,8 +147,6 @@ export function CartItemRow({
             {brandName && packName ? <span aria-hidden="true">·</span> : null}
             {packName ? <span className="truncate">{packName}</span> : null}
           </p>
-
-          {skuCode ? <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">SKU {skuCode}</p> : null}
 
           <p className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-slate-500">
             <Boxes className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />

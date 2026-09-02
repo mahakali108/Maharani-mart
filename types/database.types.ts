@@ -1453,6 +1453,23 @@ export interface Database {
         Args: { p_product_id: string; p_retailer_id: string };
         Returns: number;
       };
+      // Admin-only purchase-cost accessors (0025_cost_price_column_lockdown.sql).
+      // Direct SELECT on products.cost_price / product_packs.cost_price is
+      // revoked from anon + authenticated, so cost is read through these
+      // SECURITY DEFINER functions, which re-check is_admin_or_above() and
+      // return NULL for anyone below admin.
+      admin_product_cost: {
+        Args: { p_product_id: string };
+        Returns: number | null;
+      };
+      admin_pack_cost: {
+        Args: { p_pack_id: string };
+        Returns: number | null;
+      };
+      admin_pack_costs: {
+        Args: { p_product_id: string };
+        Returns: { pack_id: string; cost_price: number | null }[];
+      };
       is_phone_registered: {
         Args: { p_phone: string };
         Returns: boolean;

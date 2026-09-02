@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AICard, AIToolContext, AIToolDefinition, AIToolResult } from '@/lib/ai/types';
 import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { clampLimit, clampPage, dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
+import { clampLimit, clampPage, dbFailure, internalCode, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
 
 const pageFields = { page: z.number().int().min(1).max(100).optional(), limit: z.number().int().min(1).max(30).optional() };
 const productListSchema = z.object({
@@ -37,7 +37,7 @@ interface ProductRow {
 interface ProductResult {
   id: string;
   name: string;
-  skuCode: string;
+  skuCode: string | null;
   brand: string | null;
   category: string | null;
   gstPercent: number;
@@ -90,7 +90,7 @@ async function mapProducts(context: AIToolContext, rows: ProductRow[]): Promise<
     return {
       id: row.id,
       name: row.name,
-      skuCode: row.sku_code,
+      skuCode: internalCode(context, row.sku_code),
       brand: row.brands?.name ?? null,
       category: row.categories?.name ?? null,
       gstPercent: row.gst_percent,
@@ -112,7 +112,7 @@ function productCards(products: ProductResult[], context: AIToolContext): AICard
     type: 'product',
     id: product.id,
     title: product.name,
-    subtitle: [product.brand, product.packName, product.skuCode].filter(Boolean).join(' · '),
+    subtitle: [product.brand, product.packName, product.skuCode].filter(Boolean).join(' · ') || undefined,
     badge: product.stockStatus ? product.stockStatus.replaceAll('_', ' ') : undefined,
     imageUrl: product.imageUrl ?? undefined,
     quality: 'verified',

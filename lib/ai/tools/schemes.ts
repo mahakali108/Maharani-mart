@@ -2,7 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 import type { AICard, AIToolContext, AIToolDefinition } from '@/lib/ai/types';
-import { dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
+import { dbFailure, internalCode, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
 
 interface SchemeRow { id: string; name: string; description: string | null; is_festival: boolean; starts_at: string; ends_at: string; }
 interface SchemePriceRow { scheme_id: string | null; product_id: string; price: number; products: { name: string; sku_code: string } | null; }
@@ -59,7 +59,7 @@ export const schemeTools: AIToolDefinition[] = [
       if (result.error) return dbFailure();
       const scheme = result.rows.find((row) => row.id === schemeId);
       if (!scheme) return unavailable('This scheme is not active or eligible for the current user.');
-      const cards: AICard[] = scheme.products.slice(0, 20).map((p) => ({ type: 'product', id: p.id, title: p.name, subtitle: p.skuCode ?? undefined, metrics: [{ label: 'Configured scheme price', value: inr(p.configuredSchemePrice), quality: 'verified' }], quality: 'verified', source: 'Authorized scheme price row', actions: context.actor.surface === 'retailer' ? [{ type: 'link', label: 'View product', href: `/retailer/catalog/${p.id}` }] : context.actor.surface === 'admin' ? [{ type: 'link', label: 'View product', href: `/admin/products/${p.id}` }] : undefined }));
+      const cards: AICard[] = scheme.products.slice(0, 20).map((p) => ({ type: 'product', id: p.id, title: p.name, subtitle: internalCode(context, p.skuCode) ?? undefined, metrics: [{ label: 'Configured scheme price', value: inr(p.configuredSchemePrice), quality: 'verified' }], quality: 'verified', source: 'Authorized scheme price row', actions: context.actor.surface === 'retailer' ? [{ type: 'link', label: 'View product', href: `/retailer/catalog/${p.id}` }] : context.actor.surface === 'admin' ? [{ type: 'link', label: 'View product', href: `/admin/products/${p.id}` }] : undefined }));
       return verified({ scheme, products: scheme.products }, cards);
     },
   },

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { AICard, AIToolResult } from '@/lib/ai/types';
+import type { AICard, AIToolContext, AIToolResult } from '@/lib/ai/types';
 import { verificationFailure } from '@/lib/ai/safety/constants';
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -34,6 +34,26 @@ export function unavailable(message?: string): AIToolResult {
 
 export function dbFailure(): AIToolResult {
   return unavailable('Please try again after the business data service is available.');
+}
+
+/**
+ * Internal product codes (`products.sku_code`, `product_packs.pack_sku_code`)
+ * are NOT retailer-facing — business rule 6, and the reason migration 0023
+ * removed SKU from the product workflow and the retailer UI.
+ *
+ * Several AI tools are reachable from the retailer surface (`/retailer/ai`),
+ * and their cards previously put the internal code in the subtitle, which both
+ * renders it in the chat UI and hands it to the model to echo back. This
+ * helper is the single gate: on a retailer surface the code is dropped
+ * everywhere else (admin / staff / salesman) it is preserved unchanged,
+ * because those users legitimately work with internal codes.
+ */
+export function internalCode(
+  context: Pick<AIToolContext, 'actor'>,
+  code: string | null | undefined
+): string | null {
+  if (context.actor.surface === 'retailer') return null;
+  return code ?? null;
 }
 
 export function sourcePeriod(from: string, to: string, rows: number): string {

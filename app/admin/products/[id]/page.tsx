@@ -7,6 +7,7 @@ import { ProductImageManager } from '@/components/admin/product-image-manager';
 import { ProductPackManager } from '@/components/admin/product-pack-manager';
 import { ProductThresholdsForm } from '@/components/admin/product-thresholds-form';
 import { updateProductAction } from '@/lib/admin/products-actions';
+import { loadPackCosts, loadProductCost } from '@/lib/admin/cost-access';
 
 interface ProductDetail {
   id: string;
@@ -90,7 +91,7 @@ export default async function EditProductPage({ params }: { params: { id: string
   const supabase = createClient();
 
   const [
-    { data: product },
+    { data: productRow },
     { data: brandData },
     { data: categoryData },
     { data: imageData },
@@ -101,17 +102,21 @@ export default async function EditProductPage({ params }: { params: { id: string
   ] = await Promise.all([
     supabase
       .from('products')
+      // `cost_price` is deliberately NOT selected: migration 0025 revokes
+      // direct column SELECT from anon/authenticated so a retailer session can
+      // never read purchase cost via PostgREST. Admin reads it through the
+      // SECURITY DEFINER accessor below (loadProductCost / loadPackCosts).
       .select(
-        'id, name, brand_id, category_id, unit, units_per_case, base_price, cost_price, gst_percent, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
+        'id, name, brand_id, category_id, unit, units_per_case, base_price, gst_percent, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
       )
       .eq('id', params.id)
-      .single<ProductDetail>(),
+      .single<Omit<ProductDetail, 'cost_price'>>(),
     supabase.from('brands').select('id, name').eq('is_active', true).order('name'),
     supabase.from('categories').select('id, name').eq('is_active', true).order('name'),
     supabase.from('product_images').select('id, image_url, sort_order').eq('product_id', params.id).order('sort_order'),
     supabase
       .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, cost_price, case_price, barcode, image_url, is_active')
+      .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, case_price, barcode, image_url, is_active')
       .eq('product_id', params.id)
       .order('sort_order')
       .order('created_at'),
@@ -133,11 +138,25 @@ export default async function EditProductPage({ params }: { params: { id: string
       .limit(8),
   ]);
 
-  if (!product) {
+  if (!productRow) {
     notFound();
   }
 
-  const rawPacks = (packData ?? []) as unknown as Omit<ProductPackRow, 'tiers'>[];
+  // Purchase cost is admin-only and, since migration 0025, no longer readable
+  // as a plain column by any session (direct SELECT is revoked from
+  // anon/authenticated). It is fetched through the SECURITY DEFINER accessors,
+  // which re-check is_admin_or_above() inside the database.
+  const [productCost, packCosts] = await Promise.all([
+    loadProductCost(supabase, params.id),
+    loadPackCosts(supabase, params.id),
+  ]);
+  const product: ProductDetail | null = productRow
+    ? { ...(productRow as Omit<ProductDetail, 'cost_price'>), cost_price: productCost }
+    : null;
+
+  const rawPacks = ((packData ?? []) as unknown as Omit<ProductPackRow, 'tiers' | 'cost_price'>[]).map(
+    (pack) => ({ ...pack, cost_price: packCosts.get(pack.id) ?? null })
+  ) as Omit<ProductPackRow, 'tiers'>[];
   const packIds = rawPacks.map((pack) => pack.id);
   const { data: tierData } =
     packIds.length > 0

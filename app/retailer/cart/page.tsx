@@ -32,7 +32,6 @@ interface CartItemDetail {
   product_packs: {
     id: string;
     pack_name: string;
-    pack_sku_code: string;
     base_price: number;
     ptr: number | null;
     case_price: number;
@@ -71,7 +70,7 @@ export default async function CartPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, units_per_case, mrp, moq, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -160,7 +159,6 @@ export default async function CartPage() {
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
       brandName: product?.brands?.name ?? null,
-      skuCode: pack?.pack_sku_code || null,
       imageUrl: lineImage,
       unitPrice,
       gstPercent,
