@@ -45,10 +45,9 @@
 --   likewise `SECURITY DEFINER` and reads NEW/OLD directly.
 -- - `service_role` bypasses both RLS and these grants, so Supabase Studio,
 --   migrations and any service-role job are unaffected.
--- - Re-runnable: `CREATE OR REPLACE FUNCTION`, `DROP POLICY IF EXISTS` style
---   guards and idempotent REVOKE (revoking an already-revoked privilege is a
---   no-op in Postgres, and `GRANT`/`REVOKE` on a column never errors when the
---   column exists).
+-- - Re-runnable: the functions use `CREATE OR REPLACE`, and REVOKE/GRANT of a
+--   column privilege is idempotent in Postgres, so applying this twice is safe.
+--   No existing policy, table, column or row is altered in any way.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
