@@ -2,13 +2,14 @@
 
 import { useFormState } from 'react-dom';
 import { useTransition } from 'react';
-import { Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Trash2, ChevronUp, ChevronDown, Copy } from 'lucide-react';
 import {
   addProductPackAction,
   togglePackActiveAction,
   deleteProductPackAction,
   movePackAction,
   setPackImageAction,
+  duplicatePackAction,
   type PackFormState,
 } from '@/lib/admin/products-actions';
 import { PackPricingTiers, type PackTier } from '@/components/admin/pack-pricing-tiers';
@@ -111,6 +112,16 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
                             aria-label="Move pack down"
                           >
                             <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => startTransition(() => duplicatePackAction(pack.id, productId))}
+                            className="rounded-lg p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-30"
+                            aria-label="Duplicate pack"
+                            title="Duplicate this variant"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"

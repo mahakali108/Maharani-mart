@@ -28,7 +28,7 @@ interface Option {
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: { q?: string; brand?: string; category?: string; status?: string };
+  searchParams: { q?: string; brand?: string; category?: string; status?: string; page?: string };
 }) {
   const user = await requireUser();
   const supabase = createClient();
@@ -37,11 +37,16 @@ export default async function ProductsPage({
   const brandFilter = searchParams.brand ?? '';
   const categoryFilter = searchParams.category ?? '';
   const statusFilter = searchParams.status ?? '';
+  const page = Math.max(1, Number(searchParams.page) || 1);
+  const pageSize = 25;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
   let query = supabase
     .from('products')
-    .select('id, name, base_price, is_active, is_new_launch, brands ( name ), categories ( name )')
-    .order('created_at', { ascending: false });
+    .select('id, name, base_price, is_active, is_new_launch, brands ( name ), categories ( name )', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(from, to);
 
   if (q) query = query.ilike('name', `%${q}%`);
   if (brandFilter) query = query.eq('brand_id', brandFilter);
@@ -49,7 +54,7 @@ export default async function ProductsPage({
   if (statusFilter === 'active') query = query.eq('is_active', true);
   if (statusFilter === 'inactive') query = query.eq('is_active', false);
 
-  const [{ data }, { data: brandOptions }, { data: categoryOptions }] = await Promise.all([
+  const [{ data, count }, { data: brandOptions }, { data: categoryOptions }] = await Promise.all([
     query,
     supabase.from('brands').select('id, name').order('name'),
     supabase.from('categories').select('id, name').order('name'),
@@ -60,6 +65,7 @@ export default async function ProductsPage({
   const categories = (categoryOptions ?? []) as Option[];
   const canDelete = can(user.role, 'products.delete');
   const hasFilters = q || brandFilter || categoryFilter || statusFilter;
+  const totalPages = Math.max(1, Math.ceil((count ?? 0) / pageSize));
 
   return (
     <div className="space-y-6">
@@ -129,6 +135,7 @@ export default async function ProductsPage({
           }
         />
       ) : (
+        <>
         <Card className="overflow-hidden p-0">
           <table className="w-full text-sm">
             <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
@@ -170,7 +177,24 @@ export default async function ProductsPage({
             </tbody>
           </table>
         </Card>
+
+        {totalPages > 1 ? (
+          <div className="flex items-center justify-center gap-2">
+            {page > 1 ? (
+              <Link href={`/admin/products?q=${encodeURIComponent(q)}&brand=${brandFilter}&category=${categoryFilter}&status=${statusFilter}&page=${page - 1}`}>
+                <Button size="sm" variant="outline">Previous</Button>
+              </Link>
+            ) : null}
+            <span className="text-xs text-ink-400">Page {page} of {totalPages}</span>
+            {page < totalPages ? (
+              <Link href={`/admin/products?q=${encodeURIComponent(q)}&brand=${brandFilter}&category=${categoryFilter}&status=${statusFilter}&page=${page + 1}`}>
+                <Button size="sm" variant="outline">Next</Button>
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+        </>
       )}
     </div>
   );
-    }
+}
