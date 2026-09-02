@@ -64,6 +64,8 @@ export function pickApplicableTier(tiers: PricingTier[], pieces: number): Pricin
 
 export interface CaseLineBreakdown {
   pieces: number;
+  cases: number;
+  loosePieces: number;
   piecePrice: number;
   casePrice: number;
   /** GST-INCLUSIVE total for the whole line. */
@@ -75,12 +77,17 @@ export interface CaseLineBreakdown {
 }
 
 /**
- * Computes the GST-inclusive line total for `packQuantity` packs/cases of a
- * pack with the given case price, units-per-case and pricing tiers.
+ * Computes the GST-inclusive line total for `packQuantity` packs/cases (or
+ * `pieceQuantity` loose pieces) of a pack with the given case price,
+ * units-per-case and pricing tiers.
  *
- *   pieces       = packQuantity * unitsPerCase
- *   piecePrice   = applicable tier price (or case_price / unitsPerCase)
- *   total        = piecePrice * pieces          (GST-inclusive)
+ * Full cases use the exact case_price source of truth, while quantity slabs
+ * and loose piece prices apply accurately.
+ *
+ *   pieces       = pieceQuantity ?? (packQuantity * unitsPerCase)
+ *   cases        = Math.floor(pieces / unitsPerCase)
+ *   loosePieces  = pieces % unitsPerCase
+ *   total        = GST-inclusive total amount
  *   gst          = total * gst / (100 + gst)    (extracted, not added)
  *   subtotal     = total - gst
  */
@@ -88,21 +95,50 @@ export function caseLineBreakdown(input: {
   casePrice: number;
   unitsPerCase: number;
   tiers?: PricingTier[];
-  packQuantity: number;
+  packQuantity?: number;
+  pieceQuantity?: number;
   gstPercent: number;
 }): CaseLineBreakdown {
-  const { casePrice, unitsPerCase, tiers = [], packQuantity, gstPercent } = input;
+  const { casePrice, unitsPerCase, tiers = [], packQuantity, pieceQuantity, gstPercent } = input;
   const units = unitsPerCase > 0 ? unitsPerCase : 1;
-  const pieces = Math.max(1, Math.round(packQuantity)) * units;
+  const pieces =
+    pieceQuantity !== undefined && pieceQuantity !== null
+      ? Math.max(1, Math.round(pieceQuantity))
+      : Math.max(1, Math.round(packQuantity ?? 1)) * units;
+
+  const cases = Math.floor(pieces / units);
+  const loosePieces = pieces % units;
 
   const tier = pickApplicableTier(tiers, pieces);
-  const piecePrice = tier ? round2(tier.price_per_piece) : piecePriceFromCase(casePrice, units);
 
-  const total = round2(piecePrice * pieces);
+  let piecePrice: number;
+  let total: number;
+
+  if (tier && tier.rule_type === 'bulk') {
+    piecePrice = round2(tier.price_per_piece);
+    total = round2(piecePrice * pieces);
+  } else {
+    piecePrice = tier ? round2(tier.price_per_piece) : piecePriceFromCase(casePrice, units);
+    if (loosePieces === 0) {
+      total = round2(cases * casePrice);
+    } else {
+      total = round2(cases * casePrice + loosePieces * piecePrice);
+    }
+  }
+
   const gst = round2((total * gstPercent) / (100 + gstPercent));
   const subtotal = round2(total - gst);
 
-  return { pieces, piecePrice, casePrice: round2(casePrice), total, gst, subtotal };
+  return {
+    pieces,
+    cases,
+    loosePieces,
+    piecePrice,
+    casePrice: round2(casePrice),
+    total,
+    gst,
+    subtotal,
+  };
 }
 
 /** Extracts the GST component contained inside a GST-inclusive amount. */

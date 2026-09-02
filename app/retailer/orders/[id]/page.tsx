@@ -51,7 +51,7 @@ interface OrderItemRow {
   gst_percent: number;
   line_total: number;
   products: { name: string; product_images: { image_url: string; sort_order: number }[] } | null;
-  product_packs: { pack_name: string } | null;
+  product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
 interface HistoryRow {
@@ -80,7 +80,7 @@ export default async function OrderDetailPage({
       .maybeSingle<OrderDetailRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, unit_price, gst_percent, line_total, products ( name, product_images ( image_url, sort_order ) ), product_packs ( pack_name )')
+      .select('id, quantity, unit_price, gst_percent, line_total, products ( name, product_images ( image_url, sort_order ) ), product_packs ( pack_name, units_per_case )')
       .eq('order_id', params.id),
     supabase
       .from('order_status_history')
@@ -144,6 +144,8 @@ export default async function OrderDetailPage({
           <div className="divide-y divide-slate-100 px-3 sm:px-5">
             {items.map((item) => {
               const images = [...(item.products?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+              const unitsPerCase = item.product_packs?.units_per_case ?? 1;
+              const totalPieces = item.quantity * unitsPerCase;
               return (
                 <div key={item.id} className="flex items-center gap-3 py-4 sm:gap-4">
                   <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-50 sm:h-20 sm:w-20">
@@ -151,8 +153,8 @@ export default async function OrderDetailPage({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm">{item.products?.name ?? 'Unknown product'}</p>
-                    <p className="mt-1 text-[10px] font-medium text-slate-500">{item.product_packs?.pack_name ?? 'Pack'} · Qty {item.quantity}</p>
-                    <p className="mt-1 text-[9px] text-slate-400">₹{item.unit_price.toFixed(2)} / pack · GST {item.gst_percent}%</p>
+                    <p className="mt-1 text-[10px] font-medium text-slate-500">{item.product_packs?.pack_name ?? 'Pack'} · Qty {item.quantity} case{item.quantity === 1 ? '' : 's'} ({totalPieces} pcs)</p>
+                    <p className="mt-1 text-[9px] text-slate-400">₹{item.unit_price.toFixed(2)} / case · GST {item.gst_percent}%</p>
                   </div>
                   <div className="shrink-0 text-right"><p className="text-sm font-bold text-slate-950">₹{item.line_total.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-slate-400">Line total</p></div>
                 </div>

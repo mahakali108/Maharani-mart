@@ -95,6 +95,11 @@ export default async function CheckoutPage() {
       productName: product?.name ?? 'Unknown product',
       imageUrl: images[0]?.image_url,
       unitPrice,
+      piecePrice: breakdown.piecePrice,
+      unitsPerCase: pack?.units_per_case ?? 1,
+      pieces: breakdown.pieces,
+      cases: breakdown.cases,
+      loosePieces: breakdown.loosePieces,
       gstPercent,
       lineTotal: breakdown.total,
     };
@@ -155,7 +160,7 @@ export default async function CheckoutPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-bold text-slate-900">{line.productName}</p>
                     <p className="mt-1 text-[9px] text-slate-500">
-                      {line.packName} · Qty {line.quantity} case{line.quantity === 1 ? '' : 's'} · {formatInr(line.unitPrice)} per case
+                      {line.packName} · Qty {line.quantity} case{line.quantity === 1 ? '' : 's'} ({line.pieces} pcs) · {formatInr(line.unitPrice)} per case ({formatInr(line.piecePrice)}/pc)
                     </p>
                     <p className="mt-0.5 text-[9px] text-slate-400">GST {line.gstPercent}% included</p>
                   </div>
@@ -205,7 +210,7 @@ export default async function CheckoutPage() {
               </div>
             </div>
           </section>
-          <CheckoutForm grandTotal={grandTotal} />
+          <CheckoutForm grandTotal={grandTotal} subtotal={subtotal} gstTotal={gstTotal} itemCount={lines.length} />
         </aside>
       </div>
     </div>

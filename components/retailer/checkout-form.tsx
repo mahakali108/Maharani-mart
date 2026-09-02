@@ -4,7 +4,14 @@ import { useState, useTransition } from 'react';
 import { CheckCircle2, Loader2, LockKeyhole, MapPin } from 'lucide-react';
 import { placeOrderAction } from '@/lib/retailer/checkout-actions';
 
-export function CheckoutForm({ grandTotal }: { grandTotal: number }) {
+export interface CheckoutFormProps {
+  grandTotal: number;
+  subtotal?: number;
+  gstTotal?: number;
+  itemCount?: number;
+}
+
+export function CheckoutForm({ grandTotal, subtotal, gstTotal, itemCount }: CheckoutFormProps) {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -25,6 +32,14 @@ export function CheckoutForm({ grandTotal }: { grandTotal: number }) {
           <label htmlFor="notes" className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-slate-500">Notes for this order (optional)</label>
           <textarea id="notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} placeholder="Preferred delivery time, landmark or special instructions" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 outline-none placeholder:text-slate-400 focus:border-primary-300 focus:ring-2 focus:ring-primary-50" />
         </div>
+
+        {itemCount || subtotal !== undefined ? (
+          <div className="rounded-xl bg-slate-50 p-3 text-[10px] text-slate-500 space-y-1">
+            {itemCount ? <div className="flex justify-between"><span>Items to place</span><span className="font-bold text-slate-800">{itemCount} line item{itemCount === 1 ? '' : 's'}</span></div> : null}
+            {subtotal !== undefined ? <div className="flex justify-between"><span>Subtotal (excl. GST)</span><span className="font-semibold text-slate-700">₹{subtotal.toFixed(2)}</span></div> : null}
+            {gstTotal !== undefined ? <div className="flex justify-between"><span>Total GST component</span><span className="font-semibold text-slate-700">₹{gstTotal.toFixed(2)}</span></div> : null}
+          </div>
+        ) : null}
 
         {error ? <div role="alert" className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2.5 text-[10px] font-medium text-primary-700">{error}</div> : null}
 

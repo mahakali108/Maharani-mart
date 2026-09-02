@@ -28,7 +28,7 @@ interface OrderItemRow {
   gst_percent: number;
   line_total: number;
   products: { name: string } | null;
-  product_packs: { pack_name: string } | null;
+  product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
 function companyDetail(value: string | undefined, label: string): string {
@@ -53,7 +53,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
       .maybeSingle<RetailerRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, unit_price, gst_percent, line_total, products ( name ), product_packs ( pack_name )')
+      .select('id, quantity, unit_price, gst_percent, line_total, products ( name ), product_packs ( pack_name, units_per_case )')
       .eq('order_id', params.id),
   ]);
 
@@ -110,18 +110,24 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-50">
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td className="py-2">
-                  <p className="font-medium text-ink-900">{item.products?.name ?? '—'}</p>
-                  <p className="font-mono text-xs text-ink-400">{item.product_packs?.pack_name}</p>
-                </td>
-                <td className="py-2 text-ink-600">{item.quantity}</td>
-                <td className="py-2 text-right text-ink-600">₹{item.unit_price.toFixed(2)}</td>
-                <td className="py-2 text-right text-ink-600">{item.gst_percent}%</td>
-                <td className="py-2 text-right font-medium text-ink-900">₹{item.line_total.toFixed(2)}</td>
-              </tr>
-            ))}
+            {items.map((item) => {
+              const units = item.product_packs?.units_per_case ?? 1;
+              const totalPieces = item.quantity * units;
+              return (
+                <tr key={item.id}>
+                  <td className="py-2">
+                    <p className="font-medium text-ink-900">{item.products?.name ?? '—'}</p>
+                    <p className="font-mono text-xs text-ink-400">{item.product_packs?.pack_name}</p>
+                  </td>
+                  <td className="py-2 text-ink-600">
+                    {item.quantity} case{item.quantity === 1 ? '' : 's'} ({totalPieces} pcs)
+                  </td>
+                  <td className="py-2 text-right text-ink-600">₹{item.unit_price.toFixed(2)}</td>
+                  <td className="py-2 text-right text-ink-600">{item.gst_percent}%</td>
+                  <td className="py-2 text-right font-medium text-ink-900">₹{item.line_total.toFixed(2)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

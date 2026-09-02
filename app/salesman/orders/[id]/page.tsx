@@ -19,7 +19,7 @@ interface OrderItemRow {
   id: string;
   quantity: number;
   products: { name: string } | null;
-  product_packs: { pack_name: string } | null;
+  product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
 export default async function SalesmanOrderDetailPage({ params }: { params: { id: string } }) {
@@ -46,7 +46,7 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
 
   const { data: itemData } = await supabase
     .from('order_items')
-    .select('id, quantity, products ( name ), product_packs ( pack_name )')
+    .select('id, quantity, products ( name ), product_packs ( pack_name, units_per_case )')
     .eq('order_id', params.id);
   const items = (itemData ?? []) as unknown as OrderItemRow[];
 
@@ -70,12 +70,16 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
           <CardTitle>Items</CardTitle>
         </CardHeader>
         <ul className="space-y-1.5 text-sm">
-          {items.map((item) => (
-            <li key={item.id} className="flex justify-between">
-              <span className="text-ink-700">{item.products?.name} ({item.product_packs?.pack_name})</span>
-              <span className="font-medium text-ink-900">× {item.quantity}</span>
-            </li>
-          ))}
+          {items.map((item) => {
+            const units = item.product_packs?.units_per_case ?? 1;
+            const pieces = item.quantity * units;
+            return (
+              <li key={item.id} className="flex justify-between">
+                <span className="text-ink-700">{item.products?.name} ({item.product_packs?.pack_name})</span>
+                <span className="font-medium text-ink-900">× {item.quantity} case{item.quantity === 1 ? '' : 's'} ({pieces} pcs)</span>
+              </li>
+            );
+          })}
         </ul>
       </Card>
 

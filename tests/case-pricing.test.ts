@@ -31,14 +31,64 @@ describe('case-based pricing engine', () => {
     expect(line.total).toBe(900);
   });
 
-  it('recognises 24 pcs = 2 cases and 36 pcs = 3 cases', () => {
-    const twoCases = caseLineBreakdown({ ...FACE_WASH, tiers: [], packQuantity: 2 });
-    expect(twoCases.pieces).toBe(24);
-    expect(twoCases.total).toBe(1800);
+  it('decomposes quantities into cases and loose pieces accurately', () => {
+    // 15 pieces of a 12-unit pack = 1 case + 3 loose pieces
+    const breakdown = caseLineBreakdown({
+      ...FACE_WASH,
+      tiers: [],
+      pieceQuantity: 15,
+    });
+    expect(breakdown.pieces).toBe(15);
+    expect(breakdown.cases).toBe(1);
+    expect(breakdown.loosePieces).toBe(3);
+    // 1 case @ 900 + 3 loose pcs @ 75 = 900 + 225 = 1125
+    expect(breakdown.total).toBe(1125);
+    expect(breakdown.subtotal + breakdown.gst).toBe(1125);
+  });
 
-    const threeCases = caseLineBreakdown({ ...FACE_WASH, tiers: [], packQuantity: 3 });
-    expect(threeCases.pieces).toBe(36);
-    expect(threeCases.total).toBe(2700);
+  it('applies quantity slabs correctly to loose pieces', () => {
+    const tiers: PricingTier[] = [
+      { min_quantity: 1, max_quantity: 10, price_per_piece: 80, rule_type: 'bulk' },
+      { min_quantity: 10, max_quantity: null, price_per_piece: 70, rule_type: 'bulk' },
+    ];
+
+    // 5 loose pieces -> falls in [1, 10) tier @ 80/pc = 400
+    const smallLoose = caseLineBreakdown({
+      casePrice: 900,
+      unitsPerCase: 12,
+      tiers,
+      pieceQuantity: 5,
+      gstPercent: 5,
+    });
+    expect(smallLoose.piecePrice).toBe(80);
+    expect(smallLoose.total).toBe(400);
+
+    // 15 pieces -> falls in [10, ∞) tier @ 70/pc = 1050
+    const bulkLoose = caseLineBreakdown({
+      casePrice: 900,
+      unitsPerCase: 12,
+      tiers,
+      pieceQuantity: 15,
+      gstPercent: 5,
+    });
+    expect(bulkLoose.piecePrice).toBe(70);
+    expect(bulkLoose.total).toBe(1050);
+  });
+
+  it('guarantees full cases use the exact case price source of truth without rounding drift', () => {
+    // Pack with casePrice ₹100 for 3 units (100/3 = 33.333...)
+    const oddCase = caseLineBreakdown({
+      casePrice: 100,
+      unitsPerCase: 3,
+      tiers: [],
+      packQuantity: 1,
+      gstPercent: 12,
+    });
+    expect(oddCase.pieces).toBe(3);
+    expect(oddCase.cases).toBe(1);
+    expect(oddCase.loosePieces).toBe(0);
+    // Total for 1 case is exactly ₹100.00
+    expect(oddCase.total).toBe(100);
   });
 
   it('applies the Super Admin quantity tier automatically', () => {

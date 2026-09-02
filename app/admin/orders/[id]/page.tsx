@@ -22,8 +22,8 @@ interface OrderItemRow {
   quantity: number;
   unit_price: number;
   line_total: number;
-  products: { name: string; sku_code: string } | null;
-  product_packs: { pack_name: string } | null;
+  products: { name: string } | null;
+  product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
 interface HistoryRow {
@@ -49,7 +49,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
       .maybeSingle<OrderDetailRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, unit_price, line_total, products ( name, sku_code ), product_packs ( pack_name )')
+      .select('id, quantity, unit_price, line_total, products ( name ), product_packs ( pack_name, units_per_case )')
       .eq('order_id', params.id),
     supabase.from('order_status_history').select('id, status, note, created_at').eq('order_id', params.id).order('created_at'),
     supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
@@ -87,14 +87,18 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
           <CardTitle>Items</CardTitle>
         </CardHeader>
         <div className="space-y-2">
-          {items.map((item) => (
-            <div key={item.id} className="flex justify-between text-sm">
-              <span className="text-ink-700">
-                {item.products?.name} ({item.product_packs?.pack_name}) × {item.quantity}
-              </span>
-              <span className="font-medium text-ink-900">₹{item.line_total.toFixed(2)}</span>
-            </div>
-          ))}
+          {items.map((item) => {
+            const units = item.product_packs?.units_per_case ?? 1;
+            const pieces = item.quantity * units;
+            return (
+              <div key={item.id} className="flex justify-between text-sm">
+                <span className="text-ink-700">
+                  {item.products?.name} ({item.product_packs?.pack_name}) × {item.quantity} case{item.quantity === 1 ? '' : 's'} ({pieces} pcs)
+                </span>
+                <span className="font-medium text-ink-900">₹{item.line_total.toFixed(2)}</span>
+              </div>
+            );
+          })}
         </div>
         <div className="mt-3 flex justify-between border-t border-ink-100 pt-3 text-base font-semibold text-ink-950">
           <span>Total</span>
