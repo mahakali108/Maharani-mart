@@ -19,10 +19,15 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { caseLineBreakdown } from '@/lib/retailer/case-pricing';
+import {
+  calculateCaseLoosePrice,
+  piecePriceFromCase,
+  resolveLooseTierSet,
+} from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { buildVariantSwitcher, isUuidLike, variantGalleryImages } from '@/lib/retailer/variants';
 import { PackSelector } from '@/components/retailer/pack-selector';
+import { CaseLoosePriceSchedule } from '@/components/retailer/pricing-schedule';
 import { VariantSwitcher } from '@/components/retailer/variant-switcher';
 import { FavoriteToggle } from '@/components/retailer/favorite-toggle';
 import { ProductGallery } from '@/components/retailer/product-gallery';
@@ -56,7 +61,10 @@ interface PackRow {
   ptr: number | null;
   case_price: number;
   mrp: number | null;
+  /** Minimum order quantity in PIECES. */
   moq: number;
+  /** false = this pack is sold in whole cases only. */
+  allow_loose_pieces: boolean;
   image_url: string | null;
   is_active: boolean;
   sort_order: number;
@@ -76,6 +84,7 @@ interface CartItemRow {
     units_per_case: number;
     mrp: number | null;
     moq: number;
+    allow_loose_pieces: boolean;
     is_active: boolean;
   } | null;
   products: {
@@ -141,7 +150,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       .maybeSingle<ProductDetailRow>(),
     supabase
       .from('product_packs')
-      .select('id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, image_url, is_active, sort_order')
+      .select(
+        'id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, allow_loose_pieces, image_url, is_active, sort_order'
+      )
       .eq('product_id', productId)
       .order('sort_order')
       .returns<PackRow[]>(),
@@ -149,7 +160,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     supabase
       .from('cart_items')
       .select(
-        'id, pack_id, quantity, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, is_active ), products ( gst_percent, is_active )'
+        'id, pack_id, quantity, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, is_active ), products ( gst_percent, is_active )'
       )
       .eq('retailer_id', user.id)
       .returns<CartItemRow[]>(),
@@ -208,17 +219,21 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     const p = item.product_packs;
     const pr = item.products;
     if (p && pr) {
+      // `item.quantity` is a PIECE count (0026). Same engine call the server
+      // quote makes — full cases at the case price, remainder at its loose tier.
       const casePrice = resolvePackPrice(p, cartOverrides.get(item.product_id) ?? null);
-      const breakdown = caseLineBreakdown({
-        casePrice,
+      const pricing = calculateCaseLoosePrice({
+        quantity: item.quantity,
         unitsPerCase: p.units_per_case ?? 1,
+        casePrice,
         tiers: packTiers.get(item.pack_id) ?? [],
-        packQuantity: item.quantity,
         gstPercent: pr.gst_percent ?? 0,
+        moq: p.moq ?? 1,
+        allowLoosePieces: p.allow_loose_pieces !== false,
       });
-      cartSubtotal += breakdown.subtotal;
-      cartGstTotal += breakdown.gst;
-      cartSavingsTotal += calcSavings(p.mrp, breakdown.piecePrice, breakdown.pieces);
+      cartSubtotal += pricing.subtotal;
+      cartGstTotal += pricing.gst;
+      cartSavingsTotal += calcSavings(p.mrp, pricing.looseUnitPrice ?? pricing.derivedPiecePrice, pricing.quantity);
     }
   }
 
@@ -240,7 +255,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       ...pack,
       effectivePrice,
       casePrice: effectivePrice,
+      // The variant's own loose-piece slabs, resolved by the engine.
       tiers: packTiers.get(pack.id) ?? [],
+      allowLoosePieces: pack.allow_loose_pieces !== false,
       initialQuantity: cartInfo?.quantity ?? 0,
       cartItemId: cartInfo?.id ?? null,
     };
@@ -267,9 +284,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const selectedCasePrice = selectedPack ? resolvePackPrice(selectedPack, override) : null;
   // MRP is per piece; effectivePrice is the GST-inclusive case price — compare on a per-piece basis.
   const selectedPiecePrice =
-    selectedCasePrice !== null && (selectedPack?.units_per_case ?? 1) > 0
-      ? selectedCasePrice / (selectedPack?.units_per_case ?? 1)
-      : selectedCasePrice;
+    selectedCasePrice !== null ? piecePriceFromCase(selectedCasePrice, selectedPack?.units_per_case ?? 1) : null;
   const selectedTiers = selectedPack ? packTiers.get(selectedPack.id) ?? [] : [];
   const discount = calcDiscountPercent(selectedPack?.mrp, selectedPiecePrice);
   const saveAmount = calcSavings(selectedPack?.mrp, selectedPiecePrice);
@@ -463,24 +478,28 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   </p>
                 ) : null}
                 <p className="mt-1 text-[10px] text-slate-500">
-                  GST {product.gst_percent}% included in the case price · Quantity-based bulk discounts apply automatically
+                  GST {product.gst_percent}% included in every price above · full cases are billed at the case
+                  price, remaining pieces at the loose rate
                 </p>
-                {/* Selected variant's quantity slabs (product_pricing_tiers for THIS pack) */}
-                {selectedTiers.filter((tier) => tier.is_active !== false && tier.rule_type === 'bulk').length > 0 ? (
-                  <ul className="mt-2.5 space-y-1 rounded-xl bg-slate-50 p-2.5" aria-label="Quantity tier pricing for this size">
-                    {selectedTiers
-                      .filter((tier) => tier.is_active !== false && tier.rule_type === 'bulk')
-                      .sort((a, b) => a.min_quantity - b.min_quantity)
-                      .map((tier) => (
-                        <li key={tier.id ?? tier.min_quantity} className="flex items-center justify-between text-[10px] font-semibold text-slate-600">
-                          <span>
-                            {tier.min_quantity}
-                            {tier.max_quantity != null ? `–${tier.max_quantity - 1}` : '+'} pcs
-                          </span>
-                          <span className="text-slate-900">{formatInr(tier.price_per_piece)}/pc</span>
-                        </li>
-                      ))}
-                  </ul>
+                {/*
+                  Case price + loose-piece slabs for the SELECTED variant
+                  (product_pricing_tiers of THIS pack). Rendered by the shared
+                  schedule component so the cart, checkout and this page can
+                  never show three slightly different tables.
+                */}
+                {selectedPack ? (
+                  <CaseLoosePriceSchedule
+                    className="mt-2.5"
+                    unitsPerCase={selectedPack.units_per_case}
+                    casePrice={selectedCasePrice}
+                    tiers={selectedTiers}
+                    allowLoosePieces={selectedPack.allow_loose_pieces !== false}
+                  />
+                ) : null}
+                {selectedPack && resolveLooseTierSet(selectedTiers, selectedPack.units_per_case).tiers.length > 0 ? (
+                  <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">
+                    You can order as few as 1 pc — buying a full case is never compulsory.
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -552,7 +571,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               </div>
               <div className="rounded-xl bg-slate-50 p-3">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Standard case</dt>
-                <dd className="mt-1 font-bold text-slate-900">{product.units_per_case} unit(s)</dd>
+                <dd className="mt-1 font-bold text-slate-900">
+                  {selectedPack?.units_per_case ?? product.units_per_case} pcs (this size)
+                </dd>
               </div>
               <div className="rounded-xl bg-slate-50 p-3">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">GST Rate</dt>

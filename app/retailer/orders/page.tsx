@@ -174,7 +174,7 @@ export default async function OrdersPage({
                 <div className="p-4">
                   <p className="text-[10px] font-medium text-slate-500">{meta.message}</p>
                   <div className="mt-4 flex items-end justify-between gap-3">
-                    <div><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Order total</p><p className="mt-1 text-xl font-bold tracking-tight text-slate-950">₹{order.grand_total.toFixed(2)}</p><p className="text-[9px] text-slate-400">{itemCount} item{itemCount === 1 ? '' : 's'} · GST ₹{order.gst_total.toFixed(2)}</p></div>
+                    <div><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Order total</p><p className="mt-1 text-xl font-bold tracking-tight text-slate-950">₹{order.grand_total.toFixed(2)}</p><p className="text-[9px] text-slate-400">{itemCount} billing line{itemCount === 1 ? '' : 's'} · GST ₹{order.gst_total.toFixed(2)}</p></div>
                     <Link href={`/retailer/orders/${order.id}`} className="flex h-9 items-center gap-1 rounded-lg bg-slate-950 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700">{canTrack ? 'Track order' : 'View details'} <ChevronRight className="h-3.5 w-3.5" /></Link>
                   </div>
                 </div>

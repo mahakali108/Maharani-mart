@@ -15,6 +15,7 @@ import {
   Truck,
   XCircle,
 } from 'lucide-react';
+import { formatQuantitySummary, formatRowQuantity, groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { RetailerOrderActions } from '@/components/retailer/order-actions-panel';
@@ -50,7 +51,15 @@ interface OrderDetailRow {
 
 interface OrderItemRow {
   id: string;
+  product_id: string;
+  pack_id: string | null;
   quantity: number;
+  /** 'cases' | 'pieces'; null on lines placed before the case/loose split. */
+  quantity_unit: OrderItemUnit | null;
+  /** Pieces this row covers (snapshot taken when the order was written). */
+  quantity_pieces: number | null;
+  /** Pack size at order time (snapshot), so later catalog edits can't shift it. */
+  units_per_case: number | null;
   unit_price: number;
   gst_percent: number;
   line_total: number;
@@ -97,7 +106,9 @@ export default async function OrderDetailPage({
       .maybeSingle<OrderDetailRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, unit_price, gst_percent, line_total, products ( name, product_images ( image_url, sort_order ) ), product_packs ( pack_name, units_per_case )')
+      .select(
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, product_images ( image_url, sort_order ) ), product_packs ( pack_name, units_per_case )'
+      )
       .eq('order_id', params.id),
     supabase
       .from('order_status_history')
@@ -120,7 +131,14 @@ export default async function OrderDetailPage({
   const history = (historyData ?? []) as HistoryRow[];
   const meta = STATUS_META[order.status];
   const StatusIcon = meta.icon;
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  /*
+   * A mixed purchase (full cases + a loose remainder) is stored as two rows of
+   * the same pack so each row reconciles exactly; `groupOrderLines` folds them
+   * back into one card per ordered pack and sums the stored totals — it never
+   * re-prices anything, so the order screen always agrees with the invoice.
+   */
+  const orderedLines = groupOrderLines(items);
+  const totalQuantity = orderedLines.reduce((sum, line) => sum + line.quantity.pieces, 0);
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -167,21 +185,30 @@ export default async function OrderDetailPage({
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-5"><div><h2 className="text-sm font-bold text-slate-900">Items in this order</h2><p className="mt-0.5 text-[10px] text-slate-500">Prices captured when the order was placed</p></div><PackageCheck className="h-5 w-5 text-primary-600" /></div>
           <div className="divide-y divide-slate-100 px-3 sm:px-5">
-            {items.map((item) => {
-              const images = [...(item.products?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
-              const unitsPerCase = item.product_packs?.units_per_case ?? 1;
-              const totalPieces = item.quantity * unitsPerCase;
+            {orderedLines.map((line) => {
+              const { first } = line;
+              const images = [...(first.products?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
               return (
-                <div key={item.id} className="flex items-center gap-3 py-4 sm:gap-4">
+                <div key={line.key} className="flex items-center gap-3 py-4 sm:gap-4">
                   <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-50 sm:h-20 sm:w-20">
-                    {images[0]?.image_url ? <Image src={images[0].image_url} alt={item.products?.name ?? ''} fill className="object-contain p-1.5" unoptimized /> : <div className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></div>}
+                    {images[0]?.image_url ? <Image src={images[0].image_url} alt={first.products?.name ?? ''} fill className="object-contain p-1.5" unoptimized /> : <div className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></div>}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm">{item.products?.name ?? 'Unknown product'}</p>
-                    <p className="mt-1 text-[10px] font-medium text-slate-500">{item.product_packs?.pack_name ?? 'Pack'} · Qty {item.quantity} case{item.quantity === 1 ? '' : 's'} ({totalPieces} pcs)</p>
-                    <p className="mt-1 text-[9px] text-slate-400">₹{item.unit_price.toFixed(2)} / case · GST {item.gst_percent}%</p>
+                    <p className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm">{first.products?.name ?? 'Unknown product'}</p>
+                    <p className="mt-1 text-[10px] font-medium text-slate-500">
+                      {first.product_packs?.pack_name ?? 'Pack'} · Qty {formatQuantitySummary(line.quantity)}
+                    </p>
+                    {/* Every price part as it was actually billed on the invoice */}
+                    <ul className="mt-1 space-y-0.5">
+                      {line.rows.map((row) => (
+                        <li key={row.id} className="text-[9px] text-slate-400">
+                          {formatRowQuantity(row)} × ₹{row.unit_price.toFixed(2)} = ₹{row.line_total.toFixed(2)} · GST{' '}
+                          {row.gst_percent}% included
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <div className="shrink-0 text-right"><p className="text-sm font-bold text-slate-950">₹{item.line_total.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-slate-400">Line total</p></div>
+                  <div className="shrink-0 text-right"><p className="text-sm font-bold text-slate-950">₹{line.total.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-slate-400">Line total</p></div>
                 </div>
               );
             })}

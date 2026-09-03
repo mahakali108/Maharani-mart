@@ -12,7 +12,7 @@ import {
   duplicatePackAction,
   type PackFormState,
 } from '@/lib/admin/products-actions';
-import { PackPricingTiers, type PackTier } from '@/components/admin/pack-pricing-tiers';
+import { PackCasePricing, type PackPricingTier } from '@/components/admin/pack-case-pricing';
 import { MediaUploadField } from '@/components/media/media-upload-field';
 import { StoredImage } from '@/components/media/stored-image';
 import { Input } from '@/components/ui/input';
@@ -32,8 +32,12 @@ export interface Pack {
   cost_price: number | null;
   barcode: string | null;
   image_url: string | null;
+  /** Minimum order quantity in PIECES. */
+  moq: number;
+  /** false = whole cases only. */
+  allow_loose_pieces: boolean;
   is_active: boolean;
-  tiers: PackTier[];
+  tiers: PackPricingTier[];
 }
 
 const initialState: PackFormState = null;
@@ -42,7 +46,16 @@ function money(v: number | null) {
   return v === null ? '—' : `₹${v.toFixed(2)}`;
 }
 
-export function ProductPackManager({ productId, packs }: { productId: string; packs: Pack[] }) {
+export function ProductPackManager({
+  productId,
+  packs,
+  gstPercent = 0,
+}: {
+  productId: string;
+  packs: Pack[];
+  /** Parent product's GST per cent — every price here is GST-inclusive. */
+  gstPercent?: number;
+}) {
   const boundAction = addProductPackAction.bind(null, productId);
   const [state, formAction] = useFormState(boundAction, initialState);
   const [isPending, startTransition] = useTransition();
@@ -54,8 +67,9 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
         <strong>500g</strong>, <strong>750g</strong>, <strong>2 Kg</strong>, or a case pack like{' '}
         <strong>Case of 12</strong>. Sizes are free text, so any current or future size can be added without a code
         change. For each variant set the number of pieces per case and the fixed, GST-inclusive{' '}
-        <strong>case selling price</strong> — the per-piece selling price is derived automatically, and the internal
-        pack code is generated for you.
+        <strong>case selling price</strong>, then add its <strong>loose piece tiers</strong> below: a retailer may buy
+        any quantity, full cases are always billed at the case price and the remaining pieces at their tier rate. The
+        per-piece reference price is derived automatically, and the internal pack code is generated for you.
       </p>
 
       {packs.length === 0 ? (
@@ -141,8 +155,19 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
                     </tr>
                   </tbody>
                 </table>
-                <div className="border-t border-ink-100 bg-white px-3 py-2">
-                  <PackPricingTiers packId={pack.id} productId={productId} tiers={pack.tiers} />
+                <div className="border-t border-ink-100 bg-white px-3 py-3">
+                  <PackCasePricing
+                    packId={pack.id}
+                    productId={productId}
+                    packName={pack.pack_name}
+                    unitsPerCase={pack.units_per_case}
+                    casePrice={pack.case_price}
+                    mrp={pack.mrp ?? pack.base_price}
+                    moq={pack.moq}
+                    allowLoosePieces={pack.allow_loose_pieces !== false}
+                    gstPercent={gstPercent}
+                    tiers={pack.tiers}
+                  />
                 </div>
                 <div className="border-t border-ink-100 bg-white px-3 py-3">
                   <p className="mb-2 text-xs font-medium text-ink-500">
@@ -213,7 +238,7 @@ export function ProductPackManager({ productId, packs }: { productId: string; pa
           <Input id="casePrice" name="casePrice" type="number" min={0} step="0.01" required />
         </div>
         <div>
-          <Label htmlFor="moq">Min order qty (packs)</Label>
+          <Label htmlFor="moq">Min order qty (pieces)</Label>
           <Input id="moq" name="moq" type="number" min={1} step={1} defaultValue={1} />
         </div>
         <div className="sm:col-span-4">

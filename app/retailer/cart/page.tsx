@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BadgePercent,
   ChevronLeft,
+  CircleAlert,
   Info,
   PackageCheck,
   ReceiptText,
@@ -12,7 +13,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { caseLineBreakdown, round2 } from '@/lib/retailer/case-pricing';
+import { calculateCaseLoosePrice } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CartItemRow } from '@/components/retailer/cart-item-row';
 import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
@@ -38,7 +39,10 @@ interface CartItemDetail {
     case_price: number;
     units_per_case: number;
     mrp: number | null;
+    /** Minimum order quantity in PIECES. */
     moq: number;
+    /** false = this pack is sold in whole cases only. */
+    allow_loose_pieces: boolean;
     image_url: string | null;
     is_active: boolean;
   } | null;
@@ -71,7 +75,7 @@ export default async function CartPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -134,20 +138,26 @@ export default async function CartPage() {
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
     const casePrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
-    const breakdown = caseLineBreakdown({
-      casePrice,
+    // `item.quantity` is the number of PIECES in the cart. The case part and the
+    // loose remainder are priced by the one canonical engine — the same call
+    // `quoteOrderForRetailer` makes before an order is written.
+    const pricing = calculateCaseLoosePrice({
+      quantity: item.quantity,
       unitsPerCase: pack?.units_per_case ?? 1,
+      casePrice,
       tiers: pack ? tierMap.get(pack.id) ?? [] : [],
-      packQuantity: item.quantity,
       gstPercent,
+      moq: pack?.moq ?? 1,
+      allowLoosePieces: pack?.allow_loose_pieces !== false,
     });
-    // Per-case price actually charged, derived from the line total (same rule as
-    // the server quote) so the figure shown here reconciles with the invoice.
-    const unitPrice = round2(breakdown.total / Math.max(item.quantity, 1));
-    subtotal += breakdown.subtotal;
-    gstTotal += breakdown.gst;
-    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + breakdown.gst);
-    savings += calcSavings(pack?.mrp, breakdown.piecePrice, breakdown.pieces);
+    // Effective price per piece actually charged (display only). The persisted
+    // order splits the line into exact case / loose rows, so no rounding drift
+    // can ever reach the invoice.
+    const unitPrice = pricing.total / Math.max(pricing.quantity, 1);
+    subtotal += pricing.subtotal;
+    gstTotal += pricing.gst;
+    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + pricing.gst);
+    savings += calcSavings(pack?.mrp, pricing.looseUnitPrice ?? pricing.derivedPiecePrice, pricing.quantity);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     // The cart line shows the variant's own image when it has one (same rule
     // as the product page size switcher), falling back to the product gallery.
@@ -157,6 +167,10 @@ export default async function CartPage() {
       id: item.id,
       productId: item.product_id,
       quantity: item.quantity,
+      cases: pricing.fullCases,
+      loosePieces: pricing.looseQuantity,
+      isOrderable: pricing.orderable,
+      quantityMessage: pricing.message,
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
       brandName: product?.brands?.name ?? null,
@@ -168,6 +182,7 @@ export default async function CartPage() {
       unitsPerCase: pack?.units_per_case ?? 1,
       casePrice,
       tiers: pack ? tierMap.get(pack.id) ?? [] : [],
+      allowLoosePieces: pack?.allow_loose_pieces !== false,
       isUnavailable: !pack?.is_active || !product?.is_active,
       isFavorite: favoriteIds.has(item.product_id),
     };
@@ -175,7 +190,11 @@ export default async function CartPage() {
 
   const grandTotal = subtotal + gstTotal;
   const hasUnavailable = lines.some((line) => line.isUnavailable);
-  const availableCount = lines.filter((line) => !line.isUnavailable).length;
+  // A line is only orderable when the engine could price every piece of it:
+  // an uncovered loose quantity (a configured gap) or a case-only pack asked
+  // for a remainder is blocked here rather than silently re-priced.
+  const blockedLines = lines.filter((line) => !line.isUnavailable && !line.isOrderable);
+  const availableCount = lines.filter((line) => !line.isUnavailable && line.isOrderable).length;
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
 
   return (
@@ -187,7 +206,7 @@ export default async function CartPage() {
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Review your order</p>
           <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">Shopping cart</h1>
           <p className="mt-1 text-xs text-slate-500">
-            {items.length} line item{items.length === 1 ? '' : 's'} · {totalQuantity} pack{totalQuantity === 1 ? '' : 's'}
+            {items.length} line item{items.length === 1 ? '' : 's'} · {totalQuantity} pc{totalQuantity === 1 ? '' : 's'} in total
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -207,6 +226,26 @@ export default async function CartPage() {
           <p>
             <span className="font-bold">Cart update required.</span> Unavailable products are clearly marked and will be excluded when the order is validated.
           </p>
+        </div>
+      ) : null}
+
+      {blockedLines.length > 0 ? (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-xs text-primary-800"
+        >
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="font-bold">Some quantities cannot be ordered yet</p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {blockedLines.map((line) => (
+                <li key={line.id}>
+                  <span className="font-semibold">{line.productName}</span> ({line.packName}) —{' '}
+                  {line.quantityMessage ?? 'adjust the quantity to continue.'}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : null}
 
@@ -244,7 +283,7 @@ export default async function CartPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="space-y-3">
               {[
-                { icon: PackageCheck, title: 'MOQ verified', body: 'Every pack checked before order' },
+                { icon: PackageCheck, title: 'Case + loose pricing', body: 'Full cases at case price, remaining pcs at the loose rate' },
                 { icon: ReceiptText, title: 'GST transparent', body: 'Tax shown on every invoice' },
                 { icon: Truck, title: 'Track fulfillment', body: 'Status updates after ordering' },
               ].map((item) => (

@@ -96,10 +96,110 @@ An explainable, statistical demand-forecasting engine (`lib/ai/forecast/`) reads
 ### 4.4 Inventory System
 - `warehouses`, `inventory_stock` (qty per warehouse per product), `stock_movements` (typed: inward/outward/damage/return/transfer/adjustment) — inventory quantity is **never** edited directly; it's always a derived sum of movements, giving a full audit trail.
 - Live Inventory view subscribes to Supabase Realtime on `stock_movements`.
+- **Known limitation (case vs piece units).** Stock is modelled per *product* in
+  stock units, while `order_items.quantity` is now a count of pieces per billing
+  unit. Nothing decrements stock from the split rows, and the FEFO allocation RPCs
+  (migration `0017`) still read `order_items.quantity` as stock units, so for a
+  multi-piece case they under-consume (1 case row = 1 instead of 40). This gap
+  predates the case/loose work — the same mismatch existed when `quantity` held
+  packs — and it is deliberately left unfixed here: inventing a per-case stock
+  deduction would fabricate availability the warehouse has not recorded. Closing
+  it needs a stock-unit decision per product (pieces vs cases) plus a migration of
+  `inventory_*` rollups and the allocation RPCs, which is a warehouse-model
+  change rather than a pricing change. Retailer-facing consequences stay bounded:
+  ordering is never blocked by stock, and availability shown comes from the same
+  product-level totals as before.
 
-### 4.5 Pricing Engine
-- **Case-based pricing (primary).** The CASE is the selling unit. Every sellable pack carries a fixed, GST-INCLUSIVE `case_price` — the single source of truth. The per-piece selling price is always derived (`case_price / units_per_case`) and is never entered or stored manually. Quantity slabs live in `product_pricing_tiers` (half-open `[min_quantity, max_quantity)` ranges in PIECES, each with a GST-inclusive `price_per_piece`); the matching tier with the largest `min_quantity` wins, so bulk discounts apply automatically as quantity grows. The arithmetic lives in the pure module `lib/retailer/case-pricing.ts`, reused by the authoritative order quote (`lib/orders/quote-order.ts`), cart, checkout and the client pack/cart previews — no client-supplied price is ever trusted.
-- **GST-inclusive end to end.** Selling prices already include GST. GST is *extracted* (`price * gst / (100 + gst)`) for the invoice and order `gst_total`; it is never added on top of a displayed price. The legacy `price_lists` table (`scope` enum: `base`/`area`/`retailer`/`scheme`/`festival`, `priority`, `valid_from`/`valid_to`) remains and its resolved override is applied as a case-price override for the product. The legacy `ptr`/`wholesale_price`/`base_price` columns on `product_packs` are kept for backward compatibility and backfilled into `case_price` by migration `0022_case_based_pricing.sql`.
+### 4.5 Pricing Engine — cases and loose pieces
+
+**The rule, in one sentence:** a pack is priced by its **case price** for every
+full case and by a **loose-piece tier** for the remaining pieces — and nothing
+else. 40 pieces of a 40-piece case is never `40 × loose rate`, and 6 pieces is
+never forced up to a case.
+
+```
+fullCases = floor(quantity / units_per_case)
+looseQty  = quantity % units_per_case
+total     = fullCases × case_price  +  looseQty × tier_price(looseQty)
+```
+
+Every price in this model is **GST-inclusive**, so the GST shown on an invoice is
+*extracted* from these totals (`gstComponentFromInclusive`), never added.
+
+**Where it lives.** One pure module owns the arithmetic:
+`lib/retailer/case-pricing.ts` → `calculateCaseLoosePrice`. It is imported by the
+authoritative server quote (`lib/orders/quote-order.ts`), order creation, the
+cart service, every retailer screen (product page, cart, checkout), the order and
+invoice views for all four roles, the AI tools, the salesman order builder and —
+importantly — the **admin pricing editor**, which previews exactly what checkout
+will charge because it calls the same function. There is deliberately no second
+implementation: no screen multiplies a piece price by a quantity, and no client
+supplies a price, a tier, a discount or a total.
+
+Worked examples for `units_per_case = 40`, `case_price = ₹1,000`, loose tiers
+`1–6 = ₹30 · 7–12 = ₹28 · 13–20 = ₹27 · 21–39 = ₹26`:
+
+| Qty (pcs) | Split | Total |
+| --- | --- | --- |
+| 6 | 6 loose @ ₹30 | ₹180 |
+| 12 | 12 loose @ ₹28 | ₹336 |
+| 25 | 25 loose @ ₹26 | ₹650 |
+| 39 | 39 loose @ ₹26 | ₹1,014 |
+| 40 | **1 case** | ₹1,000 |
+| 41 | 1 case + 1 loose @ ₹30 | ₹1,030 |
+| 46 | 1 case + 6 loose @ ₹30 | ₹1,180 |
+| 80 | 2 cases | ₹2,000 |
+| 85 | 2 cases + 5 loose @ ₹30 | ₹2,150 |
+| 92 | 2 cases + 12 loose @ ₹28 | ₹2,336 |
+
+**Retailer freedom.** A retailer is never forced into a case: any whole-piece
+quantity at or above the pack's MOQ is enterable, and the cart offers shortcuts
+(1 pc, the MOQ, the top loose slab, 1 case, 2 cases) as *suggestions* built by
+`suggestedQuantities`. The product page states both prices side by side ("Case
+price" and "Loose price" via `components/retailer/pricing-schedule.tsx`), and the
+cart line shows the arithmetic — `1 Case × ₹1,000.00 + 6 loose pcs × ₹30.00 =
+₹1,180.00` — plus `Cases: 1 · Loose: 6`, which is repeated on the order page and
+the invoice.
+
+**Per-variant.** Case size, case price, loose tiers, MRP, GST, image and
+availability all come from the pack's own row in `product_packs` and its own
+`product_pricing_tiers` rows (migration 0026). Nothing is inherited or averaged
+across sizes.
+
+**Persistence and reconciliation.** A mixed line is stored as two `order_items`
+rows — `quantity_unit = 'cases'` (quantity = number of cases, `unit_price` = case
+price) and `quantity_unit = 'pieces'` (quantity = loose pieces, `unit_price` = the
+tier rate) — each carrying a snapshot `quantity_pieces` and `units_per_case`. So
+`unit_price × quantity = line_total` holds **exactly** on every row, the order
+header totals are the sum of those rows, and no blended per-piece rate can drift.
+`lib/orders/item-display.ts` is the single reader: it folds a pack's rows back
+into `Cases / Loose / pieces` for every view (retailer, admin, staff picking,
+salesman, AI), and treats rows written before the split as packs, so historical
+orders and invoices render unchanged.
+
+**Gaps are explicit, never repriced.** If a pack has loose tiers but a remainder
+quantity is not covered by any of them, the engine returns **zero money** and
+`orderable = false` with a message naming the covered ranges; the cart and
+checkout block instead of silently falling back to another rate. Admins must
+tick "save anyway" to persist such a configuration. When a pack has **no** loose
+rows at all, the remainder is priced at the derived `case_price / units_per_case`,
+which is exactly how packs behaved before this feature — so existing data prices
+identically.
+
+**Legacy rules.** `product_pricing_tiers` was extended, not duplicated:
+`rule_type` gained `'loose'` (active loose rows are keyed by
+`(product_pack_id, min_quantity)` and may never reach `units_per_case`), while the
+pre-existing `'default'` / `'bulk'` / `'case'` rows keep working — a pack whose
+loose set is curated has its overlapping legacy slabs deactivated by the admin
+save, and an untouched pack keeps its old behaviour. `price_lists` overrides still
+resolve to a **case-price** override for the product.
+
+**Legacy columns.** GST-inclusive means the same thing everywhere: the legacy
+`ptr` / `wholesale_price` / `base_price` columns on `product_packs` are kept only
+for reports and were backfilled into `case_price` by migration
+`0022_case_based_pricing.sql`; `base_price` continues to mirror MRP so old reads
+do not change.
+
 
 ### 4.6 Reports
 - Sales, Profit (needs `products.cost_price`, admin-only visibility), Staff Performance, Area Performance — all SQL views over real `orders`/`order_items`/`visits`/`attendance`. No canned report data.

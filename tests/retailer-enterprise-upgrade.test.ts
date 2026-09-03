@@ -465,7 +465,12 @@ describe('checkout never adds GST a second time', () => {
   it('extracts GST from the inclusive price on every retailer money path', () => {
     for (const file of ['app/retailer/checkout/page.tsx', 'app/retailer/cart/page.tsx', 'app/retailer/catalog/[id]/page.tsx']) {
       const source = read(file);
-      expect(source, file).toContain('caseLineBreakdown(');
+      // The case + loose engine is the single pricing path: it is what extracts
+      // GST out of the inclusive price, so no page may recompute money by hand.
+      // `caseLineBreakdown` was the previous entry point and is now only a thin
+      // adapter over `calculateCaseLoosePrice`; either call satisfies the rule.
+      expect(source, file).toMatch(/calculateCaseLoosePrice\(|caseLineBreakdown\(/);
+      expect(source, file).toContain("from '@/lib/retailer/case-pricing'");
       // Adding GST would look like `* (1 + gst/100)` or `subtotal + gst*qty`.
       expect(source, file).not.toMatch(/\*\s*\(1\s*\+\s*gst/);
       expect(source, file).not.toMatch(/gst_percent\s*\/\s*100\s*\)/);

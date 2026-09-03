@@ -44,6 +44,10 @@ interface ProductPackRow {
   case_price: number;
   barcode: string | null;
   image_url: string | null;
+  /** Minimum order quantity in PIECES (0026 comment). */
+  moq: number;
+  /** false = this pack is sold in whole cases only. */
+  allow_loose_pieces: boolean;
   is_active: boolean;
   tiers: PackTierRow[];
 }
@@ -53,7 +57,8 @@ interface PackTierRow {
   min_quantity: number;
   max_quantity: number | null;
   price_per_piece: number;
-  rule_type: 'default' | 'case' | 'bulk';
+  /** 'loose' = a loose-piece slab (0026); the others are pre-feature rules. */
+  rule_type: 'default' | 'case' | 'bulk' | 'loose';
   label: string | null;
 }
 
@@ -116,7 +121,9 @@ export default async function EditProductPage({ params }: { params: { id: string
     supabase.from('product_images').select('id, image_url, sort_order').eq('product_id', params.id).order('sort_order'),
     supabase
       .from('product_packs')
-      .select('id, pack_name, pack_sku_code, units_per_case, base_price, mrp, case_price, barcode, image_url, is_active')
+      .select(
+        'id, pack_name, pack_sku_code, units_per_case, base_price, mrp, case_price, barcode, image_url, moq, allow_loose_pieces, is_active'
+      )
       .eq('product_id', params.id)
       .order('sort_order')
       .order('created_at'),
@@ -349,7 +356,7 @@ export default async function EditProductPage({ params }: { params: { id: string
         <CardHeader>
           <CardTitle>Pack sizes &amp; case pricing</CardTitle>
         </CardHeader>
-        <ProductPackManager productId={params.id} packs={packs} />
+        <ProductPackManager productId={params.id} packs={packs} gstPercent={product?.gst_percent ?? 0} />
       </Card>
     </div>
   );

@@ -4,6 +4,8 @@ import { ArrowLeft, ChevronRight, Info, RotateCcw, ShieldCheck } from 'lucide-re
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
+import { groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { ReorderForm, type ReorderLineInput } from '@/components/retailer/reorder-form';
 
 interface OrderRow {
@@ -14,8 +16,13 @@ interface OrderRow {
 
 interface ReorderItemRow {
   id: string;
+  product_id: string;
   pack_id: string | null;
   quantity: number;
+  /** 'cases' | 'pieces'; null on lines billed before the case/loose split. */
+  quantity_unit: OrderItemUnit | null;
+  quantity_pieces: number | null;
+  units_per_case: number | null;
   products: {
     id: string;
     name: string;
@@ -29,7 +36,9 @@ interface ReorderItemRow {
     base_price: number;
     ptr: number | null;
     case_price: number;
+    units_per_case: number;
     moq: number;
+    allow_loose_pieces: boolean;
     is_active: boolean;
   } | null;
 }
@@ -50,11 +59,20 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<{ area_id: string }>(),
     supabase
       .from('order_items')
-      .select('id, pack_id, quantity, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, case_price, moq, is_active )')
+      .select(
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active )'
+      )
       .eq('order_id', order.id),
   ]);
 
   const items = (itemData ?? []) as unknown as ReorderItemRow[];
+  /*
+   * A mixed line was billed as two rows (cases + loose pieces). Reordering
+   * offers ONE line per pack with the TOTAL PIECES from last time, so the
+   * retailer reorders 46 pcs — not "46 cases" — and today's engine decides the
+   * case/loose split again.
+   */
+  const previousLines = groupOrderLines(items.filter((item) => item.pack_id));
   const overrideByProduct = new Map<string, number | null>();
   const distinctProductIds = [...new Set(items.map((item) => item.products?.id).filter((id): id is string => !!id))];
   const overrides = await Promise.all(
@@ -65,23 +83,31 @@ export default async function ReorderPage({ params }: { params: { id: string } }
   );
   for (const [productId, override] of overrides) overrideByProduct.set(productId, override);
 
-  const lines: ReorderLineInput[] = items
-    .filter((item) => item.pack_id && item.product_packs)
-    .map((item) => {
-      const pack = item.product_packs!;
-      const product = item.products;
+  const tierMap = await loadPackTiers(
+    supabase,
+    previousLines.map((line) => line.first.pack_id!).filter(Boolean)
+  );
+
+  const lines: ReorderLineInput[] = previousLines
+    .filter((line) => line.first.product_packs)
+    .map(({ key, first, quantity }) => {
+      const pack = first.product_packs!;
+      const product = first.products;
       const currentUnitPrice = resolvePackPrice(pack, product ? overrideByProduct.get(product.id) ?? null : null);
       const unavailable = !pack.is_active || !product?.is_active;
       return {
-        packId: item.pack_id!,
+        packId: first.pack_id ?? key,
         productName: product?.name ?? 'Unknown product',
         packName: pack.pack_name,
         imageUrl: product?.product_images[0]?.image_url,
-        previousQuantity: item.quantity,
-        suggestedQuantity: Math.max(item.quantity, pack.moq),
+        previousQuantity: quantity.pieces,
+        suggestedQuantity: Math.max(quantity.pieces, pack.moq),
         moq: pack.moq,
         gstPercent: product?.gst_percent ?? 0,
         currentUnitPrice,
+        unitsPerCase: pack.units_per_case,
+        tiers: tierMap.get(pack.id) ?? [],
+        allowLoosePieces: pack.allow_loose_pieces !== false,
         unavailable,
       };
     });

@@ -7,10 +7,22 @@ import { Boxes, CircleAlert, Heart, ImageOff, Loader2, Trash2 } from 'lucide-rea
 import { updateCartQuantityAction, removeCartItemAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
-import { caseLineBreakdown, type PricingTier } from '@/lib/retailer/case-pricing';
+import {
+  calculateCaseLoosePrice,
+  suggestedQuantities,
+  type PricingTier,
+} from '@/lib/retailer/case-pricing';
+import { CaseLooseLineBreakdown } from '@/components/retailer/pricing-schedule';
 import { QtyStepper } from '@/components/retailer/qty-stepper';
 import { cn } from '@/lib/utils/cn';
 
+/**
+ * One cart line. The quantity is a PIECE count (0026): the retailer may keep
+ * 6 pcs of a 40-pc case, or 46 pcs = 1 case + 6 loose. Every number on this
+ * row comes from `calculateCaseLoosePrice` — the same function the server runs
+ * when the order is written — so the cart can never advertise a price the
+ * checkout will not honour. Editing still posts only (cartItemId, pieces).
+ */
 export function CartItemRow({
   id,
   productId,
@@ -26,6 +38,7 @@ export function CartItemRow({
   unitsPerCase = 1,
   casePrice,
   tiers,
+  allowLoosePieces = true,
   isUnavailable,
   isFavorite = false,
 }: {
@@ -43,6 +56,7 @@ export function CartItemRow({
   unitsPerCase?: number;
   casePrice?: number | null;
   tiers?: PricingTier[];
+  allowLoosePieces?: boolean;
   isUnavailable: boolean;
   isFavorite?: boolean;
 }) {
@@ -52,9 +66,28 @@ export function CartItemRow({
   const [error, setError] = useState<string | null>(null);
   const [favorite, setFavorite] = useState(isFavorite);
 
-  function handleQuantityChange(next: number) {
-    // Mirrors the server rule (MOQ + whole number); the server action remains
-    // authoritative and any rejection is shown below and reverted.
+  const resolvedCasePrice = casePrice ?? unitPrice;
+
+  const pricing = calculateCaseLoosePrice({
+    quantity: localQty,
+    unitsPerCase,
+    casePrice: resolvedCasePrice,
+    tiers: tiers ?? [],
+    gstPercent,
+    moq,
+    allowLoosePieces,
+  });
+  const suggestions = suggestedQuantities({ unitsPerCase, moq, tiers, allowLoosePieces });
+  const displayTotal = pricing.total;
+  const displayPiecePrice = pricing.looseUnitPrice ?? pricing.derivedPiecePrice;
+  const lineSavings = calcSavings(mrp, displayPiecePrice, pricing.quantity);
+  const discountPercent = calcDiscountPercent(mrp, displayPiecePrice);
+  const isDirty = localQty !== quantity;
+
+  function commitQuantity(next: number) {
+    // Mirrors the server rule locally (whole pieces, at or above MOQ, no
+    // unpriced loose remainder) purely for responsiveness; the server action remains
+    // authoritative, and any rejection is shown below and the input reverted.
     const validQuantity = Math.max(moq, Math.round(next) || moq);
     setLocalQty(validQuantity);
     setError(null);
@@ -85,20 +118,6 @@ export function CartItemRow({
       if ('success' in result) setFavorite(result.isFavorite);
     });
   }
-
-  // unitPrice is the GST-INCLUSIVE per-case price. The line total re-applies the
-  // Super Admin-configured quantity tier so quantity changes recalculate
-  // automatically, and GST is already inside the price (never added again).
-  const breakdown = caseLineBreakdown({
-    casePrice: casePrice ?? unitPrice,
-    unitsPerCase,
-    tiers: tiers ?? [],
-    packQuantity: localQty,
-    gstPercent,
-  });
-  const displayTotal = breakdown.total;
-  const lineSavings = calcSavings(mrp, breakdown.piecePrice, breakdown.pieces);
-  const discountPercent = calcDiscountPercent(mrp, breakdown.piecePrice);
 
   return (
     <article
@@ -150,7 +169,8 @@ export function CartItemRow({
 
           <p className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-slate-500">
             <Boxes className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
-            MOQ {moq} pack{moq === 1 ? '' : 's'}
+            {unitsPerCase} pcs per case · MOQ {moq} pcs
+            {allowLoosePieces === false ? ' · full cases only' : ''}
           </p>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -171,9 +191,14 @@ export function CartItemRow({
           {/* Desktop price block */}
           <div className="mt-2.5 hidden flex-wrap items-baseline gap-x-2 gap-y-1 md:flex">
             <p className="text-base font-bold tracking-tight text-slate-950">
-              {formatInr(unitPrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
+              {formatInr(resolvedCasePrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
             </p>
-            {mrp != null && mrp > unitPrice ? (
+            {allowLoosePieces !== false && unitsPerCase > 1 ? (
+              <p className="text-[10px] font-semibold text-slate-500">
+                loose from {formatInr(displayPiecePrice)}/pc
+              </p>
+            ) : null}
+            {mrp != null && mrp > displayPiecePrice ? (
               <p className="text-[11px] text-slate-400 line-through">MRP {formatInr(mrp)}</p>
             ) : null}
             {lineSavings > 0 ? (
@@ -186,14 +211,14 @@ export function CartItemRow({
       {/* Cell B — mobile price row */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 md:hidden">
         <p className="text-sm font-bold tracking-tight text-slate-950">
-          {formatInr(unitPrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
+          {formatInr(resolvedCasePrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
         </p>
         {discountPercent > 0 ? (
           <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
             {discountPercent}% off
           </span>
         ) : null}
-        {mrp != null && mrp > unitPrice ? (
+        {mrp != null && mrp > displayPiecePrice ? (
           <p className="text-[10px] text-slate-400 line-through">MRP {formatInr(mrp)}</p>
         ) : null}
         {lineSavings > 0 ? (
@@ -201,29 +226,84 @@ export function CartItemRow({
         ) : null}
       </div>
 
-      {/* Cell C — quantity + line total */}
+      {/* Cell C — quantity in pieces + line total + case/loose breakdown */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 md:flex-col md:items-end md:gap-3 md:border-0 md:pt-0">
         <div>
-          <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Quantity</p>
-          <QtyStepper
-            value={localQty}
-            min={moq}
-            disabled={isPending || isUnavailable}
-            onChange={handleQuantityChange}
-            label={`${productName} quantity`}
-          />
+          <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Quantity (pcs)</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <QtyStepper
+              value={localQty}
+              min={moq}
+              disabled={isPending || isUnavailable}
+              onChange={commitQuantity}
+              label={`${productName} quantity in pieces`}
+            />
+            {suggestions.length > 1 ? (
+              <div className="flex flex-wrap items-center gap-1">
+                {suggestions.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={isPending || isUnavailable}
+                    onClick={() => commitQuantity(value)}
+                    aria-pressed={localQty === value}
+                    className={cn(
+                      'h-7 rounded-lg border px-1.5 text-[10px] font-bold transition disabled:opacity-50',
+                      localQty === value
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-primary-300 hover:text-primary-700'
+                    )}
+                  >
+                    {value % unitsPerCase === 0 && value >= unitsPerCase
+                      ? `${value / unitsPerCase} Case${value / unitsPerCase === 1 ? '' : 's'}`
+                      : `${value}`}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {isDirty ? (
+            <p className="mt-1 text-[9px] font-semibold text-slate-400">
+              {pricing.orderable ? `Updating to ${localQty} pcs · ${formatInr(displayTotal)}` : 'Not available yet'}
+            </p>
+          ) : null}
         </div>
         <div className="text-right">
           <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Line total incl. GST</p>
           <p className="mt-0.5 text-base font-bold tracking-tight text-slate-950 sm:text-lg">{formatInr(displayTotal)}</p>
           <p className="text-[9px] text-slate-400">
-            {formatInr(unitPrice)} × {localQty} · {gstPercent}% GST included
+            {pricing.fullCases > 0
+              ? `${pricing.fullCases} case${pricing.fullCases === 1 ? '' : 's'} × ${formatInr(resolvedCasePrice)}`
+              : `${pricing.looseQuantity} loose pcs × ${formatInr(displayPiecePrice)}`}
+            {pricing.looseQuantity > 0 && pricing.fullCases > 0
+              ? ` + ${pricing.looseQuantity} × ${formatInr(displayPiecePrice)}`
+              : null}
+            {` · ${gstPercent}% GST included`}
           </p>
         </div>
       </div>
 
-      {/* Cell D — actions */}
-      <div className="flex items-center justify-between gap-2 md:flex-col md:items-end md:gap-2">
+      {/* Cell D — the exact case + loose breakdown (same engine, one layout) */}
+      <div className="md:col-span-3">
+        <CaseLooseLineBreakdown pricing={pricing} showSummary />
+      </div>
+
+      {/* Cell E — actions */}
+      <div className="flex items-center justify-between gap-2 md:col-span-3 md:flex-row-reverse md:items-center">
+        <button
+          type="button"
+          onClick={handleRemove}
+          disabled={isPending}
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition hover:bg-primary-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 disabled:opacity-50"
+          aria-label={`Remove ${productName} from cart`}
+        >
+          {isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          )}
+          Remove
+        </button>
         {productId ? (
           <button
             type="button"
@@ -244,24 +324,13 @@ export function CartItemRow({
         ) : (
           <span />
         )}
-        <button
-          type="button"
-          onClick={handleRemove}
-          disabled={isPending}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition hover:bg-primary-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 disabled:opacity-50"
-          aria-label={`Remove ${productName} from cart`}
-        >
-          {isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-          )}
-          Remove
-        </button>
       </div>
 
       {error ? (
-        <p role="alert" className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-[10px] font-medium text-primary-700 md:col-span-3">
+        <p
+          role="alert"
+          className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-[10px] font-medium text-primary-700 md:col-span-3"
+        >
           {error}
         </p>
       ) : null}

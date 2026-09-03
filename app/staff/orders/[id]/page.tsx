@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { formatRowQuantity, rowPieces, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,10 @@ interface OrderRow {
 interface OrderItemRow {
   id: string;
   quantity: number;
+  /** 'cases' = pick N full cases; 'pieces' = pick N loose pieces. */
+  quantity_unit: OrderItemUnit | null;
+  quantity_pieces: number | null;
+  units_per_case: number | null;
   products: { name: string; sku_code: string } | null;
   product_packs: { pack_name: string } | null;
 }
@@ -33,7 +38,7 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
       .maybeSingle<OrderRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, products ( name, sku_code ), product_packs ( pack_name )')
+      .select('id, quantity, quantity_unit, quantity_pieces, units_per_case, products ( name, sku_code ), product_packs ( pack_name )')
       .eq('order_id', params.id),
   ]);
 
@@ -72,7 +77,12 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
           {items.map((item) => (
             <li key={item.id} className="flex justify-between">
               <span className="text-ink-700">{item.products?.name} ({item.product_packs?.pack_name})</span>
-              <span className="font-semibold text-ink-900">× {item.quantity}</span>
+              {/* Pickers work per billing row: 1 Case means one sealed case, 6
+                  loose pieces are broken out of a case in the pick area. */}
+              <span className="font-semibold text-ink-900">
+                × {formatRowQuantity(item)}
+                <span className="ml-1 text-xs font-normal text-ink-400">({rowPieces(item)} pcs)</span>
+              </span>
             </li>
           ))}
         </ul>

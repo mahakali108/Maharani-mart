@@ -47,12 +47,15 @@ async function productPerformance(days: number, context: AIToolContext, ascendin
   if (error) return dbFailure();
   const ids = (orders ?? []).map((row) => row.id);
   if (!ids.length) return verified({ products: [], from, to }, [], sourcePeriod(from, to, 0));
-  type Item = { product_id: string; quantity: number; line_total: number; products: { name: string; sku_code: string } | null };
+  // `quantity_pieces` matters here: a stored line is per billing unit (1 row for
+  // the cases, 1 for the loose remainder), so "quantity" only means pieces when
+  // the snapshot is read. Revenue is unaffected — it always sums `line_total`.
+  type Item = { product_id: string; quantity: number; quantity_pieces: number | null; line_total: number; products: { name: string; sku_code: string } | null };
   const data: Item[] = [];
   for (let index = 0; index < ids.length; index += 40) {
     const chunk = ids.slice(index, index + 40);
     for (let offset = 0; offset < 8000; offset += 500) {
-      const { data: page, error: itemError } = await context.supabase.from('order_items').select('product_id, quantity, line_total, products ( name, sku_code )').in('order_id', chunk).range(offset, offset + 499).returns<Item[]>();
+      const { data: page, error: itemError } = await context.supabase.from('order_items').select('product_id, quantity, quantity_pieces, line_total, products ( name, sku_code )').in('order_id', chunk).range(offset, offset + 499).returns<Item[]>();
       if (itemError) return dbFailure();
       data.push(...(page ?? []));
       if ((page?.length ?? 0) < 500) break;
@@ -60,9 +63,9 @@ async function productPerformance(days: number, context: AIToolContext, ascendin
     }
   }
   const map = new Map<string, { productId: string; name: string; skuCode: string; quantity: number; revenue: number; rows: number }>();
-  for (const item of data ?? []) { const row = map.get(item.product_id) ?? { productId: item.product_id, name: item.products?.name ?? 'Product', skuCode: item.products?.sku_code ?? '', quantity: 0, revenue: 0, rows: 0 }; row.quantity += item.quantity; row.revenue += item.line_total; row.rows += 1; map.set(item.product_id, row); }
+  for (const item of data ?? []) { const row = map.get(item.product_id) ?? { productId: item.product_id, name: item.products?.name ?? 'Product', skuCode: item.products?.sku_code ?? '', quantity: 0, revenue: 0, rows: 0 }; row.quantity += item.quantity_pieces ?? item.quantity; row.revenue += item.line_total; row.rows += 1; map.set(item.product_id, row); }
   const products = [...map.values()].sort((a, b) => ascending ? a.quantity - b.quantity : b.quantity - a.quantity).slice(0, limit);
-  const cards: AICard[] = products.map((row, index) => ({ type: 'insight', id: row.productId, title: row.name, subtitle: internalCode(context, row.skuCode) ?? undefined, badge: `#${index + 1}`, quality: 'verified', source: sourcePeriod(from, to, row.rows), metrics: [{ label: 'Quantity', value: String(row.quantity), quality: 'verified' }, { label: context.actor.role === 'retailer' ? 'Purchase value' : 'Revenue', value: inr(row.revenue), quality: 'verified' }] }));
+  const cards: AICard[] = products.map((row, index) => ({ type: 'insight', id: row.productId, title: row.name, subtitle: internalCode(context, row.skuCode) ?? undefined, badge: `#${index + 1}`, quality: 'verified', source: sourcePeriod(from, to, row.rows), metrics: [{ label: 'Quantity (pcs)', value: String(row.quantity), quality: 'verified' }, { label: context.actor.role === 'retailer' ? 'Purchase value' : 'Revenue', value: inr(row.revenue), quality: 'verified' }] }));
   return verified({ products, from, to }, cards, sourcePeriod(from, to, data?.length ?? 0));
 }
 

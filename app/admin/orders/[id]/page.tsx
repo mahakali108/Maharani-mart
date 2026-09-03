@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { formatQuantitySummary, groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminOrderActions } from '@/components/admin/order-actions-panel';
@@ -19,7 +20,13 @@ interface OrderDetailRow {
 
 interface OrderItemRow {
   id: string;
+  product_id: string;
+  pack_id: string | null;
   quantity: number;
+  /** 'cases' | 'pieces' (null on lines billed before the case/loose split). */
+  quantity_unit: OrderItemUnit | null;
+  quantity_pieces: number | null;
+  units_per_case: number | null;
   unit_price: number;
   line_total: number;
   products: { name: string } | null;
@@ -49,7 +56,9 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
       .maybeSingle<OrderDetailRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, unit_price, line_total, products ( name ), product_packs ( pack_name, units_per_case )')
+      .select(
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, line_total, products ( name ), product_packs ( pack_name, units_per_case )'
+      )
       .eq('order_id', params.id),
     supabase.from('order_status_history').select('id, status, note, created_at').eq('order_id', params.id).order('created_at'),
     supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
@@ -58,6 +67,9 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
   if (!order) notFound();
 
   const items = (itemData ?? []) as unknown as OrderItemRow[];
+  // One row per ordered pack: a cases row and its loose-piece row are folded
+  // together, and the amount shown is the sum of the stored row totals.
+  const orderLines = groupOrderLines(items);
   const history = (historyData ?? []) as HistoryRow[];
   const warehouses = (warehouseData ?? []) as WarehouseOption[];
 
@@ -87,18 +99,15 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
           <CardTitle>Items</CardTitle>
         </CardHeader>
         <div className="space-y-2">
-          {items.map((item) => {
-            const units = item.product_packs?.units_per_case ?? 1;
-            const pieces = item.quantity * units;
-            return (
-              <div key={item.id} className="flex justify-between text-sm">
-                <span className="text-ink-700">
-                  {item.products?.name} ({item.product_packs?.pack_name}) × {item.quantity} case{item.quantity === 1 ? '' : 's'} ({pieces} pcs)
-                </span>
-                <span className="font-medium text-ink-900">₹{item.line_total.toFixed(2)}</span>
-              </div>
-            );
-          })}
+          {orderLines.map((line) => (
+            <div key={line.key} className="flex justify-between text-sm">
+              <span className="text-ink-700">
+                {line.first.products?.name} ({line.first.product_packs?.pack_name}) ×{' '}
+                {formatQuantitySummary(line.quantity)}
+              </span>
+              <span className="font-medium text-ink-900">₹{line.total.toFixed(2)}</span>
+            </div>
+          ))}
         </div>
         <div className="mt-3 flex justify-between border-t border-ink-100 pt-3 text-base font-semibold text-ink-950">
           <span>Total</span>

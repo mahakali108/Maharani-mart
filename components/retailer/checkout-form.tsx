@@ -9,14 +9,17 @@ export interface CheckoutFormProps {
   subtotal?: number;
   gstTotal?: number;
   itemCount?: number;
+  /** True when a cart line cannot be priced (e.g. an unpriced loose remainder). */
+  disabled?: boolean;
 }
 
-export function CheckoutForm({ grandTotal, subtotal, gstTotal, itemCount }: CheckoutFormProps) {
+export function CheckoutForm({ grandTotal, subtotal, gstTotal, itemCount, disabled = false }: CheckoutFormProps) {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handlePlaceOrder() {
+    if (disabled) return;
     setError(null);
     startTransition(async () => {
       const result = await placeOrderAction(notes);
@@ -43,7 +46,7 @@ export function CheckoutForm({ grandTotal, subtotal, gstTotal, itemCount }: Chec
 
         {error ? <div role="alert" className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2.5 text-[10px] font-medium text-primary-700">{error}</div> : null}
 
-        <button type="button" onClick={handlePlaceOrder} disabled={isPending} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60">
+        <button type="button" onClick={handlePlaceOrder} disabled={isPending || disabled} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
           {isPending ? 'Placing order…' : `Place order · ₹${grandTotal.toFixed(2)}`}
         </button>

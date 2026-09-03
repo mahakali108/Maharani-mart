@@ -64,6 +64,17 @@ Until that decision is made, the current behaviour is correct and consistent:
 * **Case vs loose stock** — stock is counted in **pieces** only. Cases are a
   pricing/ordering unit (`product_packs.units_per_case`), not a stocking unit.
   There is no separate "cases on hand" figure and none is invented.
+* **What 0026 changed here (and what it deliberately did not).** Order lines are
+  now written per billing unit — `order_items` rows carry `quantity_unit`
+  (`'cases'` / `'pieces'`) plus a `quantity_pieces` snapshot — and the retailer
+  cart/checkout MOQs are compared in pieces. Stock movement was **not**
+  rewired: the FEFO allocation and consumption functions (0017) still read
+  `order_items.quantity`, so for a `'cases'` row they see 1 rather than 40. That
+  under-consumption predates this change (the column used to hold pack counts,
+  which is the same mismatch), and fixing it means deciding each product's stock
+  unit and migrating `inventory_*` rollups plus the RPCs — a warehouse-model
+  change, not a pricing one. `order_items.quantity_pieces` is the column a future
+  fix should consume; no stock figure is estimated or invented in the meantime.
 * **Low stock thresholds** are per product (`min_stock`, `reorder_level`,
   `max_stock`), not per warehouse and not per variant.
 * **FEFO** applies to batch consumption within a product+warehouse. Products

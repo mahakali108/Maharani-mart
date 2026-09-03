@@ -9,11 +9,18 @@ import { createOrderForRetailer } from '@/lib/orders/create-order';
 const createSalesmanOrderSchema = z.object({
   retailerId: z.string().uuid(),
   notes: z.string().max(1000).default(''),
+  /*
+   * `quantity` is the number of PIECES the retailer is taking — the same unit
+   * the web cart uses, so `createOrderForRetailer` can price it with one rule:
+   * floor(qty / unitsPerCase) cases at the case price, the remainder at its
+   * loose tier. A salesman can therefore bill 6 loose pcs of a 40-pc case and
+   * nothing about the case split is trusted from this client.
+   */
   lines: z
     .array(
       z.object({
         packId: z.string().uuid(),
-        quantity: z.number().int().positive().max(100000),
+        quantity: z.number().int().positive().max(100000).describe('Quantity in pieces (not cases)'),
       })
     )
     .min(1)

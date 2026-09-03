@@ -5,7 +5,12 @@ import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, ImageOff, Loader2, Minus, Plus, Search, ShoppingCart } from 'lucide-react';
 import { createSalesmanOrderAction } from '@/lib/salesman/order-creation-actions';
-import { gstComponentFromInclusive, round2 } from '@/lib/retailer/case-pricing';
+import {
+  calculateCaseLoosePrice,
+  piecePriceFromCase,
+  resolveLooseTierSet,
+  type PricingTier,
+} from '@/lib/retailer/case-pricing';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,7 +26,13 @@ interface OrderPack {
   id: string;
   name: string;
   skuCode: string;
+  /** Minimum order quantity in PIECES. */
   moq: number;
+  unitsPerCase: number;
+  allowLoosePieces: boolean;
+  /** Loose-piece tiers of THIS pack, straight from the database. */
+  tiers: PricingTier[];
+  /** GST-inclusive CASE price. */
   effectivePrice: number;
 }
 
@@ -69,18 +80,38 @@ export function SalesmanOrderBuilder({
   );
 
   const selectedLines = Object.entries(quantities).filter(([, quantity]) => quantity > 0);
+
+  /**
+   * Quantities are PIECES. Priced by `calculateCaseLoosePrice` — the same
+   * function `createOrderForRetailer` runs server-side — so the preview cannot
+   * drift from the order that gets written: whole cases at the case price, the
+   * remainder at its loose tier, GST extracted from the inclusive totals.
+   */
+  function priceFor(packId: string, quantity: number) {
+    const item = packById.get(packId);
+    if (!item) return null;
+    return calculateCaseLoosePrice({
+      quantity,
+      unitsPerCase: item.pack.unitsPerCase,
+      casePrice: item.pack.effectivePrice,
+      tiers: item.pack.tiers,
+      gstPercent: item.product.gstPercent,
+      moq: item.pack.moq,
+      allowLoosePieces: item.pack.allowLoosePieces,
+    });
+  }
+
   let subtotal = 0;
   let gstTotal = 0;
+  let blockedLine: string | null = null;
   for (const [packId, quantity] of selectedLines) {
-    const item = packById.get(packId);
-    if (!item) continue;
-    // effectivePrice is the GST-INCLUSIVE case price — GST is extracted, never added.
-    const lineTotal = round2(item.pack.effectivePrice * quantity);
-    const lineGst = gstComponentFromInclusive(lineTotal, item.product.gstPercent);
-    subtotal += round2(lineTotal - lineGst);
-    gstTotal += lineGst;
+    const pricing = priceFor(packId, quantity);
+    if (!pricing) continue;
+    if (!pricing.orderable) blockedLine = pricing.message ?? 'One quantity is not orderable.';
+    subtotal += pricing.subtotal;
+    gstTotal += pricing.gst;
   }
-  const estimatedTotal = round2(subtotal + gstTotal);
+  const estimatedTotal = subtotal + gstTotal;
   const availableCredit = credit.limit > 0 ? Math.max(0, credit.limit - credit.outstanding) : null;
 
   function setPackQuantity(pack: OrderPack, nextQuantity: number) {
@@ -90,6 +121,12 @@ export function SalesmanOrderBuilder({
 
   function handleSubmit() {
     setError(null);
+    // Mirrors the server rule for a fast message; the server quote stays the
+    // authority and will reject the whole order if anything is unorderable.
+    if (blockedLine) {
+      setError(blockedLine);
+      return;
+    }
     startTransition(async () => {
       const result = await createSalesmanOrderAction({
         retailerId: selectedRetailerId,
@@ -179,13 +216,44 @@ export function SalesmanOrderBuilder({
               <div className="mt-3 space-y-2 border-t border-ink-100 pt-3">
                 {product.packs.map((pack) => {
                   const quantity = quantities[pack.id] ?? 0;
+                  const pricing = quantity > 0 ? priceFor(pack.id, quantity) : null;
+                  // Cheapest applicable loose rate (from the engine's own tier
+                  // resolution), so the "from ₹x/pc" hint can't disagree with
+                  // what the line actually bills.
+                  const looseRates = resolveLooseTierSet(pack.tiers, pack.unitsPerCase).tiers.map(
+                    (tier) => tier.price_per_piece
+                  );
+                  const looseFrom = looseRates.length > 0
+                    ? Math.min(...looseRates)
+                    : piecePriceFromCase(pack.effectivePrice, pack.unitsPerCase);
                   return (
                     <div key={pack.id} className="flex flex-col gap-2 rounded-xl bg-ink-50 p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-medium text-ink-800">{pack.name}</p>
                         <p className="text-xs text-ink-400">
-                          ₹{pack.effectivePrice.toFixed(2)} · MOQ {pack.moq} · {pack.skuCode}
+                          ₹{pack.effectivePrice.toFixed(2)} / case of {pack.unitsPerCase} pcs
+                          {pack.allowLoosePieces !== false && pack.unitsPerCase > 1
+                            ? ` · loose from ₹${looseFrom.toFixed(2)}/pc`
+                            : ' · full cases only'}
+                          {' · MOQ '}
+                          {pack.moq} pcs · {pack.skuCode}
                         </p>
+                        {pricing ? (
+                          <p
+                            className={`text-xs ${pricing.orderable ? 'text-ink-600' : 'font-medium text-primary-700'}`}
+                            role={pricing.orderable ? undefined : 'alert'}
+                          >
+                            {pricing.orderable
+                              ? `${pricing.fullCases > 0 ? `${pricing.fullCases} Case${pricing.fullCases === 1 ? '' : 's'} × ₹${pricing.casePrice.toFixed(2)}` : ''}${
+                                  pricing.fullCases > 0 && pricing.looseQuantity > 0 ? ' + ' : ''
+                                }${
+                                  pricing.looseQuantity > 0
+                                    ? `${pricing.looseQuantity} loose pcs × ₹${(pricing.looseUnitPrice ?? 0).toFixed(2)}`
+                                    : ''
+                                } = ₹${pricing.total.toFixed(2)}`
+                              : pricing.message}
+                          </p>
+                        ) : null}
                       </div>
                       {quantity === 0 ? (
                         <Button type="button" size="sm" variant="outline" onClick={() => setPackQuantity(pack, pack.moq)}>
@@ -208,11 +276,11 @@ export function SalesmanOrderBuilder({
                             value={quantity}
                             onChange={(event) => setPackQuantity(pack, Number(event.target.value))}
                             className="h-9 w-20 text-center"
-                            aria-label={`Quantity for ${product.name} ${pack.name}`}
+                            aria-label={`Quantity in pieces for ${product.name} ${pack.name}`}
                           />
                           <button
                             type="button"
-                            aria-label={`Add one ${pack.name}`}
+                            aria-label={`Add one piece of ${pack.name}`}
                             onClick={() => setPackQuantity(pack, quantity + 1)}
                             className="rounded-lg border border-ink-200 bg-white p-2 text-ink-600"
                           >

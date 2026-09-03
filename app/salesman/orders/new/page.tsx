@@ -3,6 +3,7 @@ import { ShoppingCart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { SalesmanOrderBuilder } from '@/components/salesman/order-builder';
 import { Card } from '@/components/ui/card';
 
@@ -28,7 +29,11 @@ interface CatalogProduct {
     base_price: number;
     ptr: number | null;
     case_price: number;
+    units_per_case: number;
+    /** Minimum order quantity in PIECES. */
     moq: number;
+    /** false = this pack may only be sold in whole cases. */
+    allow_loose_pieces: boolean;
     is_active: boolean;
     sort_order: number;
   }[];
@@ -78,13 +83,19 @@ export default async function NewSalesmanOrderPage({
   const { data: productData } = await supabase
     .from('products')
     .select(
-      'id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, moq, is_active, sort_order )'
+      'id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, pack_sku_code, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active, sort_order )'
     )
     .eq('is_active', true)
     .order('name')
     .returns<CatalogProduct[]>();
 
   const catalog = productData ?? [];
+  // The salesman's copy of the pricing rule is the canonical engine, so each
+  // pack needs its own loose-piece tiers loaded from the database.
+  const tierMap = await loadPackTiers(
+    supabase,
+    catalog.flatMap((product) => product.product_packs.map((pack) => pack.id))
+  );
   const overrides = await Promise.all(
     catalog.map((product) =>
       getProductPriceOverride(supabase, product.id, selectedRetailer.id, selectedRetailer.area_id)
@@ -102,6 +113,9 @@ export default async function NewSalesmanOrderPage({
           name: pack.pack_name,
           skuCode: pack.pack_sku_code,
           moq: pack.moq,
+          unitsPerCase: pack.units_per_case,
+          allowLoosePieces: pack.allow_loose_pieces !== false,
+          tiers: tierMap.get(pack.id) ?? [],
           effectivePrice: resolvePackPrice(pack, overrides[index] ?? null),
         }));
 

@@ -8,7 +8,21 @@ import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
 import { stockForProducts } from '@/lib/ai/tools/products';
 
-const lineSchema = z.object({ packId: z.string().uuid(), quantity: z.number().int().min(1).max(100000) });
+/*
+ * `quantity` is always a PIECE count — never a case count. 46 means 46 pieces
+ * (1 case of 40 + 6 loose pcs for a 40-pc case); the server decides the
+ * case/loose split and the price, so the model cannot ask for a discounted
+ * quantity by naming cases.
+ */
+const lineSchema = z.object({
+  packId: z.string().uuid(),
+  quantity: z
+    .number()
+    .int()
+    .min(1)
+    .max(100000)
+    .describe('Quantity in pieces (not cases). Example: for a 40-pc case, 46 = 1 case + 6 loose pcs.'),
+});
 const linesSchema = z.object({ lines: z.array(lineSchema).min(1).max(100) });
 const LINE_JSON = {
   type: 'object', additionalProperties: false, required: ['lines'], properties: {
@@ -16,12 +30,26 @@ const LINE_JSON = {
   },
 };
 
+/**
+ * Label for one quoted line, in the retailer's own words: cases and loose
+ * pieces are named separately instead of a blended "46 × ₹25.65" rate. The
+ * money always comes from the quote — only the wording is built here.
+ */
+function quoteLineLabel(line: OrderQuote['lines'][number]): string {
+  const parts: string[] = [];
+  if (line.cases > 0) parts.push(`${line.cases} Case${line.cases === 1 ? '' : 's'} × ${inr(line.casePrice)}`);
+  if (line.loosePieces > 0) {
+    parts.push(`${line.loosePieces} loose pc${line.loosePieces === 1 ? '' : 's'} × ${inr(line.piecePrice)}`);
+  }
+  return parts.join(' + ') || `${line.pieces} pcs × ${inr(line.piecePrice)}`;
+}
+
 function quoteCard(quote: OrderQuote, title = 'Cart preview'): AICard {
-  const q = quote as { lines: Array<{ productName: string; packName: string; quantity: number; lineTotal: number }>; subtotal: number; gstTotal: number; discountTotal: number; grandTotal: number; credit: { availableCredit: number | null; exceedsLimit: boolean } };
+  const q = quote;
   return {
     type: 'cart', title, subtitle: `${q.lines.length} verified line item${q.lines.length === 1 ? '' : 's'}`, quality: 'verified',
-    source: 'Shared order quote service: current price, MOQ, GST and credit',
-    lines: q.lines.map((line) => ({ label: `${line.productName} · ${line.packName}`, value: `${line.quantity} × ${inr(line.lineTotal / line.quantity)}`, detail: inr(line.lineTotal) })),
+    source: 'Shared order quote service: current case price, loose piece tiers, MOQ, GST and credit',
+    lines: q.lines.map((line) => ({ label: `${line.productName} · ${line.packName}`, value: quoteLineLabel(line), detail: `${line.pieces} pcs · ${inr(line.lineTotal)}` })),
     metrics: [
       { label: 'Subtotal', value: inr(q.subtotal), quality: 'verified' },
       { label: 'GST', value: inr(q.gstTotal), quality: 'verified' },
@@ -46,16 +74,24 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
   if (error) return dbFailure();
   const orderIds = (orderRows ?? []).map((row) => row.id);
   const history = orderIds.length
-    ? await context.supabase.from('order_items').select('product_id, pack_id, quantity').in('order_id', orderIds).limit(500).returns<{ product_id: string; pack_id: string | null; quantity: number }[]>()
-    : { data: [] as { product_id: string; pack_id: string | null; quantity: number }[], error: null };
+    ? await context.supabase
+        .from('order_items')
+        .select('product_id, pack_id, quantity, quantity_pieces')
+        .in('order_id', orderIds)
+        .limit(500)
+        .returns<{ product_id: string; pack_id: string | null; quantity: number; quantity_pieces: number | null }[]>() // rows are per billing unit (0026)
+    : { data: [] as { product_id: string; pack_id: string | null; quantity: number; quantity_pieces: number | null }[], error: null };
   if (history.error) return dbFailure();
 
+  // Piece counts, because a stored line is now per billing unit (a cases row
+  // plus a loose-pieces row). `quantity_pieces` is the snapshot each row was
+  // written with; historical rows fall back to their own quantity.
   const frequency = new Map<string, { productId: string; packId: string; count: number; totalQuantity: number }>();
   for (const row of history.data ?? []) {
     if (!row.pack_id) continue;
     const existing = frequency.get(row.pack_id) ?? { productId: row.product_id, packId: row.pack_id, count: 0, totalQuantity: 0 };
     existing.count += 1;
-    existing.totalQuantity += row.quantity;
+    existing.totalQuantity += row.quantity_pieces ?? row.quantity;
     frequency.set(row.pack_id, existing);
   }
 
@@ -83,6 +119,7 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
   const proposed = available.flatMap((candidate) => {
     const pack = packById.get(candidate.packId);
     if (!pack) return [];
+    // Recent average PIECES per order, floored at the MOQ (which is in pieces).
     const usual = candidate.count > 0 ? Math.max(pack.moq, Math.round(candidate.totalQuantity / candidate.count)) : pack.moq;
     const quantity = Math.min(usual, stock.get(candidate.productId)?.available ?? 0);
     return quantity >= pack.moq ? [{ candidate, line: { packId: candidate.packId, quantity } }] : [];
@@ -116,7 +153,19 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
   const card = quoteCard(bestQuote, `Suggested cart under ${inr(budget)}`);
   card.quality = 'estimate';
   card.source = `${orderIds.length} recent order(s), live availability and shared quote service`;
-  card.lines = bestQuote.lines.map((line) => ({ label: `${line.productName} · ${line.packName}`, value: `${line.quantity} units`, detail: reasons.get(line.packId) }));
+  card.lines = bestQuote.lines.map((line) => {
+    const breakdown = [
+      line.cases > 0 ? `${line.cases} Case${line.cases === 1 ? '' : 's'}` : null,
+      line.loosePieces > 0 ? `${line.loosePieces} loose pcs` : null,
+    ]
+      .filter(Boolean)
+      .join(' + ');
+    return {
+      label: `${line.productName} · ${line.packName}`,
+      value: breakdown ? `${line.pieces} pcs (${breakdown})` : `${line.pieces} pcs`,
+      detail: reasons.get(line.packId),
+    };
+  });
   card.actions = [
     { type: 'link', label: 'Review current cart', href: '/retailer/cart', tone: 'secondary' },
     { type: 'prompt', label: 'Adjust budget', value: 'Please adjust this suggested cart to ₹', tone: 'secondary' },
@@ -134,20 +183,20 @@ export const cartTools: AIToolDefinition[] = [
     inputJsonSchema: { type: 'object', additionalProperties: false, required: ['budget'], properties: { budget: { type: 'number', minimum: 100, maximum: 10000000 } } }, execute: async ({ budget }, context) => prepareBudgetCart(budget, context),
   },
   {
-    name: 'calculate_order_preview', description: 'Calculate a read-only authoritative price, MOQ, GST and credit preview for pack IDs and quantities.', actionClass: 'PREPARE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: linesSchema, inputJsonSchema: LINE_JSON,
+    name: 'calculate_order_preview', description: 'Calculate a read-only authoritative case/loose price, MOQ, GST and credit preview for pack IDs and piece quantities.', actionClass: 'PREPARE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: linesSchema, inputJsonSchema: LINE_JSON,
     execute: async ({ lines }, context) => { const result = await quoteOrderForRetailer({ retailerId: context.actor.id, lines, supabase: context.supabase }); return 'error' in result ? unavailable(result.error) : verified({ quote: result.quote }, [quoteCard(result.quote)]); },
   },
   {
-    name: 'add_to_cart', description: 'Add validated pack quantities to the authenticated retailer cart. Requires explicit confirmation.', actionClass: 'WRITE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: linesSchema, inputJsonSchema: LINE_JSON,
+    name: 'add_to_cart', description: 'Add validated quantities (in pieces) to the authenticated retailer cart. Requires explicit confirmation.', actionClass: 'WRITE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: linesSchema, inputJsonSchema: LINE_JSON,
     execute: async ({ lines }, context) => { const result = await addCartLines(context.supabase, context.actor.id, lines); return 'error' in result ? unavailable(result.error) : verified({ success: true }, [{ type: 'cart', title: 'Items added to cart', quality: 'verified', actions: [{ type: 'link', label: 'Review cart', href: '/retailer/cart', tone: 'primary' }] }]); },
   },
   {
-    name: 'add_cart_item', description: 'Alias for adding one validated pack quantity to the authenticated retailer cart. Requires confirmation.', actionClass: 'WRITE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: lineSchema,
+    name: 'add_cart_item', description: 'Alias for adding one validated quantity in pieces to the authenticated retailer cart. Requires confirmation.', actionClass: 'WRITE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: lineSchema,
     inputJsonSchema: { type: 'object', additionalProperties: false, required: ['packId', 'quantity'], properties: { packId: { type: 'string', format: 'uuid' }, quantity: { type: 'integer', minimum: 1, maximum: 100000 } } },
     execute: async (line, context) => { const result = await addCartLines(context.supabase, context.actor.id, [line]); return 'error' in result ? unavailable(result.error) : verified({ success: true }, [{ type: 'cart', title: 'Item added to cart', quality: 'verified', actions: [{ type: 'link', label: 'Review cart', href: '/retailer/cart' }] }]); },
   },
   {
-    name: 'update_cart_quantity', description: 'Update one owned cart line after explicit confirmation and current MOQ validation.', actionClass: 'WRITE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: z.object({ cartItemId: z.string().uuid(), quantity: z.number().int().min(1).max(100000) }),
+    name: 'update_cart_quantity', description: 'Update one owned cart line to a quantity in pieces after explicit confirmation and current MOQ validation.', actionClass: 'WRITE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: z.object({ cartItemId: z.string().uuid(), quantity: z.number().int().min(1).max(100000) }),
     inputJsonSchema: { type: 'object', additionalProperties: false, required: ['cartItemId', 'quantity'], properties: { cartItemId: { type: 'string', format: 'uuid' }, quantity: { type: 'integer', minimum: 1 } } },
     execute: async ({ cartItemId, quantity }, context) => { const result = await updateCartLine(context.supabase, context.actor.id, cartItemId, quantity); return 'error' in result ? unavailable(result.error) : verified({ success: true }, [{ type: 'cart', title: 'Cart quantity updated', quality: 'verified' }]); },
   },

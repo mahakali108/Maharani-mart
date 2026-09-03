@@ -12,6 +12,7 @@
  */
 
 import { calculateCreditPosition, roundMoney } from '@/lib/orders/credit';
+import { rowPieces } from '@/lib/orders/item-display';
 import type {
   BusinessOverview,
   CommandCenterAction,
@@ -49,7 +50,14 @@ export interface RawOrder {
 export interface RawOrderItem {
   order_id: string;
   product_id: string;
+  /** Count in the row's billing unit: cases for a 'cases' row, pieces for 'pieces'. */
   quantity: number;
+  /**
+   * Pieces the row covers (snapshot written with 0026). Demand metrics count
+   * PIECES so they stay comparable with product-level stock; rows without a
+   * snapshot (an ad-hoc projection) fall back to their own quantity.
+   */
+  quantity_pieces?: number | null;
   line_total: number;
   products: { name: string; sku_code: string; brand_id: string | null; category_id: string | null } | null;
 }
@@ -418,7 +426,7 @@ export function computeTopPerformers(input: TopPerformerInputs): TopPerformers {
     const order = orders.find((o) => o.id === item.order_id);
     if (!order) continue;
     const p = byProduct.get(item.product_id) ?? { name: item.products?.name ?? 'Product', qty: 0, value: 0 };
-    p.qty += item.quantity;
+    p.qty += rowPieces(item);
     p.value = roundMoney(p.value + item.line_total);
     byProduct.set(item.product_id, p);
     const catId = item.products?.category_id;
@@ -867,7 +875,7 @@ export interface InventoryIntelInputs {
 export function computeInventoryIntel(input: InventoryIntelInputs) {
   const sold = new Map<string, number>();
   for (const item of input.items30d) {
-    sold.set(item.product_id, (sold.get(item.product_id) ?? 0) + item.quantity);
+    sold.set(item.product_id, (sold.get(item.product_id) ?? 0) + rowPieces(item));
   }
   const soldRows = [...sold.entries()].map(([id, units30d]) => ({ id, units30d }));
   const fastMoving = [...soldRows].sort((a, b) => b.units30d - a.units30d).slice(0, 10)

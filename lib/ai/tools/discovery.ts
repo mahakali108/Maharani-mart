@@ -41,10 +41,10 @@ async function frequent(context: AIToolContext) {
   const { data: orders, error } = await context.supabase.from('orders').select('id').eq('retailer_id', context.actor.id).neq('status', 'cancelled').order('placed_at', { ascending: false }).limit(40).returns<{ id: string }[]>();
   if (error) return dbFailure();
   if (!orders?.length) return verified({ products: [], sourceOrders: 0 }, [], 'No purchase history');
-  const { data: items, error: itemError } = await context.supabase.from('order_items').select('product_id, quantity').in('order_id', orders.map((o) => o.id)).limit(800).returns<{ product_id: string; quantity: number }[]>();
+  const { data: items, error: itemError } = await context.supabase.from('order_items').select('product_id, quantity, quantity_pieces').in('order_id', orders.map((o) => o.id)).limit(800).returns<{ product_id: string; quantity: number; quantity_pieces: number | null }[]>();
   if (itemError) return dbFailure();
   const counts = new Map<string, { occurrences: number; quantity: number }>();
-  for (const item of items ?? []) { const value = counts.get(item.product_id) ?? { occurrences: 0, quantity: 0 }; value.occurrences += 1; value.quantity += item.quantity; counts.set(item.product_id, value); }
+  for (const item of items ?? []) { const value = counts.get(item.product_id) ?? { occurrences: 0, quantity: 0 }; value.occurrences += 1; value.quantity += item.quantity_pieces ?? item.quantity; counts.set(item.product_id, value); }
   const ids = [...counts.entries()].sort((a, b) => b[1].occurrences - a[1].occurrences).slice(0, 12).map(([id]) => id);
   const { data: rows, error: productError } = await context.supabase.from('products').select(PRODUCT_SELECT).in('id', ids).eq('is_active', true).returns<ProductRow[]>();
   if (productError) return dbFailure();
