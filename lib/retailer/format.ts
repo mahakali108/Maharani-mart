@@ -1,3 +1,5 @@
+import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
+
 /** Display helpers only. Never used as a source of prices or tax. */
 
 export function formatInr(value: number): string {
@@ -34,14 +36,15 @@ export function formatMargin(margin: number | null | undefined): string | null {
 }
 
 /**
- * Resolves the unit price for a pack: effectivePrice divided by unitsPerCase.
- * If unitsPerCase <= 1, unit price is equal to effectivePrice.
+ * Resolves the reference per-piece price for a pack. Delegates to
+ * `piecePriceFromCase` in the pricing engine — the single definition of that
+ * derivation — so a card, a table and the cart can never show three slightly
+ * different per-piece numbers. Note this is a REFERENCE rate for MRP
+ * comparisons and best-value ranking: a real order is priced per case plus per
+ * loose tier, never by multiplying this figure.
  */
 export function resolveUnitPrice(effectivePrice: number, unitsPerCase: number): number {
-  if (unitsPerCase > 1) {
-    return Math.round((effectivePrice / unitsPerCase) * 100) / 100;
-  }
-  return effectivePrice;
+  return piecePriceFromCase(effectivePrice, unitsPerCase);
 }
 
 /**

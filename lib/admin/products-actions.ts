@@ -9,6 +9,14 @@ import { requirePermission } from '@/lib/admin/guard';
 import { loadPackCost } from '@/lib/admin/cost-access';
 import { deleteMedia } from '@/lib/media';
 import { isRenderableMediaRef } from '@/lib/media/refs';
+import {
+  findLooseCoverageGaps,
+  piecePriceFromCase,
+  looseTierDraftToRow,
+  maxLooseQuantity,
+  validateLooseTierSet,
+  type LooseTierDraft,
+} from '@/lib/retailer/case-pricing';
 import type { Database } from '@/types/database.types';
 
 export type ProductFormState = { error?: string } | null;
@@ -113,7 +121,9 @@ async function seedDefaultPackForProduct(
     barcode: string | null;
   }
 ) {
-  const piecePrice = Math.round((d.casePrice / Math.max(1, d.unitsPerCase)) * 100) / 100;
+  // Reference per-piece rate from the engine, so a seeded default slab prices
+    // exactly like the derived rate the storefront shows.
+    const piecePrice = piecePriceFromCase(d.casePrice, d.unitsPerCase);
   const { data: pack, error } = await supabase
     .from('product_packs')
     .insert({
@@ -276,7 +286,9 @@ export async function updateProductAction(
   // price.
   const defaultPackId = await findDefaultPackId(supabase, productId);
   if (defaultPackId) {
-    const piecePrice = Math.round((d.casePrice / Math.max(1, d.unitsPerCase)) * 100) / 100;
+    // Reference per-piece rate from the engine, so a seeded default slab prices
+    // exactly like the derived rate the storefront shows.
+    const piecePrice = piecePriceFromCase(d.casePrice, d.unitsPerCase);
     await supabase
       .from('product_packs')
       .update({
@@ -424,6 +436,9 @@ export async function addProductPackAction(
     cost_price: d.costPrice === '' ? null : Number(d.costPrice),
     case_price: d.casePrice,
     moq: d.moq,
+    // A brand-new pack starts loose-friendly: the retailer is never forced to
+    // buy a full case unless the admin switches this off deliberately.
+    allow_loose_pieces: true,
     barcode: d.barcode || null,
     created_by: user.id,
   };
@@ -443,7 +458,9 @@ export async function addProductPackAction(
 
   // Seed default + case tiers anchored to the case price.
   if (pack) {
-    const piecePrice = Math.round((d.casePrice / Math.max(1, d.unitsPerCase)) * 100) / 100;
+    // Reference per-piece rate from the engine, so a seeded default slab prices
+    // exactly like the derived rate the storefront shows.
+    const piecePrice = piecePriceFromCase(d.casePrice, d.unitsPerCase);
     const tiers =
       d.unitsPerCase > 1
         ? [
@@ -599,92 +616,219 @@ export async function movePackAction(productId: string, packId: string, directio
 }
 
 // ----------------------------------------------------------------------------
-// Case-based pricing tiers (quantity slabs) for a pack
+// Case + loose-piece pricing for a pack (migration 0026)
 // ----------------------------------------------------------------------------
+//
+// ONE admin action owns a pack's whole pricing configuration: units per case,
+// the GST-inclusive case price, MRP, MOQ (in pieces), whether loose pieces may be
+// ordered at all, and the complete set of loose-piece tiers. The validation it
+// applies is the validation the retailer-facing engine applies —
+// `validateLooseTierSet` / `looseTierDraftToRow` / `findLooseCoverageGaps` from
+// `lib/retailer/case-pricing` — so a configuration the admin is allowed to save
+// is exactly a configuration the cart, quote and invoice can price without a
+// surprise, and the admin preview and the checkout provably agree.
+//
+// The tier editor is a "save the whole set" operation instead of three separate
+// add/update/delete endpoints: an overlapping or duplicated range could only
+// ever be created between two partial writes, and the range rules forbid
+// overlapping slabs outright.
 
-export type TierFormState = { error?: string } | null;
+/** One loose-piece slab exactly as the admin edits it (inclusive range, pcs). */
+export interface LooseTierFormRow {
+  /** Existing `product_pricing_tiers` id when editing a stored slab. */
+  id: string | null;
+  minQty: number;
+  /** Inclusive upper bound in pieces; null = up to the last piece before a case. */
+  maxQty: number | null;
+  pricePerPiece: number;
+  label: string | null;
+}
 
-const tierSchema = z.object({
-  minQuantity: z.coerce.number().int().min(1, 'Minimum quantity must be at least 1.'),
-  maxQuantity: z.coerce.number().int().optional().or(z.literal('')),
-  pricePerPiece: z.coerce.number().min(0, 'Price per piece cannot be negative.'),
-  label: z.string().optional(),
+export type PackPricingFormState = { error?: string; notice?: string } | null;
+
+const looseTierRowSchema = z.object({
+  id: z.string().uuid().nullish(),
+  minQty: z.coerce.number(),
+  maxQty: z.coerce.number().nullish(),
+  pricePerPiece: z.coerce.number(),
+  label: z.string().trim().max(80).nullish(),
 });
 
-export async function addPricingTierAction(
-  packId: string,
-  productId: string,
-  _prevState: TierFormState,
-  formData: FormData
-): Promise<TierFormState> {
+const packPricingSchema = z.object({
+  packId: z.string().uuid(),
+  productId: z.string().uuid(),
+  packName: z.string().trim().min(1, 'Enter a pack name (e.g. "Case of 40").'),
+  unitsPerCase: z.coerce
+    .number()
+    .int('Units per case must be a whole number of pieces.')
+    .min(1, 'Units per case must be at least 1 piece.'),
+  casePrice: z.coerce
+    .number()
+    .positive('Enter the GST-inclusive case price — it must be more than ₹0.'),
+  mrp: z.coerce.number().min(0, 'Enter a valid MRP.'),
+  moq: z.coerce
+    .number()
+    .int('Minimum order quantity must be a whole number of pieces.')
+    .min(1, 'Minimum order quantity must be at least 1 piece.'),
+  allowLoosePieces: z.boolean(),
+  acknowledgeGaps: z.boolean().default(false),
+  tiers: z.array(looseTierRowSchema).max(50, 'A pack supports up to 50 loose-piece tiers.'),
+});
+
+export async function savePackPricingAction(input: z.input<typeof packPricingSchema>): Promise<PackPricingFormState> {
   const user = await requirePermission('products.edit');
-  const parsed = tierSchema.safeParse({
-    minQuantity: formData.get('minQuantity'),
-    maxQuantity: formData.get('maxQuantity') || '',
-    pricePerPiece: formData.get('pricePerPiece'),
-    label: formData.get('label'),
-  });
+  const parsed = packPricingSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid pricing rule.' };
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid pricing configuration.' };
   }
   const d = parsed.data;
+  const unitsPerCase = d.unitsPerCase;
 
-  const supabase = createClient();
-  const { error } = await supabase.from('product_pricing_tiers').insert({
-    product_pack_id: packId,
-    min_quantity: d.minQuantity,
-    max_quantity: d.maxQuantity === '' ? null : Number(d.maxQuantity),
-    price_per_piece: d.pricePerPiece,
-    rule_type: 'bulk',
-    label: d.label?.trim() || 'Bulk discount',
-    created_by: user.id,
-  } as unknown as never);
-  if (error) return { error: error.message };
-
-  revalidatePath(`/admin/products/${productId}`);
-  return null;
-}
-
-export async function updatePricingTierAction(
-  tierId: string,
-  productId: string,
-  _prevState: TierFormState,
-  formData: FormData
-): Promise<TierFormState> {
-  await requirePermission('products.edit');
-  const parsed = tierSchema.safeParse({
-    minQuantity: formData.get('minQuantity'),
-    maxQuantity: formData.get('maxQuantity') || '',
-    pricePerPiece: formData.get('pricePerPiece'),
-    label: formData.get('label'),
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid pricing rule.' };
+  // Full cases are always priced by the case price, so a case-only pack has no
+  // loose tiers to configure. Rejecting here keeps the two systems from
+  // contradicting each other on the retailer screen.
+  if (!d.allowLoosePieces && d.tiers.length > 0) {
+    return {
+      error:
+        'This pack is set to full cases only, so loose tiers cannot be saved. Allow loose pieces, or remove the loose tiers.',
+    };
   }
-  const d = parsed.data;
+
+  const drafts: LooseTierDraft[] = d.tiers.map((tier) => ({
+    minQty: Number(tier.minQty),
+    maxQty: tier.maxQty === null || tier.maxQty === undefined ? null : Number(tier.maxQty),
+    pricePerPiece: Number(tier.pricePerPiece),
+  }));
+
+  // Range rules: min>max, duplicates, overlaps, negatives, zero/negative price,
+  // a slab reaching into full-case territory, invalid units per case.
+  const tierErrors = validateLooseTierSet(drafts, unitsPerCase);
+  if (tierErrors.length > 0) return { error: tierErrors.join(' ') };
+
+  const rows = drafts.map((draft) => looseTierDraftToRow(draft, unitsPerCase));
+  const gaps = findLooseCoverageGaps(rows, unitsPerCase);
+  if (d.allowLoosePieces && rows.length > 0 && gaps.length > 0 && !d.acknowledgeGaps) {
+    const ranges = gaps.map((gap) => (gap.min === gap.max ? `${gap.min} pc` : `${gap.min}–${gap.max} pcs`)).join(', ');
+    return {
+      error: `The loose tiers do not price every quantity below a case: ${ranges} ${
+        gaps.length === 1 ? 'is' : 'are'
+      } uncovered. Retailers ordering that many loose pieces would be blocked at checkout instead of silently repriced, so confirm the gap explicitly if that is what you want.`,
+    };
+  }
 
   const supabase = createClient();
-  const { error } = await supabase
-    .from('product_pricing_tiers')
+
+  // The pack must belong to this product — never trust the id pair alone.
+  const { data: existingPack, error: packReadError } = await supabase
+    .from('product_packs')
+    .select('id, units_per_case, allow_loose_pieces')
+    .eq('id', d.packId)
+    .eq('product_id', d.productId)
+    .maybeSingle<{ id: string; units_per_case: number; allow_loose_pieces: boolean }>();
+  if (packReadError) return { error: packReadError.message };
+  if (!existingPack) return { error: 'That pack does not belong to this product.' };
+
+  const { error: packError } = await supabase
+    .from('product_packs')
     .update({
-      min_quantity: d.minQuantity,
-      max_quantity: d.maxQuantity === '' ? null : Number(d.maxQuantity),
-      price_per_piece: d.pricePerPiece,
-      label: d.label?.trim() || 'Bulk discount',
+      pack_name: d.packName,
+      units_per_case: unitsPerCase,
+      // `base_price` mirrors MRP, exactly as the create path does, so legacy
+      // reports that still read base_price keep showing the same number.
+      base_price: d.mrp,
+      mrp: d.mrp,
+      case_price: d.casePrice,
+      moq: d.moq,
+      allow_loose_pieces: d.allowLoosePieces,
     } as unknown as never)
-    .eq('id', tierId);
-  if (error) return { error: error.message };
+    .eq('id', d.packId);
+  if (packError) return { error: packError.message };
 
-  revalidatePath(`/admin/products/${productId}`);
-  return null;
-}
+  // --- tier sync ------------------------------------------------------------
+  const { data: storedTiers, error: tierReadError } = await supabase
+    .from('product_pricing_tiers')
+    .select('id, min_quantity, max_quantity, rule_type')
+    .eq('product_pack_id', d.packId)
+    .eq('is_active', true)
+    .returns<
+      { id: string; min_quantity: number; max_quantity: number | null; rule_type: 'default' | 'case' | 'bulk' | 'loose' }[]
+    >();
+  if (tierReadError) return { error: tierReadError.message };
 
-export async function deletePricingTierAction(tierId: string, productId: string) {
-  await requirePermission('products.edit');
-  const supabase = createClient();
-  const { error } = await supabase.from('product_pricing_tiers').delete().eq('id', tierId);
-  if (error) throw new Error(error.message);
-  revalidatePath(`/admin/products/${productId}`);
+  const stored = storedTiers ?? [];
+  const submittedIds = new Set(d.tiers.map((tier) => tier.id ?? null).filter((id): id is string => !!id));
+  const looseCeiling = maxLooseQuantity(unitsPerCase);
+
+  // Historical slabs ('default' / 'bulk') that reach into loose territory are
+  // deactivated once the admin starts curating loose tiers, so a stale rule can
+  // never reappear as the price of a remainder. Rows are deactivated rather
+  // than deleted: order history, audit trails and rollbacks stay intact.
+  const staleLegacyIds = stored
+    .filter(
+      (tier) =>
+        rows.length > 0 &&
+        tier.rule_type !== 'loose' &&
+        tier.rule_type !== 'case' &&
+        tier.min_quantity <= looseCeiling &&
+        (tier.max_quantity === null || tier.max_quantity > 1)
+    )
+    .map((tier) => tier.id);
+
+  const deactivateIds = [
+    ...staleLegacyIds,
+    ...stored.filter((tier) => tier.rule_type === 'loose' && !submittedIds.has(tier.id)).map((tier) => tier.id),
+  ];
+  if (deactivateIds.length > 0) {
+    const { error: deactivateError } = await supabase
+      .from('product_pricing_tiers')
+      .update({ is_active: false, updated_at: new Date().toISOString() } as unknown as never)
+      .in('id', deactivateIds);
+    if (deactivateError) return { error: deactivateError.message };
+  }
+
+  const inserts: Record<string, unknown>[] = [];
+  for (let index = 0; index < d.tiers.length; index += 1) {
+    const tier = d.tiers[index]!;
+    const row = rows[index]!;
+    const payload = {
+      product_pack_id: d.packId,
+      min_quantity: row.min_quantity,
+      max_quantity: row.max_quantity,
+      price_per_piece: row.price_per_piece,
+      rule_type: 'loose' as const,
+      label: (tier.label ?? '').trim() || 'Loose pieces',
+      is_active: true,
+    };
+    if (tier.id && submittedIds.has(tier.id)) {
+      const { error } = await supabase
+        .from('product_pricing_tiers')
+        .update(payload as unknown as never)
+        .eq('id', tier.id)
+        .eq('product_pack_id', d.packId);
+      if (error) return { error: error.message };
+    } else {
+      inserts.push({ ...payload, created_by: user.id });
+    }
+  }
+  if (inserts.length > 0) {
+    const { error } = await supabase.from('product_pricing_tiers').insert(inserts as unknown as never);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(`/admin/products/${d.productId}`);
+  revalidatePath('/retailer/catalog');
+
+  const notices: string[] = [];
+  if (staleLegacyIds.length > 0) {
+    notices.push(
+      `Deactivated ${staleLegacyIds.length} legacy bulk rule(s) that overlapped loose quantities (1–${looseCeiling} pcs); orders already placed keep their stored prices.`
+    );
+  }
+  if (gaps.length > 0 && rows.length > 0) {
+    const ranges = gaps.map((gap) => (gap.min === gap.max ? `${gap.min} pc` : `${gap.min}–${gap.max} pcs`)).join(', ');
+    notices.push(`Saved with an explicit gap: orders of ${ranges} loose pieces are blocked at checkout until a tier covers them.`);
+  }
+  return notices.length > 0 ? { notice: notices.join(' ') } : null;
 }
 
 // ----------------------------------------------------------------------------

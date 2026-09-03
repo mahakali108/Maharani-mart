@@ -9,7 +9,7 @@ import {
   variantHref,
   type VariantPackBase,
 } from '@/lib/retailer/variants';
-import { caseLineBreakdown, pickApplicableTier, type PricingTier } from '@/lib/retailer/case-pricing';
+import { caseLineBreakdown, pickApplicableTier, round2, type PricingTier } from '@/lib/retailer/case-pricing';
 import { resolvePackPrice } from '@/lib/retailer/effective-price';
 import { quoteOrderForRetailer, type RequestedQuoteLine } from '@/lib/orders/quote-order';
 
@@ -91,10 +91,11 @@ const BABY_POWDER_PACKS: BabyPowderPack[] = [
 ];
 
 const TIERS_BY_PACK: Record<string, PricingTier[]> = {
-  // 50g bulk slab starts at 96 pcs; below that the case price governs.
-  [PACK_50G]: [{ id: 't-50', min_quantity: 96, max_quantity: null, price_per_piece: 23, rule_type: 'bulk', is_active: true }],
-  // 100g has its OWN slab (from 48 pcs) — must never leak into the 50g pack.
-  [PACK_100G]: [{ id: 't-100', min_quantity: 48, max_quantity: null, price_per_piece: 55, rule_type: 'bulk', is_active: true }],
+  // 50g (case of 48) loose slab: 13–47 pcs @ ₹23/pc.
+  [PACK_50G]: [{ id: 't-50', min_quantity: 13, max_quantity: 48, price_per_piece: 23, rule_type: 'loose', is_active: true }],
+  // 100g (case of 24) has its OWN loose slab 13–23 @ ₹55 — it must never leak
+  // into the 50g pack, and neither slab may ever touch a full case.
+  [PACK_100G]: [{ id: 't-100', min_quantity: 13, max_quantity: 24, price_per_piece: 55, rule_type: 'loose', is_active: true }],
   [PACK_200G]: [],
 };
 
@@ -302,26 +303,56 @@ describe('product size / variant switcher', () => {
       expect(breakdown.total).toBe(1440); // one full case = exact case price
     });
 
-    it('applies each variant’s OWN quantity slab at the same piece count', () => {
-      // 48 pieces: inside the 100g slab (>=48 -> ₹55/pc) but NOT inside the 50g slab (>=96).
-      expect(pickApplicableTier(TIERS_BY_PACK[PACK_100G]!, 48)?.price_per_piece).toBe(55);
-      expect(pickApplicableTier(TIERS_BY_PACK[PACK_50G]!, 48)).toBeNull();
+    it('applies each variant’s OWN quantity slab to the same loose remainder', () => {
+      // Both variants have a slab starting at 13 pcs, at different rates.
+      expect(pickApplicableTier(TIERS_BY_PACK[PACK_100G]!, 13)?.price_per_piece).toBe(55);
+      expect(pickApplicableTier(TIERS_BY_PACK[PACK_50G]!, 13)?.price_per_piece).toBe(23);
+      expect(pickApplicableTier(TIERS_BY_PACK[PACK_100G]!, 48)).toBeNull(); // beyond a 24-pc case
+
+      // 37 pcs of 100g = 1 full case @ ₹1,440 + 13 loose pcs @ the 100g slab.
       const hundredG = caseLineBreakdown({
         casePrice: 1440,
         unitsPerCase: 24,
         tiers: TIERS_BY_PACK[PACK_100G]!,
-        pieceQuantity: 48,
+        pieceQuantity: 37,
         gstPercent: GST_PERCENT,
       });
-      expect(hundredG.total).toBe(48 * 55); // 2640, slab applied for the 100g variant
+      expect(hundredG.cases).toBe(1);
+      expect(hundredG.loosePieces).toBe(13);
+      expect(hundredG.total).toBe(1440 + 13 * 55);
+
+      // The same 37 pcs on the 50g variant is all loose, priced by ITS slab.
       const fiftyG = caseLineBreakdown({
         casePrice: 1200,
         unitsPerCase: 48,
         tiers: TIERS_BY_PACK[PACK_50G]!,
-        pieceQuantity: 48,
+        pieceQuantity: 37,
         gstPercent: GST_PERCENT,
       });
-      expect(fiftyG.total).toBe(1200); // 1 full case at the case price — 50g slab not reached
+      expect(fiftyG.cases).toBe(0);
+      expect(fiftyG.total).toBe(37 * 23);
+
+      // And 48 pcs of 50g is exactly one case: always the case price, never 48 × ₹23.
+      expect(
+        caseLineBreakdown({
+          casePrice: 1200,
+          unitsPerCase: 48,
+          tiers: TIERS_BY_PACK[PACK_50G]!,
+          pieceQuantity: 48,
+          gstPercent: GST_PERCENT,
+        }).total
+      ).toBe(1200);
+
+      // 200g has no slab configured at all → the derived case piece price rules.
+      expect(
+        caseLineBreakdown({
+          casePrice: 1320,
+          unitsPerCase: 12,
+          tiers: TIERS_BY_PACK[PACK_200G]!,
+          pieceQuantity: 7,
+          gstPercent: GST_PERCENT,
+        }).total
+      ).toBe(7 * 110);
     });
 
     it('never adds GST on top — the GST component is extracted from the inclusive price', () => {
@@ -332,10 +363,11 @@ describe('product size / variant switcher', () => {
         packQuantity: 2,
         gstPercent: GST_PERCENT,
       });
-      // 48 pcs @ ₹55 = ₹2640 GST-inclusive; GST is extracted, not added.
-      expect(breakdown.total).toBe(2640);
-      expect(breakdown.gst).toBeCloseTo((2640 * 5) / 105, 2);
-      expect(breakdown.subtotal + breakdown.gst).toBe(2640);
+      // 2 full cases = 2 × ₹1,440 GST-inclusive (loose slabs never reprice a
+      // case); GST is extracted from that inclusive total, never added on top.
+      expect(breakdown.total).toBe(2880);
+      expect(breakdown.gst).toBeCloseTo((2880 * 5) / 105, 2);
+      expect(breakdown.subtotal + breakdown.gst).toBe(2880);
     });
   });
 
@@ -358,7 +390,7 @@ describe('product size / variant switcher', () => {
       expect(checkout).toContain('.eq(\'retailer_id\', user.id)');
       expect(checkout).toContain('pack_id');
       expect(checkout).toContain('loadPackTiers');
-      expect(checkout).toContain('packQuantity: item.quantity');
+      expect(checkout).toContain('quantity: item.quantity');
       expect(checkout).toContain('unitsPerCase: pack?.units_per_case ?? 1');
       // No client-submitted money value is ever posted — only notes are.
       const actions = read('lib/retailer/checkout-actions.ts');
@@ -375,8 +407,10 @@ describe('product size / variant switcher', () => {
       });
 
       const lines: RequestedQuoteLine[] = [
-        { packId: PACK_100G, quantity: 2 }, // 48 pcs -> 100g slab ₹55/pc
-        { packId: PACK_50G, quantity: 1 }, // 48 pcs -> below 50g slab -> case price
+        // Quantities are PIECES now: 37 pcs of the 24-pc 100g variant is
+        // 1 full case + a 13-pc remainder priced by the 100g slab.
+        { packId: PACK_100G, quantity: 37 },
+        { packId: PACK_50G, quantity: 48 }, // exactly one case -> case price
       ];
       const result = await quoteOrderForRetailer({ retailerId: RETAILER.id, lines, supabase: supabase as never });
       expect('quote' in result).toBe(true);
@@ -387,18 +421,29 @@ describe('product size / variant switcher', () => {
 
       // The 100g line uses the 100g configuration exclusively.
       expect(hundred?.unitsPerCase).toBe(24);
-      expect(hundred?.pieces).toBe(48);
+      expect(hundred?.pieces).toBe(37);
+      expect(hundred?.cases).toBe(1);
+      expect(hundred?.loosePieces).toBe(13);
       expect(hundred?.casePrice).toBe(1440);
-      expect(hundred?.piecePrice).toBe(55); // the 100g tier won
-      expect(hundred?.lineTotal).toBe(2640);
+      expect(hundred?.piecePrice).toBe(55); // the 100g tier priced the remainder
+      expect(hundred?.lineTotal).toBe(1440 + 13 * 55);
       expect(hundred?.gstPercent).toBe(GST_PERCENT);
+
+      // ...and it is persisted as two exact rows, never one blended unit price.
+      expect(hundred?.items.map((item) => item.quantityUnit)).toEqual(['cases', 'pieces']);
+      expect(hundred?.items[0]).toMatchObject({ quantity: 1, unitPrice: 1440, lineTotal: 1440, quantityPieces: 24 });
+      expect(hundred?.items[1]).toMatchObject({ quantity: 13, unitPrice: 55, lineTotal: 715, quantityPieces: 13 });
+      for (const item of hundred?.items ?? []) {
+        expect(round2(item.unitPrice * item.quantity)).toBe(item.lineTotal);
+      }
 
       // The 50g line keeps its own configuration — proof the variants never mix.
       expect(fifty?.unitsPerCase).toBe(48);
       expect(fifty?.piecePrice).toBe(25);
       expect(fifty?.lineTotal).toBe(1200);
+      expect(fifty?.items).toHaveLength(1); // a full case is a single row
 
-      expect(result.quote.grandTotal).toBe(3840); // 2640 + 1200, GST-inclusive
+      expect(result.quote.grandTotal).toBe(2155 + 1200); // GST-inclusive
     });
 
     it('the server quote rejects an unavailable variant instead of faking it', async () => {
@@ -421,7 +466,12 @@ describe('product size / variant switcher', () => {
     it('order creation persists quote lines verbatim — pack_id included — and never trusts client prices', () => {
       const create = read('lib/orders/create-order.ts');
       expect(create).toContain('pack_id: line.packId');
-      expect(create).toContain('unit_price: line.unitPrice');
+      // 0026: a mixed line is persisted as one row per billing unit, each with
+      // its own exact unit price (never a blended per-case figure).
+      expect(create).toContain('unit_price: item.unitPrice');
+      expect(create).toContain('quantity_unit: item.quantityUnit');
+      expect(create).toContain('quantity_pieces: item.quantityPieces');
+      expect(create).toContain('quote.lines.flatMap((line) =>');
       expect(create).toContain('quoteOrderForRetailer');
       // The order detail page and invoice read product_packs per order item.
       const detail = read('app/retailer/orders/[id]/page.tsx');

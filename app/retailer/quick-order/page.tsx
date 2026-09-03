@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
 import { QuickOrderRow, type QuickOrderPack } from '@/components/retailer/quick-order-row';
@@ -31,7 +32,10 @@ interface QuickOrderProductRow {
     ptr: number | null;
     case_price: number;
     mrp: number | null;
+    /** Minimum order quantity in PIECES. */
     moq: number;
+    /** false = whole cases only. */
+    allow_loose_pieces: boolean;
     is_active: boolean;
   }[];
 }
@@ -61,7 +65,9 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
   if (q) {
     const { data: productRows } = await supabase
       .from('products')
-      .select('id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, is_active )')
+      .select(
+        'id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, allow_loose_pieces, is_active )'
+      )
       .eq('is_active', true)
       .ilike('name', `"%${q}%"`)
       .order('name')
@@ -69,6 +75,12 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
       .returns<QuickOrderProductRow[]>();
 
     const products = productRows ?? [];
+    // Loose-piece slabs per pack, so the quick grid prices a quantity with the
+    // same engine the cart and checkout use instead of a case-price shortcut.
+    const tierMap = await loadPackTiers(
+      supabase,
+      products.flatMap((product) => product.product_packs.map((pack) => pack.id))
+    );
     const overrides = await getProductPriceOverrides(
       supabase,
       products.map((product) => product.id),
@@ -87,6 +99,8 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
             moq: pack.moq,
             mrp: pack.mrp,
             casePrice: resolvePackPrice(pack, overrides.get(product.id) ?? null),
+            allowLoosePieces: pack.allow_loose_pieces !== false,
+            tiers: tierMap.get(pack.id) ?? [],
           }));
         const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
         return {

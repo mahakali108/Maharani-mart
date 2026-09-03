@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { formatQuantitySummary, groupOrderLines, rowUnit, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { PrintButton } from '@/components/retailer/print-button';
@@ -23,7 +24,13 @@ interface RetailerRow {
 
 interface OrderItemRow {
   id: string;
+  product_id: string;
+  pack_id: string | null;
   quantity: number;
+  /** 'cases' | 'pieces'; null on lines billed before the case/loose split. */
+  quantity_unit: OrderItemUnit | null;
+  quantity_pieces: number | null;
+  units_per_case: number | null;
   unit_price: number;
   gst_percent: number;
   line_total: number;
@@ -53,13 +60,24 @@ export default async function InvoicePage({ params }: { params: { id: string } }
       .maybeSingle<RetailerRow>(),
     supabase
       .from('order_items')
-      .select('id, quantity, unit_price, gst_percent, line_total, products ( name ), product_packs ( pack_name, units_per_case )')
+      .select(
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name ), product_packs ( pack_name, units_per_case )'
+      )
       .eq('order_id', params.id),
   ]);
 
   if (!order) notFound();
 
   const items = (itemData ?? []) as unknown as OrderItemRow[];
+
+  /*
+   * One invoice line per ordered pack. A mixed purchase (full cases plus a
+   * loose remainder) is stored as two `order_items` rows so each row's
+   * unit_price × quantity matches its line_total exactly; `groupOrderLines`
+   * folds them back into a single invoice line whose amount is the sum of those
+   * rows, so the invoice still adds up to the order grand total to the paisa.
+   */
+  const invoiceLines = groupOrderLines(items);
 
   const company = {
     name: companyDetail(process.env.COMPANY_NAME, 'COMPANY_NAME'),
@@ -110,26 +128,36 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-50">
-            {items.map((item) => {
-              const units = item.product_packs?.units_per_case ?? 1;
-              const totalPieces = item.quantity * units;
-              return (
-                <tr key={item.id}>
-                  <td className="py-2">
-                    <p className="font-medium text-ink-900">{item.products?.name ?? '—'}</p>
-                    <p className="font-mono text-xs text-ink-400">{item.product_packs?.pack_name}</p>
-                  </td>
-                  <td className="py-2 text-ink-600">
-                    {item.quantity} case{item.quantity === 1 ? '' : 's'} ({totalPieces} pcs)
-                  </td>
-                  <td className="py-2 text-right text-ink-600">₹{item.unit_price.toFixed(2)}</td>
-                  <td className="py-2 text-right text-ink-600">{item.gst_percent}%</td>
-                  <td className="py-2 text-right font-medium text-ink-900">₹{item.line_total.toFixed(2)}</td>
-                </tr>
-              );
-            })}
+            {invoiceLines.map((line) => (
+              <tr key={line.key}>
+                <td className="py-2">
+                  <p className="font-medium text-ink-900">{line.first.products?.name ?? '—'}</p>
+                  <p className="font-mono text-xs text-ink-400">{line.first.product_packs?.pack_name}</p>
+                </td>
+                <td className="py-2 text-ink-600">{formatQuantitySummary(line.quantity)}</td>
+                <td className="py-2 text-right text-ink-600">
+                  {/* Each billing part is printed as it was charged: cases per
+                      case, loose pieces per piece — never a blended average. */}
+                  <ul className="space-y-0.5">
+                    {line.rows.map((row) => (
+                      <li key={row.id}>
+                        ₹{row.unit_price.toFixed(2)}
+                        <span className="text-ink-400"> / {rowUnit(row) === 'pieces' ? 'pc' : 'case'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+                <td className="py-2 text-right text-ink-600">{line.first.gst_percent}%</td>
+                <td className="py-2 text-right font-medium text-ink-900">₹{line.total.toFixed(2)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
+
+        <p className="mt-2 text-[10px] leading-4 text-ink-400">
+          Full cases are billed at the case price; any remaining pieces at the loose-piece quantity rate. Rates are
+          GST-inclusive, and each line amount above is the sum of the case and loose rows billed for that pack.
+        </p>
 
         <div className="ml-auto mt-4 w-full max-w-xs space-y-1.5 border-t border-ink-100 pt-4">
           <div className="flex justify-between text-sm text-ink-600">

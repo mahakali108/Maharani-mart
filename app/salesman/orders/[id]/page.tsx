@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { formatQuantitySummary, groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +18,12 @@ interface OrderRow {
 
 interface OrderItemRow {
   id: string;
+  product_id: string;
+  pack_id: string | null;
   quantity: number;
+  quantity_unit: OrderItemUnit | null;
+  quantity_pieces: number | null;
+  units_per_case: number | null;
   products: { name: string } | null;
   product_packs: { pack_name: string; units_per_case: number } | null;
 }
@@ -46,9 +52,12 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
 
   const { data: itemData } = await supabase
     .from('order_items')
-    .select('id, quantity, products ( name ), product_packs ( pack_name, units_per_case )')
+    .select(
+      'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, products ( name ), product_packs ( pack_name, units_per_case )'
+    )
     .eq('order_id', params.id);
   const items = (itemData ?? []) as unknown as OrderItemRow[];
+  const orderLines = groupOrderLines(items);
 
   return (
     <div className="space-y-6">
@@ -70,16 +79,14 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
           <CardTitle>Items</CardTitle>
         </CardHeader>
         <ul className="space-y-1.5 text-sm">
-          {items.map((item) => {
-            const units = item.product_packs?.units_per_case ?? 1;
-            const pieces = item.quantity * units;
-            return (
-              <li key={item.id} className="flex justify-between">
-                <span className="text-ink-700">{item.products?.name} ({item.product_packs?.pack_name})</span>
-                <span className="font-medium text-ink-900">× {item.quantity} case{item.quantity === 1 ? '' : 's'} ({pieces} pcs)</span>
-              </li>
-            );
-          })}
+          {orderLines.map((line) => (
+            <li key={line.key} className="flex justify-between">
+              <span className="text-ink-700">
+                {line.first.products?.name} ({line.first.product_packs?.pack_name})
+              </span>
+              <span className="font-medium text-ink-900">× {formatQuantitySummary(line.quantity)}</span>
+            </li>
+          ))}
         </ul>
       </Card>
 

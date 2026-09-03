@@ -75,7 +75,9 @@ export async function fetchOrderItems(supabase: Supabase, orderIds: string[]): P
     for (let offset = 0; offset < MAX_ITEMS; offset += 500) {
       const { data, error } = await supabase
         .from('order_items')
-        .select('order_id, product_id, quantity, line_total, products ( name, sku_code, brand_id, category_id )')
+        .select(
+          'order_id, product_id, quantity, quantity_pieces, line_total, products ( name, sku_code, brand_id, category_id )'
+        )
         .in('order_id', chunk)
         .range(offset, offset + 499);
       if (error) throw new Error(error.message);

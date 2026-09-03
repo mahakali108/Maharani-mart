@@ -7,12 +7,29 @@ import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
 import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { resolveRetailerTarget } from '@/lib/ai/safety/auth';
 import { dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
+import { formatRowQuantity, rowPieces, type OrderItemUnit} from '@/lib/orders/item-display';
 
 const orderIdSchema = z.object({ orderId: z.string().uuid() });
 const retailerOptionalSchema = z.object({ retailerId: z.string().uuid().optional(), limit: z.number().int().min(1).max(30).optional(), status: z.enum(['pending', 'confirmed', 'processing', 'packed', 'dispatched', 'delivered', 'cancelled', 'returned']).optional() });
 
 interface OrderRow { id: string; order_number: string; retailer_id: string; status: string; subtotal: number; gst_total: number; discount_total: number; grand_total: number; placed_at: string; notes?: string | null; retailers?: { shop_name: string } | null; }
-interface OrderItemRow { id: string; order_id: string; product_id: string; pack_id: string | null; quantity: number; unit_price: number; gst_percent: number; line_total: number; products: { name: string; sku_code: string } | null; product_packs: { pack_name: string } | null; }
+interface OrderItemRow {
+  id: string;
+  order_id: string;
+  product_id: string;
+  pack_id: string | null;
+  quantity: number;
+  /** 'cases' | 'pieces' — the billing unit of this row (null on old rows). */
+  quantity_unit: OrderItemUnit | null;
+  /** Pieces this row covers, snapshotted at order time. */
+  quantity_pieces: number | null;
+  units_per_case: number | null;
+  unit_price: number;
+  gst_percent: number;
+  line_total: number;
+  products: { name: string; sku_code: string } | null;
+  product_packs: { pack_name: string } | null;
+}
 
 function orderCard(order: OrderRow, context: AIToolContext, invoice = false): AICard {
   const base = context.actor.surface === 'retailer'
@@ -49,12 +66,21 @@ async function listOrders(input: z.infer<typeof retailerOptionalSchema>, context
 async function getOrder(orderId: string, context: AIToolContext) {
   const [{ data: order, error }, { data: items, error: itemError }] = await Promise.all([
     context.supabase.from('orders').select('id, order_number, retailer_id, status, subtotal, gst_total, discount_total, grand_total, placed_at, notes, retailers ( shop_name )').eq('id', orderId).maybeSingle<OrderRow>(),
-    context.supabase.from('order_items').select('id, order_id, product_id, pack_id, quantity, unit_price, gst_percent, line_total, products ( name, sku_code ), product_packs ( pack_name )').eq('order_id', orderId).returns<OrderItemRow[]>(),
+    context.supabase.from('order_items').select('id, order_id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, sku_code ), product_packs ( pack_name )').eq('order_id', orderId).returns<OrderItemRow[]>(),
   ]);
   if (error || itemError) return dbFailure();
   if (!order) return unavailable('That order was not found in your authorized data.');
   const card = orderCard(order, context);
-  card.lines = (items ?? []).map((item) => ({ label: `${item.products?.name ?? 'Product'} · ${item.product_packs?.pack_name ?? 'Pack'}`, value: `${item.quantity} × ${inr(item.unit_price)}`, detail: `${item.gst_percent}% GST · ${inr(item.line_total)}` }));
+  /*
+   * Each row is shown with its own billing unit because that is exactly how it
+   * was priced: a mixed purchase arrives as a cases row at the case price plus a
+   * loose-pieces row at the tier rate. No blended average is ever presented.
+   */
+  card.lines = (items ?? []).map((item) => ({
+    label: `${item.products?.name ?? 'Product'} · ${item.product_packs?.pack_name ?? 'Pack'}`,
+    value: `${formatRowQuantity(item)} × ${inr(item.unit_price)}`,
+    detail: `${rowPieces(item)} pcs · ${item.gst_percent}% GST · ${inr(item.line_total)}`,
+  }));
   return verified({ order, items: items ?? [] }, [card]);
 }
 
@@ -63,14 +89,26 @@ async function reorderDraft(orderId: string, context: AIToolContext) {
   const details = await getOrder(orderId, context);
   if (!details.ok || !details.data) return details;
   const items = (details.data as { items: OrderItemRow[] }).items;
-  const lines = items.filter((item) => item.pack_id).map((item) => ({ packId: item.pack_id!, quantity: item.quantity }));
+  // Reorder in PIECES: a mixed previous line (1 case row + 6 loose pcs row)
+  // folds back into one 46-pc request, which the server then re-splits with
+  // today's case size and today's loose tiers.
+  const piecesByPack = new Map<string, number>();
+  for (const item of items) {
+    if (!item.pack_id) continue;
+    piecesByPack.set(item.pack_id, (piecesByPack.get(item.pack_id) ?? 0) + rowPieces(item));
+  }
+  const lines = [...piecesByPack.entries()].map(([packId, quantity]) => ({ packId, quantity }));
   const result = await quoteOrderForRetailer({ retailerId: context.actor.id, lines, supabase: context.supabase });
   if ('error' in result) return unavailable(`The previous order cannot be prepared with current rules: ${result.error}`);
   let token: string | undefined;
   try { token = createConfirmationToken(context.actor, 'add_to_cart', { lines }); } catch { /* configuration is reported by missing action */ }
   const card: AICard = {
     type: 'cart', title: `Reorder draft from ${(details.data as { order: OrderRow }).order.order_number}`, subtitle: 'Current price, MOQ, GST and credit were revalidated. No order was placed.', quality: 'verified', source: 'Previous owned order + shared current quote service',
-    lines: result.quote.lines.map((line) => ({ label: `${line.productName} · ${line.packName}`, value: `${line.quantity} units`, detail: inr(line.lineTotal) })),
+    lines: result.quote.lines.map((line) => ({
+      label: `${line.productName} · ${line.packName}`,
+      value: `${line.pieces} pcs (${line.cases} Case${line.cases === 1 ? '' : 's'} + ${line.loosePieces} loose)`,
+      detail: inr(line.lineTotal),
+    })),
     metrics: [{ label: 'Subtotal', value: inr(result.quote.subtotal), quality: 'verified' }, { label: 'GST', value: inr(result.quote.gstTotal), quality: 'verified' }, { label: 'Current total', value: inr(result.quote.grandTotal), quality: 'verified' }],
     actions: [
       { type: 'link', label: 'Review cart', href: '/retailer/cart', tone: 'secondary' },
@@ -87,13 +125,29 @@ async function reorderSuggestions(context: AIToolContext) {
   if (error) return dbFailure();
   if (!orders || orders.length < 2) return verified({ suggestions: [], quality: 'insufficient_data' }, [{ type: 'notice', title: 'Not enough data yet', subtitle: 'At least two non-cancelled orders are needed for reorder interval estimates.', quality: 'unavailable' }]);
   const dateByOrder = new Map(orders.map((order) => [order.id, order.placed_at]));
-  const { data: items, error: itemError } = await context.supabase.from('order_items').select('order_id, product_id, pack_id, quantity, products ( name )').in('order_id', orders.map((order) => order.id)).limit(1000).returns<Array<{ order_id: string; product_id: string; pack_id: string | null; quantity: number; products: { name: string } | null }>>();
+  const { data: items, error: itemError } = await context.supabase.from('order_items').select('order_id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, products ( name )').in('order_id', orders.map((order) => order.id)).limit(1000).returns<Array<{ order_id: string; product_id: string; pack_id: string | null; quantity: number; quantity_unit: OrderItemUnit | null; quantity_pieces: number | null; units_per_case: number | null; products: { name: string } | null }>>();
   if (itemError) return dbFailure();
-  const groups = new Map<string, { name: string; packId: string | null; points: { date: number; quantity: number }[] }>();
+  // Rows are per billing unit, so one order can hold two rows for the same
+  // product (its cases row and its loose-pieces row). Fold them back into one
+  // observation per order before estimating intervals, in PIECES.
+  const piecesByOrderProduct = new Map<string, { orderId: string; productId: string; packId: string | null; name: string; pieces: number }>();
   for (const item of items ?? []) {
-    const group = groups.get(item.product_id) ?? { name: item.products?.name ?? 'Product', packId: item.pack_id, points: [] };
-    group.points.push({ date: +new Date(dateByOrder.get(item.order_id)!), quantity: item.quantity });
-    groups.set(item.product_id, group);
+    const key = `${item.order_id}:${item.product_id}`;
+    const entry = piecesByOrderProduct.get(key) ?? {
+      orderId: item.order_id,
+      productId: item.product_id,
+      packId: item.pack_id,
+      name: item.products?.name ?? 'Product',
+      pieces: 0,
+    };
+    entry.pieces += rowPieces(item);
+    piecesByOrderProduct.set(key, entry);
+  }
+  const groups = new Map<string, { name: string; packId: string | null; points: { date: number; quantity: number }[] }>();
+  for (const entry of piecesByOrderProduct.values()) {
+    const group = groups.get(entry.productId) ?? { name: entry.name, packId: entry.packId, points: [] };
+    group.points.push({ date: +new Date(dateByOrder.get(entry.orderId)!), quantity: entry.pieces });
+    groups.set(entry.productId, group);
   }
   const now = Date.now();
   const suggestions = [...groups.entries()].flatMap(([productId, group]) => {
@@ -106,7 +160,7 @@ async function reorderSuggestions(context: AIToolContext) {
     const avgQuantity = Math.max(1, Math.round(unique.reduce((sum, point) => sum + point.quantity, 0) / unique.length));
     return [{ productId, productName: group.name, packId: group.packId, expectedIntervalDays: intervalDays, daysSinceLastOrder: daysSince, suggestedQuantity: avgQuantity, sampleOrders: unique.length, dueEstimate: daysSince >= Math.max(1, intervalDays - 2) }];
   }).sort((a, b) => Number(b.dueEstimate) - Number(a.dueEstimate)).slice(0, 20);
-  const cards: AICard[] = suggestions.map((s) => ({ type: 'insight', id: s.productId, title: s.productName, subtitle: `Usually purchased about every ${s.expectedIntervalDays} days; last purchased ${s.daysSinceLastOrder} days ago.`, badge: s.dueEstimate ? 'May be due' : 'Not due yet', quality: 'estimate', source: `${s.sampleOrders} actual order occurrences`, metrics: [{ label: 'Suggested qty', value: String(s.suggestedQuantity), quality: 'estimate' }, { label: 'Sample', value: `${s.sampleOrders} orders`, quality: 'verified' }] }));
+  const cards: AICard[] = suggestions.map((s) => ({ type: 'insight', id: s.productId, title: s.productName, subtitle: `Usually purchased about every ${s.expectedIntervalDays} days; last purchased ${s.daysSinceLastOrder} days ago.`, badge: s.dueEstimate ? 'May be due' : 'Not due yet', quality: 'estimate', source: `${s.sampleOrders} actual order occurrences`, metrics: [{ label: 'Suggested qty', value: `${s.suggestedQuantity} pcs`, quality: 'estimate' }, { label: 'Sample', value: `${s.sampleOrders} orders`, quality: 'verified' }] }));
   return verified({ suggestions, quality: 'estimate' }, cards, `${orders.length} authorized order headers and ${items?.length ?? 0} item rows`);
 }
 

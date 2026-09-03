@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Check, CheckCircle2, CircleAlert, Heart, ImageOff, Loader2, PackagePlus, ShoppingCart, Sparkles, Tag } from 'lucide-react';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
+import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { QtyStepper } from '@/components/retailer/qty-stepper';
 import { cn } from '@/lib/utils/cn';
@@ -52,9 +53,14 @@ export function ProductCard({
   const [error, setError] = useState(false);
   const [favorite, setFavorite] = useState(isFavorite);
   const [quantity, setQuantity] = useState(Math.max(1, moq));
-  // Per-piece derived selling price (case_price / units_per_case) for honest
-  // MRP comparisons — MRP is per piece, while fromPrice is the case price.
-  const piecePrice = fromPrice !== null && unitsPerCase > 0 ? fromPrice / unitsPerCase : fromPrice;
+  /*
+   * Per-piece reference rate for honest MRP comparison — MRP is per piece while
+   * fromPrice is the case price. Derived by the pricing engine's own helper (and
+   * marked as a reference: the case is billed at the case price, and a quantity
+   * that includes loose pieces is priced from the loose tiers on the product
+   * page, never from this number).
+   */
+  const piecePrice = fromPrice !== null ? piecePriceFromCase(fromPrice, unitsPerCase) : null;
   const discount = calcDiscountPercent(mrp, piecePrice);
   const savings = calcSavings(mrp, piecePrice);
   const unavailable = !defaultPackId || fromPrice === null;
@@ -149,7 +155,7 @@ export function ProductCard({
           {packName ? (
             <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500 sm:text-[11px]">
               <PackagePlus className="h-3 w-3 shrink-0" />
-              {packName} · MOQ {moq}
+              {packName} · MOQ {moq} pc{moq === 1 ? '' : 's'}
             </p>
           ) : null}
 
@@ -159,12 +165,14 @@ export function ProductCard({
               <p className="text-base font-bold tracking-tight text-slate-950 sm:text-lg">
                 {fromPrice !== null ? formatInr(fromPrice) : 'Price on request'}
               </p>
-              {fromPrice !== null && unitsPerCase > 1 ? (
+              {piecePrice !== null && unitsPerCase > 1 ? (
                 <p className="text-[9px] font-medium text-slate-400 sm:text-[10px]">
-                  {formatInr(fromPrice / unitsPerCase)}/pc · {unitsPerCase} pcs
+                  {formatInr(piecePrice)}/pc · {unitsPerCase} pcs
                 </p>
               ) : null}
-              {mrp && fromPrice !== null && mrp > fromPrice ? (
+              {/* MRP is per piece, so it is compared with the per-piece rate —
+                  never with the case price. */}
+              {mrp && piecePrice !== null && mrp > piecePrice ? (
                 <p className="text-[10px] text-slate-400 line-through sm:text-xs">MRP {formatInr(mrp)}</p>
               ) : null}
             </div>
@@ -184,7 +192,13 @@ export function ProductCard({
         <div className="mt-auto space-y-2 pt-2.5">
           {defaultPackId && !unavailable ? (
             <>
-              <QtyStepper value={quantity} min={moq} onChange={setQuantity} compact label={`${name} quantity`} />
+              <QtyStepper
+                value={quantity}
+                min={moq}
+                onChange={setQuantity}
+                compact
+                label={`${name} quantity in pieces`}
+              />
               <button
                 type="button"
                 onClick={handleQuickAdd}
@@ -200,7 +214,13 @@ export function ProductCard({
                 )}
               >
                 {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : added ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
-                {isPending ? 'Adding…' : added ? 'Added to cart' : error ? 'Try again' : `Add${quantity > 1 ? ` · ${quantity}` : ''}`}
+                {isPending
+                  ? 'Adding…'
+                  : added
+                    ? 'Added to cart'
+                    : error
+                      ? 'Try again'
+                      : `Add${quantity > 0 ? ` · ${quantity} pc${quantity === 1 ? '' : 's'}` : ''}`}
               </button>
             </>
           ) : (

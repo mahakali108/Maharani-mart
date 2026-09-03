@@ -5,7 +5,7 @@ import { Check, ChevronLeft, ChevronRight, CreditCard, ImageOff, PackageCheck, R
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { caseLineBreakdown, round2 } from '@/lib/retailer/case-pricing';
+import { calculateCaseLoosePrice } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
@@ -24,6 +24,10 @@ interface CartItemDetail {
     case_price: number;
     units_per_case: number;
     mrp: number | null;
+    /** Minimum order quantity in PIECES. */
+    moq: number;
+    /** false = this pack is sold in whole cases only. */
+    allow_loose_pieces: boolean;
     image_url: string | null;
     is_active: boolean;
   } | null;
@@ -56,7 +60,9 @@ export default async function CheckoutPage() {
   const [{ data: cartData }, { data: retailer }, { data: profile }] = await Promise.all([
     supabase
       .from('cart_items')
-      .select('id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, image_url, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )')
+      .select(
+        'id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )'
+      )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
     supabase
@@ -86,20 +92,26 @@ export default async function CheckoutPage() {
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
     const casePrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
-    const breakdown = caseLineBreakdown({
-      casePrice,
+    // `item.quantity` is the PIECE count in the cart. Pricing runs through the
+    // canonical engine — identical to `quoteOrderForRetailer`, which will be
+    // re-executed when the order is created, so this review can only ever
+    // confirm the amount that will actually be billed.
+    const pricing = calculateCaseLoosePrice({
+      quantity: item.quantity,
       unitsPerCase: pack?.units_per_case ?? 1,
+      casePrice,
       tiers: item.pack_id ? tierMap.get(item.pack_id) ?? [] : [],
-      packQuantity: item.quantity,
       gstPercent,
+      moq: pack?.moq ?? 1,
+      allowLoosePieces: pack?.allow_loose_pieces !== false,
     });
-    // Per-case price actually charged, derived from the line total (same rule as
-    // the server quote) so the figure shown here reconciles with the invoice.
-    const unitPrice = round2(breakdown.total / Math.max(item.quantity, 1));
-    subtotal += breakdown.subtotal;
-    gstTotal += breakdown.gst;
-    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + breakdown.gst);
-    savings += calcSavings(pack?.mrp, breakdown.piecePrice, breakdown.pieces);
+    // Effective price per piece charged (display only). The order itself is
+    // persisted as exact case / loose rows, so totals reconcile to the paisa.
+    const unitPrice = pricing.total / Math.max(pricing.quantity, 1);
+    subtotal += pricing.subtotal;
+    gstTotal += pricing.gst;
+    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + pricing.gst);
+    savings += calcSavings(pack?.mrp, pricing.looseUnitPrice ?? pricing.derivedPiecePrice, pricing.quantity);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     // Prefer the variant's own image (matches the product page size switcher).
     const lineImage = pack?.image_url ?? images[0]?.image_url;
@@ -110,13 +122,18 @@ export default async function CheckoutPage() {
       productName: product?.name ?? 'Unknown product',
       imageUrl: lineImage,
       unitPrice,
-      piecePrice: breakdown.piecePrice,
+      piecePrice: pricing.looseUnitPrice ?? pricing.derivedPiecePrice,
       unitsPerCase: pack?.units_per_case ?? 1,
-      pieces: breakdown.pieces,
-      cases: breakdown.cases,
-      loosePieces: breakdown.loosePieces,
+      casePrice,
+      pieces: pricing.quantity,
+      loosePieces: pricing.looseQuantity,
+      cases: pricing.fullCases,
+      caseSubtotal: pricing.caseSubtotal,
+      looseSubtotal: pricing.looseSubtotal,
+      orderable: pricing.orderable,
+      quantityMessage: pricing.message,
       gstPercent,
-      lineTotal: breakdown.total,
+      lineTotal: pricing.total,
     };
   });
   const grandTotal = subtotal + gstTotal;
@@ -175,9 +192,16 @@ export default async function CheckoutPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-bold text-slate-900">{line.productName}</p>
                     <p className="mt-1 text-[9px] text-slate-500">
-                      {line.packName} · Qty {line.quantity} case{line.quantity === 1 ? '' : 's'} ({line.pieces} pcs) · {formatInr(line.unitPrice)} per case ({formatInr(line.piecePrice)}/pc)
+                      {line.packName} · Qty {line.pieces} pc{line.pieces === 1 ? '' : 's'} ·{' '}
+                      {line.cases > 0 ? `${line.cases} Case${line.cases === 1 ? '' : 's'} × ${formatInr(line.casePrice)}` : ''}
+                      {line.cases > 0 && line.loosePieces > 0 ? ' + ' : ''}
+                      {line.loosePieces > 0
+                        ? `${line.loosePieces} loose pcs × ${formatInr(line.piecePrice)}`
+                        : ''}
                     </p>
-                    <p className="mt-0.5 text-[9px] text-slate-400">GST {line.gstPercent}% included</p>
+                    <p className="mt-0.5 text-[9px] text-slate-400">
+                      Cases: {line.cases} · Loose: {line.loosePieces} · GST {line.gstPercent}% included
+                    </p>
                   </div>
                   <p className="shrink-0 text-sm font-bold text-slate-950">{formatInr(line.lineTotal)}</p>
                 </div>
@@ -270,7 +294,22 @@ export default async function CheckoutPage() {
               </div>
             </div>
           </section>
-          <CheckoutForm grandTotal={grandTotal} subtotal={subtotal} gstTotal={gstTotal} itemCount={lines.length} />
+          {lines.some((line) => !line.orderable) ? (
+            <p
+              role="alert"
+              className="rounded-2xl border border-primary-200 bg-primary-50 px-4 py-3 text-[11px] font-semibold text-primary-700"
+            >
+              {lines.find((line) => !line.orderable)?.quantityMessage ??
+                'One of the quantities in your cart is not available. Adjust it in the cart to continue.'}
+            </p>
+          ) : null}
+          <CheckoutForm
+            grandTotal={grandTotal}
+            subtotal={subtotal}
+            gstTotal={gstTotal}
+            itemCount={lines.length}
+            disabled={lines.some((line) => !line.orderable)}
+          />
         </aside>
       </div>
     </div>

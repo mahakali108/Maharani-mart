@@ -5,15 +5,27 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Check, ChevronRight, ImageOff, Loader2, Minus, Plus, ShoppingCart } from 'lucide-react';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
+import {
+  calculateCaseLoosePrice,
+  maxLooseQuantity,
+  piecePriceFromCase,
+  resolveLooseTierSet,
+  type PricingTier,
+} from '@/lib/retailer/case-pricing';
 
 export interface QuickOrderPack {
   id: string;
   packName: string;
   unitsPerCase: number;
+  /** Minimum order quantity in PIECES. */
   moq: number;
   mrp: number | null;
   /** GST-inclusive CASE selling price. */
   casePrice: number;
+  /** false = this pack is billed in whole cases only. */
+  allowLoosePieces?: boolean;
+  /** This pack's own loose-piece slabs (from `product_pricing_tiers`). */
+  tiers?: PricingTier[];
 }
 
 export function QuickOrderRow({
@@ -63,9 +75,26 @@ export function QuickOrderRow({
     });
   }
 
-  // effectivePrice is now the GST-INCLUSIVE case price — GST is never added again.
-  const landedPrice = pack.casePrice;
-  const piecePrice = pack.unitsPerCase > 0 ? pack.casePrice / pack.unitsPerCase : pack.casePrice;
+  /*
+   * The quantity in this grid is PIECES, and the price shown is what the server
+   * will actually charge for it: `calculateCaseLoosePrice` bills every complete
+   * case at the case price and the remaining pieces at their loose tier. Prices
+   * are GST-inclusive, so GST is never added on top here either.
+   */
+  const pricing = calculateCaseLoosePrice({
+    quantity,
+    unitsPerCase: pack.unitsPerCase,
+    casePrice: pack.casePrice,
+    tiers: pack.tiers ?? [],
+    gstPercent,
+    moq: pack.moq,
+    allowLoosePieces: pack.allowLoosePieces !== false,
+  });
+  const landedPrice = pricing.total;
+  const piecePrice = piecePriceFromCase(pack.casePrice, pack.unitsPerCase);
+  const loose = resolveLooseTierSet(pack.tiers ?? [], pack.unitsPerCase).tiers;
+  const looseFrom = loose.length > 0 ? Math.min(...loose.map((tier) => tier.price_per_piece)) : piecePrice;
+  const looseCeiling = maxLooseQuantity(pack.unitsPerCase);
   const discount = pack.mrp && pack.mrp > piecePrice
     ? Math.round(((pack.mrp - piecePrice) / pack.mrp) * 100)
     : 0;
@@ -97,7 +126,10 @@ export function QuickOrderRow({
           >
             {packs.map((item) => <option key={item.id} value={item.id}>{item.packName}</option>)}
           </select>
-          <p className="mt-1 text-[9px] text-slate-400">{pack.unitsPerCase} unit(s) · MOQ {pack.moq}</p>
+          <p className="mt-1 text-[9px] text-slate-400">
+            {pack.unitsPerCase} pcs/case · MOQ {pack.moq} pcs
+            {pack.allowLoosePieces === false ? ' · full cases only' : ` · loose from ₹${looseFrom.toFixed(2)}/pc`}
+          </p>
         </div>
 
         <div>
@@ -111,7 +143,7 @@ export function QuickOrderRow({
               value={quantity}
               onChange={(event) => changeQuantity(Number(event.target.value) || pack.moq)}
               className="h-full min-w-0 flex-1 border-x border-slate-200 text-center text-xs font-bold outline-none"
-              aria-label={`${name} quantity, minimum ${pack.moq}`}
+              aria-label={`${name} quantity in pieces, minimum ${pack.moq}`}
             />
             <button type="button" onClick={() => changeQuantity(quantity + 1)} className="flex h-full w-9 items-center justify-center text-slate-500 hover:bg-slate-50" aria-label={`Increase ${name} quantity`}><Plus className="h-3.5 w-3.5" /></button>
           </div>
@@ -124,20 +156,35 @@ export function QuickOrderRow({
               {pack.mrp && pack.mrp > piecePrice ? <p className="text-[9px] text-slate-400 line-through">₹{pack.mrp.toFixed(2)}</p> : null}
             </div>
             <p className="text-[9px] text-slate-400">{gstPercent}% GST incl · {pack.unitsPerCase} pcs/case</p>
+            {pricing.fullCases > 0 || pricing.looseQuantity > 0 ? (
+              <p className="mt-0.5 text-[9px] font-semibold text-slate-500">
+                {pricing.fullCases > 0 ? `${pricing.fullCases} Case × ₹${pack.casePrice.toFixed(0)}` : ''}
+                {pricing.fullCases > 0 && pricing.looseQuantity > 0 ? ' + ' : ''}
+                {pricing.looseQuantity > 0
+                  ? `${pricing.looseQuantity} pcs × ₹${(pricing.looseUnitPrice ?? looseFrom).toFixed(0)}`
+                  : ''}
+                {looseCeiling > 0 && pricing.looseQuantity === looseCeiling ? ' (case-fullest loose rate)' : ''}
+              </p>
+            ) : null}
             {discount > 0 ? <p className="mt-0.5 text-[9px] font-bold text-emerald-700">Save {discount}%</p> : null}
           </div>
           <button
             type="button"
             onClick={handleAdd}
-            disabled={isPending}
+            disabled={isPending || !pricing.orderable}
             className={`mt-2 flex h-9 min-w-[112px] items-center justify-center gap-1.5 rounded-lg px-3 text-[10px] font-bold text-white transition sm:ml-auto ${added ? 'bg-emerald-600' : 'bg-primary-600 hover:bg-primary-700'} disabled:opacity-60`}
           >
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : added ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
-            {isPending ? 'Adding…' : added ? 'Added' : `Add · ₹${(landedPrice * quantity).toFixed(0)}`}
+            {isPending ? 'Adding…' : added ? 'Added' : `Add · ₹${landedPrice.toFixed(0)}`}
           </button>
         </div>
       </div>
 
+      {!pricing.orderable ? (
+        <p className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-[10px] font-medium text-amber-800">
+          {pricing.message}
+        </p>
+      ) : null}
       {error ? <p role="alert" className="border-t border-primary-100 bg-primary-50 px-4 py-2 text-[10px] font-medium text-primary-700">{error}</p> : null}
       {added ? <Link href="/retailer/cart" className="flex items-center justify-center gap-1 border-t border-emerald-100 bg-emerald-50 px-4 py-2 text-[10px] font-bold text-emerald-700">Review cart <ChevronRight className="h-3 w-3" /></Link> : null}
     </article>

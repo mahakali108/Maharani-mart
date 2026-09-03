@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ImageOff, Loader2, ShoppingCart } from 'lucide-react';
 import { addReorderLinesToCartAction } from '@/lib/retailer/order-actions';
-import { gstComponentFromInclusive, round2 } from '@/lib/retailer/case-pricing';
+import {
+  calculateCaseLoosePrice,
+  type PricingTier,
+} from '@/lib/retailer/case-pricing';
+import { formatQuantitySummary, summarizeQuantityRows } from '@/lib/orders/item-display';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,11 +19,19 @@ export interface ReorderLineInput {
   productName: string;
   packName: string;
   imageUrl?: string;
+  /** Pieces ordered last time (cases row + loose rows folded together). */
   previousQuantity: number;
+  /** Pieces to pre-fill: max(previous, current MOQ). */
   suggestedQuantity: number;
+  /** Minimum order quantity in PIECES. */
   moq: number;
   gstPercent: number;
+  /** Current GST-inclusive CASE price for this pack. */
   currentUnitPrice: number;
+  unitsPerCase: number;
+  /** Current loose-piece tiers of this pack, so the same engine can reprice. */
+  tiers: PricingTier[];
+  allowLoosePieces: boolean;
   unavailable: boolean;
 }
 
@@ -49,17 +61,34 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
   const [isPending, startTransition] = useTransition();
 
   const selected = lines.filter((line) => state[line.packId]?.included);
+
+  /**
+   * Repriced through the canonical engine (current terms, quantities in
+   * PIECES): full cases at today's case price, the remainder at today's loose
+   * tier. Prices are GST-inclusive, so the GST shown is extracted from the
+   * line total and never added on top. This is a display aid only — the server
+   * re-quotes every line at checkout.
+   */
+  function priceLine(line: ReorderLineInput, quantity: number) {
+    return calculateCaseLoosePrice({
+      quantity,
+      unitsPerCase: line.unitsPerCase,
+      casePrice: line.currentUnitPrice,
+      tiers: line.tiers,
+      gstPercent: line.gstPercent,
+      moq: line.moq,
+      allowLoosePieces: line.allowLoosePieces,
+    });
+  }
+
   let subtotal = 0;
   let gstTotal = 0;
   for (const line of selected) {
-    const quantity = Math.max(line.moq, state[line.packId]?.quantity ?? line.moq);
-    // currentUnitPrice is GST-INCLUSIVE — GST is extracted, never added.
-    const lineTotal = round2(line.currentUnitPrice * quantity);
-    const lineGst = gstComponentFromInclusive(lineTotal, line.gstPercent);
-    subtotal += round2(lineTotal - lineGst);
-    gstTotal += lineGst;
+    const pricing = priceLine(line, Math.max(line.moq, state[line.packId]?.quantity ?? line.moq));
+    subtotal += pricing.subtotal;
+    gstTotal += pricing.gst;
   }
-  const grandTotal = round2(subtotal + gstTotal);
+  const grandTotal = subtotal + gstTotal;
 
   function setQuantity(packId: string, quantity: number, moq: number) {
     setState((prev) => ({
@@ -108,7 +137,8 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
         {lines.map((line) => {
           const lineState = state[line.packId];
           const quantity = Math.max(line.moq, lineState?.quantity ?? line.moq);
-          const lineTotal = round2(line.currentUnitPrice * quantity);
+          const pricing = priceLine(line, quantity);
+          const lineTotal = pricing.total;
           return (
             <Card
               key={line.packId}
@@ -134,11 +164,23 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink-900">{line.productName}</p>
                 <p className="text-xs text-ink-400">
-                  {line.packName} · ₹{line.currentUnitPrice.toFixed(2)} · {line.gstPercent}% GST included
+                  {line.packName} · ₹{line.currentUnitPrice.toFixed(2)} per case of {line.unitsPerCase} pcs ·{' '}
+                  {line.gstPercent}% GST included
                 </p>
                 <p className="text-xs text-ink-400">
-                  Previously {line.previousQuantity} · MOQ now {line.moq}
+                  Previously {formatQuantitySummary({ ...summarizeQuantityRows([]), pieces: line.previousQuantity })} · MOQ
+                  now {line.moq} pcs
                 </p>
+                {pricing.fullCases + pricing.looseQuantity > 0 ? (
+                  <p className="text-[11px] text-ink-500">
+                    Now billed as {pricing.fullCases} Case{pricing.fullCases === 1 ? '' : 's'}
+                    {pricing.fullCases > 0 ? ` × ₹${line.currentUnitPrice.toFixed(2)}` : ''}
+                    {pricing.looseQuantity > 0
+                      ? ` + ${pricing.looseQuantity} loose pcs × ₹${(pricing.looseUnitPrice ?? 0).toFixed(2)}`
+                      : ''}{' '}
+                    = ₹{pricing.total.toFixed(2)}
+                  </p>
+                ) : null}
                 {line.unavailable ? (
                   <p className="text-xs font-medium text-primary-600">No longer available</p>
                 ) : null}
