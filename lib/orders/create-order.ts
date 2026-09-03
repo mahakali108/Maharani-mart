@@ -65,15 +65,28 @@ export async function createOrderForRetailer({
     .single<{ id: string; order_number: string }>();
   if (orderError || !order) return { error: orderError?.message ?? 'Failed to create order.' };
 
-  const itemPayloads: OrderItemInsert[] = quote.lines.map((line) => ({
-    order_id: order.id,
-    product_id: line.productId,
-    pack_id: line.packId,
-    quantity: line.quantity,
-    unit_price: line.unitPrice,
-    gst_percent: line.gstPercent,
-    line_total: line.lineTotal,
-  }));
+  // Every quote line expands into one or two `order_items` rows: whole cases at
+  // the case price and, when there is a remainder, the loose pieces at their own
+  // tier rate. Each row is internally exact (`unit_price × quantity =
+  // line_total`), `quantity_unit` says which unit the row is billed in, and
+  // `quantity_pieces` snapshots the piece count so an invoice, a reorder or a
+  // dispatch never has to re-derive it from a pack configuration that may change
+  // afterwards. Order totals are the sum of these rows, so the persisted money
+  // always reconciles with the quote the retailer saw.
+  const itemPayloads: OrderItemInsert[] = quote.lines.flatMap((line) =>
+    line.items.map((item) => ({
+      order_id: order.id,
+      product_id: line.productId,
+      pack_id: line.packId,
+      quantity: item.quantity,
+      quantity_unit: item.quantityUnit,
+      quantity_pieces: item.quantityPieces,
+      units_per_case: item.unitsPerCase,
+      unit_price: item.unitPrice,
+      gst_percent: line.gstPercent,
+      line_total: item.lineTotal,
+    }))
+  );
   const { error: itemsError } = await supabase.from('order_items').insert(itemPayloads as unknown as never);
 
   if (itemsError) {

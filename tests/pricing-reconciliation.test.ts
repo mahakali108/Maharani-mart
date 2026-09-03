@@ -195,9 +195,13 @@ describe('case price remains the source of truth; piece price is derived', () =>
     const line = caseLineBreakdown({ casePrice: 240, unitsPerCase: 12, tiers, pieceQuantity: 15, gstPercent: 5 });
     expect(line.cases).toBe(1);
     expect(line.loosePieces).toBe(3);
-    // 15 pieces falls in the [12, ∞) slab → ₹20/pc for the loose pieces.
-    expect(line.piecePrice).toBe(20);
-    expect(line.total).toBe(round2(240 + 3 * 20));
+    // 0026: the remainder (3 pcs) picks the slab — ₹22/pc. Selecting it from the
+    // total (15 pcs → the [12, ∞) ₹20 slab) would have repriced the case part.
+    expect(line.piecePrice).toBe(22);
+    expect(line.total).toBe(round2(240 + 3 * 22));
+    // The case part is never touched by the slab, at any quantity.
+    const twoCases = caseLineBreakdown({ casePrice: 240, unitsPerCase: 12, tiers, pieceQuantity: 24, gstPercent: 5 });
+    expect(twoCases.total).toBe(480);
   });
 
   it('selects the matching tier with the largest min_quantity (half-open ranges)', () => {

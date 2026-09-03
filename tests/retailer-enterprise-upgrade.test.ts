@@ -589,9 +589,36 @@ describe('migration hygiene', () => {
     });
   });
 
-  it('adds 0025 as the latest migration', () => {
-    expect(migrations[migrations.length - 1]).toBe('0025_cost_price_column_lockdown.sql');
-    expect(existsSync(join(migrationsDir, '0025_cost_price_column_lockdown.sql'))).toBe(true);
+  it('adds 0026 (case + loose piece pricing) as the latest migration', () => {
+    expect(migrations[migrations.length - 1]).toBe('0026_case_and_loose_piece_pricing.sql');
+    expect(existsSync(join(migrationsDir, '0026_case_and_loose_piece_pricing.sql'))).toBe(true);
+  });
+
+  it('keeps the case + loose migration additive — no destructive statement, no RLS change', () => {
+    const sql = read('supabase/migrations/0026_case_and_loose_piece_pricing.sql').toLowerCase();
+    // Nothing is dropped, truncated or deleted: history and carts survive.
+    expect(sql).not.toMatch(/drop column/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/truncate /i);
+    expect(sql).not.toMatch(/delete from/i);
+    // The only constraint removed is the tier rule_type check, immediately
+    // re-added as a superset so existing rows keep their meaning.
+    expect(sql).toMatch(/drop constraint if exists product_pricing_tiers_rule_type_check/);
+    expect(sql.match(/drop constraint if exists/g) ?? []).toHaveLength(2);
+    // Case price stays the single source of truth — the migration never adds a
+    // competing case-price column.
+    expect(sql).not.toMatch(/add column case_price/i);
+    expect(sql).toMatch(/allow_loose_pieces boolean not null default true/);
+    expect(sql).toMatch(/rule_type in \('default', 'case', 'bulk', 'loose'\)/);
+    expect(sql).toMatch(/quantity_unit text not null default 'packs'/);
+    // RLS is inherited, never relaxed: no policy is created, dropped or altered.
+    expect(sql).not.toMatch(/create policy/i);
+    expect(sql).not.toMatch(/drop policy/i);
+    expect(sql).not.toMatch(/alter table .* enable row level security/i);
+    // No privilege statements at all (comments may mention them, DDL may not).
+    expect(sql).not.toMatch(/^\s*grant /im);
+    expect(sql).not.toMatch(/^\s*revoke /im);
+    expect(sql).not.toMatch(/alter default privileges/i);
   });
 
   it('enables RLS on every retailer-facing table across the history', () => {

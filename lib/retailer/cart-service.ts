@@ -2,34 +2,73 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
+import { calculateCaseLoosePrice } from '@/lib/retailer/case-pricing';
+import { resolvePackCasePrice } from '@/lib/retailer/effective-price';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 
-interface PackValidationRow {
+interface PackForCart {
   id: string;
+  pack_name: string;
   moq: number;
+  units_per_case: number;
+  case_price: number;
+  ptr: number | null;
+  base_price: number;
+  allow_loose_pieces: boolean;
   is_active: boolean;
   products: { is_active: boolean } | null;
 }
 
 export type CartServiceResult = { error: string } | { success: true };
 
+/**
+ * The single cart-side quantity rule. It runs the SAME pure pricing engine the
+ * server quote and the UI previews use, so a retailer can never park a quantity
+ * in the cart that checkout would reject (below MOQ, a partial case on a
+ * whole-case-only pack, or a loose remainder the admin has not priced).
+ *
+ * A product-level `price_lists` override is deliberately not consulted here:
+ * an override changes what a case costs, never what may be ordered. Money is
+ * still resolved authoritatively at quote/order time.
+ */
+async function quantityError(supabase: ReturnType<typeof createClient>, pack: PackForCart, quantity: number) {
+  const tiers = await loadPackTiers(supabase, [pack.id]);
+  const pricing = calculateCaseLoosePrice({
+    quantity,
+    unitsPerCase: pack.units_per_case,
+    casePrice: resolvePackCasePrice(pack, null),
+    tiers: tiers.get(pack.id) ?? [],
+    moq: pack.moq,
+    allowLoosePieces: pack.allow_loose_pieces !== false,
+  });
+  if (pricing.orderable) return null;
+  return pricing.message ?? 'That quantity is not available for this pack.';
+}
+
 export async function validatePackForCart(
   supabase: ReturnType<typeof createClient>,
   packId: string,
   quantity: number
 ): Promise<string | null> {
+  // `quantity` is a PIECE count (0026): 6 pcs, 46 pcs or 80 pcs are all valid.
   if (!packId || quantity < 1 || quantity > 100000 || !Number.isInteger(quantity)) {
-    return 'Enter a valid whole number quantity.';
+    return 'Enter a valid whole number quantity in pieces.';
   }
   const { data: pack, error } = await supabase
     .from('product_packs')
-    .select('id, moq, is_active, products ( is_active )')
+    .select(
+      'id, pack_name, moq, units_per_case, case_price, ptr, base_price, allow_loose_pieces, is_active, products ( is_active )'
+    )
     .eq('id', packId)
-    .maybeSingle<PackValidationRow>();
+    .maybeSingle<PackForCart>();
   if (error || !pack) return 'This pack no longer exists.';
   if (!pack.is_active) return 'This pack is currently unavailable.';
   if (!pack.products?.is_active) return 'This product is currently unavailable.';
+  // MOQ is checked here with the wording the cart has always used, and again by
+  // the engine below (single implementation of the rule) for the case/loose
+  // rules: a whole-case-only pack and an unpriced loose remainder.
   if (quantity < pack.moq) return `Minimum order quantity for this pack is ${pack.moq}.`;
-  return null;
+  return quantityError(supabase, pack, quantity);
 }
 
 export async function addCartLines(

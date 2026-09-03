@@ -363,6 +363,8 @@ export interface Database {
           barcode: string | null;
           image_url: string | null;
           moq: number;
+          /** 0026: false = whole cases only, never a loose remainder. */
+          allow_loose_pieces: boolean;
           is_active: boolean;
           sort_order: number;
           created_by: string | null;
@@ -384,6 +386,8 @@ export interface Database {
           barcode?: string | null;
           image_url?: string | null;
           moq?: number;
+          /** 0026: false = whole cases only, never a loose remainder. */
+          allow_loose_pieces?: boolean;
           is_active?: boolean;
           sort_order?: number;
           created_by?: string | null;
@@ -407,7 +411,8 @@ export interface Database {
           min_quantity: number;
           max_quantity: number | null;
           price_per_piece: number;
-          rule_type: 'default' | 'case' | 'bulk';
+          /** 'loose' = 0026 loose-piece slab; the others are pre-0026 slabs. */
+          rule_type: 'default' | 'case' | 'bulk' | 'loose';
           label: string | null;
           is_active: boolean;
           created_by: string | null;
@@ -420,7 +425,7 @@ export interface Database {
           min_quantity: number;
           max_quantity?: number | null;
           price_per_piece: number;
-          rule_type?: 'default' | 'case' | 'bulk';
+          rule_type?: 'default' | 'case' | 'bulk' | 'loose';
           label?: string | null;
           is_active?: boolean;
           created_by?: string | null;
@@ -790,6 +795,16 @@ export interface Database {
           unit_price: number;
           gst_percent: number;
           line_total: number;
+          /**
+           * 0026. 'packs' = every row written before case+loose pricing (quantity
+           * was a case count). New mixed lines are stored as a 'cases' row plus a
+           * 'pieces' row so unit_price × quantity === line_total stays exact.
+           */
+          quantity_unit: 'packs' | 'cases' | 'pieces';
+          /** Pieces this line covers (snapshot; never re-derived later). */
+          quantity_pieces: number | null;
+          /** Pack case size at order time (snapshot). */
+          units_per_case: number | null;
         };
         Insert: {
           id?: string;
@@ -800,6 +815,9 @@ export interface Database {
           unit_price: number;
           gst_percent?: number;
           line_total: number;
+          quantity_unit?: 'packs' | 'cases' | 'pieces';
+          quantity_pieces?: number | null;
+          units_per_case?: number | null;
         };
         Update: Partial<Database['public']['Tables']['order_items']['Insert']>;
         Relationships: [
