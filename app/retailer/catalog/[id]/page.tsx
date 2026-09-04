@@ -458,7 +458,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   </p>
                   {selectedPack && selectedPack.units_per_case > 1 ? (
                     <p className="text-sm font-semibold text-slate-500 sm:text-base">
-                      {formatInr(selectedCasePrice / selectedPack.units_per_case)}/pc · {selectedPack.units_per_case} pcs
+                      {formatInr(piecePriceFromCase(selectedCasePrice, selectedPack.units_per_case))}/pc ·{' '}
+                      {selectedPack.units_per_case} pcs
                     </p>
                   ) : null}
                   {selectedPack?.mrp && selectedPiecePrice != null && selectedPack.mrp > selectedPiecePrice ? (

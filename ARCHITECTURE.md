@@ -200,6 +200,32 @@ for reports and were backfilled into `case_price` by migration
 `0022_case_based_pricing.sql`; `base_price` continues to mirror MRP so old reads
 do not change.
 
+**Why a pack can show `Units/case = 1` (the "1 pc = 1 case" state).** `0004` created
+`product_packs.units_per_case` with a default of 1, and the pre-case UI never asked
+an admin for a case size — one pack row *was* one sellable case. Migrations `0022`
+and `0026` deliberately preserved those values (no data is rewritten on upgrade),
+so older catalog rows keep `units_per_case = 1` and therefore show
+`per piece = case price` with a single legacy `default` tier (`1 → no limit`) until
+an admin edits them. This is data, not a rendering bug: the UI reads the stored
+row. To convert such a pack, open `/admin/products/<id> → Pack sizes & case
+pricing`, set **Pcs per case** to the real case size (the editor flags the legacy
+state when it is still 1), and add the loose-piece tiers; full cases keep billing
+at `case_price` and the remainder follows the tiers immediately. A pack whose Qty
+is legitimately 1 piece/case keeps working unchanged.
+
+The requirement's reference configuration — `units_per_case = 80`,
+`case_price = ₹1,000`, loose tiers `1–6 = ₹30 · 7–12 = ₹28 · 13–20 = ₹27 ·
+21–79 = ₹26` — is pinned by tests:
+
+| Qty (pcs) | Split | Total |
+| --- | --- | --- |
+| 6 | 6 loose @ ₹30 | ₹180 |
+| 12 | 12 loose @ ₹28 | ₹336 |
+| 20 | 20 loose @ ₹27 | ₹540 |
+| 80 | **1 case** | ₹1,000 |
+| 92 | 1 case + 12 loose @ ₹28 | ₹1,336 |
+| 160 | 2 cases | ₹2,000 |
+
 
 ### 4.6 Reports
 - Sales, Profit (needs `products.cost_price`, admin-only visibility), Staff Performance, Area Performance — all SQL views over real `orders`/`order_items`/`visits`/`attendance`. No canned report data.

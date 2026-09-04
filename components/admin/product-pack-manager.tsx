@@ -97,7 +97,18 @@ export function ProductPackManager({
                     <tr>
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-ink-900">{pack.pack_name}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-ink-500">{pack.barcode ?? '—'}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">{pack.units_per_case}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">
+                        {pack.units_per_case === 1 ? (
+                          <span
+                            className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                            title="Legacy configuration: 1 piece = 1 case. Set the real pieces per case in the pricing editor below."
+                          >
+                            1 pc = 1 case
+                          </span>
+                        ) : (
+                          pack.units_per_case
+                        )}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">{money(pack.mrp ?? pack.base_price)}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 font-semibold text-ink-900">{money(pack.case_price)}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">{money(piecePrice)}</td>
