@@ -299,6 +299,21 @@ export function PackCasePricing({
         </div>
       </div>
 
+      {safeUnits === 1 ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-900"
+        >
+          <strong className="font-bold">This pack is configured as 1 pc = 1 case.</strong> That is the legacy state a
+          pack shows when it predates case pricing — it sells single pieces at the full case price (
+          {money(Number.parseFloat(price) || 0)}/pc), which is why the case price and per-piece price look identical.
+          If this product ships in cases of several pieces, set{' '}
+          <strong>Pcs per case</strong> to the real case size first: the per-piece reference rate is then derived from
+          the case price, the loose tier editor below opens, and retailers can order 6, 12, 20, 40, 92… pcs without
+          ever being forced to buy a full case.
+        </div>
+      ) : null}
+
       <label className="flex items-start gap-2 text-xs text-ink-600">
         <input
           type="checkbox"

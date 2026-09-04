@@ -142,6 +142,82 @@ describe('case + loose engine: the worked examples from the business requirement
   });
 });
 
+describe('case + loose engine: the EXACT 80-piece configuration from the requirement', () => {
+  //   units/case   80 pcs
+  //   case price   ₹1,000 (GST-inclusive)
+  //   loose tiers  1–6 → ₹30   ·   7–12 → ₹28   ·   13–20 → ₹27   ·   21–79 → ₹26
+  const UNITS = 80;
+  const CASE = 1000;
+  const TIERS: PricingTier[] = [
+    { id: 'e1', min_quantity: 1, max_quantity: 7, price_per_piece: 30, rule_type: 'loose' },
+    { id: 'e2', min_quantity: 7, max_quantity: 13, price_per_piece: 28, rule_type: 'loose' },
+    { id: 'e3', min_quantity: 13, max_quantity: 21, price_per_piece: 27, rule_type: 'loose' },
+    { id: 'e4', min_quantity: 21, max_quantity: 80, price_per_piece: 26, rule_type: 'loose' },
+  ];
+  const exact = (quantity: number) =>
+    calculateCaseLoosePrice({
+      quantity,
+      unitsPerCase: UNITS,
+      casePrice: CASE,
+      tiers: TIERS,
+      gstPercent: 0,
+    });
+
+  it('prices 6 / 12 / 20 / 80 / 92 / 160 pcs exactly as mandated', () => {
+    const expected: [number, number, number, number][] = [
+      // [qty, total, fullCases, looseQty]
+      [6, 180, 0, 6],
+      [12, 336, 0, 12],
+      [20, 540, 0, 20],
+      [80, 1000, 1, 0],
+      [92, 1336, 1, 12],
+      [160, 2000, 2, 0],
+    ];
+    for (const [quantity, total, fullCases, looseQuantity] of expected) {
+      const result = exact(quantity);
+      expect({ q: quantity, total: result.total, cases: result.fullCases, loose: result.looseQuantity }).toEqual({
+        q: quantity,
+        total,
+        cases: fullCases,
+        loose: looseQuantity,
+      });
+      expect(result.orderable).toBe(true);
+      expect(result.caseSubtotal + result.looseSubtotal).toBe(result.total);
+    }
+  });
+
+  it('bills 12 pcs at the 7–12 loose rate — never 12/80 × ₹1000 and never the case price', () => {
+    const twelve = exact(12);
+    expect(twelve.looseUnitPrice).toBe(28);
+    expect(twelve.loosePriceSource).toBe('tier');
+    expect(twelve.caseSubtotal).toBe(0);
+    expect(twelve.total).toBe(12 * 28);
+    // The forbidden prorated quote (₹150) and the case price as piece price
+    // (₹12,000) must both be impossible by construction.
+    expect(twelve.total).not.toBe((12 / UNITS) * CASE);
+    expect(twelve.total).not.toBe(12 * CASE);
+  });
+
+  it('splits 92 pcs into 1 case + 12 loose and bills each side at its own rate', () => {
+    const ninetyTwo = exact(92);
+    expect(ninetyTwo.fullCases).toBe(1);
+    expect(ninetyTwo.looseQuantity).toBe(12);
+    expect(ninetyTwo.caseSubtotal).toBe(1000);
+    expect(ninetyTwo.looseSubtotal).toBe(336);
+    expect(ninetyTwo.total).toBe(1336);
+    // A full case is never repriced at the last loose slab (₹26 × 80 = ₹2,080).
+    expect(ninetyTwo.total).not.toBe(1000 + 80 * 26);
+  });
+
+  it('keeps 160 pcs at exactly two case prices — the retailer buys cases, not 160 loose pieces', () => {
+    const result = exact(160);
+    expect(result.fullCases).toBe(2);
+    expect(result.looseQuantity).toBe(0);
+    expect(result.total).toBe(2000);
+    expect(result.total).not.toBe(160 * 26);
+  });
+});
+
 describe('case + loose engine: boundary and edge cases', () => {
   it('handles Q < case, Q = case and Q = multiple of case', () => {
     expect(price(39).looseQuantity).toBe(39);

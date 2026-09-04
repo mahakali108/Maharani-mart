@@ -12,7 +12,7 @@ import {
   summarizeQuantityRows,
   type GroupableOrderItemRow,
 } from '@/lib/orders/item-display';
-import { calculateCaseLoosePrice } from '@/lib/retailer/case-pricing';
+import { calculateCaseLoosePrice, type PricingTier } from '@/lib/retailer/case-pricing';
 
 const root = join(__dirname, '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
@@ -326,5 +326,64 @@ describe('the mandated worked examples still hold end to end', () => {
         { quantity: looseRow.quantity, quantity_unit: 'pieces', quantity_pieces: 6, units_per_case: 40 },
       ])
     ).toMatchObject({ pieces: 46, cases: 1, loose: 6 });
+  });
+});
+
+describe('the exact 80-piece configuration from the requirement (admin → page → cart → quote → invoice)', () => {
+  //   units/case   80 pcs
+  //   case price   ₹1,000 (GST-inclusive)
+  //   loose tiers  1–6 → ₹30 · 7–12 → ₹28 · 13–20 → ₹27 · 21–79 → ₹26
+  const EIGHTY: PricingTier[] = [
+    { min_quantity: 1, max_quantity: 7, price_per_piece: 30, rule_type: 'loose' },
+    { min_quantity: 7, max_quantity: 13, price_per_piece: 28, rule_type: 'loose' },
+    { min_quantity: 13, max_quantity: 21, price_per_piece: 27, rule_type: 'loose' },
+    { min_quantity: 21, max_quantity: 80, price_per_piece: 26, rule_type: 'loose' },
+  ];
+  const exact = (quantity: number) =>
+    calculateCaseLoosePrice({ quantity, unitsPerCase: 80, casePrice: 1000, tiers: EIGHTY, gstPercent: 0 });
+
+  it('prices 6 / 12 / 20 / 80 / 92 / 160 pcs exactly as mandated', () => {
+    const expected: [number, number, number, number][] = [
+      [6, 180, 0, 6],
+      [12, 336, 0, 12],
+      [20, 540, 0, 20],
+      [80, 1000, 1, 0],
+      [92, 1336, 1, 12],
+      [160, 2000, 2, 0],
+    ];
+    for (const [quantity, total, cases, loose] of expected) {
+      const pricing = exact(quantity);
+      expect(pricing.total, `${quantity} pcs`).toBe(total);
+      expect(pricing.fullCases).toBe(cases);
+      expect(pricing.looseQuantity).toBe(loose);
+      expect(pricing.orderable).toBe(true);
+    }
+  });
+
+  it('writes and invoices 92 pcs as 1 case × ₹1,000 + 12 loose × ₹28 — never a prorated ₹150', () => {
+    const pricing = exact(92);
+    expect(pricing.caseSubtotal).toBe(1000);
+    expect(pricing.looseSubtotal).toBe(336);
+    expect(pricing.total).toBe(1336);
+    // The exact rows the server quote persists.
+    const rows = [
+      { quantity: pricing.fullCases, quantity_unit: 'cases' as const, quantity_pieces: 80, units_per_case: 80 },
+      { quantity: pricing.looseQuantity, quantity_unit: 'pieces' as const, quantity_pieces: 12, units_per_case: 80 },
+    ];
+    expect(pricing.caseSubtotal + pricing.looseSubtotal).toBe(pricing.total);
+    expect(formatQuantitySummary(summarizeQuantityRows(rows))).toBe('92 pcs (1 Case + 12 loose pcs)');
+    // The forbidden formula 12/80 × ₹1,000 = ₹150 must never appear anywhere.
+    expect(pricing.total).not.toBe((12 / 80) * 1000);
+  });
+
+  it('product page shows the case + loose schedule and never the old bulk-only table', () => {
+    const page = read('app/retailer/catalog/[id]/page.tsx');
+    expect(page).toContain('piecePriceFromCase(selectedCasePrice, selectedPack.units_per_case)');
+    expect(page).not.toMatch(/selectedCasePrice\s*\/\s*selectedPack\.units_per_case/);
+  });
+
+  it('admin editor and pack manager flag the legacy 1 pc = 1 case state from the reported screenshot', () => {
+    expect(read('components/admin/pack-case-pricing.tsx')).toContain('1 pc = 1 case');
+    expect(read('components/admin/product-pack-manager.tsx')).toContain('1 pc = 1 case');
   });
 });
