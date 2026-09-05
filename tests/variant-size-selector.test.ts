@@ -55,7 +55,7 @@ const BASES: VariantPackBase[] = SIZES.map((size) => ({
 const PRICING = new Map<string, VariantPricingInput>(
   SIZES.map((size) => [
     size.id,
-    { casePrice: size.case_price, unitsPerCase: size.units_per_case, mrp: size.mrp, hasOffer: false },
+    { piecePrice: round2(size.case_price / size.units_per_case), mrp: size.mrp, hasOffer: false },
   ])
 );
 
@@ -102,17 +102,14 @@ describe('Phase 2 — dynamic variant size selector', () => {
     expect(codeOnly).not.toMatch(/unitsPerCase\s*=\s*12\b/);
   });
 
-  it('each size card carries its OWN derived per-piece price and case price', () => {
+  it('each size card carries its OWN per-piece selling price', () => {
     const model = buildVariantSwitcher(BASES, null, PRICING);
     const g750 = model.variants.find((variant) => variant.label === '750g')!;
     expect(g750.pricing).not.toBeNull();
-    expect(g750.pricing!.casePrice).toBe(2880);
-    expect(g750.pricing!.unitsPerCase).toBe(8);
     expect(g750.pricing!.piecePrice).toBe(360); // 2880 / 8 — derived, never stored
     // No cross-contamination between variants.
     const g30 = model.variants.find((variant) => variant.label === '30g')!;
     expect(g30.pricing!.piecePrice).toBe(12); // 1152 / 96
-    expect(g30.pricing!.unitsPerCase).toBe(96);
   });
 
   it('shows a discount only when a real MRP is genuinely higher', () => {
@@ -124,7 +121,7 @@ describe('Phase 2 — dynamic variant size selector', () => {
     const noMrp = buildVariantSwitcher(
       [BASES[0]!],
       null,
-      new Map([[BASES[0]!.id, { casePrice: 1152, unitsPerCase: 96, mrp: null }]])
+      new Map([[BASES[0]!.id, { piecePrice: 12, mrp: null }]])
     );
     expect(noMrp.variants[0]!.pricing!.discountPercent).toBe(0);
 
@@ -132,7 +129,7 @@ describe('Phase 2 — dynamic variant size selector', () => {
     const badMrp = buildVariantSwitcher(
       [BASES[0]!],
       null,
-      new Map([[BASES[0]!.id, { casePrice: 1152, unitsPerCase: 96, mrp: 5 }]])
+      new Map([[BASES[0]!.id, { piecePrice: 12, mrp: 5 }]])
     );
     expect(badMrp.variants[0]!.pricing!.discountPercent).toBe(0);
   });
@@ -147,8 +144,8 @@ describe('Phase 2 — dynamic variant size selector', () => {
 
   it('awards no BEST VALUE badge when every size costs the same per piece', () => {
     const flat = new Map<string, VariantPricingInput>([
-      [BASES[0]!.id, { casePrice: 1000, unitsPerCase: 100 }],
-      [BASES[1]!.id, { casePrice: 500, unitsPerCase: 50 }],
+      [BASES[0]!.id, { piecePrice: 10 }],
+      [BASES[1]!.id, { piecePrice: 10 }],
     ]);
     const model = buildVariantSwitcher(BASES.slice(0, 2), null, flat);
     expect(model.variants.some((variant) => variant.isBestValue)).toBe(false);
@@ -275,9 +272,10 @@ function makeFakeSupabase(packs: Record<string, unknown>[]) {
 }
 
 describe('Phase 5 — persisted order lines reconcile (unit_price × quantity = line_total)', () => {
-  it('rounds the per-case unit price from the line total for an odd units_per_case', async () => {
-    // ₹1200 case of 96 pieces = ₹12.50/pc, but 7 pieces per case of ₹100 does
-    // not divide evenly — the classic float-drift case.
+  it('persists an exact piece-billed line even when the case size is odd', async () => {
+    // 7 pieces per case × ₹100 — an odd divisor. In the retailer piece model the
+    // pack is billed per piece at the derived rate (₹14.29/pc), and the persisted
+    // row satisfies unit_price × quantity = line_total exactly to the paisa.
     const pack = {
       id: '99999999-9999-4999-8999-999999999999',
       product_id: PRODUCT_ID,
@@ -290,70 +288,62 @@ describe('Phase 5 — persisted order lines reconcile (unit_price × quantity = 
       is_active: true,
       products: { id: PRODUCT_ID, name: 'Test Product', gst_percent: 5, is_active: true },
     };
-    const supabase = makeFakeSupabase([pack]);
-    // Quantities are pieces since 0026: 21 pcs of a 7-pc case is exactly 3 cases.
     const result = await quoteOrderForRetailer({
       retailerId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       lines: [{ packId: pack.id, quantity: 21 }],
-      supabase: supabase as never,
-    });
-    expect('quote' in result).toBe(true);
-    if (!('quote' in result)) return;
-    const line = result.quote.lines[0]!;
-
-    expect(line.cases).toBe(3);
-    expect(line.loosePieces).toBe(0);
-    expect(line.lineTotal).toBe(300); // 3 full cases at the exact case price
-    // The derived per-piece rate would NOT have reconciled: 14.29 × 21 = 300.09.
-    expect(line.piecePrice).toBe(14.29);
-    expect(round2(line.piecePrice * 21)).not.toBe(300);
-    // So the persisted row is billed in cases at the case price: exact by hand.
-    expect(line.items).toHaveLength(1);
-    expect(line.items[0]).toMatchObject({ quantity: 3, quantityUnit: 'cases', unitPrice: 100, lineTotal: 300 });
-    expect(round2(line.items[0]!.unitPrice * line.items[0]!.quantity)).toBe(line.items[0]!.lineTotal);
-    // GST is extracted from the inclusive total, never added on top.
-    expect(round2(line.subtotal + line.gst)).toBe(line.lineTotal);
-  });
-
-  it('a mixed line persists two rows and still reconciles to the paisa', async () => {
-    const pack = {
-      id: '99999999-9999-4999-8999-999999999999',
-      product_id: PRODUCT_ID,
-      pack_name: '350g',
-      base_price: 100,
-      ptr: null,
-      case_price: 100,
-      units_per_case: 7,
-      moq: 1,
-      is_active: true,
-      products: { id: PRODUCT_ID, name: 'Test Product', gst_percent: 5, is_active: true },
-    };
-    const result = await quoteOrderForRetailer({
-      retailerId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-      lines: [{ packId: pack.id, quantity: 10 }], // 1 case + 3 loose pcs
       supabase: makeFakeSupabase([pack]) as never,
     });
     expect('quote' in result).toBe(true);
     if (!('quote' in result)) return;
     const line = result.quote.lines[0]!;
-    expect(line.cases).toBe(1);
-    expect(line.loosePieces).toBe(3);
-    expect(line.items).toHaveLength(2);
-    expect(line.items[0]).toMatchObject({ quantity: 1, quantityUnit: 'cases', unitPrice: 100, lineTotal: 100 });
-    expect(line.items[1]).toMatchObject({ quantity: 3, quantityUnit: 'pieces', unitPrice: 14.29, lineTotal: 42.87 });
-    expect(round2(100 + 42.87)).toBe(line.lineTotal);
-    for (const item of line.items) {
-      expect(round2(item.unitPrice * item.quantity)).toBe(item.lineTotal);
-    }
+
+    expect(line.pieces).toBe(21);
+    expect(line.cases).toBe(0);
+    expect(line.loosePieces).toBe(0);
+    // Derived per-piece rate: 100 / 7 = ₹14.29; line total reconciles in paise.
+    expect(line.piecePrice).toBe(14.29);
+    expect(line.lineTotal).toBe(round2(line.piecePrice * 21));
+    expect(line.items).toHaveLength(1);
+    expect(line.items[0]).toMatchObject({ quantity: 21, quantityUnit: 'pieces', unitPrice: 14.29 });
+    expect(round2(line.items[0]!.unitPrice * line.items[0]!.quantity)).toBe(line.items[0]!.lineTotal);
+    // GST is extracted from the inclusive total, never added on top.
+    expect(round2(line.subtotal + line.gst)).toBe(line.lineTotal);
   });
 
-  it('order creation persists the reconciled unit price per billing unit', () => {
+  it('prices any piece quantity at the retail tier rate — no case/loose split', async () => {
+    const pack = {
+      id: '99999999-9999-4999-8999-999999999999',
+      product_id: PRODUCT_ID,
+      pack_name: '350g',
+      base_price: 100,
+      ptr: null,
+      case_price: 100,
+      units_per_case: 7,
+      moq: 1,
+      is_active: true,
+      products: { id: PRODUCT_ID, name: 'Test Product', gst_percent: 5, is_active: true },
+    };
+    const result = await quoteOrderForRetailer({
+      retailerId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      lines: [{ packId: pack.id, quantity: 10 }],
+      supabase: makeFakeSupabase([pack]) as never,
+    });
+    expect('quote' in result).toBe(true);
+    if (!('quote' in result)) return;
+    const line = result.quote.lines[0]!;
+    expect(line.cases).toBe(0);
+    expect(line.loosePieces).toBe(0);
+    expect(line.items).toHaveLength(1);
+    expect(line.items[0]).toMatchObject({ quantity: 10, quantityUnit: 'pieces', unitPrice: 14.29 });
+    expect(round2(line.items[0]!.unitPrice * line.items[0]!.quantity)).toBe(line.items[0]!.lineTotal);
+  });
+
+  it('order creation persists the reconciled per-piece unit price', () => {
     const create = read('lib/orders/create-order.ts');
     expect(create).toContain('unit_price: item.unitPrice');
     expect(create).toContain('line_total: item.lineTotal');
     const quote = read('lib/orders/quote-order.ts');
-    expect(quote).toContain('unitPrice: pricing.casePrice');
-    expect(quote).toContain('unitPrice: pricing.looseUnitPrice');
+    expect(quote).toContain('unitPrice: pricing.unitPrice');
     expect(quote).toContain("quantityUnit: 'pieces'");
   });
 });

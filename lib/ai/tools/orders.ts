@@ -72,9 +72,9 @@ async function getOrder(orderId: string, context: AIToolContext) {
   if (!order) return unavailable('That order was not found in your authorized data.');
   const card = orderCard(order, context);
   /*
-   * Each row is shown with its own billing unit because that is exactly how it
-   * was priced: a mixed purchase arrives as a cases row at the case price plus a
-   * loose-pieces row at the tier rate. No blended average is ever presented.
+   * Each row is shown with the unit it was billed in: new orders are one pieces
+   * row per line at the per-piece rate, and the retailer is never shown a
+   * case/loose split. Only pre-piece historical rows can carry a 'cases' unit.
    */
   card.lines = (items ?? []).map((item) => ({
     label: `${item.products?.name ?? 'Product'} · ${item.product_packs?.pack_name ?? 'Pack'}`,
@@ -89,9 +89,8 @@ async function reorderDraft(orderId: string, context: AIToolContext) {
   const details = await getOrder(orderId, context);
   if (!details.ok || !details.data) return details;
   const items = (details.data as { items: OrderItemRow[] }).items;
-  // Reorder in PIECES: a mixed previous line (1 case row + 6 loose pcs row)
-  // folds back into one 46-pc request, which the server then re-splits with
-  // today's case size and today's loose tiers.
+  // Reorder in PIECES: a previous line folds back into one piece-count request
+  // (e.g. 46 pcs), which the server then prices with today's selling tiers.
   const piecesByPack = new Map<string, number>();
   for (const item of items) {
     if (!item.pack_id) continue;

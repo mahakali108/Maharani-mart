@@ -13,7 +13,8 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { calculateCaseLoosePrice } from '@/lib/retailer/case-pricing';
+import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CartItemRow } from '@/components/retailer/cart-item-row';
 import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
@@ -138,26 +139,26 @@ export default async function CartPage() {
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
     const casePrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
-    // `item.quantity` is the number of PIECES in the cart. The case part and the
-    // loose remainder are priced by the one canonical engine — the same call
-    // `quoteOrderForRetailer` makes before an order is written.
-    const pricing = calculateCaseLoosePrice({
+    // `item.quantity` is the number of PIECES in the cart. Quantity Q is priced
+    // at Q × (applicable per-piece tier rate) by the one canonical retailer
+    // engine — the same call `quoteOrderForRetailer` makes before an order is
+    // written. The case price is internal only and is NOT sent to the browser;
+    // the server resolves the per-piece fallback here instead.
+    const pricing = calculateRetailerPiecePrice({
       quantity: item.quantity,
       unitsPerCase: pack?.units_per_case ?? 1,
       casePrice,
       tiers: pack ? tierMap.get(pack.id) ?? [] : [],
       gstPercent,
       moq: pack?.moq ?? 1,
-      allowLoosePieces: pack?.allow_loose_pieces !== false,
     });
-    // Effective price per piece actually charged (display only). The persisted
-    // order splits the line into exact case / loose rows, so no rounding drift
-    // can ever reach the invoice.
-    const unitPrice = pricing.total / Math.max(pricing.quantity, 1);
+    // Server-resolved per-piece fallback for a variant without selling tiers, so
+    // the client row never has to receive the internal case price.
+    const derivedPiecePrice = pack ? piecePriceFromCase(casePrice, pack.units_per_case) : 0;
     subtotal += pricing.subtotal;
     gstTotal += pricing.gst;
     gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + pricing.gst);
-    savings += calcSavings(pack?.mrp, pricing.looseUnitPrice ?? pricing.derivedPiecePrice, pricing.quantity);
+    savings += calcSavings(pack?.mrp, pricing.unitPrice, pricing.quantity);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     // The cart line shows the variant's own image when it has one (same rule
     // as the product page size switcher), falling back to the product gallery.
@@ -167,20 +168,17 @@ export default async function CartPage() {
       id: item.id,
       productId: item.product_id,
       quantity: item.quantity,
-      cases: pricing.fullCases,
-      loosePieces: pricing.looseQuantity,
       isOrderable: pricing.orderable,
       quantityMessage: pricing.message,
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
       brandName: product?.brands?.name ?? null,
       imageUrl: lineImage,
-      unitPrice,
       gstPercent,
       moq: pack?.moq ?? 1,
       mrp: pack?.mrp,
       unitsPerCase: pack?.units_per_case ?? 1,
-      casePrice,
+      derivedPiecePrice,
       tiers: pack ? tierMap.get(pack.id) ?? [] : [],
       allowLoosePieces: pack?.allow_loose_pieces !== false,
       isUnavailable: !pack?.is_active || !product?.is_active,
@@ -190,9 +188,9 @@ export default async function CartPage() {
 
   const grandTotal = subtotal + gstTotal;
   const hasUnavailable = lines.some((line) => line.isUnavailable);
-  // A line is only orderable when the engine could price every piece of it:
-  // an uncovered loose quantity (a configured gap) or a case-only pack asked
-  // for a remainder is blocked here rather than silently re-priced.
+  // A line is only orderable when the engine could price it at a valid retail
+  // piece rate (whole quantity, at or above MOQ). Unpriced requests are blocked
+  // here rather than silently re-priced.
   const blockedLines = lines.filter((line) => !line.isUnavailable && !line.isOrderable);
   const availableCount = lines.filter((line) => !line.isUnavailable && line.isOrderable).length;
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
@@ -283,7 +281,7 @@ export default async function CartPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="space-y-3">
               {[
-                { icon: PackageCheck, title: 'Case + loose pricing', body: 'Full cases at case price, remaining pcs at the loose rate' },
+                { icon: PackageCheck, title: 'Piece pricing', body: 'Each piece is priced and larger quantities earn a lower rate' },
                 { icon: ReceiptText, title: 'GST transparent', body: 'Tax shown on every invoice' },
                 { icon: Truck, title: 'Track fulfillment', body: 'Status updates after ordering' },
               ].map((item) => (

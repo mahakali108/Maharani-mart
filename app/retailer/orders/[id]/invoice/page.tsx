@@ -136,8 +136,9 @@ export default async function InvoicePage({ params }: { params: { id: string } }
                 </td>
                 <td className="py-2 text-ink-600">{formatQuantitySummary(line.quantity)}</td>
                 <td className="py-2 text-right text-ink-600">
-                  {/* Each billing part is printed as it was charged: cases per
-                      case, loose pieces per piece — never a blended average. */}
+                  {/* Each row is printed with the unit it was billed in. New
+                      orders bill one pieces row per line; only pre-piece
+                      historical rows can carry a 'cases' unit. */}
                   <ul className="space-y-0.5">
                     {line.rows.map((row) => (
                       <li key={row.id}>
@@ -155,8 +156,8 @@ export default async function InvoicePage({ params }: { params: { id: string } }
         </table>
 
         <p className="mt-2 text-[10px] leading-4 text-ink-400">
-          Full cases are billed at the case price; any remaining pieces at the loose-piece quantity rate. Rates are
-          GST-inclusive, and each line amount above is the sum of the case and loose rows billed for that pack.
+          Each line is billed per piece at the retail piece rate shown. Rates are GST-inclusive, and each line
+          amount above already includes the applicable GST.
         </p>
 
         <div className="ml-auto mt-4 w-full max-w-xs space-y-1.5 border-t border-ink-100 pt-4">

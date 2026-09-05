@@ -24,20 +24,16 @@ import {
   updateCartQuantityAction,
 } from '@/lib/retailer/cart-actions';
 import {
-  calcRetailerMargin,
   calcSavings,
   determineBestValueTier,
   formatInr,
-  formatMargin,
 } from '@/lib/retailer/format';
 import {
-  calculateCaseLoosePrice,
-  piecePriceFromCase,
   suggestedQuantities,
-  type CaseLoosePricing,
   type PricingTier,
 } from '@/lib/retailer/case-pricing';
-import { CaseLooseLineBreakdown, CaseLoosePriceSchedule } from '@/components/retailer/pricing-schedule';
+import { calculateRetailerPiecePrice, type RetailerPiecePricing } from '@/lib/retailer/retailer-pricing';
+import { RetailerLineBreakdown, RetailerPriceSchedule } from '@/components/retailer/pricing-schedule';
 
 export interface MultiPricePack {
   id: string;
@@ -48,10 +44,14 @@ export interface MultiPricePack {
   mrp: number | null;
   /** Minimum order quantity in PIECES. */
   moq: number;
-  /** GST-inclusive CASE selling price (source of truth). */
-  effectivePrice: number;
-  casePrice: number;
-  /** This exact pack's loose-piece tiers (plus any legacy slab). */
+  /** GST-inclusive retail per-piece rate (deepest selling tier, derived). */
+  unitPrice: number;
+  /**
+   * Server-resolved GST-inclusive per-piece fallback used when this pack has no
+   * configured selling tiers. Never the internal case price.
+   */
+  derivedPiecePrice: number;
+  /** This exact pack's retail piece selling tiers (plus any legacy slab). */
   tiers: PricingTier[];
   /** false = the pack is only sold in whole cases. */
   allowLoosePieces?: boolean;
@@ -79,10 +79,10 @@ export interface PackSelectorProps {
  * The retailer's quantity + add-to-cart surface for every pack of a product.
  *
  * Quantities are entered in PIECES — 6, 10, 25, 40, 46, 85 — and the price
- * shown for each of them comes from `calculateCaseLoosePrice`, the same pure
- * function the server quote runs before an order is written. Nothing here is a
- * second implementation of the pricing rule, and nothing here is trusted: the
- * action only ever submits (packId, pieces).
+ * shown for each of them comes from `calculateRetailerPiecePrice`, the same
+ * pure function the server quote runs before an order is written. Nothing here
+ * is a second implementation of the pricing rule, and nothing here is trusted:
+ * the action only ever submits (packId, pieces).
  */
 export function PackSelector({
   packs,
@@ -124,29 +124,27 @@ export function PackSelector({
   const [generalError, setGeneralError] = useState<string | null>(null);
 
   /**
-   * The ONE pricing call for a pack + quantity. Full cases at the case price,
-   * the remainder at its loose tier — including the orderability verdict (MOQ,
-   * whole-case-only packs, unpriced loose ranges).
+   * The ONE pricing call for a pack + quantity: quantity Q is billed at
+   * Q × (the applicable per-piece tier rate). Includes the orderability verdict
+   * (MOQ, unwhole quantity, invalid pack). No case/loose split.
    */
-  function pricingFor(pack: MultiPricePack, qty: number): CaseLoosePricing {
-    return calculateCaseLoosePrice({
+  function pricingFor(pack: MultiPricePack, qty: number): RetailerPiecePricing {
+    return calculateRetailerPiecePrice({
       quantity: qty,
       unitsPerCase: pack.units_per_case,
-      casePrice: pack.effectivePrice,
+      casePrice: 0,
       tiers: pack.tiers,
       gstPercent,
       moq: pack.moq,
-      allowLoosePieces: pack.allowLoosePieces !== false,
+      derivedPiecePrice: pack.derivedPiecePrice,
     });
   }
 
   // Presentation extras computed from authoritative pack fields only.
   const enrichedPacks = packs.map((pack) => {
-    const unitPrice = piecePriceFromCase(pack.effectivePrice, pack.units_per_case);
-    const landedPrice = pack.effectivePrice; // GST already included
-    const marginPercent = calcRetailerMargin(pack.mrp, unitPrice);
+    const unitPrice = pack.unitPrice;
     const savingsPerPack = calcSavings(pack.mrp, unitPrice);
-    return { ...pack, unitPrice, landedPrice, marginPercent, savingsPerPack };
+    return { ...pack, unitPrice, savingsPerPack };
   });
 
   const { bestPackId, savingsVsRef, refPackName } = determineBestValueTier(enrichedPacks);
@@ -177,7 +175,7 @@ export function PackSelector({
   }
 
   /** Local mirror of the server rule, so the message appears while typing. */
-  function localGuard(pack: MultiPricePack, pricing: CaseLoosePricing): string | null {
+  function localGuard(pack: MultiPricePack, pricing: RetailerPiecePricing): string | null {
     if (!pricing.orderable) return pricing.message ?? 'That quantity is not available for this pack.';
     return null;
   }
@@ -290,7 +288,7 @@ export function PackSelector({
 
   const totalSelectedPcs = modifiedPacks.reduce((sum, pack) => sum + (quantities[pack.id] ?? 0), 0);
   const totalSelectedLanded = modifiedPacks.reduce(
-    (sum, pack) => sum + pricingFor(pack, quantities[pack.id] ?? 0).total,
+    (sum, pack) => sum + pricingFor(pack, quantities[pack.id] ?? 0).lineTotal,
     0
   );
 
@@ -376,17 +374,17 @@ export function PackSelector({
 
   return (
     <section
-      aria-label="Case and loose piece pricing"
+      aria-label="Piece price and quantity"
       className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_4px_24px_rgba(15,23,42,0.06)]"
     >
       {/* Section Header */}
       <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-4 py-3.5 sm:px-5">
         <div>
           <h2 className="text-sm font-bold tracking-tight text-slate-900 sm:text-base">
-            Case price &amp; loose piece price
+            Piece price &amp; quantity
           </h2>
           <p className="mt-0.5 text-[10px] text-slate-500 sm:text-xs">
-            Buy any number of pieces — full cases are billed at the case price, the rest at the loose rate
+            Buy any number of pieces — larger quantities earn a lower per-piece rate
           </p>
         </div>
         <PackageCheck className="h-5 w-5 text-primary-600" aria-hidden="true" />
@@ -443,8 +441,8 @@ export function PackSelector({
                   <div className="min-w-0">
                     <h3 className="text-sm font-bold text-slate-900 sm:text-base">{pack.pack_name}</h3>
                     <p className="mt-0.5 text-[10px] font-medium text-slate-500">
-                      {pack.units_per_case} pcs per case · min order {pack.moq} pc{pack.moq === 1 ? '' : 's'}
-                      {pack.allowLoosePieces === false ? ' · full cases only' : ''}
+                      Sold by piece · min order {pack.moq} pc{pack.moq === 1 ? '' : 's'} · from{' '}
+                      {formatInr(pack.unitPrice)}/pc
                     </p>
                   </div>
 
@@ -463,26 +461,21 @@ export function PackSelector({
                   </div>
                 </div>
 
-                {/* Case price + loose price schedule for THIS variant */}
-                <CaseLoosePriceSchedule
+                {/* Retail piece-price schedule for THIS variant */}
+                <RetailerPriceSchedule
                   className="mt-2.5"
                   unitsPerCase={pack.units_per_case}
-                  casePrice={pack.effectivePrice}
                   tiers={pack.tiers}
-                  allowLoosePieces={pack.allowLoosePieces !== false}
                   gstPercent={gstPercent}
                 />
 
-                {/* Retailer economics, per piece, from MRP vs the billed rate */}
+                {/* Retailer economics, per piece, from MRP vs the selling rate */}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
-                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 font-bold text-emerald-700">
-                    Margin {pack.marginPercent !== null ? formatMargin(pack.marginPercent) : '—'}
-                  </span>
                   {pack.mrp ? (
                     <span className="text-slate-400">
                       MRP {formatInr(pack.mrp)}/pc
                       {pack.savingsPerPack > 0 ? (
-                        <span className="ml-1 font-semibold text-slate-500">
+                        <span className="ml-1 font-semibold text-emerald-700">
                           you save {formatInr(pack.savingsPerPack)}/pc
                         </span>
                       ) : null}
@@ -562,7 +555,7 @@ export function PackSelector({
                       ) : isItemInCart && !isModified ? (
                         <div className="flex h-10 items-center gap-1.5 rounded-xl bg-emerald-50 px-3.5 text-xs font-bold text-emerald-700">
                           <Check className="h-4 w-4 text-emerald-600" />
-                          <span>In cart · {formatInr(pricing.total)}</span>
+                          <span>In cart · {formatInr(pricing.lineTotal)}</span>
                         </div>
                       ) : isItemInCart ? (
                         <button
@@ -576,7 +569,7 @@ export function PackSelector({
                           ) : (
                             <Check className="h-3.5 w-3.5" />
                           )}
-                          Update · {formatInr(pricing.total)}
+                          Update · {formatInr(pricing.lineTotal)}
                         </button>
                       ) : (
                         <button
@@ -590,7 +583,7 @@ export function PackSelector({
                           ) : (
                             <ShoppingCart className="h-3.5 w-3.5" />
                           )}
-                          Add to cart · {formatInr(pricing.total)}
+                          Add to cart · {formatInr(pricing.lineTotal)}
                         </button>
                       )}
                     </div>
@@ -602,36 +595,31 @@ export function PackSelector({
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
                         Quick pick
                       </span>
-                      {suggestions.map((value) => {
-                        const isCase = value % pack.units_per_case === 0 && value >= pack.units_per_case;
-                        const caseCount = value / pack.units_per_case;
-                        return (
-                          <button
-                            key={value}
-                            type="button"
-                            disabled={isCurrentPending}
-                            onClick={() => setQuantity(pack, value)}
-                            aria-pressed={qty === value}
-                            className={`h-7 rounded-lg border px-2 text-[10px] font-bold transition disabled:opacity-50 ${
-                              qty === value
-                                ? 'border-slate-900 bg-slate-900 text-white'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-primary-300 hover:text-primary-700'
-                            }`}
-                          >
-                            {isCase ? `${caseCount} Case${caseCount === 1 ? '' : 's'} (${value})` : `${value} pcs`}
-                          </button>
-                        );
-                      })}
+                      {suggestions.map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          disabled={isCurrentPending}
+                          onClick={() => setQuantity(pack, value)}
+                          aria-pressed={qty === value}
+                          className={`h-7 rounded-lg border px-2 text-[10px] font-bold transition disabled:opacity-50 ${
+                            qty === value
+                              ? 'border-slate-900 bg-slate-900 text-white'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-primary-300 hover:text-primary-700'
+                          }`}
+                        >
+                          {value} pcs
+                        </button>
+                      ))}
                     </div>
                   ) : null}
 
-                  {/* Live case + loose breakdown from the canonical engine */}
+                  {/* Live piece breakdown from the canonical engine */}
                   {qty > 0 ? (
-                    <CaseLooseLineBreakdown className="mt-2.5" pricing={pricing} />
+                    <RetailerLineBreakdown className="mt-2.5" pricing={pricing} />
                   ) : (
                     <p className="mt-2 text-[10px] text-slate-400">
-                      Enter any quantity — the case part is billed at {formatInr(pack.effectivePrice)} per case and
-                      any remaining pieces at the loose rate above.
+                      Enter any quantity — the per-piece rate above applies, and bulk quantities earn a better rate.
                     </p>
                   )}
                 </div>
@@ -714,7 +702,7 @@ export function PackSelector({
         <div className="flex items-center justify-center gap-1.5 pt-1 text-[10px] text-slate-400">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
           <span>
-            Prices, case splits and MOQs are recalculated on Maharani Traders servers before the order is placed.
+            Piece prices and MOQs are recalculated on Maharani Traders servers before the order is placed.
           </span>
         </div>
       </div>

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
@@ -92,16 +93,22 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
       .map((product) => {
         const packs: QuickOrderPack[] = product.product_packs
           .filter((pack) => pack.is_active)
-          .map((pack) => ({
-            id: pack.id,
-            packName: pack.pack_name,
-            unitsPerCase: pack.units_per_case,
-            moq: pack.moq,
-            mrp: pack.mrp,
-            casePrice: resolvePackPrice(pack, overrides.get(product.id) ?? null),
-            allowLoosePieces: pack.allow_loose_pieces !== false,
-            tiers: tierMap.get(pack.id) ?? [],
-          }));
+          .map((pack) => {
+            // The internal case price stays server-side; only the resulting
+            // per-piece fallback is sent to the row (which never knows the case
+            // price or the units-per-case requirement).
+            const casePrice = resolvePackPrice(pack, overrides.get(product.id) ?? null);
+            return {
+              id: pack.id,
+              packName: pack.pack_name,
+              unitsPerCase: pack.units_per_case,
+              moq: pack.moq,
+              mrp: pack.mrp,
+              derivedPiecePrice: piecePriceFromCase(casePrice, pack.units_per_case),
+              allowLoosePieces: pack.allow_loose_pieces !== false,
+              tiers: tierMap.get(pack.id) ?? [],
+            } satisfies QuickOrderPack;
+          });
         const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
         return {
           id: product.id,

@@ -110,89 +110,79 @@ An explainable, statistical demand-forecasting engine (`lib/ai/forecast/`) reads
   ordering is never blocked by stock, and availability shown comes from the same
   product-level totals as before.
 
-### 4.5 Pricing Engine — cases and loose pieces
+### 4.5 Pricing Engine — small-retailer B2B piece model
 
-**The rule, in one sentence:** a pack is priced by its **case price** for every
-full case and by a **loose-piece tier** for the remaining pieces — and nothing
-else. 40 pieces of a 40-piece case is never `40 × loose rate`, and 6 pieces is
-never forced up to a case.
+**Two concerns, cleanly separated.** The platform now serves a **small
+retailer** who buys **individual PIECES**. The **case** is an INTERNAL
+supplier/warehouse/stock-packing concept only, and must never reach the retailer
+as a buying rule, a price or a requirement.
+
+- **RETAILER selling price** (the only thing a retailer sees and pays) is
+  derived from the variant's *loose-piece selling tiers*, keyed by the **total
+  quantity**: quantity Q is billed at `Q × tier_rate(Q)`.
+- **INTERNAL case / supplier / warehouse / cost** (`units_per_case`,
+  `case_price`, supplier cost, admin margin, pack SKU) is kept intact for
+  supplier purchasing, warehouse stock, internal costing and any future
+  wholesale — but it is never rendered to a retailer.
+
+The case+loose math remains inside `lib/retailer/case-pricing.ts` as the
+internal engine; the retailer lens lives in
+`lib/retailer/retailer-pricing.ts` → `calculateRetailerPiecePrice`, which is the
+**only** function a retailer-facing price may come from.
 
 ```
-fullCases = floor(quantity / units_per_case)
-looseQty  = quantity % units_per_case
-total     = fullCases × case_price  +  looseQty × tier_price(looseQty)
+Q     = retailer quantity (pieces)
+rate  = tier_rate(Q)          // from loose-piece selling tiers, by total Q
+total = Q × rate              // GST-inclusive; GST is extracted, never added
 ```
 
-Every price in this model is **GST-inclusive**, so the GST shown on an invoice is
-*extracted* from these totals (`gstComponentFromInclusive`), never added.
+**Where it lives.**
+- `lib/retailer/retailer-pricing.ts` → `calculateRetailerPiecePrice`: single
+  authoritative retailer price. It uses integer paise so `Q × unitPrice ===
+  lineTotal` exactly, extracts GST from the inclusive total, rejects
+  zero/negative/non-integer/below-MOQ quantities, and extends the deepest tier
+  for any quantity above the top slab so a retailer can order 80, 92, 200… pcs
+  without a case boundary.
+- `lib/retailer/case-pricing.ts` → `calculateCaseLoosePrice`: still the INTERNAL
+  engine used by admin/supplier/warehouse and by the retailer-tier resolution
+  helper. The case concept is not deleted — it is kept for internal concerns.
 
-**Where it lives.** One pure module owns the arithmetic:
-`lib/retailer/case-pricing.ts` → `calculateCaseLoosePrice`. It is imported by the
-authoritative server quote (`lib/orders/quote-order.ts`), order creation, the
-cart service, every retailer screen (product page, cart, checkout), the order and
-invoice views for all four roles, the AI tools, the salesman order builder and —
-importantly — the **admin pricing editor**, which previews exactly what checkout
-will charge because it calls the same function. There is deliberately no second
-implementation: no screen multiplies a piece price by a quantity, and no client
-supplies a price, a tier, a discount or a total.
+**Retailer freedom and honesty.** A retailer is never forced to buy a case: any
+whole-piece quantity at or above the pack's MOQ is enterable (1, 6, 12, 20, 40,
+80, 92…). The cart offers shortcuts as **suggestions** only, never restrictions.
+The product page, cart, checkout and invoice show **only**: product name,
+variant/size, MRP per piece, selling price per piece, quantity, the applicable
+quantity tier, total piece quantity and the GST-inclusive total. No case price,
+no case purchase price, no units-per-case buying requirement, no case SKU, no
+supplier cost, no admin margin and no internal pack identifier is shown.
 
-Worked examples for `units_per_case = 40`, `case_price = ₹1,000`, loose tiers
-`1–6 = ₹30 · 7–12 = ₹28 · 13–20 = ₹27 · 21–39 = ₹26`:
+**Per-variant.** Selling tiers, MRP, GST, image and availability all come from
+the pack's own `product_packs` row and its own `product_pricing_tiers` rows
+(migration 0026). Switching size swaps the displayed per-piece rate, MRP, image
+and tier table; nothing is inherited or averaged across sizes.
 
-| Qty (pcs) | Split | Total |
-| --- | --- | --- |
-| 6 | 6 loose @ ₹30 | ₹180 |
-| 12 | 12 loose @ ₹28 | ₹336 |
-| 25 | 25 loose @ ₹26 | ₹650 |
-| 39 | 39 loose @ ₹26 | ₹1,014 |
-| 40 | **1 case** | ₹1,000 |
-| 41 | 1 case + 1 loose @ ₹30 | ₹1,030 |
-| 46 | 1 case + 6 loose @ ₹30 | ₹1,180 |
-| 80 | 2 cases | ₹2,000 |
-| 85 | 2 cases + 5 loose @ ₹30 | ₹2,150 |
-| 92 | 2 cases + 12 loose @ ₹28 | ₹2,336 |
+**Persistence and reconciliation.** Each quote line is persisted as exactly
+**one** `order_items` row, `quantity_unit = 'pieces'`, `unit_price = tier_rate`,
+`line_total = Q × unit_price`, with a snapshot `quantity_pieces`. No case/loose
+split, so `unit_price × quantity = line_total` holds exactly and no blended rate
+can drift. `lib/orders/item-display.ts` is the single reader: it folds a pack's
+rows back into a piece count for every view, and still renders a historical
+case+loose split for rows written before the piece model.
 
-**Retailer freedom.** A retailer is never forced into a case: any whole-piece
-quantity at or above the pack's MOQ is enterable, and the cart offers shortcuts
-(1 pc, the MOQ, the top loose slab, 1 case, 2 cases) as *suggestions* built by
-`suggestedQuantities`. The product page states both prices side by side ("Case
-price" and "Loose price" via `components/retailer/pricing-schedule.tsx`), and the
-cart line shows the arithmetic — `1 Case × ₹1,000.00 + 6 loose pcs × ₹30.00 =
-₹1,180.00` — plus `Cases: 1 · Loose: 6`, which is repeated on the order page and
-the invoice.
+**Gaps are explicit, never repriced.** If a pack has selling tiers but a
+quantity is not covered by any of them (above MOQ and below the top slab), the
+engine returns `orderable = false` and blocks at cart/checkout rather than
+silently falling back. When a pack has **no** selling tiers, the retailer price
+falls back to the server-resolved per-piece rate (the internal
+`case_price / units_per_case`), so existing data prices identically — but that
+fallback is computed server-side and only the per-piece number crosses to the
+browser.
 
-**Per-variant.** Case size, case price, loose tiers, MRP, GST, image and
-availability all come from the pack's own row in `product_packs` and its own
-`product_pricing_tiers` rows (migration 0026). Nothing is inherited or averaged
-across sizes.
-
-**Persistence and reconciliation.** A mixed line is stored as two `order_items`
-rows — `quantity_unit = 'cases'` (quantity = number of cases, `unit_price` = case
-price) and `quantity_unit = 'pieces'` (quantity = loose pieces, `unit_price` = the
-tier rate) — each carrying a snapshot `quantity_pieces` and `units_per_case`. So
-`unit_price × quantity = line_total` holds **exactly** on every row, the order
-header totals are the sum of those rows, and no blended per-piece rate can drift.
-`lib/orders/item-display.ts` is the single reader: it folds a pack's rows back
-into `Cases / Loose / pieces` for every view (retailer, admin, staff picking,
-salesman, AI), and treats rows written before the split as packs, so historical
-orders and invoices render unchanged.
-
-**Gaps are explicit, never repriced.** If a pack has loose tiers but a remainder
-quantity is not covered by any of them, the engine returns **zero money** and
-`orderable = false` with a message naming the covered ranges; the cart and
-checkout block instead of silently falling back to another rate. Admins must
-tick "save anyway" to persist such a configuration. When a pack has **no** loose
-rows at all, the remainder is priced at the derived `case_price / units_per_case`,
-which is exactly how packs behaved before this feature — so existing data prices
-identically.
-
-**Legacy rules.** `product_pricing_tiers` was extended, not duplicated:
-`rule_type` gained `'loose'` (active loose rows are keyed by
-`(product_pack_id, min_quantity)` and may never reach `units_per_case`), while the
-pre-existing `'default'` / `'bulk'` / `'case'` rows keep working — a pack whose
-loose set is curated has its overlapping legacy slabs deactivated by the admin
-save, and an untouched pack keeps its old behaviour. `price_lists` overrides still
-resolve to a **case-price** override for the product.
+**Legacy rules.** `product_pricing_tiers` still carries `rule_type = 'loose'`
+for retailer selling tiers; pre-existing `'default'` / `'bulk'` / `'case'` rows
+are preserved for internal/historical meaning. `price_lists` overrides still
+resolve to a case-price override, which the server converts to the per-piece
+fallback before it reaches the retailer.
 
 **Legacy columns.** GST-inclusive means the same thing everywhere: the legacy
 `ptr` / `wholesale_price` / `base_price` columns on `product_packs` are kept only
@@ -213,18 +203,19 @@ state when it is still 1), and add the loose-piece tiers; full cases keep billin
 at `case_price` and the remainder follows the tiers immediately. A pack whose Qty
 is legitimately 1 piece/case keeps working unchanged.
 
-The requirement's reference configuration — `units_per_case = 80`,
-`case_price = ₹1,000`, loose tiers `1–6 = ₹30 · 7–12 = ₹28 · 13–20 = ₹27 ·
-21–79 = ₹26` — is pinned by tests:
+The requirement's reference configuration — `units_per_case = 80`
+(internal only), selling tiers `1–6 = ₹30 · 7–12 = ₹28 · 13–20 = ₹27 ·
+21–79 = ₹26` — is pinned by `tests/retailer-piece-pricing.test.ts`:
 
-| Qty (pcs) | Split | Total |
+| Qty (pcs) | Rate/pc | Total |
 | --- | --- | --- |
-| 6 | 6 loose @ ₹30 | ₹180 |
-| 12 | 12 loose @ ₹28 | ₹336 |
-| 20 | 20 loose @ ₹27 | ₹540 |
-| 80 | **1 case** | ₹1,000 |
-| 92 | 1 case + 12 loose @ ₹28 | ₹1,336 |
-| 160 | 2 cases | ₹2,000 |
+| 6 | ₹30 | ₹180 |
+| 7 | ₹28 | ₹196 |
+| 12 | ₹28 | ₹336 |
+| 13 | ₹27 | ₹351 |
+| 20 | ₹27 | ₹540 |
+| 40 | ₹26 | ₹1,040 |
+| 160 | ₹26 | ₹4,160 |
 
 
 ### 4.6 Reports

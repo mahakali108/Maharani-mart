@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight, Info, RotateCcw, ShieldCheck } from 'lucide-re
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
+import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { ReorderForm, type ReorderLineInput } from '@/components/retailer/reorder-form';
@@ -93,7 +94,11 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     .map(({ key, first, quantity }) => {
       const pack = first.product_packs!;
       const product = first.products;
-      const currentUnitPrice = resolvePackPrice(pack, product ? overrideByProduct.get(product.id) ?? null : null);
+      // Server-resolved per-piece fallback (never the internal case price).
+      const derivedPiecePrice = piecePriceFromCase(
+        resolvePackPrice(pack, product ? overrideByProduct.get(product.id) ?? null : null),
+        pack.units_per_case
+      );
       const unavailable = !pack.is_active || !product?.is_active;
       return {
         packId: first.pack_id ?? key,
@@ -104,7 +109,7 @@ export default async function ReorderPage({ params }: { params: { id: string } }
         suggestedQuantity: Math.max(quantity.pieces, pack.moq),
         moq: pack.moq,
         gstPercent: product?.gst_percent ?? 0,
-        currentUnitPrice,
+        derivedPiecePrice,
         unitsPerCase: pack.units_per_case,
         tiers: tierMap.get(pack.id) ?? [],
         allowLoosePieces: pack.allow_loose_pieces !== false,

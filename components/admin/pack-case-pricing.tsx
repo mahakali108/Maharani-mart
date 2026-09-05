@@ -14,38 +14,43 @@ import {
 } from 'lucide-react';
 import { savePackPricingAction, type LooseTierFormRow } from '@/lib/admin/products-actions';
 import {
-  calculateCaseLoosePrice,
   findLooseCoverageGaps,
   inclusiveMaxQuantity,
   looseTierDraftToRow,
   maxLooseQuantity,
   piecePriceFromCase,
   suggestedQuantities,
+  tierRangeLabel,
   validateLooseTierSet,
   type LooseTierDraft,
   type PricingTier,
 } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 /**
- * Admin editor for ONE pack's complete pricing configuration.
+ * Admin editor for ONE pack's pricing configuration — two clearly separated
+ * concerns.
  *
- *   units per case  →  how many pieces make a full case
- *   case price      →  GST-inclusive price of a full case (source of truth)
- *   loose tiers     →  min qty | max qty | ₹/pc for a remainder below a case
+ *   INTERNAL (supplier / warehouse / stock / cost):
+ *     - units per case   →  how many pieces make a full case an admin packs
+ *     - case price       →  GST-inclusive price of a full case (internal)
+ *     These feed supplier purchasing, warehouse stock, internal costing and any
+ *     future wholesale. They are NEVER shown to a retailer as a buying rule.
  *
- * The rule it configures — and the only rule the storefront uses — is: full
- * cases are ALWAYS billed at the case price, and the leftover pieces are billed
- * at the tier that covers the REMAINDER count. So this screen never asks for a
- * per-piece case rate, and it never lets a loose slab reach a full case (that
- * would silently reprice cases).
+ *   RETAILER (piece selling price):
+ *     - selling tiers   →  min qty | max qty | ₹/pc, the only rule that prices
+ *                          what a retailer orders. Quantity Q is billed at
+ *                          Q × (the tier that covers Q). A retailer is never
+ *                          forced to buy a full case.
  *
  * Validation and the live preview both call `lib/retailer/case-pricing`
- * directly — the same module the retailer cart and the server-side quote use —
- * so what the admin previews is by construction what the retailer is billed.
- * The server action re-runs the identical checks; nothing here is trusted.
+ * directly, and the retailer cart and the server-side quote use the
+ * `lib/retailer/retailer-pricing` lens over the same tiers — so what the admin
+ * previews is by construction what the retailer is billed. The server action
+ * re-runs the identical checks; nothing here is trusted.
  */
 
 /** A stored pricing row of this pack (any rule type). */
@@ -213,19 +218,23 @@ export function PackCasePricing({
       } else if (result && 'notice' in result && result.notice) {
         setFeedback({ tone: 'notice', text: result.notice });
       } else {
-        setFeedback({ tone: 'notice', text: 'Pricing saved. Retailers see the new case and loose rates immediately.' });
+        setFeedback({ tone: 'notice', text: 'Pricing saved. Retailers now see the new per-piece selling rate immediately.' });
       }
     });
   }
 
-  const previewPricing = calculateCaseLoosePrice({
+  // Preview what the RETAILER is billed: quantity Q at Q × (the tier that covers
+  // Q), through the same engine the product page, cart, checkout and server
+  // quote use. The internal case price is used only as the per-piece fallback
+  // (via derivedPiecePrice), never as a case/loose split.
+  const previewPricing = calculateRetailerPiecePrice({
     quantity: Number.parseInt(previewQty, 10) || 0,
     unitsPerCase: safeUnits,
     casePrice: Number.parseFloat(price) || 0,
+    derivedPiecePrice: piecePriceFromCase(Number.parseFloat(price) || 0, safeUnits),
     tiers: previewTiers.length > 0 ? previewTiers : tiers,
     gstPercent,
     moq: Math.max(1, Number.parseInt(moqValue, 10) || 1),
-    allowLoosePieces: looseAllowed,
   });
   const quickQuantities = suggestedQuantities({
     unitsPerCase: safeUnits,
@@ -240,9 +249,14 @@ export function PackCasePricing({
       {/* Case configuration                                                  */}
       {/* ------------------------------------------------------------------ */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-primary-700">
-          <Package className="h-3.5 w-3.5" aria-hidden="true" /> Case &amp; loose piece pricing
-        </p>
+        <div>
+          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-primary-700">
+            <Package className="h-3.5 w-3.5" aria-hidden="true" /> Pack pricing
+          </p>
+          <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+            INTERNAL — case / supplier / warehouse / cost
+          </p>
+        </div>
         <span className="text-[9px] text-ink-400">
           GST {Number.isFinite(gstPercent) ? gstPercent : 0}% included in every price — never added later
         </span>
@@ -324,15 +338,16 @@ export function PackCasePricing({
         />
         <span>
           <strong className="font-semibold text-ink-800">Allow loose pieces.</strong> When on, a retailer can order
-          any quantity — only the complete cases use the case price and the remainder uses the loose tiers below. When
-          off, this pack is sold in full cases of {safeUnits} pcs only.
+          any quantity and is priced by the selling tiers below. Leave on so the retailer is never restricted to full
+          cases. When off, this pack is offered in whole cases only — use sparingly (internal/warehouse packs), since
+          the small-retailer model prefers piece selling.
         </span>
       </label>
 
       <p className="rounded-lg bg-white/70 px-2.5 py-2 text-[11px] text-ink-500">
-        Derived per-piece rate inside a case: <strong className="text-ink-800">{money(piecePriceFromCase(Number.parseFloat(price) || 0, safeUnits))}</strong>{' '}
-        — display only; a case is always billed at {money(Number.parseFloat(price) || 0)}, and loose pieces are never
-        billed at the case price.
+        <strong className="text-ink-800">INTERNAL case price</strong>: {money(Number.parseFloat(price) || 0)} per {safeUnits} pc case.{' '}
+        This feeds supplier purchasing, warehouse stock and internal cost. It is never shown to a retailer. The
+        retailer is priced only by the selling tiers below.
       </p>
 
       {/* ------------------------------------------------------------------ */}
@@ -341,7 +356,7 @@ export function PackCasePricing({
       <div className="space-y-2 rounded-lg border border-ink-100 bg-white p-2.5">
         <div className="flex items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-ink-500">
-            <Layers className="h-3 w-3" aria-hidden="true" /> Loose piece tiers (1–{ceiling} pcs)
+            <Layers className="h-3 w-3" aria-hidden="true" /> Retailer selling price — per piece (1–{ceiling} pcs)
           </p>
           <button
             type="button"
@@ -359,8 +374,9 @@ export function PackCasePricing({
           </p>
         ) : drafts.length === 0 ? (
           <p className="text-[11px] text-ink-500">
-            No loose tiers: remainders are priced at the derived case rate ({money(piecePriceFromCase(Number.parseFloat(price) || 0, safeUnits))}/pc).
-            Add a tier to give small quantities their own rate.
+            No selling tiers: every piece is priced at the derived per-piece rate
+            ({money(piecePriceFromCase(Number.parseFloat(price) || 0, safeUnits))}/pc). Add a tier to give small
+            quantities their own rate.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -528,9 +544,7 @@ export function PackCasePricing({
                   : 'border-ink-200 bg-white text-ink-600 hover:border-primary-300'
               }`}
             >
-              {value % safeUnits === 0 && value >= safeUnits
-                ? `${value / safeUnits} Case${value / safeUnits === 1 ? '' : 's'}`
-                : `${value} pcs`}
+              {value} pc{value === 1 ? '' : 's'}
             </button>
           ))}
           <Input
@@ -544,30 +558,22 @@ export function PackCasePricing({
           />
         </div>
         <ul className="mt-2 space-y-1 text-[11px]">
-          {previewPricing.fullCases > 0 ? (
-            <li className="flex items-baseline justify-between gap-2 text-ink-600">
-              <span>
-                {previewPricing.fullCases} Case{previewPricing.fullCases === 1 ? '' : 's'} × {money(previewPricing.casePrice)}
-              </span>
-              <span>{money(previewPricing.caseSubtotal)}</span>
-            </li>
-          ) : null}
-          {previewPricing.looseQuantity > 0 && previewPricing.looseUnitPrice !== null ? (
-            <li className="flex items-baseline justify-between gap-2 text-ink-600">
-              <span>
-                {previewPricing.looseQuantity} loose pcs × {money(previewPricing.looseUnitPrice)}
-                <span className="ml-1 text-[9px] text-ink-400">
-                  ({previewPricing.loosePriceSource === 'tier' ? 'loose tier' : 'derived from case price'})
-                </span>
-              </span>
-              <span>{money(previewPricing.looseSubtotal)}</span>
+          <li className="flex items-baseline justify-between gap-2 text-ink-600">
+            <span>
+              {previewPricing.quantity} pc{previewPricing.quantity === 1 ? '' : 's'} × {money(previewPricing.unitPrice)}
+            </span>
+            <span>{money(previewPricing.lineTotal)}</span>
+          </li>
+          {previewPricing.tier ? (
+            <li className="text-[9px] text-ink-400">
+              Quantity tier: {tierRangeLabel(previewPricing.tier.min_quantity, previewPricing.tier.max_quantity)}
+              {' · '}
+              {previewPricing.priceSource === 'tier' ? 'selling tier' : 'derived from case price'}
             </li>
           ) : null}
           <li className="flex items-baseline justify-between gap-2 border-t border-ink-100 pt-1 text-xs font-bold text-ink-900">
-            <span>
-              Total incl. GST · Cases: {previewPricing.fullCases} · Loose: {previewPricing.looseQuantity}
-            </span>
-            <span>{money(previewPricing.total)}</span>
+            <span>Total incl. GST · {previewPricing.quantity} pcs</span>
+            <span>{money(previewPricing.lineTotal)}</span>
           </li>
           <li className="text-[9px] text-ink-400">
             GST component already inside it: {money(previewPricing.gst)} (net {money(previewPricing.subtotal)})

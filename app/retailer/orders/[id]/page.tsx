@@ -174,7 +174,7 @@ export default async function OrderDetailPage({
         </div>
         <div className="grid grid-cols-3 border-t border-slate-100 bg-slate-50/70">
           <div className="border-r border-slate-100 px-4 py-3 text-center"><p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Products</p><p className="mt-1 text-xs font-bold text-slate-800">{items.length} line{items.length === 1 ? '' : 's'}</p></div>
-          <div className="border-r border-slate-100 px-4 py-3 text-center"><p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Quantity</p><p className="mt-1 text-xs font-bold text-slate-800">{totalQuantity} pack{totalQuantity === 1 ? '' : 's'}</p></div>
+          <div className="border-r border-slate-100 px-4 py-3 text-center"><p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Quantity</p><p className="mt-1 text-xs font-bold text-slate-800">{totalQuantity} pc{totalQuantity === 1 ? '' : 's'}</p></div>
           <div className="px-4 py-3 text-center"><p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Order value</p><p className="mt-1 text-xs font-bold text-slate-800">₹{order.grand_total.toFixed(2)}</p></div>
         </div>
       </section>

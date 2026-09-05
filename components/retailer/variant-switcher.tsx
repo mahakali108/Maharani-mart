@@ -71,7 +71,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
               variant.isSelected ? 'text-white/80' : 'text-slate-500'
             )}
           >
-            {formatInr(pricing.casePrice)} / case of {pricing.unitsPerCase}
+            Quantity tier rates apply
           </span>
         </>
       ) : null}

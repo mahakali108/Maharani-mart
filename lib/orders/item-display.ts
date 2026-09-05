@@ -94,17 +94,22 @@ export function summarizeQuantityRows(rows: OrderItemQuantityRow[]): QuantitySum
 export function formatQuantitySummary(summary: QuantitySummary): string {
   const { pieces, cases, loose } = summary;
   const base = `${pieces} pc${pieces === 1 ? '' : 's'}`;
-  if (cases === 0 && loose === 0) return base;
+  // Retailer model: pieces only. A line with no case component is reported as a
+  // plain piece count — no "loose" qualifier is needed and none is shown.
+  if (cases === 0) return base;
+  // Historical mixed rows (billed before the piece-only model) still describe
+  // their case + loose split so the past order renders the numbers it was
+  // written with.
   const parts: string[] = [];
   if (cases > 0) parts.push(`${cases} Case${cases === 1 ? '' : 's'}`);
   if (loose > 0) parts.push(`${loose} loose pc${loose === 1 ? '' : 's'}`);
   return `${base} (${parts.join(' + ')})`;
 }
 
-/** The row-level quantity label, e.g. "1 Case" or "6 loose pcs". */
+/** The row-level quantity label, e.g. "6 pcs" or (historical) "1 Case". */
 export function formatRowQuantity(row: OrderItemQuantityRow): string {
   return rowUnit(row) === 'pieces'
-    ? `${row.quantity} loose pc${row.quantity === 1 ? '' : 's'}`
+    ? `${row.quantity} pc${row.quantity === 1 ? '' : 's'}`
     : `${row.quantity} Case${row.quantity === 1 ? '' : 's'}`;
 }
 

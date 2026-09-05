@@ -9,9 +9,9 @@ import { dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
 import { stockForProducts } from '@/lib/ai/tools/products';
 
 /*
- * `quantity` is always a PIECE count — never a case count. 46 means 46 pieces
- * (1 case of 40 + 6 loose pcs for a 40-pc case); the server decides the
- * case/loose split and the price, so the model cannot ask for a discounted
+ * `quantity` is always a PIECE count — never a case count. A retailer orders
+ * 1, 6, 12, 40, 80… pcs; the server prices Q at Q × (the selling tier covering
+ * Q) and never forces a full case, so the model cannot ask for a discounted
  * quantity by naming cases.
  */
 const lineSchema = z.object({
@@ -21,7 +21,7 @@ const lineSchema = z.object({
     .int()
     .min(1)
     .max(100000)
-    .describe('Quantity in pieces (not cases). Example: for a 40-pc case, 46 = 1 case + 6 loose pcs.'),
+    .describe('Quantity in pieces (not cases). Any whole number of pieces is allowed, e.g. 6, 12, 40.'),
 });
 const linesSchema = z.object({ lines: z.array(lineSchema).min(1).max(100) });
 const LINE_JSON = {
@@ -31,24 +31,20 @@ const LINE_JSON = {
 };
 
 /**
- * Label for one quoted line, in the retailer's own words: cases and loose
- * pieces are named separately instead of a blended "46 × ₹25.65" rate. The
- * money always comes from the quote — only the wording is built here.
+ * Label for one quoted line, in the retailer's own words: the piece count at
+ * the per-piece rate, from the quote. The retailer buys pieces; no case/loose
+ * split is ever named. The money always comes from the quote — only the wording
+ * is built here.
  */
 function quoteLineLabel(line: OrderQuote['lines'][number]): string {
-  const parts: string[] = [];
-  if (line.cases > 0) parts.push(`${line.cases} Case${line.cases === 1 ? '' : 's'} × ${inr(line.casePrice)}`);
-  if (line.loosePieces > 0) {
-    parts.push(`${line.loosePieces} loose pc${line.loosePieces === 1 ? '' : 's'} × ${inr(line.piecePrice)}`);
-  }
-  return parts.join(' + ') || `${line.pieces} pcs × ${inr(line.piecePrice)}`;
+  return `${line.pieces} pcs × ${inr(line.piecePrice)}`;
 }
 
 function quoteCard(quote: OrderQuote, title = 'Cart preview'): AICard {
   const q = quote;
   return {
     type: 'cart', title, subtitle: `${q.lines.length} verified line item${q.lines.length === 1 ? '' : 's'}`, quality: 'verified',
-    source: 'Shared order quote service: current case price, loose piece tiers, MOQ, GST and credit',
+    source: 'Shared order quote service: per-piece selling rate, MOQ, GST and credit',
     lines: q.lines.map((line) => ({ label: `${line.productName} · ${line.packName}`, value: quoteLineLabel(line), detail: `${line.pieces} pcs · ${inr(line.lineTotal)}` })),
     metrics: [
       { label: 'Subtotal', value: inr(q.subtotal), quality: 'verified' },

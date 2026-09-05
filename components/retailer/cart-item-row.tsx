@@ -7,21 +7,19 @@ import { Boxes, CircleAlert, Heart, ImageOff, Loader2, Trash2 } from 'lucide-rea
 import { updateCartQuantityAction, removeCartItemAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
-import {
-  calculateCaseLoosePrice,
-  suggestedQuantities,
-  type PricingTier,
-} from '@/lib/retailer/case-pricing';
-import { CaseLooseLineBreakdown } from '@/components/retailer/pricing-schedule';
+import { suggestedQuantities, type PricingTier } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
+import { RetailerLineBreakdown } from '@/components/retailer/pricing-schedule';
 import { QtyStepper } from '@/components/retailer/qty-stepper';
 import { cn } from '@/lib/utils/cn';
 
 /**
- * One cart line. The quantity is a PIECE count (0026): the retailer may keep
- * 6 pcs of a 40-pc case, or 46 pcs = 1 case + 6 loose. Every number on this
- * row comes from `calculateCaseLoosePrice` — the same function the server runs
- * when the order is written — so the cart can never advertise a price the
- * checkout will not honour. Editing still posts only (cartItemId, pieces).
+ * One cart line. The quantity is a PIECE count (0026): the retailer may order
+ * 6, 12, 46, 92… pcs — any whole number. Every number on this row comes from
+ * `calculateRetailerPiecePrice` — the same function the server runs when the
+ * order is written — so the cart can never advertise a price the checkout will
+ * not honour. Editing still posts only (cartItemId, pieces). No case price,
+ * no units-per-case requirement and no case breakdown is ever shown.
  */
 export function CartItemRow({
   id,
@@ -31,12 +29,11 @@ export function CartItemRow({
   packName,
   imageUrl,
   quantity,
-  unitPrice,
   gstPercent,
   moq,
   mrp,
   unitsPerCase = 1,
-  casePrice,
+  derivedPiecePrice,
   tiers,
   allowLoosePieces = true,
   isUnavailable,
@@ -49,12 +46,12 @@ export function CartItemRow({
   packName: string;
   imageUrl?: string;
   quantity: number;
-  unitPrice: number;
   gstPercent: number;
   moq: number;
   mrp?: number | null;
   unitsPerCase?: number;
-  casePrice?: number | null;
+  /** Server-resolved per-piece fallback (never the internal case price). */
+  derivedPiecePrice?: number | null;
   tiers?: PricingTier[];
   allowLoosePieces?: boolean;
   isUnavailable: boolean;
@@ -66,20 +63,21 @@ export function CartItemRow({
   const [error, setError] = useState<string | null>(null);
   const [favorite, setFavorite] = useState(isFavorite);
 
-  const resolvedCasePrice = casePrice ?? unitPrice;
-
-  const pricing = calculateCaseLoosePrice({
+  // Retailer piece pricing: quantity Q is billed at Q × (applicable tier rate).
+  // No internal case price is carried to the client; the server-supplied
+  // per-piece fallback covers variants that have no configured selling tiers.
+  const pricing = calculateRetailerPiecePrice({
     quantity: localQty,
     unitsPerCase,
-    casePrice: resolvedCasePrice,
+    casePrice: 0,
     tiers: tiers ?? [],
     gstPercent,
     moq,
-    allowLoosePieces,
+    derivedPiecePrice: derivedPiecePrice ?? undefined,
   });
   const suggestions = suggestedQuantities({ unitsPerCase, moq, tiers, allowLoosePieces });
-  const displayTotal = pricing.total;
-  const displayPiecePrice = pricing.looseUnitPrice ?? pricing.derivedPiecePrice;
+  const displayTotal = pricing.lineTotal;
+  const displayPiecePrice = pricing.unitPrice;
   const lineSavings = calcSavings(mrp, displayPiecePrice, pricing.quantity);
   const discountPercent = calcDiscountPercent(mrp, displayPiecePrice);
   const isDirty = localQty !== quantity;
@@ -169,8 +167,7 @@ export function CartItemRow({
 
           <p className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-slate-500">
             <Boxes className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
-            {unitsPerCase} pcs per case · MOQ {moq} pcs
-            {allowLoosePieces === false ? ' · full cases only' : ''}
+            Sold by piece · MOQ {moq} pc{moq === 1 ? '' : 's'}
           </p>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -191,13 +188,8 @@ export function CartItemRow({
           {/* Desktop price block */}
           <div className="mt-2.5 hidden flex-wrap items-baseline gap-x-2 gap-y-1 md:flex">
             <p className="text-base font-bold tracking-tight text-slate-950">
-              {formatInr(resolvedCasePrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
+              {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-400">/pc</span>
             </p>
-            {allowLoosePieces !== false && unitsPerCase > 1 ? (
-              <p className="text-[10px] font-semibold text-slate-500">
-                loose from {formatInr(displayPiecePrice)}/pc
-              </p>
-            ) : null}
             {mrp != null && mrp > displayPiecePrice ? (
               <p className="text-[11px] text-slate-400 line-through">MRP {formatInr(mrp)}</p>
             ) : null}
@@ -211,7 +203,7 @@ export function CartItemRow({
       {/* Cell B — mobile price row */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 md:hidden">
         <p className="text-sm font-bold tracking-tight text-slate-950">
-          {formatInr(resolvedCasePrice)} <span className="text-[10px] font-medium text-slate-400">/ case</span>
+          {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-400">/pc</span>
         </p>
         {discountPercent > 0 ? (
           <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
@@ -226,7 +218,7 @@ export function CartItemRow({
         ) : null}
       </div>
 
-      {/* Cell C — quantity in pieces + line total + case/loose breakdown */}
+      {/* Cell C — quantity in pieces + line total */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 md:flex-col md:items-end md:gap-3 md:border-0 md:pt-0">
         <div>
           <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Quantity (pcs)</p>
@@ -254,9 +246,7 @@ export function CartItemRow({
                         : 'border-slate-200 bg-white text-slate-600 hover:border-primary-300 hover:text-primary-700'
                     )}
                   >
-                    {value % unitsPerCase === 0 && value >= unitsPerCase
-                      ? `${value / unitsPerCase} Case${value / unitsPerCase === 1 ? '' : 's'}`
-                      : `${value}`}
+                    {value} pc{value === 1 ? '' : 's'}
                   </button>
                 ))}
               </div>
@@ -272,20 +262,16 @@ export function CartItemRow({
           <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Line total incl. GST</p>
           <p className="mt-0.5 text-base font-bold tracking-tight text-slate-950 sm:text-lg">{formatInr(displayTotal)}</p>
           <p className="text-[9px] text-slate-400">
-            {pricing.fullCases > 0
-              ? `${pricing.fullCases} case${pricing.fullCases === 1 ? '' : 's'} × ${formatInr(resolvedCasePrice)}`
-              : `${pricing.looseQuantity} loose pcs × ${formatInr(displayPiecePrice)}`}
-            {pricing.looseQuantity > 0 && pricing.fullCases > 0
-              ? ` + ${pricing.looseQuantity} × ${formatInr(displayPiecePrice)}`
-              : null}
-            {` · ${gstPercent}% GST included`}
+            {pricing.quantity} pc{pricing.quantity === 1 ? '' : 's'} × {formatInr(displayPiecePrice)}
+            {' · '}
+            {gstPercent}% GST included
           </p>
         </div>
       </div>
 
-      {/* Cell D — the exact case + loose breakdown (same engine, one layout) */}
+      {/* Cell D — the exact piece breakdown (same engine, one layout) */}
       <div className="md:col-span-3">
-        <CaseLooseLineBreakdown pricing={pricing} showSummary />
+        <RetailerLineBreakdown pricing={pricing} />
       </div>
 
       {/* Cell E — actions */}

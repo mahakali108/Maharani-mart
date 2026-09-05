@@ -5,7 +5,8 @@ import { Check, ChevronLeft, ChevronRight, CreditCard, ImageOff, PackageCheck, R
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import { calculateCaseLoosePrice } from '@/lib/retailer/case-pricing';
+import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
@@ -91,27 +92,26 @@ export default async function CheckoutPage() {
     const pack = item.product_packs;
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
-    const casePrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
     // `item.quantity` is the PIECE count in the cart. Pricing runs through the
-    // canonical engine — identical to `quoteOrderForRetailer`, which will be
-    // re-executed when the order is created, so this review can only ever
-    // confirm the amount that will actually be billed.
-    const pricing = calculateCaseLoosePrice({
+    // canonical retailer engine — identical to `quoteOrderForRetailer`, which
+    // will be re-executed when the order is created, so this review can only
+    // ever confirm the amount that will actually be billed.
+    const pricing = calculateRetailerPiecePrice({
       quantity: item.quantity,
       unitsPerCase: pack?.units_per_case ?? 1,
-      casePrice,
+      casePrice: 0,
       tiers: item.pack_id ? tierMap.get(item.pack_id) ?? [] : [],
       gstPercent,
       moq: pack?.moq ?? 1,
-      allowLoosePieces: pack?.allow_loose_pieces !== false,
+      // Server-resolved per-piece fallback (never the internal case price).
+      derivedPiecePrice: pack ? piecePriceFromCase(resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null), pack.units_per_case) : 0,
     });
-    // Effective price per piece charged (display only). The order itself is
-    // persisted as exact case / loose rows, so totals reconcile to the paisa.
-    const unitPrice = pricing.total / Math.max(pricing.quantity, 1);
+    // Effective per-piece rate actually charged.
+    const unitPrice = pricing.unitPrice;
     subtotal += pricing.subtotal;
     gstTotal += pricing.gst;
     gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + pricing.gst);
-    savings += calcSavings(pack?.mrp, pricing.looseUnitPrice ?? pricing.derivedPiecePrice, pricing.quantity);
+    savings += calcSavings(pack?.mrp, pricing.unitPrice, pricing.quantity);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     // Prefer the variant's own image (matches the product page size switcher).
     const lineImage = pack?.image_url ?? images[0]?.image_url;
@@ -122,18 +122,13 @@ export default async function CheckoutPage() {
       productName: product?.name ?? 'Unknown product',
       imageUrl: lineImage,
       unitPrice,
-      piecePrice: pricing.looseUnitPrice ?? pricing.derivedPiecePrice,
+      piecePrice: pricing.unitPrice,
       unitsPerCase: pack?.units_per_case ?? 1,
-      casePrice,
       pieces: pricing.quantity,
-      loosePieces: pricing.looseQuantity,
-      cases: pricing.fullCases,
-      caseSubtotal: pricing.caseSubtotal,
-      looseSubtotal: pricing.looseSubtotal,
       orderable: pricing.orderable,
       quantityMessage: pricing.message,
       gstPercent,
-      lineTotal: pricing.total,
+      lineTotal: pricing.lineTotal,
     };
   });
   const grandTotal = subtotal + gstTotal;
@@ -193,14 +188,10 @@ export default async function CheckoutPage() {
                     <p className="truncate font-bold text-slate-900">{line.productName}</p>
                     <p className="mt-1 text-[9px] text-slate-500">
                       {line.packName} · Qty {line.pieces} pc{line.pieces === 1 ? '' : 's'} ·{' '}
-                      {line.cases > 0 ? `${line.cases} Case${line.cases === 1 ? '' : 's'} × ${formatInr(line.casePrice)}` : ''}
-                      {line.cases > 0 && line.loosePieces > 0 ? ' + ' : ''}
-                      {line.loosePieces > 0
-                        ? `${line.loosePieces} loose pcs × ${formatInr(line.piecePrice)}`
-                        : ''}
+                      {formatInr(line.piecePrice)}/pc
                     </p>
                     <p className="mt-0.5 text-[9px] text-slate-400">
-                      Cases: {line.cases} · Loose: {line.loosePieces} · GST {line.gstPercent}% included
+                      GST {line.gstPercent}% included
                     </p>
                   </div>
                   <p className="shrink-0 text-sm font-bold text-slate-950">{formatInr(line.lineTotal)}</p>
