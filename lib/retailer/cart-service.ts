@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
-import { calculateCaseLoosePrice } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { resolvePackCasePrice } from '@/lib/retailer/effective-price';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 
@@ -22,24 +22,23 @@ interface PackForCart {
 export type CartServiceResult = { error: string } | { success: true };
 
 /**
- * The single cart-side quantity rule. It runs the SAME pure pricing engine the
- * server quote and the UI previews use, so a retailer can never park a quantity
- * in the cart that checkout would reject (below MOQ, a partial case on a
- * whole-case-only pack, or a loose remainder the admin has not priced).
+ * The single cart-side quantity rule. It runs the SAME pure retailer piece
+ * pricing engine the server quote and the UI previews use, so a retailer can
+ * never park a quantity in the cart that checkout would reject (below MOQ or
+ * an unwhole quantity).
  *
  * A product-level `price_lists` override is deliberately not consulted here:
- * an override changes what a case costs, never what may be ordered. Money is
+ * an override changes what a piece costs, never what may be ordered. Money is
  * still resolved authoritatively at quote/order time.
  */
 async function quantityError(supabase: ReturnType<typeof createClient>, pack: PackForCart, quantity: number) {
   const tiers = await loadPackTiers(supabase, [pack.id]);
-  const pricing = calculateCaseLoosePrice({
+  const pricing = calculateRetailerPiecePrice({
     quantity,
     unitsPerCase: pack.units_per_case,
     casePrice: resolvePackCasePrice(pack, null),
     tiers: tiers.get(pack.id) ?? [],
     moq: pack.moq,
-    allowLoosePieces: pack.allow_loose_pieces !== false,
   });
   if (pricing.orderable) return null;
   return pricing.message ?? 'That quantity is not available for this pack.';

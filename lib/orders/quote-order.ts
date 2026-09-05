@@ -3,7 +3,8 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { calculateCreditPosition, roundMoney, type CreditPosition } from '@/lib/orders/credit';
 import { getProductPriceOverrides, resolvePackCasePrice } from '@/lib/retailer/effective-price';
-import { calculateCaseLoosePrice, type PricingTier } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice, type RetailerPiecePricing } from '@/lib/retailer/retailer-pricing';
+import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 
 export interface RequestedQuoteLine {
@@ -211,64 +212,45 @@ export async function quoteOrderForRetailer({
     const product = pack.products!;
 
     const casePrice = roundMoney(resolvePackCasePrice(pack, overrides.get(pack.product_id) ?? null));
-    const pricing = calculateCaseLoosePrice({
+    // Retailer piece pricing: quantity Q is billed as Q × (per-piece tier rate).
+    // The case price is INTERNAL only — it is never shown to the retailer and is
+    // used here solely as the derived-per-piece fallback when a pack has no
+    // configured selling tiers. The same function the product page, cart and
+    // checkout preview with, re-run authoritatively before anything is written.
+    const pricing: RetailerPiecePricing = calculateRetailerPiecePrice({
       quantity,
       unitsPerCase: pack.units_per_case,
       casePrice,
       tiers: tierMap.get(packId) ?? [],
       gstPercent: product.gst_percent,
       moq: pack.moq,
-      allowLoosePieces: pack.allow_loose_pieces !== false,
     });
 
-    // The engine has the final say on orderability: a loose remainder the admin
-    // never priced (or a partial case on a whole-case-only pack) is rejected
-    // here rather than being silently priced by another rule.
+    // The engine has the final say on orderability: an unwhole quantity, an
+    // unpriced tier gap or a below-MOQ request is rejected here rather than
+    // being silently priced by another rule.
     if (!pricing.orderable) {
       return {
         error: `${product.name} (${pack.pack_name}): ${pricing.message ?? 'That quantity cannot be ordered right now.'}`,
       };
     }
 
-    const items: QuotedOrderItem[] = [];
+    // One exact row per line, billed in PIECES at the applicable tier rate so
+    // unit_price × quantity = line_total holds exactly (in paise). The retailer
+    // buys pieces — there is no case/loose split to persist.
+    const item: QuotedOrderItem = {
+      quantity,
+      quantityUnit: 'pieces',
+      quantityPieces: quantity,
+      unitsPerCase: pack.units_per_case,
+      unitPrice: pricing.unitPrice,
+      lineTotal: pricing.lineTotal,
+      subtotal: pricing.subtotal,
+      gst: pricing.gst,
+    };
 
-    // Full cases first: the case price is the source of truth for that part and
-    // the loose remainder is priced separately by its own tier. Two exact rows
-    // beat one blended row, because every stored line then satisfies
-    // unit_price × quantity = line_total to the paisa.
-    const caseGst = gstOf(pricing.caseSubtotal, product.gst_percent);
-    if (pricing.fullCases > 0) {
-      items.push({
-        quantity: pricing.fullCases,
-        quantityUnit: 'cases',
-        quantityPieces: pricing.fullCases * pricing.unitsPerCase,
-        unitsPerCase: pricing.unitsPerCase,
-        unitPrice: pricing.casePrice,
-        lineTotal: pricing.caseSubtotal,
-        subtotal: roundMoney(pricing.caseSubtotal - caseGst),
-        gst: caseGst,
-      });
-    }
-    const looseGst = gstOf(pricing.looseSubtotal, product.gst_percent);
-    if (pricing.looseQuantity > 0 && pricing.looseUnitPrice !== null) {
-      items.push({
-        quantity: pricing.looseQuantity,
-        quantityUnit: 'pieces',
-        quantityPieces: pricing.looseQuantity,
-        unitsPerCase: pricing.unitsPerCase,
-        unitPrice: pricing.looseUnitPrice,
-        lineTotal: pricing.looseSubtotal,
-        subtotal: roundMoney(pricing.looseSubtotal - looseGst),
-        gst: looseGst,
-      });
-    }
-
-    // The line and order headers are summed from those rows, so
-    // Σ order_items.line_total === orders.grand_total by construction.
-    const lineSubtotal = roundMoney(items.reduce((sum, item) => sum + item.subtotal, 0));
-    const lineGst = roundMoney(items.reduce((sum, item) => sum + item.gst, 0));
-    subtotal = roundMoney(subtotal + lineSubtotal);
-    gstTotal = roundMoney(gstTotal + lineGst);
+    subtotal = roundMoney(subtotal + pricing.subtotal);
+    gstTotal = roundMoney(gstTotal + pricing.gst);
 
     quotedLines.push({
       productId: pack.product_id,
@@ -279,19 +261,20 @@ export async function quoteOrderForRetailer({
       moq: pack.moq,
       unitsPerCase: pack.units_per_case,
       pieces: pricing.quantity,
-      cases: pricing.fullCases,
-      loosePieces: pricing.looseQuantity,
-      piecePrice: pricing.looseUnitPrice ?? pricing.derivedPiecePrice,
-      casePrice: pricing.casePrice,
-      unitPrice: roundMoney(pricing.total / Math.max(pricing.quantity, 1)),
+      cases: 0,
+      loosePieces: 0,
+      piecePrice: pricing.unitPrice,
+      // Internal only — never rendered to a retailer.
+      casePrice: 0,
+      unitPrice: pricing.unitPrice,
       gstPercent: product.gst_percent,
-      subtotal: lineSubtotal,
-      gst: lineGst,
-      lineTotal: pricing.total,
-      looseUnitPrice: pricing.looseUnitPrice,
-      loosePriceSource: pricing.loosePriceSource,
-      looseTier: pricing.looseTier,
-      items,
+      subtotal: pricing.subtotal,
+      gst: pricing.gst,
+      lineTotal: pricing.lineTotal,
+      looseUnitPrice: pricing.unitPrice,
+      loosePriceSource: pricing.priceSource,
+      looseTier: pricing.tier,
+      items: [item],
     });
   }
 
@@ -307,13 +290,4 @@ export async function quoteOrderForRetailer({
       credit: calculateCreditPosition(retailer.credit_limit, retailer.outstanding_balance, grandTotal),
     },
   };
-}
-
-/**
- * GST already contained inside a GST-INCLUSIVE amount. A full case and a loose
- * remainder extract their own component from their own amount so each persisted
- * row reconciles on its own, and the two still add up to the line's GST.
- */
-function gstOf(inclusive: number, gstPercent: number): number {
-  return roundMoney((inclusive * gstPercent) / (100 + gstPercent));
 }

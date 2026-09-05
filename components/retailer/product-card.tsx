@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { Check, CheckCircle2, CircleAlert, Heart, ImageOff, Loader2, PackagePlus, ShoppingCart, Sparkles, Tag } from 'lucide-react';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
-import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { QtyStepper } from '@/components/retailer/qty-stepper';
 import { cn } from '@/lib/utils/cn';
@@ -40,7 +39,6 @@ export function ProductCard({
   mrp,
   packName,
   moq = 1,
-  unitsPerCase = 1,
   defaultPackId,
   gstPercent,
   isFavorite = false,
@@ -53,14 +51,9 @@ export function ProductCard({
   const [error, setError] = useState(false);
   const [favorite, setFavorite] = useState(isFavorite);
   const [quantity, setQuantity] = useState(Math.max(1, moq));
-  /*
-   * Per-piece reference rate for honest MRP comparison — MRP is per piece while
-   * fromPrice is the case price. Derived by the pricing engine's own helper (and
-   * marked as a reference: the case is billed at the case price, and a quantity
-   * that includes loose pieces is priced from the loose tiers on the product
-   * page, never from this number).
-   */
-  const piecePrice = fromPrice !== null ? piecePriceFromCase(fromPrice, unitsPerCase) : null;
+  // `fromPrice` is the retailer's per-piece "from" rate (resolved server-side
+  // from the cheapest variant). It is never a case total.
+  const piecePrice = fromPrice;
   const discount = calcDiscountPercent(mrp, piecePrice);
   const savings = calcSavings(mrp, piecePrice);
   const unavailable = !defaultPackId || fromPrice === null;
@@ -160,18 +153,12 @@ export function ProductCard({
           ) : null}
 
           <div className="mt-2">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Case price · GST inclusive</p>
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Piece price · GST inclusive</p>
             <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
               <p className="text-base font-bold tracking-tight text-slate-950 sm:text-lg">
                 {fromPrice !== null ? formatInr(fromPrice) : 'Price on request'}
+                <span className="text-[9px] font-medium text-slate-400">/pc</span>
               </p>
-              {piecePrice !== null && unitsPerCase > 1 ? (
-                <p className="text-[9px] font-medium text-slate-400 sm:text-[10px]">
-                  {formatInr(piecePrice)}/pc · {unitsPerCase} pcs
-                </p>
-              ) : null}
-              {/* MRP is per piece, so it is compared with the per-piece rate —
-                  never with the case price. */}
               {mrp && piecePrice !== null && mrp > piecePrice ? (
                 <p className="text-[10px] text-slate-400 line-through sm:text-xs">MRP {formatInr(mrp)}</p>
               ) : null}

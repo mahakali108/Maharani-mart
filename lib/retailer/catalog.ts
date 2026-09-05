@@ -6,6 +6,7 @@ import {
   getProductPriceOverrides,
   resolvePackPrice,
 } from '@/lib/retailer/effective-price';
+import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { calcDiscountPercent } from '@/lib/retailer/format';
 import type { ProductCardProps } from '@/components/retailer/product-card';
 
@@ -48,11 +49,18 @@ function bestPricedPack(product: CatalogProductRow, override: number | null) {
   const activePacks = [...product.product_packs]
     .filter((pack) => pack.is_active)
     .sort((a, b) => a.sort_order - b.sort_order);
-  const priced = activePacks.map((pack) => ({
-    pack,
-    price: resolvePackPrice(pack, override), // GST-inclusive case price
-  }));
-  return priced.sort((a, b) => a.price - b.price)[0] ?? null;
+  const priced = activePacks.map((pack) => {
+    // Internal GST-inclusive case price — NEVER shown to the retailer.
+    const price = resolvePackPrice(pack, override);
+    return {
+      pack,
+      price,
+      // Reference per-piece rate (internal case price ÷ units per case). The
+      // card shows this as the "from ₹/pc" figure; the case total is internal.
+      piecePrice: piecePriceFromCase(price, pack.units_per_case),
+    };
+  });
+  return priced.sort((a, b) => a.piecePrice - b.piecePrice)[0] ?? null;
 }
 
 export function toPricedCard(
@@ -70,7 +78,7 @@ export function toPricedCard(
     // parent product's gallery exactly as before when it has none.
     imageUrl: best?.pack.image_url ?? images[0]?.image_url,
     isNewLaunch: product.is_new_launch,
-    fromPrice: best?.price ?? null,
+    fromPrice: best?.piecePrice ?? null,
     mrp: best?.pack.mrp,
     packName: best?.pack.pack_name,
     moq: best?.pack.moq ?? 1,

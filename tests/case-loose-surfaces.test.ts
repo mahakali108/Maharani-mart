@@ -68,16 +68,18 @@ describe('reading persisted case / loose rows', () => {
     expect(summarizeQuantityRows(rows)).toEqual({ pieces: 46, cases: 1, loose: 6, unitsPerCase: 40 });
     expect(formatQuantitySummary(summarizeQuantityRows(rows))).toBe('46 pcs (1 Case + 6 loose pcs)');
     expect(formatRowQuantity(rows[0]!)).toBe('1 Case');
-    expect(formatRowQuantity(rows[1]!)).toBe('6 loose pcs');
+    expect(formatRowQuantity(rows[1]!)).toBe('6 pcs');
   });
 
-  it('labels pure-case and pure-loose quantities plainly', () => {
+  it('labels a piece-only line plainly and a case line with its historical split', () => {
     expect(
       formatQuantitySummary(summarizeQuantityRows([{ quantity: 2, quantity_unit: 'cases', quantity_pieces: 80, units_per_case: 40 }]))
     ).toBe('80 pcs (2 Cases)');
+    // A piece-only line (the retailer model) is a plain piece count — no "loose"
+    // qualifier and no case reference.
     expect(
       formatQuantitySummary(summarizeQuantityRows([{ quantity: 12, quantity_unit: 'pieces', quantity_pieces: 12, units_per_case: 40 }]))
-    ).toBe('12 pcs (12 loose pcs)');
+    ).toBe('12 pcs');
     // A line whose split is unknown (historical single case row) still reads well.
     expect(formatQuantitySummary({ pieces: 1, cases: 0, loose: 0, unitsPerCase: 1 })).toBe('1 pc');
   });
@@ -109,45 +111,43 @@ describe('reading persisted case / loose rows', () => {
   });
 });
 
-describe('retailer surfaces price through the canonical engine only', () => {
-  it('product page shows the case price and the loose tiers of the selected variant', () => {
+describe('retailer surfaces price through the canonical piece engine only', () => {
+  it('product page shows the per-piece rate and the selling tiers of the selected variant', () => {
     const page = read('app/retailer/catalog/[id]/page.tsx');
     expect(page).toContain("from '@/components/retailer/pricing-schedule'");
-    expect(page).toContain('<CaseLoosePriceSchedule');
-    expect(page).toContain('allow_loose_pieces');
+    expect(page).toContain('<RetailerPriceSchedule');
     expect(page).toContain('never compulsory');
-    // The cart summary on the same page uses the engine, in pieces.
-    expect(page).toContain('calculateCaseLoosePrice({');
+    // The cart summary on the same page uses the piece engine, in pieces.
+    expect(page).toContain('calculateRetailerPiecePrice({');
     expect(page).toContain('quantity: item.quantity');
+    // No case price is ever surfaced to the retailer here.
+    expect(page).not.toContain('Case price');
   });
 
   it('pack selector enters pieces, suggests quantities and never forces a case', () => {
     const selector = read('components/retailer/pack-selector.tsx');
-    expect(selector).toContain('calculateCaseLoosePrice({');
+    expect(selector).toContain('calculateRetailerPiecePrice({');
     expect(selector).toContain('suggestedQuantities({');
     expect(selector).toContain('Quantity (pcs)');
-    expect(selector).toContain('<CaseLooseLineBreakdown');
+    expect(selector).toContain('<RetailerLineBreakdown');
     // Add / update still submit (packId, pieces) — the server prices them.
     expect(selector).toContain('addToCartAction(pack.id, qty)');
     expect(selector).toContain('updateCartQuantityAction(inCart.cartItemId, qty)');
-    // Case-only packs are the admin's choice, not a hard-coded restriction.
-    expect(selector).toContain('allowLoosePieces: pack.allowLoosePieces !== false');
   });
 
-  it('cart line is editable in pieces and shows the case + loose breakdown', () => {
+  it('cart line is editable in pieces and shows the piece breakdown', () => {
     const row = read('components/retailer/cart-item-row.tsx');
-    expect(row).toContain('calculateCaseLoosePrice({');
-    expect(row).toContain('<CaseLooseLineBreakdown');
+    expect(row).toContain('calculateRetailerPiecePrice({');
+    expect(row).toContain('<RetailerLineBreakdown');
     expect(row).toContain('min={moq}');
     const page = read('app/retailer/cart/page.tsx');
-    expect(page).toContain('calculateCaseLoosePrice({');
-    expect(page).toContain('allowLoosePieces: pack?.allow_loose_pieces !== false');
+    expect(page).toContain('calculateRetailerPiecePrice({');
   });
 
-  it('checkout re-quotes with the engine and blocks an unpriced loose remainder', () => {
+  it('checkout re-quotes with the piece engine and blocks an unpriced quantity', () => {
     const checkout = read('app/retailer/checkout/page.tsx');
-    expect(checkout).toContain('calculateCaseLoosePrice({');
-    expect(checkout).toContain('Cases: {line.cases} · Loose: {line.loosePieces}');
+    expect(checkout).toContain('calculateRetailerPiecePrice({');
+    expect(checkout).not.toContain('Cases: {line.cases} · Loose: {line.loosePieces}');
     expect(checkout).toContain('disabled={lines.some((line) => !line.orderable)}');
     // GST is still extracted, never added on top.
     expect(checkout).not.toMatch(/\*\s*\(1\s*\+\s*gst/);
@@ -176,7 +176,7 @@ describe('retailer surfaces price through the canonical engine only', () => {
     expect(page).toContain('groupOrderLines(items.filter((item) => item.pack_id))');
     expect(page).toContain('previousQuantity: quantity.pieces');
     const form = read('components/retailer/reorder-form.tsx');
-    expect(form).toContain('calculateCaseLoosePrice({');
+    expect(form).toContain('calculateRetailerPiecePrice({');
     expect(form).not.toContain('currentUnitPrice * quantity');
   });
 
@@ -208,21 +208,22 @@ describe('retailer surfaces price through the canonical engine only', () => {
 
   it('quick order grid prices each typed piece count with the engine', () => {
     const row = read('components/retailer/quick-order-row.tsx');
-    expect(row).toContain('calculateCaseLoosePrice({');
+    expect(row).toContain('calculateRetailerPiecePrice({');
     expect(row).toContain('disabled={isPending || !pricing.orderable}');
     expect(row).toContain('quantity in pieces');
     // The old shortcut (case price × pieces) must not come back.
     expect(row).not.toContain('landedPrice * quantity');
     const page = read('app/retailer/quick-order/page.tsx');
     expect(page).toContain('loadPackTiers');
-    expect(page).toContain('allow_loose_pieces');
   });
 
-  it('catalog cards use the engine for their per-piece reference rate', () => {
+  it('catalog cards show a per-piece reference rate and never the case total', () => {
     const card = read('components/retailer/product-card.tsx');
-    expect(card).toContain('piecePriceFromCase(fromPrice, unitsPerCase)');
-    expect(card).not.toMatch(/fromPrice\s*\/\s*unitsPerCase/);
-    expect(card).toContain('quantity in pieces');
+    expect(card).toContain('Piece price · GST inclusive');
+    expect(card).toContain('fromPrice');
+    const catalog = read('lib/retailer/catalog.ts');
+    expect(catalog).toContain('piecePriceFromCase(price, pack.units_per_case)');
+    expect(catalog).not.toMatch(/fromPrice\s*\/\s*unitsPerCase/);
   });
 });
 
@@ -233,10 +234,12 @@ describe('admin configures one case + loose model', () => {
     expect(editor).toContain('validateLooseTierSet(');
     expect(editor).toContain('findLooseCoverageGaps(');
     expect(editor).toContain('looseTierDraftToRow(');
-    expect(editor).toContain('calculateCaseLoosePrice({');
+    // The admin preview now uses the SAME retailer piece engine the storefront
+    // and server quote use, so what the admin sees is what the retailer is
+    // billed — never the internal case+loose split.
+    expect(editor).toContain('calculateRetailerPiecePrice({');
     expect(editor).toContain('savePackPricingAction({');
     // The preview says so out loud, and there is no local copy of the math.
-    expect(editor).toContain('same function as checkout');
     expect(editor).not.toMatch(/casePrice\s*\/\s*unitsPerCase\s*\*\s*quantity/);
   });
 
@@ -376,9 +379,10 @@ describe('the exact 80-piece configuration from the requirement (admin → page 
     expect(pricing.total).not.toBe((12 / 80) * 1000);
   });
 
-  it('product page shows the case + loose schedule and never the old bulk-only table', () => {
+  it('product page shows the retail piece schedule and never the old bulk/case table', () => {
     const page = read('app/retailer/catalog/[id]/page.tsx');
-    expect(page).toContain('piecePriceFromCase(selectedCasePrice, selectedPack.units_per_case)');
+    expect(page).toContain('calculateRetailerPiecePrice({');
+    expect(page).toContain('<RetailerPriceSchedule');
     expect(page).not.toMatch(/selectedCasePrice\s*\/\s*selectedPack\.units_per_case/);
   });
 

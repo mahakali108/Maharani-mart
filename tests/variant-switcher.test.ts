@@ -221,9 +221,9 @@ describe('product size / variant switcher', () => {
       // The switcher is rendered from server data and builds its model from the raw packs.
       expect(page).toContain('<VariantSwitcher');
       expect(page).toContain('buildVariantSwitcher(rawPacks, selectedPack?.id ?? null, variantPricing)');
-      // Every size card is priced from server-resolved data (case price +
-      // units per case + MRP), never from a browser-side estimate.
-      expect(page).toContain('casePrice: resolvePackPrice(pack, override)');
+      // Every size card is priced from server-resolved data (per-piece rate +
+      // MRP), never from a browser-side estimate or a case total.
+      expect(page).toContain('piecePrice: pieceRateForPack(');
       // A pack id in the URL pins the selected variant.
       expect(page).toContain('requestedPackId ? rawPacks.find((pack) => pack.id === requestedPackId)');
       // The component uses next/link <Link href>, not onClick state updates.
@@ -407,10 +407,10 @@ describe('product size / variant switcher', () => {
       });
 
       const lines: RequestedQuoteLine[] = [
-        // Quantities are PIECES now: 37 pcs of the 24-pc 100g variant is
-        // 1 full case + a 13-pc remainder priced by the 100g slab.
+        // Quantities are PIECES: 37 pcs of the 24-pc 100g variant and 48 pcs of
+        // the 48-pc 50g variant are both priced at their own retail tier rate.
         { packId: PACK_100G, quantity: 37 },
-        { packId: PACK_50G, quantity: 48 }, // exactly one case -> case price
+        { packId: PACK_50G, quantity: 48 },
       ];
       const result = await quoteOrderForRetailer({ retailerId: RETAILER.id, lines, supabase: supabase as never });
       expect('quote' in result).toBe(true);
@@ -419,31 +419,30 @@ describe('product size / variant switcher', () => {
       const hundred = result.quote.lines.find((line) => line.packId === PACK_100G);
       const fifty = result.quote.lines.find((line) => line.packId === PACK_50G);
 
-      // The 100g line uses the 100g configuration exclusively.
+      // The 100g line uses the 100g retail tier exclusively (13+ → ₹55/pc).
       expect(hundred?.unitsPerCase).toBe(24);
       expect(hundred?.pieces).toBe(37);
-      expect(hundred?.cases).toBe(1);
-      expect(hundred?.loosePieces).toBe(13);
-      expect(hundred?.casePrice).toBe(1440);
-      expect(hundred?.piecePrice).toBe(55); // the 100g tier priced the remainder
-      expect(hundred?.lineTotal).toBe(1440 + 13 * 55);
+      expect(hundred?.cases).toBe(0);
+      expect(hundred?.loosePieces).toBe(0);
+      expect(hundred?.casePrice).toBe(0);
+      expect(hundred?.piecePrice).toBe(55);
+      expect(hundred?.lineTotal).toBe(37 * 55);
       expect(hundred?.gstPercent).toBe(GST_PERCENT);
 
-      // ...and it is persisted as two exact rows, never one blended unit price.
-      expect(hundred?.items.map((item) => item.quantityUnit)).toEqual(['cases', 'pieces']);
-      expect(hundred?.items[0]).toMatchObject({ quantity: 1, unitPrice: 1440, lineTotal: 1440, quantityPieces: 24 });
-      expect(hundred?.items[1]).toMatchObject({ quantity: 13, unitPrice: 55, lineTotal: 715, quantityPieces: 13 });
+      // It is persisted as ONE exact piece row — no case/loose split.
+      expect(hundred?.items.map((item) => item.quantityUnit)).toEqual(['pieces']);
+      expect(hundred?.items[0]).toMatchObject({ quantity: 37, unitPrice: 55, lineTotal: 37 * 55, quantityPieces: 37 });
       for (const item of hundred?.items ?? []) {
         expect(round2(item.unitPrice * item.quantity)).toBe(item.lineTotal);
       }
 
       // The 50g line keeps its own configuration — proof the variants never mix.
       expect(fifty?.unitsPerCase).toBe(48);
-      expect(fifty?.piecePrice).toBe(25);
-      expect(fifty?.lineTotal).toBe(1200);
-      expect(fifty?.items).toHaveLength(1); // a full case is a single row
+      expect(fifty?.piecePrice).toBe(23);
+      expect(fifty?.lineTotal).toBe(48 * 23);
+      expect(fifty?.items).toHaveLength(1); // a single piece-backed row
 
-      expect(result.quote.grandTotal).toBe(2155 + 1200); // GST-inclusive
+      expect(result.quote.grandTotal).toBe(37 * 55 + 48 * 23); // GST-inclusive
     });
 
     it('the server quote rejects an unavailable variant instead of faking it', async () => {

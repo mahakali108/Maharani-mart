@@ -16,11 +16,11 @@
  *   - the gallery image list for a variant (pack image first, parent
  *     product gallery as the existing fallback)
  *
- * No NEW price is invented here. The switcher only *presents* numbers the
- * caller already resolved server-side (the pack's GST-inclusive case_price
- * plus any product-level override); the per-piece figure is the same derived
- * value the pricing engine uses (case_price / units_per_case). Pricing stays
- * in lib/retailer/case-pricing.ts and remains server-authoritative. No availability is invented: a variant
+ * No NEW price is invented here. The switcher only *presents* per-piece
+ * numbers the caller already resolved server-side from the pack's own selling
+ * tiers; the internal case_price / units_per_case and any product-level
+ * override stay in the pricing layer and are never surfaced to a retailer.
+ * Pricing remains server-authoritative. No availability is invented: a variant
  * is "available" only when its `is_active` flag (and its parent product's)
  * is true, exactly what RLS already exposes to retailers.
  *
@@ -30,8 +30,31 @@
  * both invented and a data leak. See docs/warehouse-gaps.md.
  */
 
-import { piecePriceFromCase, round2 } from '@/lib/retailer/case-pricing';
+import { round2 } from '@/lib/retailer/case-pricing';
 import { calcDiscountPercent } from '@/lib/retailer/format';
+
+/** Server-resolved, GST-inclusive numbers for one variant card. */
+export interface VariantPricing {
+  /**
+   * GST-INCLUSIVE per-piece selling price shown on the size pill. Resolved by
+   * the caller from the variant's own selling tiers (deepest/`from` rate), never
+   * derived in the browser.
+   */
+  piecePrice: number;
+  /** Printed MRP per piece, when the admin recorded one. */
+  mrp: number | null;
+  /** Saving vs MRP, in %, 0 when there is no real MRP advantage. */
+  discountPercent: number;
+  /** True only when an active scheme/offer row really exists for the product. */
+  hasOffer: boolean;
+}
+
+/** Pricing inputs a page may supply per pack (already resolved server-side). */
+export interface VariantPricingInput {
+  piecePrice: number;
+  mrp?: number | null;
+  hasOffer?: boolean;
+}
 
 /** A minimal pack shape needed for switcher/gallery decisions. */
 export interface VariantPackBase {
@@ -85,29 +108,6 @@ export interface VariantSwitcherItem {
   isBestValue: boolean;
 }
 
-/** Server-resolved, GST-inclusive numbers for one variant card. */
-export interface VariantPricing {
-  /** GST-INCLUSIVE case selling price (the source of truth). */
-  casePrice: number;
-  /** Derived per-piece price (case_price / units_per_case). Never stored. */
-  piecePrice: number;
-  unitsPerCase: number;
-  /** Printed MRP per piece, when the admin recorded one. */
-  mrp: number | null;
-  /** Saving vs MRP, in %, 0 when there is no real MRP advantage. */
-  discountPercent: number;
-  /** True only when an active scheme/offer row really exists for the product. */
-  hasOffer: boolean;
-}
-
-/** Pricing inputs a page may supply per pack (already resolved server-side). */
-export interface VariantPricingInput {
-  casePrice: number;
-  unitsPerCase: number;
-  mrp?: number | null;
-  hasOffer?: boolean;
-}
-
 export interface VariantSwitcherModel {
   variants: VariantSwitcherItem[];
   /** At least one navigable variant exists. */
@@ -132,14 +132,9 @@ export function buildVariantSwitcher(
     const input = pricingByPackId?.get(pack.id) ?? null;
     const pricing: VariantPricing | null = input
       ? {
-          casePrice: round2(input.casePrice),
-          piecePrice: piecePriceFromCase(input.casePrice, input.unitsPerCase),
-          unitsPerCase: input.unitsPerCase > 0 ? input.unitsPerCase : 1,
+          piecePrice: round2(input.piecePrice),
           mrp: input.mrp ?? null,
-          discountPercent: calcDiscountPercent(
-            input.mrp ?? null,
-            piecePriceFromCase(input.casePrice, input.unitsPerCase)
-          ),
+          discountPercent: calcDiscountPercent(input.mrp ?? null, round2(input.piecePrice)),
           hasOffer: input.hasOffer === true,
         }
       : null;

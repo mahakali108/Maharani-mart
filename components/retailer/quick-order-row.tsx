@@ -5,13 +5,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Check, ChevronRight, ImageOff, Loader2, Minus, Plus, ShoppingCart } from 'lucide-react';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
-import {
-  calculateCaseLoosePrice,
-  maxLooseQuantity,
-  piecePriceFromCase,
-  resolveLooseTierSet,
-  type PricingTier,
-} from '@/lib/retailer/case-pricing';
+import { type PricingTier } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 
 export interface QuickOrderPack {
   id: string;
@@ -20,8 +15,8 @@ export interface QuickOrderPack {
   /** Minimum order quantity in PIECES. */
   moq: number;
   mrp: number | null;
-  /** GST-inclusive CASE selling price. */
-  casePrice: number;
+  /** Server-resolved per-piece fallback when the pack has no selling tiers. */
+  derivedPiecePrice: number;
   /** false = this pack is billed in whole cases only. */
   allowLoosePieces?: boolean;
   /** This pack's own loose-piece slabs (from `product_pricing_tiers`). */
@@ -77,24 +72,24 @@ export function QuickOrderRow({
 
   /*
    * The quantity in this grid is PIECES, and the price shown is what the server
-   * will actually charge for it: `calculateCaseLoosePrice` bills every complete
-   * case at the case price and the remaining pieces at their loose tier. Prices
-   * are GST-inclusive, so GST is never added on top here either.
+   * will actually charge: `calculateRetailerPiecePrice` bills Q at Q × (the
+   * applicable per-piece tier rate). Prices are GST-inclusive, so GST is never
+   * added on top here either.
    */
-  const pricing = calculateCaseLoosePrice({
+  const pricing = calculateRetailerPiecePrice({
     quantity,
     unitsPerCase: pack.unitsPerCase,
-    casePrice: pack.casePrice,
+    casePrice: 0,
     tiers: pack.tiers ?? [],
     gstPercent,
     moq: pack.moq,
-    allowLoosePieces: pack.allowLoosePieces !== false,
+    derivedPiecePrice: pack.derivedPiecePrice,
   });
-  const landedPrice = pricing.total;
-  const piecePrice = piecePriceFromCase(pack.casePrice, pack.unitsPerCase);
-  const loose = resolveLooseTierSet(pack.tiers ?? [], pack.unitsPerCase).tiers;
-  const looseFrom = loose.length > 0 ? Math.min(...loose.map((tier) => tier.price_per_piece)) : piecePrice;
-  const looseCeiling = maxLooseQuantity(pack.unitsPerCase);
+  const landedPrice = pricing.lineTotal;
+  const piecePrice =
+    pack.tiers && pack.tiers.length > 0
+      ? Math.min(...pack.tiers.filter((t) => t.is_active !== false).map((t) => t.price_per_piece))
+      : pack.derivedPiecePrice;
   const discount = pack.mrp && pack.mrp > piecePrice
     ? Math.round(((pack.mrp - piecePrice) / pack.mrp) * 100)
     : 0;
@@ -127,8 +122,7 @@ export function QuickOrderRow({
             {packs.map((item) => <option key={item.id} value={item.id}>{item.packName}</option>)}
           </select>
           <p className="mt-1 text-[9px] text-slate-400">
-            {pack.unitsPerCase} pcs/case · MOQ {pack.moq} pcs
-            {pack.allowLoosePieces === false ? ' · full cases only' : ` · loose from ₹${looseFrom.toFixed(2)}/pc`}
+            Sold by piece · MOQ {pack.moq} pc{pack.moq === 1 ? '' : 's'} · from ₹{piecePrice.toFixed(2)}/pc
           </p>
         </div>
 
@@ -152,20 +146,12 @@ export function QuickOrderRow({
         <div className="flex items-end justify-between gap-3 border-t border-slate-100 pt-3 sm:block sm:border-0 sm:pt-0 sm:text-right">
           <div>
             <div className="flex items-baseline gap-1.5 sm:justify-end">
-              <p className="text-base font-bold text-slate-950">₹{pack.casePrice.toFixed(2)}</p>
+              <p className="text-base font-bold text-slate-950">₹{pricing.unitPrice.toFixed(2)}<span className="text-[9px] font-medium text-slate-400">/pc</span></p>
               {pack.mrp && pack.mrp > piecePrice ? <p className="text-[9px] text-slate-400 line-through">₹{pack.mrp.toFixed(2)}</p> : null}
             </div>
-            <p className="text-[9px] text-slate-400">{gstPercent}% GST incl · {pack.unitsPerCase} pcs/case</p>
-            {pricing.fullCases > 0 || pricing.looseQuantity > 0 ? (
-              <p className="mt-0.5 text-[9px] font-semibold text-slate-500">
-                {pricing.fullCases > 0 ? `${pricing.fullCases} Case × ₹${pack.casePrice.toFixed(0)}` : ''}
-                {pricing.fullCases > 0 && pricing.looseQuantity > 0 ? ' + ' : ''}
-                {pricing.looseQuantity > 0
-                  ? `${pricing.looseQuantity} pcs × ₹${(pricing.looseUnitPrice ?? looseFrom).toFixed(0)}`
-                  : ''}
-                {looseCeiling > 0 && pricing.looseQuantity === looseCeiling ? ' (case-fullest loose rate)' : ''}
-              </p>
-            ) : null}
+            <p className="text-[9px] text-slate-400">
+              {quantity} pc{quantity === 1 ? '' : 's'} × ₹{pricing.unitPrice.toFixed(2)} = ₹{pricing.lineTotal.toFixed(2)} · {gstPercent}% GST incl
+            </p>
             {discount > 0 ? <p className="mt-0.5 text-[9px] font-bold text-emerald-700">Save {discount}%</p> : null}
           </div>
           <button

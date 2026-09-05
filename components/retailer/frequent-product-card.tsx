@@ -14,7 +14,7 @@ export function FrequentProductCard({
   packId,
   packName,
   moq,
-  effectivePrice,
+  piecePrice,
   timesOrdered,
 }: {
   id: string;
@@ -23,7 +23,8 @@ export function FrequentProductCard({
   packId: string | null;
   packName?: string;
   moq: number;
-  effectivePrice: number | null;
+  /** GST-inclusive per-piece selling price (never the internal case price). */
+  piecePrice: number | null;
   timesOrdered: number;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -52,7 +53,7 @@ export function FrequentProductCard({
         </div>
         <h3 className="mt-2 line-clamp-2 min-h-[2rem] text-[11px] font-bold leading-4 text-slate-800">{name}</h3>
         <p className="mt-1 truncate text-[9px] text-slate-500">{packName ?? 'Select pack'} · MOQ {moq}</p>
-        <p className="mt-1 text-sm font-bold text-slate-950">{effectivePrice !== null ? `₹${effectivePrice.toFixed(2)}` : 'Price on request'}</p>
+        <p className="mt-1 text-sm font-bold text-slate-950">{piecePrice !== null ? `₹${piecePrice.toFixed(2)}/pc` : 'Price on request'}</p>
       </Link>
       {packId ? (
         <button

@@ -19,15 +19,12 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
-import {
-  calculateCaseLoosePrice,
-  piecePriceFromCase,
-  resolveLooseTierSet,
-} from '@/lib/retailer/case-pricing';
+import { piecePriceFromCase, resolveLooseTierSet, tierRangeLabel, type PricingTier } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { buildVariantSwitcher, isUuidLike, variantGalleryImages } from '@/lib/retailer/variants';
 import { PackSelector } from '@/components/retailer/pack-selector';
-import { CaseLoosePriceSchedule } from '@/components/retailer/pricing-schedule';
+import { RetailerPriceSchedule } from '@/components/retailer/pricing-schedule';
 import { VariantSwitcher } from '@/components/retailer/variant-switcher';
 import { FavoriteToggle } from '@/components/retailer/favorite-toggle';
 import { ProductGallery } from '@/components/retailer/product-gallery';
@@ -219,21 +216,20 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     const p = item.product_packs;
     const pr = item.products;
     if (p && pr) {
-      // `item.quantity` is a PIECE count (0026). Same engine call the server
-      // quote makes — full cases at the case price, remainder at its loose tier.
-      const casePrice = resolvePackPrice(p, cartOverrides.get(item.product_id) ?? null);
-      const pricing = calculateCaseLoosePrice({
+      // `item.quantity` is a PIECE count. Same retailer piece-pricing call the
+      // server quote makes — quantity Q is billed at Q × (applicable tier rate).
+      const pricing = calculateRetailerPiecePrice({
         quantity: item.quantity,
         unitsPerCase: p.units_per_case ?? 1,
-        casePrice,
+        casePrice: 0,
         tiers: packTiers.get(item.pack_id) ?? [],
         gstPercent: pr.gst_percent ?? 0,
         moq: p.moq ?? 1,
-        allowLoosePieces: p.allow_loose_pieces !== false,
+        derivedPiecePrice: piecePriceFromCase(resolvePackPrice(p, cartOverrides.get(item.product_id) ?? null), p.units_per_case ?? 1),
       });
       cartSubtotal += pricing.subtotal;
       cartGstTotal += pricing.gst;
-      cartSavingsTotal += calcSavings(p.mrp, pricing.looseUnitPrice ?? pricing.derivedPiecePrice, pricing.quantity);
+      cartSavingsTotal += calcSavings(p.mrp, pricing.unitPrice, pricing.quantity);
     }
   }
 
@@ -247,16 +243,33 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         }
       : null;
 
-  // Map product packs with authoritative case prices, tiers and existing cart items
+  // Resolve a pack's retailer piece rate: the deepest (best) configured selling
+  // tier, falling back to the internal case-derived per-piece figure only when
+  // the admin has not configured any selling tiers for the variant.
+  const pieceRateForPack = (
+    pack: { id: string; units_per_case: number; case_price?: number | null; ptr: number | null; base_price: number },
+    tiers: PricingTier[]
+  ): number => {
+    const sellingTiers = resolveLooseTierSet(tiers, pack.units_per_case).tiers;
+    if (sellingTiers.length > 0) return Math.min(...sellingTiers.map((tier) => tier.price_per_piece));
+    return piecePriceFromCase(resolvePackPrice(pack, override), pack.units_per_case);
+  };
+
+  // Map product packs with their retail piece rate, tiers and existing cart items.
+  // Only the per-piece figures cross to the client; the internal case price and
+  // any units-per-case requirement stay server-side.
   const packs = activePacks.map((pack) => {
-    const effectivePrice = resolvePackPrice(pack, override);
+    const internalCasePrice = resolvePackPrice(pack, override);
+    const tiers = packTiers.get(pack.id) ?? [];
     const cartInfo = cartItemByPackId.get(pack.id);
     return {
       ...pack,
-      effectivePrice,
-      casePrice: effectivePrice,
-      // The variant's own loose-piece slabs, resolved by the engine.
-      tiers: packTiers.get(pack.id) ?? [],
+      // Server-resolved per-piece fallback (never the internal case price).
+      derivedPiecePrice: piecePriceFromCase(internalCasePrice, pack.units_per_case),
+      // The retail per-piece rate the retailer actually sees (deepest tier).
+      unitPrice: pieceRateForPack(pack, tiers),
+      // The variant's own selling tiers, resolved by the engine.
+      tiers,
       allowLoosePieces: pack.allow_loose_pieces !== false,
       initialQuantity: cartInfo?.quantity ?? 0,
       cartItemId: cartInfo?.id ?? null,
@@ -267,24 +280,24 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   // Selected variant (pack) — the size switcher's current size.
   //   /retailer/catalog/<packId>    -> that exact variant is highlighted
   //   /retailer/catalog/<productId> -> existing default (cheapest active pack)
-  // Every variant-specific value below (image, MRP, case price, units per
-  // case, tiers, discount) is read from the SELECTED pack; the product-level
-  // price override still applies to all packs of the product unchanged.
+  // Every variant-specific value below (image, MRP, per-piece rate, tiers,
+  // discount) is read from the SELECTED pack; the product-level price override
+  // still applies to all packs of the product unchanged.
   // ---------------------------------------------------------------------------
   const urlPack = requestedPackId ? rawPacks.find((pack) => pack.id === requestedPackId) ?? null : null;
   if (requestedPackId && !urlPack) notFound();
 
-  const lowestPrice = packs.length > 0 ? Math.min(...packs.map((pack) => pack.effectivePrice)) : null;
-  const defaultPack = packs.find((pack) => pack.effectivePrice === lowestPrice) ?? packs[0] ?? null;
+  const lowestRate = packs.length > 0 ? Math.min(...packs.map((pack) => pack.unitPrice)) : null;
+  const defaultPack = packs.find((pack) => pack.unitPrice === lowestRate) ?? packs[0] ?? null;
   const selectedPack = urlPack ?? defaultPack;
   const isViewingVariant = urlPack !== null;
 
-  // Selected variant's authoritative numbers (GST-inclusive case price is the
-  // source of truth; the per-piece price is derived, never stored).
-  const selectedCasePrice = selectedPack ? resolvePackPrice(selectedPack, override) : null;
-  // MRP is per piece; effectivePrice is the GST-inclusive case price — compare on a per-piece basis.
+  // Selected variant's authoritative retail per-piece rate (deepest selling tier
+  // for THIS variant — switching size swaps the rate, MRP, image and tiers).
   const selectedPiecePrice =
-    selectedCasePrice !== null ? piecePriceFromCase(selectedCasePrice, selectedPack?.units_per_case ?? 1) : null;
+    selectedPack
+      ? pieceRateForPack(selectedPack, packTiers.get(selectedPack.id) ?? [])
+      : null;
   const selectedTiers = selectedPack ? packTiers.get(selectedPack.id) ?? [] : [];
   const discount = calcDiscountPercent(selectedPack?.mrp, selectedPiecePrice);
   const saveAmount = calcSavings(selectedPack?.mrp, selectedPiecePrice);
@@ -293,18 +306,18 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     .filter((scheme): scheme is NonNullable<SchemeLinkRow['schemes']> => !!scheme && scheme.is_active);
   const hasActiveScheme = schemes.length > 0;
   const selectedAvailable = selectedPack?.is_active ?? false;
+  const selectedTierLabel = selectedPiecePrice !== null
+    ? (selectedTiers.length ? tierRangeLabel(Math.min(...selectedTiers.map((t) => t.min_quantity)), Math.max(...selectedTiers.map((t) => t.max_quantity ?? Number.MAX_SAFE_INTEGER))) : null)
+    : null;
 
-  // Real, server-resolved numbers for every size card of the switcher. The
-  // same case_price source of truth + product-level override the quote uses;
-  // the per-piece figure is derived inside buildVariantSwitcher. Nothing is
-  // estimated in the browser and no stock number is exposed (inventory is
-  // product-level and staff-only — see docs/warehouse-gaps.md).
+  // Real, server-resolved per-piece numbers for every size card of the switcher.
+  // Nothing is estimated in the browser and no stock number is exposed
+  // (inventory is product-level and staff-only — see docs/warehouse-gaps.md).
   const variantPricing = new Map(
     rawPacks.map((pack) => [
       pack.id,
       {
-        casePrice: resolvePackPrice(pack, override),
-        unitsPerCase: pack.units_per_case,
+        piecePrice: pieceRateForPack(pack, packTiers.get(pack.id) ?? []),
         mrp: pack.mrp,
         hasOffer: hasActiveScheme,
       },
@@ -446,23 +459,18 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             {/* SIZE / VARIANT SWITCHER — navigates to each variant's own route */}
             <VariantSwitcher model={variantSwitcher} productName={product.name} />
 
-            {/* 4. MRP & WHOLESALE PRICE OVERVIEW — for the SELECTED variant */}
-            {selectedCasePrice !== null ? (
+            {/* 4. MRP & RETAIL PIECE PRICE OVERVIEW — for the SELECTED variant */}
+            {selectedPiecePrice !== null ? (
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                  {isViewingVariant ? `Case price · ${selectedPack?.pack_name}` : 'Case price from'}
+                  {isViewingVariant ? `Piece price · ${selectedPack?.pack_name}` : 'Piece price from'}
                 </p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
                   <p className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-                    {formatInr(selectedCasePrice)}
+                    {formatInr(selectedPiecePrice)}
+                    <span className="text-sm font-semibold text-slate-500 sm:text-base">/pc</span>
                   </p>
-                  {selectedPack && selectedPack.units_per_case > 1 ? (
-                    <p className="text-sm font-semibold text-slate-500 sm:text-base">
-                      {formatInr(piecePriceFromCase(selectedCasePrice, selectedPack.units_per_case))}/pc ·{' '}
-                      {selectedPack.units_per_case} pcs
-                    </p>
-                  ) : null}
-                  {selectedPack?.mrp && selectedPiecePrice != null && selectedPack.mrp > selectedPiecePrice ? (
+                  {selectedPack?.mrp && selectedPack.mrp > selectedPiecePrice ? (
                     <p className="text-sm font-medium text-slate-400 line-through sm:text-base">
                       MRP {formatInr(selectedPack.mrp)}
                     </p>
@@ -475,26 +483,29 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 </div>
                 {saveAmount > 0 ? (
                   <p className="mt-1 text-xs font-bold text-emerald-700 sm:text-sm">
-                    You save {formatInr(saveAmount)} on wholesale pricing
+                    You save {formatInr(saveAmount)} vs MRP
+                  </p>
+                ) : null}
+                {selectedTierLabel ? (
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Best rate of {formatInr(selectedPiecePrice)}/pc at {selectedTierLabel}
                   </p>
                 ) : null}
                 <p className="mt-1 text-[10px] text-slate-500">
-                  GST {product.gst_percent}% included in every price above · full cases are billed at the case
-                  price, remaining pieces at the loose rate
+                  GST {product.gst_percent}% included in every price above · larger quantities earn a lower rate
                 </p>
                 {/*
-                  Case price + loose-piece slabs for the SELECTED variant
+                  Retail piece-price slab table for the SELECTED variant
                   (product_pricing_tiers of THIS pack). Rendered by the shared
                   schedule component so the cart, checkout and this page can
                   never show three slightly different tables.
                 */}
                 {selectedPack ? (
-                  <CaseLoosePriceSchedule
+                  <RetailerPriceSchedule
                     className="mt-2.5"
                     unitsPerCase={selectedPack.units_per_case}
-                    casePrice={selectedCasePrice}
                     tiers={selectedTiers}
-                    allowLoosePieces={selectedPack.allow_loose_pieces !== false}
+                    gstPercent={product.gst_percent}
                   />
                 ) : null}
                 {selectedPack && resolveLooseTierSet(selectedTiers, selectedPack.units_per_case).tiers.length > 0 ? (
@@ -571,10 +582,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 <dd className="mt-1 font-bold capitalize text-slate-900">{product.unit}</dd>
               </div>
               <div className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Standard case</dt>
-                <dd className="mt-1 font-bold text-slate-900">
-                  {selectedPack?.units_per_case ?? product.units_per_case} pcs (this size)
-                </dd>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Sold by</dt>
+                <dd className="mt-1 font-bold capitalize text-slate-900">Individual pieces</dd>
               </div>
               <div className="rounded-xl bg-slate-50 p-3">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">GST Rate</dt>
