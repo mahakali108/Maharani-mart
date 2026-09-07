@@ -5,6 +5,7 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import Link from 'next/link';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 30;
 
@@ -127,7 +128,7 @@ export default async function InventoryLedgerPage({
                     <td className="px-5 py-3 font-medium text-ink-900">{m.quantity}</td>
                     <td className="px-5 py-3 text-ink-600">{m.profiles?.full_name ?? '—'}</td>
                     <td className="px-5 py-3 text-ink-500">{m.reason ?? '—'}</td>
-                    <td className="px-5 py-3 text-ink-500">{new Date(m.created_at).toLocaleString('en-IN')}</td>
+                    <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(m.created_at)}</td>
                   </tr>
                 ))}
               </tbody>

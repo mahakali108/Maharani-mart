@@ -28,6 +28,7 @@ import {
   createFeature,
   removeFeature,
 } from '@/lib/admin/control-center/actions';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 // ── Icon Map ───────────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ export function ControlCenterClient({
                       {log.target_name ? ` → ${log.target_name}` : ''}
                     </p>
                     <p className="text-xs text-ink-500">
-                      by {log.actor_name} · {new Date(log.created_at).toLocaleString('en-IN')}
+                      by {log.actor_name} · {formatIndiaDateTime(log.created_at)}
                       {log.reason ? ` · ${log.reason}` : ''}
                     </p>
                   </div>
@@ -276,7 +277,7 @@ export function ControlCenterClient({
                     </td>
                     <td className="px-4 py-3 text-xs text-ink-500">
                       {u.access_expires_at
-                        ? new Date(u.access_expires_at).toLocaleDateString('en-IN')
+                        ? formatIndiaDateTime(u.access_expires_at)
                         : '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -560,7 +561,7 @@ export function ControlCenterClient({
                   <td className="px-4 py-3 text-ink-600">{u.role.replace('_', ' ')}</td>
                   <td className="px-4 py-3"><StatusBadge status={u.access_status} /></td>
                   <td className="px-4 py-3 text-xs text-ink-500">
-                    {u.access_expires_at ? new Date(u.access_expires_at).toLocaleString('en-IN') : '—'}
+                    {u.access_expires_at ? formatIndiaDateTime(u.access_expires_at) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
@@ -703,7 +704,7 @@ export function ControlCenterClient({
                     )}
                   </div>
                   <span className="text-xs text-ink-400">
-                    {new Date(log.created_at).toLocaleString('en-IN')}
+                    {formatIndiaDateTime(log.created_at)}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-ink-500">

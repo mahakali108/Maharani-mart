@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCheck, ChevronRight, Clock3, CreditCard, PackageCheck, Tag, Truck } from 'lucide-react';
 import { markAllNotificationsReadAction, markNotificationReadAction } from '@/lib/retailer/notification-actions';
+import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 
 export interface NotificationItem {
   id: string;
@@ -85,13 +86,7 @@ export function NotificationList({ alerts }: { alerts: NotificationItem[] }) {
                   <p className="mt-1 text-[10px] leading-4 text-slate-600 sm:text-xs sm:leading-5">{alert.body}</p>
                   <p className="mt-2 flex items-center gap-1 text-[9px] text-slate-400">
                     <Clock3 className="h-3 w-3" />{' '}
-                    {new Date(alert.created_at).toLocaleString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
+                    {formatIndiaRelativeDateTime(alert.created_at)}
                   </p>
                 </div>
               </article>

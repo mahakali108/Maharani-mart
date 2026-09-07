@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import type { ProductTotalsViewRow, ExpiryReportViewRow } from '@/types/inventory.types';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 30;
 
@@ -212,7 +213,7 @@ export default async function InventoryReportsPage({
         filterBase={filterBase}
         headers={['When', 'Product', 'Warehouse', 'Type', 'Qty']}
         rows={rows.map((m) => [
-          new Date(m.created_at).toLocaleString('en-IN'),
+          formatIndiaDateTime(m.created_at),
           m.products?.name ?? '—',
           m.warehouses?.name ?? '—',
           m.movement_type.replace(/_/g, ' '),
@@ -246,8 +247,8 @@ export default async function InventoryReportsPage({
             g.status,
             String(units),
             `₹${value.toLocaleString('en-IN')}`,
-            new Date(g.created_at).toLocaleString('en-IN'),
-            g.confirmed_at ? new Date(g.confirmed_at).toLocaleString('en-IN') : '—',
+            formatIndiaDateTime(g.created_at),
+            g.confirmed_at ? formatIndiaDateTime(g.confirmed_at) : '—',
           ];
         })}
       />

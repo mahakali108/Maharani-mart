@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface LogRow {
   id: string;
@@ -129,7 +130,7 @@ export default async function AdminNotificationsPage({
                       </span>
                     </td>
                     <td className="px-5 py-3 text-xs text-ink-400">
-                      {new Date(log.created_at).toLocaleString('en-IN')}
+                      {formatIndiaDateTime(log.created_at)}
                     </td>
                     <td className="px-5 py-3">
                       <details className="text-xs text-ink-500">

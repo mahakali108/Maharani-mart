@@ -18,6 +18,7 @@ import {
   LEDGER_PAYMENT_GAP_NOTICE,
   loadRetailerLedger,
 } from '@/lib/retailer/ledger';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 /**
  * Retailer financial view.
@@ -135,11 +136,7 @@ export default async function RetailerLedgerPage({
                             {entry.orderNumber}
                           </Link>
                           <p className="mt-1 text-[10px] text-slate-500">
-                            {new Date(entry.placedAt).toLocaleDateString('en-IN', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
+                            {formatIndiaDateTime(entry.placedAt)}
                             {' · '}
                             {STATUS_LABELS[entry.status] ?? entry.status}
                           </p>
@@ -168,11 +165,7 @@ export default async function RetailerLedgerPage({
                     {ledger.entries.map((entry) => (
                       <tr key={entry.orderId} className="hover:bg-slate-50/70">
                         <td className="whitespace-nowrap px-5 py-3 text-slate-600">
-                          {new Date(entry.placedAt).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {formatIndiaDateTime(entry.placedAt)}
                         </td>
                         <td className="px-5 py-3">
                           <Link

@@ -23,6 +23,7 @@ import {
   setUserFeatureOverride,
   removeUserFeatureOverride,
 } from '@/lib/admin/control-center/actions';
+import { formatIndiaDateTime, formatIndiaDate } from '@/lib/datetime/india';
 
 function StatusBadge({ status }: { status: AccessStatus }) {
   return (
@@ -86,7 +87,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
             <p className="text-sm text-ink-500">ID: {userView.id}</p>
             <p className="text-sm text-ink-500">Phone: {userView.phone}</p>
             <p className="text-sm text-ink-500">
-              Created: {new Date(userView.createdAt).toLocaleDateString('en-IN')}
+              Created: {formatIndiaDate(userView.createdAt)}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -101,7 +102,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
             <StatusBadge status={userView.accessStatus} />
             {userView.accessExpiresAt && (
               <span className="text-xs text-ink-500">
-                Expires: {new Date(userView.accessExpiresAt).toLocaleString('en-IN')}
+                Expires: {formatIndiaDateTime(userView.accessExpiresAt)}
               </span>
             )}
           </div>
@@ -324,8 +325,8 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
                 <div>
                   <StatusBadge status={period.status} />
                   <span className="ml-2 text-xs text-ink-500">
-                    {new Date(period.started_at).toLocaleString('en-IN')}
-                    {period.expires_at ? ` → ${new Date(period.expires_at).toLocaleString('en-IN')}` : ' → Unlimited'}
+                    {formatIndiaDateTime(period.started_at)}
+                    {period.expires_at ? ` → ${formatIndiaDateTime(period.expires_at)}` : ' → Unlimited'}
                   </span>
                 </div>
                 {period.reason && (
@@ -352,7 +353,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
                     {log.action.replace(/_/g, ' ')}
                   </p>
                   <p className="text-xs text-ink-500">
-                    by {log.actor_name} · {new Date(log.created_at).toLocaleString('en-IN')}
+                    by {log.actor_name} · {formatIndiaDateTime(log.created_at)}
                     {log.reason ? ` · ${log.reason}` : ''}
                   </p>
                 </div>

@@ -3,6 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { AICard, AIToolContext, AIToolDefinition } from '@/lib/ai/types';
 import { dbFailure, internalCode, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
+import { formatIndiaDate } from '@/lib/datetime/india';
 
 interface SchemeRow { id: string; name: string; description: string | null; is_festival: boolean; starts_at: string; ends_at: string; }
 interface SchemePriceRow { scheme_id: string | null; product_id: string; price: number; products: { name: string; sku_code: string } | null; }
@@ -29,7 +30,7 @@ function schemeCards(rows: EligibleScheme[], context: AIToolContext): AICard[] {
     type: 'scheme', id: scheme.id, title: scheme.name, subtitle: scheme.description ?? 'No additional scheme description is recorded.',
     badge: scheme.is_festival ? 'Festival offer' : 'Active scheme', quality: 'verified', source: 'Active scheme and authorized visible scheme-price rows',
     metrics: [
-      { label: 'Ends', value: new Date(scheme.ends_at).toLocaleDateString('en-IN'), quality: 'verified' },
+      { label: 'Ends', value: formatIndiaDate(scheme.ends_at), quality: 'verified' },
       { label: 'Products', value: String(scheme.products.length), quality: 'verified' },
       { label: 'Minimum', value: 'Not recorded', quality: 'unavailable' },
     ],

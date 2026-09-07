@@ -5,6 +5,7 @@ import { AlertTriangle, Inbox } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils/cn';
 import type { SectionStatus, Severity } from '@/lib/admin/command-center/types';
+import { formatIndiaDateTime, formatIndiaDate } from '@/lib/datetime/india';
 
 /** Currency + percent formatters shared by all Command Center sections. */
 export function inr(value: number): string {
@@ -22,12 +23,11 @@ export function pct(value: number | null): string {
 }
 
 export function dateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return formatIndiaDateTime(iso);
 }
 
 export function dateOnly(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatIndiaDate(iso);
 }
 
 export function SeverityBadge({ severity }: { severity: Severity }) {

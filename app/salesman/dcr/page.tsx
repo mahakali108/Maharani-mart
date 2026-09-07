@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { formatIndiaTime } from '@/lib/datetime/india';
 
 interface AttendanceRow {
   punch_in_at: string;
@@ -105,9 +106,9 @@ export default async function DailyCallReportPage({
         </CardHeader>
         {attendance ? (
           <div className="flex gap-4 text-sm text-ink-600">
-            <span>In: {new Date(attendance.punch_in_at).toLocaleTimeString('en-IN')}</span>
+            <span>In: {formatIndiaTime(attendance.punch_in_at)}</span>
             <span>
-              Out: {attendance.punch_out_at ? new Date(attendance.punch_out_at).toLocaleTimeString('en-IN') : 'Not punched out yet'}
+              Out: {attendance.punch_out_at ? formatIndiaTime(attendance.punch_out_at) : 'Not punched out yet'}
             </span>
           </div>
         ) : (

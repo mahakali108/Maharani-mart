@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { BannerForm } from '@/components/admin/banner-form';
 import { BannerRowActions } from '@/components/admin/banner-row-actions';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface BannerRow {
   id: string;
@@ -88,8 +89,8 @@ export default async function BannersPage() {
                   </td>
                   <td className="px-5 py-3 text-ink-600">{b.area_id ? areaById.get(b.area_id) ?? '—' : 'All areas'}</td>
                   <td className="px-5 py-3 text-xs text-ink-500">
-                    {b.starts_at ? new Date(b.starts_at).toLocaleDateString('en-IN') : 'Any time'}
-                    {b.ends_at ? ` – ${new Date(b.ends_at).toLocaleDateString('en-IN')}` : ''}
+                    {b.starts_at ? formatIndiaDateTime(b.starts_at) : 'Any time'}
+                    {b.ends_at ? ` – ${formatIndiaDateTime(b.ends_at)}` : ''}
                   </td>
                   <td className="px-5 py-3">
                     <span

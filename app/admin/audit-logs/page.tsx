@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 25;
 
@@ -195,7 +196,7 @@ export default async function AuditLogsPage({
                 {logs.map((log) => (
                   <tr key={log.id}>
                     <td className="whitespace-nowrap px-5 py-3 text-xs text-ink-400">
-                      {new Date(log.created_at).toLocaleString('en-IN')}
+                      {formatIndiaDateTime(log.created_at)}
                     </td>
                     <td className="px-5 py-3 text-ink-700">{log.changed_by_name ?? 'System'}</td>
                     <td className="px-5 py-3">

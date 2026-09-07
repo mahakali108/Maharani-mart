@@ -23,6 +23,7 @@ import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card
 import { formatInr } from '@/lib/retailer/format';
 import { calculateCreditPosition } from '@/lib/orders/credit';
 import { OrderStatusTimeline, type TrackedStatus, type StatusHistoryEntry } from '@/components/retailer/order-status-timeline';
+import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 
 type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'packed' | 'dispatched' | 'delivered' | 'cancelled' | 'returned';
 
@@ -164,7 +165,7 @@ export default async function OrderDetailPage({
             <div className="min-w-0">
               <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Order details</p>
               <h1 className="mt-1 truncate font-mono text-base font-bold text-slate-950 sm:text-2xl">{order.order_number}</h1>
-              <p className="mt-1 text-[10px] text-slate-500">Placed {new Date(order.placed_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+              <p className="mt-1 text-[10px] text-slate-500">Placed {formatIndiaRelativeDateTime(order.placed_at)}</p>
             </div>
           </div>
           <div className="flex items-center justify-between gap-3 sm:justify-end">

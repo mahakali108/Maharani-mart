@@ -5,6 +5,7 @@ import { FileText, Trash2, Download } from 'lucide-react';
 import { MediaUploadField } from '@/components/media/media-upload-field';
 import { addRetailerDocumentAction, deleteRetailerDocumentAction } from '@/lib/admin/retailers-actions';
 import { Select } from '@/components/ui/select';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const DOC_TYPES = [
   { value: 'gstin_certificate', label: 'GSTIN Certificate' },
@@ -45,7 +46,7 @@ export function RetailerDocumentsManager({
                   <p className="truncate text-sm font-medium text-ink-900">{doc.file_name}</p>
                   <p className="text-xs text-ink-400">
                     {DOC_TYPES.find((t) => t.value === doc.doc_type)?.label ?? doc.doc_type} ·{' '}
-                    {new Date(doc.created_at).toLocaleDateString('en-IN')}
+                    {formatIndiaDateTime(doc.created_at)}
                   </p>
                 </div>
               </div>

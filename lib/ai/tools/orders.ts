@@ -8,6 +8,7 @@ import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { resolveRetailerTarget } from '@/lib/ai/safety/auth';
 import { dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
 import { formatRowQuantity, rowPieces, type OrderItemUnit} from '@/lib/orders/item-display';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const orderIdSchema = z.object({ orderId: z.string().uuid() });
 const retailerOptionalSchema = z.object({ retailerId: z.string().uuid().optional(), limit: z.number().int().min(1).max(30).optional(), status: z.enum(['pending', 'confirmed', 'processing', 'packed', 'dispatched', 'delivered', 'cancelled', 'returned']).optional() });
@@ -41,11 +42,11 @@ function orderCard(order: OrderRow, context: AIToolContext, invoice = false): AI
         : '/admin/orders';
   return {
     type: invoice ? 'invoice' : 'order', id: order.id, title: invoice ? `Invoice ${order.order_number}` : order.order_number,
-    subtitle: order.retailers?.shop_name ?? new Date(order.placed_at).toLocaleString('en-IN'), badge: order.status, quality: 'verified', source: 'RLS-authorized order record',
+    subtitle: order.retailers?.shop_name ?? formatIndiaDateTime(order.placed_at), badge: order.status, quality: 'verified', source: 'RLS-authorized order record',
     metrics: [
       { label: 'Total', value: inr(order.grand_total), quality: 'verified' },
       { label: 'GST', value: inr(order.gst_total), quality: 'verified' },
-      { label: 'Placed', value: new Date(order.placed_at).toLocaleDateString('en-IN'), quality: 'verified' },
+      { label: 'Placed', value: formatIndiaDateTime(order.placed_at), quality: 'verified' },
     ],
     actions: [{ type: 'link', label: invoice && context.actor.surface === 'retailer' ? 'View invoice' : 'View order', href: invoice && context.actor.surface === 'retailer' ? `${base}/${order.id}/invoice` : `${base}/${order.id}`, tone: 'primary' }],
   };

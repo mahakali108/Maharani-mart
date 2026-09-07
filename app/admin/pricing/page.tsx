@@ -5,6 +5,7 @@ import { AdminEmptyState } from '@/components/admin/empty-state';
 import { PriceListForm } from '@/components/admin/price-list-form';
 import { PricePreviewForm } from '@/components/admin/price-preview-form';
 import { DeactivatePriceButton } from '@/components/admin/deactivate-price-button';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface ProductOption {
   id: string;
@@ -142,7 +143,7 @@ export default async function PricingPage() {
                     </td>
                     <td className="px-5 py-3 font-semibold text-ink-900">₹{pl.price.toFixed(2)}</td>
                     <td className="px-5 py-3 text-ink-600">{pl.priority}</td>
-                    <td className="px-5 py-3 text-ink-500">{new Date(pl.created_at).toLocaleDateString('en-IN')}</td>
+                    <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(pl.created_at)}</td>
                     <td className="px-5 py-3">
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${

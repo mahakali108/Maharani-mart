@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { DispatchButton } from '@/components/staff/dispatch-button';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface OrderRow {
   id: string;
@@ -11,6 +12,7 @@ interface OrderRow {
   status: string;
   warehouse_id: string | null;
   grand_total: number;
+  placed_at: string;
   retailers: { shop_name: string; address: string | null } | null;
   warehouses: { name: string } | null;
 }
@@ -33,7 +35,7 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
   const [{ data: order }, { data: itemData }] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, order_number, status, warehouse_id, grand_total, retailers ( shop_name, address ), warehouses ( name )')
+      .select('id, order_number, status, warehouse_id, grand_total, placed_at, retailers ( shop_name, address ), warehouses ( name )')
       .eq('id', params.id)
       .maybeSingle<OrderRow>(),
     supabase
@@ -53,6 +55,7 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
         <h1 className="font-mono text-xl font-semibold text-ink-950">{order.order_number}</h1>
         <p className="text-sm text-ink-500">{order.retailers?.shop_name}</p>
         <p className="text-xs text-ink-400">{order.retailers?.address}</p>
+        <p className="text-xs text-ink-400">Placed {formatIndiaDateTime(order.placed_at)}</p>
       </div>
 
       <Card>

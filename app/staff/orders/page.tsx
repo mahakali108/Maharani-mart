@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface OrderRow {
   id: string;
@@ -55,6 +56,7 @@ export default async function StaffOrdersPage() {
                   <p className="font-mono text-sm font-medium text-ink-900">{o.order_number}</p>
                   <p className="text-xs text-ink-500">{o.retailers?.shop_name}</p>
                   <p className="text-xs text-ink-400">{o.warehouses?.name ?? 'No warehouse assigned'}</p>
+                  <p className="text-xs text-ink-400">{formatIndiaDateTime(o.placed_at)}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-ink-900">₹{o.grand_total.toFixed(2)}</p>

@@ -17,6 +17,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { formatInr } from '@/lib/retailer/format';
 import { describeOrderTotals } from '@/lib/orders/item-display';
+import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 15;
 
@@ -265,13 +266,7 @@ export default async function OrdersPage({
                       </Link>
                       <p className="mt-0.5 text-[9px] text-slate-500">
                         Placed{' '}
-                        {new Date(order.placed_at).toLocaleString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
+                        {formatIndiaRelativeDateTime(order.placed_at)}
                       </p>
                     </div>
                   </div>

@@ -32,6 +32,7 @@ import { RecentlyViewedRail, RecentlyViewedTracker } from '@/components/retailer
 import { loadFavoriteIds } from '@/lib/retailer/catalog';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { getCoPurchasedCards, getSimilarProductCards } from '@/lib/retailer/personalization';
+import { formatIndiaDate } from '@/lib/datetime/india';
 
 interface ProductDetailRow {
   id: string;
@@ -550,11 +551,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                     ) : null}
                     <p className="mt-0.5 text-[10px] text-amber-800">
                       Valid till{' '}
-                      {new Date(scheme.ends_at).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatIndiaDate(scheme.ends_at)}
                     </p>
                   </li>
                 ))}

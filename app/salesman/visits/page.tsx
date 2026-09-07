@@ -2,6 +2,7 @@ import { Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const STATUS_STYLES: Record<string, string> = {
   planned: 'bg-ink-100 text-ink-600',
@@ -74,8 +75,8 @@ export default async function SalesmanVisitsPage({
                   </span>
                 </div>
                 <div className="mt-2 flex gap-4 text-xs text-ink-400">
-                  {v.check_in_at ? <span>In: {new Date(v.check_in_at).toLocaleString('en-IN')}</span> : null}
-                  {v.check_out_at ? <span>Out: {new Date(v.check_out_at).toLocaleString('en-IN')}</span> : null}
+                  {v.check_in_at ? <span>In: {formatIndiaDateTime(v.check_in_at)}</span> : null}
+                  {v.check_out_at ? <span>Out: {formatIndiaDateTime(v.check_out_at)}</span> : null}
                 </div>
                 {v.notes ? <p className="mt-2 text-sm text-ink-600">{v.notes}</p> : null}
               </Card>

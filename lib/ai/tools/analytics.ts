@@ -3,6 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { AICard, AIToolContext, AIToolDefinition } from '@/lib/ai/types';
 import { dbFailure, internalCode, inr, sourcePeriod, unavailable, verified } from '@/lib/ai/tools/helpers';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const periodSchema = z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(30).optional() });
 const periodJson = { type: 'object', additionalProperties: false, properties: { days: { type: 'integer', minimum: 1, maximum: 365 }, limit: { type: 'integer', minimum: 1, maximum: 30 } } };
@@ -106,7 +107,7 @@ async function predictedStockouts(context: AIToolContext) {
   if (error) return dbFailure();
   if (!data?.length) return unavailable('No current verified stock-out predictions are available. Data available nahi hai.');
   const predictions = data as Array<{ id: string; prediction_type: string; scope_id: string | null; payload: Record<string, unknown>; confidence: number | null; computed_at: string }>;
-  return verified({ predictions, estimate: true }, predictions.map((row) => ({ type: 'insight', id: row.scope_id ?? undefined, title: 'Stored low-stock estimate', subtitle: `Computed ${new Date(row.computed_at).toLocaleString('en-IN')}`, quality: 'estimate', source: 'Stored ai_predictions row from the existing business prediction job', metrics: [{ label: 'Confidence', value: row.confidence === null ? 'Not recorded' : `${Number(row.confidence).toFixed(2)}`, quality: row.confidence === null ? 'unavailable' : 'estimate' }] })));
+  return verified({ predictions, estimate: true }, predictions.map((row) => ({ type: 'insight', id: row.scope_id ?? undefined, title: 'Stored low-stock estimate', subtitle: `Computed ${formatIndiaDateTime(row.computed_at)}`, quality: 'estimate', source: 'Stored ai_predictions row from the existing business prediction job', metrics: [{ label: 'Confidence', value: row.confidence === null ? 'Not recorded' : `${Number(row.confidence).toFixed(2)}`, quality: row.confidence === null ? 'unavailable' : 'estimate' }] })));
 }
 
 export const analyticsTools: AIToolDefinition[] = [

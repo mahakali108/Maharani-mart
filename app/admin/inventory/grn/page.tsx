@@ -8,6 +8,7 @@ import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import { StatusBadge } from '@/components/admin/status-badge';
 import type { GrnRow } from '@/types/inventory.types';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 25;
 
@@ -107,8 +108,8 @@ export default async function GrnListPage({
                     <td className="px-5 py-3 text-ink-600">{g.supplier_reference ?? '—'}</td>
                     <td className="px-5 py-3 text-right text-ink-600">{itemCounts.get(g.id) ?? 0}</td>
                     <td className="px-5 py-3"><StatusBadge status={g.status} /></td>
-                    <td className="px-5 py-3 text-ink-500">{new Date(g.created_at).toLocaleString('en-IN')}</td>
-                    <td className="px-5 py-3 text-ink-500">{g.confirmed_at ? new Date(g.confirmed_at).toLocaleString('en-IN') : '—'}</td>
+                    <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(g.created_at)}</td>
+                    <td className="px-5 py-3 text-ink-500">{g.confirmed_at ? formatIndiaDateTime(g.confirmed_at) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

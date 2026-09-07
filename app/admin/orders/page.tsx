@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 20;
 
@@ -128,7 +129,7 @@ export default async function AdminOrdersPage({
                         {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-ink-500">{new Date(o.placed_at).toLocaleDateString('en-IN')}</td>
+                    <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(o.placed_at)}</td>
                   </tr>
                 ))}
               </tbody>
