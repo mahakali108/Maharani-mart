@@ -3,8 +3,18 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Boxes, CircleAlert, Heart, ImageOff, Loader2, Trash2 } from 'lucide-react';
-import { updateCartQuantityAction, removeCartItemAction } from '@/lib/retailer/cart-actions';
+import {
+  Boxes,
+  CircleAlert,
+  Heart,
+  ImageOff,
+  Loader2,
+  Trash2,
+} from 'lucide-react';
+import {
+  updateCartQuantityAction,
+  removeCartItemAction,
+} from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { suggestedQuantities, type PricingTier } from '@/lib/retailer/case-pricing';
@@ -126,7 +136,10 @@ export function CartItemRow({
       )}
     >
       {isPending ? (
-        <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden rounded-t-2xl bg-primary-100">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-0.5 overflow-hidden rounded-t-2xl bg-primary-100"
+        >
           <span className="block h-full w-1/2 animate-pulse bg-primary-600" />
         </div>
       ) : null}
@@ -135,7 +148,7 @@ export function CartItemRow({
       <div className="flex min-w-0 gap-3 sm:gap-4">
         <div
           className={cn(
-            'relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-slate-100 sm:h-24 sm:w-24',
+            'relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-50 ring-1 ring-slate-100 sm:h-24 sm:w-24',
             isUnavailable && 'opacity-70'
           )}
         >
@@ -157,17 +170,21 @@ export function CartItemRow({
         </div>
 
         <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm sm:leading-5">{productName}</h3>
+          <h3 className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm sm:leading-5">
+            {productName}
+          </h3>
 
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] font-medium text-slate-500 sm:text-[11px]">
-            {brandName ? <span className="font-semibold uppercase tracking-wide text-slate-400">{brandName}</span> : null}
+            {brandName ? (
+              <span className="font-semibold uppercase tracking-wide text-slate-400">{brandName}</span>
+            ) : null}
             {brandName && packName ? <span aria-hidden="true">·</span> : null}
             {packName ? <span className="truncate">{packName}</span> : null}
           </p>
 
           <p className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-slate-500">
             <Boxes className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
-            Sold by piece · MOQ {moq} pc{moq === 1 ? '' : 's'}
+            Sold by piece · min {moq} pc{moq === 1 ? '' : 's'}
           </p>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -176,11 +193,11 @@ export function CartItemRow({
             </span>
             {isUnavailable ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
-                <CircleAlert className="h-3 w-3" aria-hidden="true" /> Unavailable — will be skipped
+                <CircleAlert className="h-3 w-3" aria-hidden="true" /> Unavailable
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" /> Available to order
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" /> Available
               </span>
             )}
           </div>
@@ -254,17 +271,17 @@ export function CartItemRow({
           </div>
           {isDirty ? (
             <p className="mt-1 text-[9px] font-semibold text-slate-400">
-              {pricing.orderable ? `Updating to ${localQty} pcs · ${formatInr(displayTotal)}` : 'Not available yet'}
+              {pricing.orderable
+                ? `Updating to ${localQty} pcs · ${formatInr(displayTotal)}`
+                : 'Not available yet'}
             </p>
           ) : null}
         </div>
         <div className="text-right">
-          <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Line total incl. GST</p>
+          <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Line total (incl. GST)</p>
           <p className="mt-0.5 text-base font-bold tracking-tight text-slate-950 sm:text-lg">{formatInr(displayTotal)}</p>
           <p className="text-[9px] text-slate-400">
-            {pricing.quantity} pc{pricing.quantity === 1 ? '' : 's'} × {formatInr(displayPiecePrice)}
-            {' · '}
-            {gstPercent}% GST included
+            {pricing.quantity} pc{pricing.quantity === 1 ? '' : 's'} × {formatInr(displayPiecePrice)} · GST {gstPercent}% included
           </p>
         </div>
       </div>
@@ -304,7 +321,10 @@ export function CartItemRow({
             aria-label={favorite ? `Remove ${productName} from favourites` : `Save ${productName} for later`}
             aria-pressed={favorite}
           >
-            <Heart className={cn('h-4 w-4', favorite && 'fill-primary-600 text-primary-600')} aria-hidden="true" />
+            <Heart
+              className={cn('h-4 w-4', favorite && 'fill-primary-600 text-primary-600')}
+              aria-hidden="true"
+            />
             {favorite ? 'Saved' : 'Save for later'}
           </button>
         ) : (

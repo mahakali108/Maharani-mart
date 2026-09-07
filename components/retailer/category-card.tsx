@@ -21,11 +21,16 @@ export function CategoryCard({
     <Link
       href={`/retailer/catalog?category=${category.id}`}
       className={cn(
-        'group block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md',
+        'group block h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
         compact && 'rounded-xl'
       )}
     >
-      <div className={cn('relative overflow-hidden bg-gradient-to-br from-blue-50 via-slate-50 to-slate-100', compact ? 'aspect-square' : 'aspect-[4/3]')}>
+      <div
+        className={cn(
+          'relative overflow-hidden bg-slate-50',
+          compact ? 'aspect-square' : 'aspect-[4/3]'
+        )}
+      >
         {category.image_url ? (
           <Image
             src={category.image_url}
@@ -36,24 +41,35 @@ export function CategoryCard({
             unoptimized
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-blue-500">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/90 shadow-sm">
-              <LayoutGrid className="h-5 w-5" />
+          <div className="flex h-full items-center justify-center text-primary-500">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
+              <LayoutGrid className="h-5 w-5" aria-hidden="true" />
             </span>
           </div>
         )}
-        {!compact ? <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/30 to-transparent" /> : null}
       </div>
-      <div className={cn('flex items-center gap-2', compact ? 'min-h-[3.75rem] p-2.5' : 'p-4')}>
+      <div className={cn('flex items-center gap-2', compact ? 'min-h-[3.25rem] p-2' : 'p-3.5')}>
         <div className="min-w-0 flex-1">
-          <h3 className={cn('truncate font-bold text-slate-900', compact ? 'text-[11px]' : 'text-sm')}>{category.name}</h3>
+          <h3
+            className={cn(
+              'truncate font-bold text-slate-900',
+              compact ? 'text-[11px]' : 'text-sm'
+            )}
+          >
+            {category.name}
+          </h3>
           {!compact ? (
             <p className="mt-0.5 text-[10px] text-slate-500">
               {category.productCount ?? 0} product{category.productCount === 1 ? '' : 's'}
             </p>
           ) : null}
         </div>
-        {!compact ? <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-primary-600" /> : null}
+        {!compact ? (
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-primary-600"
+            aria-hidden="true"
+          />
+        ) : null}
       </div>
     </Link>
   );

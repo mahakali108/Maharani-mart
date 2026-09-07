@@ -169,3 +169,40 @@ export function groupOrderLines<T extends GroupableOrderItemRow>(rows: T[]): Gro
 export function sumLineTotals(rows: readonly { line_total?: number }[]): number {
   return round2(rows.reduce((sum, row) => sum + (row.line_total ?? 0), 0));
 }
+
+/**
+ * A one-shot summary of an order's `order_items` rows: how many distinct
+ * billing lines were written and how many individual pieces the retailer is
+ * actually being delivered. Used by order history cards to show
+ * "3 lines · 46 pieces" without re-deriving a piece count for every row
+ * individually.
+ */
+export interface OrderTotalsSummary {
+  lineCount: number;
+  totalPieces: number;
+}
+
+export function describeOrderTotals(
+  rows: readonly (OrderItemQuantityRow & {
+    id?: string;
+    pack_id?: string | null;
+    product_id?: string | null;
+  })[]
+): OrderTotalsSummary {
+  if (rows.length === 0) return { lineCount: 0, totalPieces: 0 };
+  // Group rows by their pack so a cases + loose pair on the same pack counts
+  // as one billing line. Mirrors `groupOrderLines`'s bucketing without needing
+  // the full GroupableOrderItemRow shape.
+  const groups = new Map<string, OrderItemQuantityRow[]>();
+  for (const row of rows) {
+    const key = row.pack_id ?? row.product_id ?? `row:${row.id ?? ''}`;
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(row);
+    else groups.set(key, [row]);
+  }
+  let totalPieces = 0;
+  for (const members of groups.values()) {
+    for (const row of members) totalPieces += rowPieces(row);
+  }
+  return { lineCount: groups.size, totalPieces };
+}

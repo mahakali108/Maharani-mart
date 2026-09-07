@@ -51,10 +51,10 @@ export default function HelpPage({
         <span className="text-slate-800">Help</span>
       </div>
 
-      <section className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-primary-950 p-5 text-white shadow-lg sm:p-8">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Retailer support</p>
-        <h1 className="mt-2 text-2xl font-bold sm:text-4xl">Help centre</h1>
-        <p className="mt-2 max-w-xl text-xs text-slate-300 sm:text-sm">
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Retailer support</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Help centre</h1>
+        <p className="mt-2 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm">
           Get help with orders, payments, products and delivery — without leaving Maharani Traders.
         </p>
       </section>

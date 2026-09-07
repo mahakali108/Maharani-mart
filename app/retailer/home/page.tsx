@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Package, Search as SearchIcon, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { BrandCard, type BrandCardData } from '@/components/retailer/brand-card';
@@ -41,8 +42,10 @@ interface RetailerRow {
 }
 
 /**
- * Marketplace discovery only. Ordering, credit, account and support tools
- * remain intentionally out of this surface and are available from Account.
+ * Marketplace discovery for the small retailer. Every card on this page is a
+ * real record (active banners, active categories, active brands, active
+ * products) and every price is the canonical per-piece rate. There is no
+ * invented popularity, no fake stock, no fake review count and no fake offer.
  */
 export default async function RetailerHomePage() {
   const user = await requireUser();
@@ -54,7 +57,14 @@ export default async function RetailerHomePage() {
   ]);
 
   const nowIso = new Date().toISOString();
-  const [{ data: bannerRows }, { data: categoryData }, { data: brandData }, { data: discoveryRows }, frequentCards, buyAgainCards] = await Promise.all([
+  const [
+    { data: bannerRows },
+    { data: categoryData },
+    { data: brandData },
+    { data: discoveryRows },
+    frequentCards,
+    buyAgainCards,
+  ] = await Promise.all([
     supabase
       .from('banners')
       .select('id, title, image_url, link_url, area_id, starts_at, ends_at')
@@ -80,11 +90,6 @@ export default async function RetailerHomePage() {
       .limit(80)
       .returns<CatalogProductRow[]>(),
     getFrequentlyOrderedCards(supabase, user.id, retailer?.area_id ?? null, favoriteIds, 10),
-    // "Recently ordered" — the retailer's OWN last non-cancelled order, read
-    // through their RLS-scoped session. getBuyAgainCards re-resolves today's
-    // price for every product, so nothing here carries a stale amount, and it
-    // returns [] when the shop has no order history yet (the rail then simply
-    // does not render — no placeholder products are ever invented).
     getBuyAgainCards(supabase, user.id, retailer?.area_id ?? null, favoriteIds, 10),
   ]);
 
@@ -120,64 +125,93 @@ export default async function RetailerHomePage() {
   const bestSellingProducts = frequentCards.length > 0 ? frequentCards : discovery.bestPrices;
 
   return (
-    <div className="space-y-7 sm:space-y-10">
-      <h1 className="sr-only">Maharani Traders wholesale marketplace</h1>
+    <div className="space-y-5 sm:space-y-7">
+      <h1 className="sr-only">Maharani Traders — order everyday products by the piece</h1>
 
+      {/* Promotional banner carousel — only renders when there is a real active
+         banner; the carousel component paints a soft light fallback otherwise. */}
       <PromoCarousel banners={banners} />
 
+      {/* Shop by category — real categories only, soft red/pink accent rail. */}
       <section aria-labelledby="home-categories" className="space-y-3">
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex items-end justify-between gap-3 px-0.5">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Browse the marketplace</p>
-            <h2 id="home-categories" className="mt-0.5 text-base font-bold tracking-tight text-slate-900 sm:text-xl">Shop by category</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+              Shop by category
+            </p>
+            <h2 id="home-categories" className="mt-0.5 text-base font-bold tracking-tight text-slate-900 sm:text-lg">
+              What are you stocking today?
+            </h2>
           </div>
-          <Link href="/retailer/categories" className="shrink-0 text-[11px] font-bold text-primary-600 hover:text-primary-700 sm:text-xs">
+          <Link
+            href="/retailer/categories"
+            className="shrink-0 text-[11px] font-bold text-primary-600 hover:text-primary-700 sm:text-xs"
+          >
             View all
           </Link>
         </div>
         {homeCategories.length > 0 ? (
-          <div className="scrollbar-none -mx-3 flex gap-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-5 sm:gap-4 sm:overflow-visible sm:px-0 lg:grid-cols-8 xl:grid-cols-10">
+          <div
+            className="scrollbar-none -mx-3 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-5 sm:gap-3 sm:overflow-visible sm:px-0 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10"
+            role="list"
+          >
             {homeCategories.map((category) => (
-              <div key={category.id} className="w-[6.75rem] shrink-0 sm:w-auto">
+              <div key={category.id} className="w-[6.5rem] shrink-0 snap-start sm:w-auto" role="listitem">
                 <CategoryCard category={category} compact />
               </div>
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-xs text-slate-500">
-            Categories will appear here when the catalog is ready.
-          </div>
+          <EmptyState
+            icon={SearchIcon}
+            title="Categories will appear here"
+            body="Your distributor is curating this section. Check back soon."
+          />
         )}
       </section>
 
+      {/* Shop by brand — real brands only. */}
       <section aria-labelledby="home-brands" className="space-y-3">
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex items-end justify-between gap-3 px-0.5">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Trusted FMCG partners</p>
-            <h2 id="home-brands" className="mt-0.5 text-base font-bold tracking-tight text-slate-900 sm:text-xl">Shop by brand</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+              Trusted brands
+            </p>
+            <h2 id="home-brands" className="mt-0.5 text-base font-bold tracking-tight text-slate-900 sm:text-lg">
+              Shop by brand
+            </h2>
           </div>
-          <Link href="/retailer/brands" className="shrink-0 text-[11px] font-bold text-primary-600 hover:text-primary-700 sm:text-xs">
+          <Link
+            href="/retailer/brands"
+            className="shrink-0 text-[11px] font-bold text-primary-600 hover:text-primary-700 sm:text-xs"
+          >
             View all
           </Link>
         </div>
         {brands.length > 0 ? (
-          <div className="scrollbar-none -mx-3 flex gap-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:gap-4 sm:overflow-visible sm:px-0 lg:grid-cols-6 xl:grid-cols-8">
+          <div
+            className="scrollbar-none -mx-3 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-3 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:gap-3 sm:overflow-visible sm:px-0 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8"
+            role="list"
+          >
             {brands.slice(0, 10).map((brand) => (
-              <div key={brand.id} className="w-[8.75rem] shrink-0 sm:w-auto">
+              <div key={brand.id} className="w-[8.5rem] shrink-0 snap-start sm:w-auto" role="listitem">
                 <BrandCard brand={brand} compact />
               </div>
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-xs text-slate-500">
-            Brands will appear here when products are added.
-          </div>
+          <EmptyState
+            icon={Sparkles}
+            title="Brands will appear here"
+            body="New brands join the marketplace regularly — they'll show up here once available."
+          />
         )}
       </section>
 
+      {/* Buy again — only if the retailer has real order history. No placeholder. */}
       {buyAgainCards.length > 0 ? (
         <ProductRail
-          eyebrow="From your last order"
+          eyebrow="Reorder in a tap"
           title="Buy again"
           href="/retailer/orders"
           linkLabel="View your orders"
@@ -211,6 +245,32 @@ export default async function RetailerHomePage() {
         products={discovery.deals}
         emptyMessage="Featured offers will appear here when they are available."
       />
+    </div>
+  );
+}
+
+/**
+ * Reusable empty-state card. Used wherever real data is empty — never as a
+ * cover for a placeholder or fake data. Keep it small, light and friendly.
+ */
+function EmptyState({
+  icon: Icon,
+  title,
+  body,
+}: {
+  icon: typeof Package;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-xs text-slate-500">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <div>
+        <p className="text-[12px] font-semibold text-slate-800">{title}</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">{body}</p>
+      </div>
     </div>
   );
 }

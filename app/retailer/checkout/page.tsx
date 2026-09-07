@@ -1,7 +1,17 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
-import { Check, ChevronLeft, ChevronRight, CreditCard, ImageOff, PackageCheck, ReceiptText, ShieldCheck } from 'lucide-react';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  ImageOff,
+  ReceiptText,
+  ShieldCheck,
+  ShoppingCart,
+  Truck,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
@@ -79,10 +89,7 @@ export default async function CheckoutPage() {
 
   const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
   const overrideByProduct = await getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null);
-  const tierMap = await loadPackTiers(
-    supabase,
-    items.map((item) => item.pack_id)
-  );
+  const tierMap = await loadPackTiers(supabase, items.map((item) => item.pack_id));
 
   let subtotal = 0;
   let gstTotal = 0;
@@ -104,7 +111,12 @@ export default async function CheckoutPage() {
       gstPercent,
       moq: pack?.moq ?? 1,
       // Server-resolved per-piece fallback (never the internal case price).
-      derivedPiecePrice: pack ? piecePriceFromCase(resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null), pack.units_per_case) : 0,
+      derivedPiecePrice: pack
+        ? piecePriceFromCase(
+            resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null),
+            pack.units_per_case
+          )
+        : 0,
     });
     // Effective per-piece rate actually charged.
     const unitPrice = pricing.unitPrice;
@@ -132,12 +144,13 @@ export default async function CheckoutPage() {
     };
   });
   const grandTotal = subtotal + gstTotal;
+  const totalPieces = lines.reduce((sum, line) => sum + line.pieces, 0);
 
   return (
     <div className="space-y-5 sm:space-y-6">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
         <Link href="/retailer/cart" className="flex items-center gap-1 hover:text-primary-600">
-          <ChevronLeft className="h-3.5 w-3.5" /> Cart
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Cart
         </Link>
         <ChevronRight className="h-3 w-3" />
         <span className="text-slate-800">Checkout</span>
@@ -146,67 +159,126 @@ export default async function CheckoutPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Final review</p>
-          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">Secure checkout</h1>
-          <p className="mt-1 text-xs text-slate-500">Review pricing, GST and credit before placing your order.</p>
+          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Checkout</h1>
+          <p className="mt-1 text-xs text-slate-500">
+            Review the items, address and credit before placing the order.
+          </p>
         </div>
-        <div className="hidden items-center gap-2 text-[9px] font-bold text-slate-500 sm:flex">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
-            <Check className="h-3 w-3" />
-          </span>
-          Cart <span className="h-px w-8 bg-emerald-300" />
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white">2</span> Checkout
-          <span className="h-px w-8 bg-slate-200" />
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">3</span> Done
-        </div>
+        {/* Stepper — Cart → Checkout → Done. Visible from sm up. */}
+        <ol
+          className="hidden items-center gap-2 text-[10px] font-bold text-slate-500 sm:flex"
+          aria-label="Checkout progress"
+        >
+          <li className="flex items-center gap-1.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
+              <Check className="h-3 w-3" aria-hidden="true" />
+            </span>
+            <span>Cart</span>
+          </li>
+          <span className="h-px w-6 bg-emerald-300" aria-hidden="true" />
+          <li className="flex items-center gap-1.5 text-primary-700">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white">2</span>
+            <span>Checkout</span>
+          </li>
+          <span className="h-px w-6 bg-slate-200" aria-hidden="true" />
+          <li className="flex items-center gap-1.5 text-slate-400">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">3</span>
+            <span>Done</span>
+          </li>
+        </ol>
       </div>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_370px] lg:gap-7">
         <div className="space-y-4">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-5">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Order items</h2>
-                <p className="mt-0.5 text-[10px] text-slate-500">
-                  {lines.length} line item{lines.length === 1 ? '' : 's'}
-                </p>
+          {/* 1. DELIVERY ADDRESS */}
+          {retailer ? (
+            <section
+              aria-label="Delivery address"
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            >
+              <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5 sm:px-5">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-[11px] font-bold text-white">1</span>
+                <Truck className="h-4 w-4 text-primary-600" aria-hidden="true" />
+                <h2 className="text-sm font-bold text-slate-900">Delivery address</h2>
               </div>
-              <PackageCheck className="h-5 w-5 text-primary-600" />
+              <div className="p-4 sm:p-5">
+                <DeliveryAddressCard
+                  address={{
+                    shopName: retailer.shop_name ?? null,
+                    contactName: profile?.full_name ?? user.fullName,
+                    address: retailer.address ?? null,
+                    area: retailer.areas
+                      ? `${retailer.areas.name}${retailer.areas.district ? `, ${retailer.areas.district}` : ''}`
+                      : null,
+                    phone: profile?.phone ?? null,
+                  }}
+                />
+              </div>
+            </section>
+          ) : null}
+
+          {/* 2. ORDER ITEMS */}
+          <section
+            aria-label="Order items"
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-[11px] font-bold text-white">2</span>
+                <ShoppingCart className="h-4 w-4 text-primary-600" aria-hidden="true" />
+                <h2 className="text-sm font-bold text-slate-900">Order items</h2>
+              </div>
+              <p className="text-[10px] font-semibold text-slate-500">
+                {lines.length} line{lines.length === 1 ? '' : 's'} · {totalPieces} pc{totalPieces === 1 ? '' : 's'}
+              </p>
             </div>
             <div className="divide-y divide-slate-100 px-4 sm:px-5">
               {lines.map((line) => (
                 <div key={line.id} className="flex items-center gap-3 py-4 text-xs">
                   <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-50">
                     {line.imageUrl ? (
-                      <Image src={line.imageUrl} alt={line.productName} fill className="object-contain p-1" unoptimized />
+                      <Image
+                        src={line.imageUrl}
+                        alt={line.productName}
+                        fill
+                        sizes="56px"
+                        className="object-contain p-1"
+                        unoptimized
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center text-slate-300">
-                        <ImageOff className="h-4 w-4" />
+                        <ImageOff className="h-4 w-4" aria-hidden="true" />
                       </div>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-bold text-slate-900">{line.productName}</p>
-                    <p className="mt-1 text-[9px] text-slate-500">
-                      {line.packName} · Qty {line.pieces} pc{line.pieces === 1 ? '' : 's'} ·{' '}
-                      {formatInr(line.piecePrice)}/pc
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      {line.packName} · {line.pieces} pc{line.pieces === 1 ? '' : 's'} × {formatInr(line.piecePrice)}/pc
                     </p>
-                    <p className="mt-0.5 text-[9px] text-slate-400">
-                      GST {line.gstPercent}% included
-                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">GST {line.gstPercent}% included</p>
                   </div>
                   <p className="shrink-0 text-sm font-bold text-slate-950">{formatInr(line.lineTotal)}</p>
                 </div>
               ))}
             </div>
-            <Link href="/retailer/cart" className="flex items-center justify-center border-t border-slate-100 bg-slate-50 py-3 text-[10px] font-bold text-primary-600">
+            <Link
+              href="/retailer/cart"
+              className="flex items-center justify-center border-t border-slate-100 bg-slate-50 py-3 text-[10px] font-bold text-primary-600 hover:text-primary-700"
+            >
               Edit cart
             </Link>
           </section>
 
           {retailer ? (
-            <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} orderImpact={grandTotal} />
+            <CreditSummary
+              creditLimit={retailer.credit_limit}
+              outstandingBalance={retailer.outstanding_balance}
+              orderImpact={grandTotal}
+            />
           ) : null}
 
+          {/* 3. PAYMENT / CREDIT */}
           {/*
             Settlement method, stated from real data only. The schema has no
             `payment_method` column and no Net-15/Net-30 terms model, so this
@@ -215,48 +287,45 @@ export default async function CheckoutPage() {
             a choice that could be manipulated client-side, and it never affects
             price (which stays server-authoritative).
           */}
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5">
+          <section
+            aria-label="Payment"
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5 sm:px-5">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-[11px] font-bold text-white">3</span>
               <CreditCard className="h-4 w-4 text-primary-600" aria-hidden="true" />
-              <h2 className="text-sm font-bold text-slate-900">Settlement</h2>
+              <h2 className="text-sm font-bold text-slate-900">Payment</h2>
             </div>
-            <div className="space-y-2 p-4 text-xs">
+            <div className="space-y-2 p-4 text-xs sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-600">Method</span>
                 <span className="font-bold text-slate-900">
-                  {retailer && retailer.credit_limit > 0 ? 'Business credit account' : 'No credit facility configured'}
+                  {retailer && retailer.credit_limit > 0
+                    ? 'Business credit account'
+                    : 'No credit facility configured'}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-600">Final payable</span>
+                <span className="text-slate-600">Final amount</span>
                 <span className="font-bold text-slate-900">{formatInr(grandTotal)}</span>
               </div>
-              <p className="pt-1 text-[10px] leading-4 text-slate-400">
-                Payment terms (for example Net-15 or Net-30) are set by your distributor and are not selectable here.
-                GST is already included in every price above — it is never added again at checkout.
+              <p className="pt-1 text-[10px] leading-4 text-slate-500">
+                Payment terms (for example Net-15 or Net-30) are set by your distributor and are not
+                selectable here. GST is already included in every price above — it is never added again at checkout.
               </p>
             </div>
           </section>
-
-          {retailer ? (
-            <DeliveryAddressCard
-              address={{
-                shopName: retailer.shop_name ?? null,
-                contactName: profile?.full_name ?? user.fullName,
-                address: retailer.address ?? null,
-                area: retailer.areas
-                  ? `${retailer.areas.name}${retailer.areas.district ? `, ${retailer.areas.district}` : ''}`
-                  : null,
-                phone: profile?.phone ?? null,
-              }}
-            />
-          ) : null}
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-36">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
+          {/* 4. PLACE ORDER SUMMARY */}
+          <section
+            aria-label="Order total"
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
             <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-5 py-4">
-              <ReceiptText className="h-4 w-4 text-primary-600" />
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-[11px] font-bold text-white">4</span>
+              <ReceiptText className="h-4 w-4 text-primary-600" aria-hidden="true" />
               <h2 className="text-sm font-bold text-slate-900">Order total</h2>
             </div>
             <div className="space-y-3 p-5">
@@ -277,11 +346,12 @@ export default async function CheckoutPage() {
                 </div>
               ) : null}
               <div className="flex items-end justify-between border-t border-dashed border-slate-200 pt-4">
-                <span className="text-sm font-bold text-slate-900">Grand total</span>
+                <span className="text-sm font-bold text-slate-900">Total (incl. GST)</span>
                 <span className="text-2xl font-bold tracking-tight text-slate-950">{formatInr(grandTotal)}</span>
               </div>
               <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Final totals are validated server-side
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                Final totals are validated server-side
               </div>
             </div>
           </section>

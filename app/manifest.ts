@@ -16,7 +16,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Maharani Traders',
     short_name: 'Maharani Traders',
     description:
-      'Maharani Traders — FMCG B2B Wholesale Distribution for Khagaria District. Browse the wholesale catalog, place orders, and track credit.',
+      'Maharani Traders — order everyday products by the piece, track deliveries, and reorder favourites.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
@@ -52,13 +52,13 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       {
-        name: 'Catalog',
+        name: 'Browse products',
         short_name: 'Catalog',
-        description: 'Browse the wholesale product catalog',
+        description: 'Browse the product catalog',
         url: '/retailer/catalog',
       },
       {
-        name: 'My Orders',
+        name: 'My orders',
         short_name: 'Orders',
         description: 'View your past and current orders',
         url: '/retailer/orders',
