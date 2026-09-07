@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
 import { AttendanceCheckButton } from '@/components/salesman/attendance-check-button';
-import { formatIndiaDate, formatIndiaTime } from '@/lib/datetime/india';
+import { formatIndiaDate, formatIndiaTime, indiaTodayDateKey } from '@/lib/datetime/india';
 
 interface AttendanceRow {
   id: string;
@@ -16,7 +16,8 @@ export default async function AttendancePage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const today = new Date().toISOString().slice(0, 10);
+  // work_date is the Asia/Kolkata calendar date.
+  const today = indiaTodayDateKey();
 
   const [{ data: todayRow }, { data: historyData }] = await Promise.all([
     supabase.from('attendance').select('id, work_date, punch_in_at, punch_out_at').eq('user_id', user.id).eq('work_date', today).maybeSingle<AttendanceRow>(),

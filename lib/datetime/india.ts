@@ -184,6 +184,96 @@ export function indiaTodayDateKey(now: Date | number = new Date()): string {
   return indiaCalendarDateKey(now) ?? '1970-01-01';
 }
 
+/**
+ * Offset of `Asia/Kolkata` from UTC in milliseconds for the day containing
+ * `at`, derived from the IANA zone via `Intl` — no hardcoded +05:30. We read
+ * the IST wall clock at 12:00 UTC on that calendar day (an instant safely
+ * inside the day, away from any midnight roll-over) and take the gap from
+ * 12:00; India has no DST, so the offset is constant across the day.
+ */
+function indiaOffsetMs(at: Date): number {
+  const parts = indiaDateParts(at);
+  if (!parts) return 0;
+  const noonUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), 12, 0, 0);
+  const bag: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
+  for (const part of IST_PARTS.formatToParts(new Date(noonUtc))) {
+    if (part.type !== 'literal') bag[part.type] = part.value;
+  }
+  const istHour = (Number(bag.hour ?? '12') % 12) + (normalizeDayPeriod(bag.dayPeriod) === 'PM' ? 12 : 0);
+  const istMinute = Number(bag.minute ?? '0');
+  // At 12:00 UTC the IST wall clock reads istHour:istMinute; offset = wall − 12:00.
+  return (istHour * 60 + istMinute - 12 * 60) * 60_000;
+}
+
+const DATE_KEY_PARTS = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** UTC instant marking 00:00:00.000 IST (start of the India calendar day) for a `YYYY-MM-DD` key. */
+export function indiaDayStart(key: string): Date | null {
+  const match = DATE_KEY_PARTS.exec(key);
+  if (!match) return null;
+  const midnightUtc = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0);
+  return new Date(midnightUtc - indiaOffsetMs(new Date(midnightUtc)));
+}
+
+/** UTC instant marking 23:59:59.999 IST (end of the India calendar day) for a `YYYY-MM-DD` key. */
+export function indiaDayEnd(key: string): Date | null {
+  const start = indiaDayStart(key);
+  if (!start) return null;
+  return new Date(start.getTime() + 86_399_999);
+}
+
+/** ISO instant (UTC) marking the start of an Asia/Kolkata calendar day. */
+export function indiaDayStartIso(key: string): string | null {
+  return indiaDayStart(key)?.toISOString() ?? null;
+}
+
+/** ISO instant (UTC) marking the end of an Asia/Kolkata calendar day. */
+export function indiaDayEndIso(key: string): string | null {
+  return indiaDayEnd(key)?.toISOString() ?? null;
+}
+
+/** Add `days` India calendar days to a `YYYY-MM-DD` key. */
+export function indiaAddDaysToKey(key: string, days: number): string | null {
+  const start = indiaDayStart(key);
+  if (!start) return null;
+  return indiaCalendarDateKey(new Date(start.getTime() + days * 86_400_000));
+}
+
+/**
+ * Whole India calendar days between two `YYYY-MM-DD` keys:
+ * positive when `toKey` is after `fromKey`.
+ */
+export function indiaDiffDays(fromKey: string, toKey: string): number | null {
+  const from = indiaDayStart(fromKey);
+  const to = indiaDayStart(toKey);
+  if (!from || !to) return null;
+  return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+}
+
+/** Asia/Kolkata calendar date key `days` India days before/after `now`. */
+export function indiaDateKeyOffset(now: Date | number = new Date(), days = 0): string {
+  const today = indiaTodayDateKey(now);
+  return indiaAddDaysToKey(today, days) ?? today;
+}
+
+/** UTC instant of 00:00 IST on the first day of the India calendar month containing `now`. */
+export function indiaMonthStart(now: Date | number = new Date()): Date {
+  const key = indiaTodayDateKey(now);
+  const [year, month] = key.split('-');
+  return indiaDayStart(`${year}-${month}-01`) ?? new Date(now);
+}
+
+/** UTC instant of 00:00 IST on the first day of the previous India calendar month. */
+export function indiaPreviousMonthStart(now: Date | number = new Date()): Date {
+  const key = indiaTodayDateKey(now);
+  const [yearStr, monthStr] = key.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevMonth = month === 1 ? 12 : month - 1;
+  return indiaDayStart(`${prevYear}-${String(prevMonth).padStart(2, '0')}-01`) ?? new Date(now);
+}
+
 function calendarKeyToUtcDay(key: string): number | null {
   const match = DATE_ONLY.exec(key);
   if (!match) return null;

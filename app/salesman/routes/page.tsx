@@ -1,6 +1,7 @@
 import { Route as RouteIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { RouteStopCard } from '@/components/salesman/route-stop-card';
 
@@ -49,8 +50,8 @@ export default async function SalesmanRoutesPage() {
     );
   }
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // "Today" follows the Asia/Kolkata calendar day (00:00 IST).
+  const todayStartIso = indiaDayStartIso(indiaTodayDateKey());
 
   const routeIds = routes.map((r) => r.id);
   const [{ data: stopData }, { data: visitData }] = await Promise.all([
@@ -64,7 +65,7 @@ export default async function SalesmanRoutesPage() {
       .from('visits')
       .select('id, retailer_id, status, check_in_at')
       .eq('salesman_id', user.id)
-      .gte('created_at', todayStart.toISOString())
+      .gte('created_at', todayStartIso)
       .returns<TodayVisitRow[]>(),
   ]);
 

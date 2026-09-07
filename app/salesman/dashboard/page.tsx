@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { CalendarCheck, ClipboardList, Clock, MapPin, Route, ShoppingCart, Store, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface TodayOrder {
@@ -11,9 +12,8 @@ interface TodayOrder {
 export default async function SalesmanDashboardPage() {
   const user = await requireUser();
   const supabase = createClient();
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayIso = todayStart.toISOString();
+  // "Today" follows the Asia/Kolkata calendar day (00:00 IST), not server time.
+  const todayIso = indiaDayStartIso(indiaTodayDateKey());
 
   const [
     { count: assignedRetailers },

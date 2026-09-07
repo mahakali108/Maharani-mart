@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
-import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { formatIndiaDateTime, indiaDayEndIso, indiaDayStartIso } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 30;
 
@@ -77,8 +77,9 @@ export default async function InventoryMovementsPage({
 
   if (warehouseFilter) query = query.eq('warehouse_id', warehouseFilter);
   if (typeFilter) query = query.eq('movement_type', typeFilter);
-  if (from) query = query.gte('created_at', `${from}T00:00:00.000Z`);
-  if (to) query = query.lte('created_at', `${to}T23:59:59.999Z`);
+  // Date filters are Asia/Kolkata calendar days; convert to UTC instants.
+  if (from) query = query.gte('created_at', indiaDayStartIso(from)!);
+  if (to) query = query.lte('created_at', indiaDayEndIso(to)!);
 
   // Product name search needs a two-step (PostgREST cannot filter embedded
   // relations from the parent query); bounded to keep it cheap.

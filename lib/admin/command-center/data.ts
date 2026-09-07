@@ -1,6 +1,15 @@
 import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
+import {
+  indiaAddDaysToKey,
+  indiaDayEndIso,
+  indiaDayStart,
+  indiaDayStartIso,
+  indiaMonthStart,
+  indiaPreviousMonthStart,
+  indiaTodayDateKey,
+} from '@/lib/datetime/india';
 import { runForecastPipeline } from '@/lib/ai/forecast/index';
 import { generateForecastInsights, summaryNarrative } from '@/lib/ai/forecast/insights';
 import type { ForecastResult, ForecastSummary } from '@/lib/ai/forecast/types';
@@ -23,11 +32,8 @@ import {
   computeSupplierIntel,
   computeTrends,
   computeTopPerformers,
-  localDayEndIso,
-  localMidnightIso,
   roundPct,
   summarizeAuditEvent,
-  toDateKey,
   addDays,
   startOfDay,
   type RawAuditLog,
@@ -109,22 +115,22 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function isValidDateKey(value: string): boolean {
-  if (!DATE_RE.test(value)) return false;
-  const d = new Date(value + 'T00:00:00');
-  return !Number.isNaN(d.getTime()) && toDateKey(d) === value;
+  return DATE_RE.test(value) && indiaDayStartIso(value) !== null;
 }
 
 /** Validates raw searchParams into bounded, safe Sales Intelligence filters. */
 export function parseSalesIntelFilters(params: { from?: string; to?: string; category?: string; brand?: string; product?: string; retailer?: string; salesman?: string }, now = new Date()): SalesFilterValidation {
-  const maxFrom = toDateKey(addDays(now, -90));
-  let from = params.from && isValidDateKey(params.from) ? params.from : toDateKey(addDays(now, -30));
-  let to = params.to && isValidDateKey(params.to) ? params.to : toDateKey(now);
+  // Date keys are Asia/Kolkata calendar days, so offsets are added in IST days.
+  const todayKey = indiaTodayDateKey(now);
+  const maxFrom = indiaAddDaysToKey(todayKey, -90) ?? todayKey;
+  let from = params.from && isValidDateKey(params.from) ? params.from : (indiaAddDaysToKey(todayKey, -30) ?? todayKey);
+  let to = params.to && isValidDateKey(params.to) ? params.to : todayKey;
   if (from < maxFrom) from = maxFrom;
   if (from > to) [from, to] = [to, from];
-  if (toDateKey(addDays(new Date(to + 'T00:00:00'), 1)) < toDateKey(now)) to = toDateKey(now);
+  if ((indiaAddDaysToKey(to, 1) ?? to) < todayKey) to = todayKey;
   // Cap the window at 90 days so the query stays bounded.
-  if (new Date(to + 'T00:00:00').getTime() - new Date(from + 'T00:00:00').getTime() > 89 * 86_400_000) {
-    from = toDateKey(addDays(new Date(to + 'T00:00:00'), -89));
+  if ((indiaAddDaysToKey(from, 89) ?? from) < to) {
+    from = indiaAddDaysToKey(to, -89) ?? from;
   }
 
   const uuidOr = (value: string | undefined): string | null => (value && UUID_RE.test(value) ? value : null);
@@ -148,9 +154,9 @@ export async function gatherCommandCenterData(
   options: { salesFilters?: SalesIntelFilters } = {}
 ): Promise<CommandCenterData> {
   const now = new Date();
-  const todayKey = toDateKey(now);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+  const todayKey = indiaTodayDateKey(now);
+  const monthStart = indiaMonthStart(now);
+  const prevMonthStart = indiaPreviousMonthStart(now);
   const d30 = addDays(now, -30);
   const d60 = addDays(now, -60);
   const d7 = addDays(now, -7);
@@ -159,7 +165,7 @@ export async function gatherCommandCenterData(
   // ---- Parallel, error-isolated fetches ---------------------------------
   const [ordersToday, ordersMonth, ordersPrevMonth, orders30, ordersPrev30, retailers, profiles, totals, expiry, grnsSection, audit, aiAudit, notifFail, myNotifs, visits, adjustments, forecastSection] =
     await Promise.all([
-      trySection('orders:today', async () => fetchOrders(supabase, localMidnightIso(todayKey), new Date(now.getTime() + 86_399_000).toISOString())),
+      trySection('orders:today', async () => fetchOrders(supabase, indiaDayStartIso(todayKey)!, indiaDayEndIso(todayKey)!)),
       trySection('orders:month', async () => fetchOrders(supabase, monthStart.toISOString(), now.toISOString())),
       trySection('orders:prev-month', async () => fetchOrders(supabase, prevMonthStart.toISOString(), monthStart.toISOString())),
       trySection('orders:30d', async () => fetchOrders(supabase, d30.toISOString(), now.toISOString())),
@@ -429,15 +435,18 @@ async function gatherSalesIntel(
   retailers: RawRetailer[],
   profiles: RawProfile[]
 ): Promise<CommandCenterData['salesIntel']> {
-  const fromIso = localMidnightIso(filters.from);
-  const toIso = localDayEndIso(filters.to);
-  const spanDays = Math.max(1, Math.round((new Date(filters.to + 'T00:00:00').getTime() - new Date(filters.from + 'T00:00:00').getTime()) / 86_400_000) + 1);
-  const prevTo = new Date(new Date(filters.from + 'T00:00:00').getTime() - 86_400_000);
-  const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86_400_000);
+  const fromIso = indiaDayStartIso(filters.from)!;
+  const toIso = indiaDayEndIso(filters.to)!;
+  const spanDays = Math.max(
+    1,
+    Math.round(((indiaDayStart(filters.to)!.getTime() - indiaDayStart(filters.from)!.getTime()) / 86_400_000) + 1)
+  );
+  const prevToKey = indiaAddDaysToKey(filters.from, -1) ?? filters.from;
+  const prevFromKey = indiaAddDaysToKey(prevToKey, -(spanDays - 1)) ?? prevToKey;
 
   const [orders, prevOrders, brands, categories] = await Promise.all([
     trySection('sales:orders', () => fetchOrders(supabase, fromIso, toIso)),
-    trySection('sales:prev-orders', () => fetchOrders(supabase, prevFrom.toISOString(), new Date(prevTo.getTime() + 86_399_999).toISOString())),
+    trySection('sales:prev-orders', () => fetchOrders(supabase, indiaDayStartIso(prevFromKey)!, indiaDayEndIso(prevToKey)!)),
     trySection('sales:brands', async () => {
       const { data, error } = await supabase.from('brands').select('id, name').eq('is_active', true).limit(500);
       if (error) throw new Error(error.message);

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
-import { formatIndiaTime } from '@/lib/datetime/india';
+import { formatIndiaTime, indiaTodayDateKey } from '@/lib/datetime/india';
 
 interface AttendanceRow {
   id: string;
@@ -21,7 +21,7 @@ export default async function AdminAttendancePage({
   searchParams: { date?: string };
 }) {
   const supabase = createClient();
-  const date = searchParams.date || new Date().toISOString().slice(0, 10);
+  const date = searchParams.date || indiaTodayDateKey();
 
   const { data } = await supabase
     .from('attendance')
@@ -49,7 +49,7 @@ export default async function AdminAttendancePage({
               name="date"
               type="date"
               defaultValue={date}
-              max={new Date().toISOString().slice(0, 10)}
+              max={indiaTodayDateKey()}
               className="h-11 rounded-xl border border-ink-200 bg-white px-3.5 text-sm text-ink-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-600"
             />
           </div>

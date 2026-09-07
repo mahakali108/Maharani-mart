@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { formatIndiaTime } from '@/lib/datetime/india';
+import { formatIndiaTime, indiaDayEndIso, indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
 
 interface AttendanceRow {
   punch_in_at: string;
@@ -26,10 +26,6 @@ interface OrderRow {
   retailers: { shop_name: string } | null;
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export default async function DailyCallReportPage({
   searchParams,
 }: {
@@ -38,9 +34,10 @@ export default async function DailyCallReportPage({
   const user = await requireUser();
   const supabase = createClient();
 
-  const date = searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date) ? searchParams.date : todayIso();
-  const dayStart = `${date}T00:00:00.000Z`;
-  const dayEnd = `${date}T23:59:59.999Z`;
+  const date = searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date) ? searchParams.date : indiaTodayDateKey();
+  // Day window follows the Asia/Kolkata calendar day; timestamps stay UTC.
+  const dayStart = indiaDayStartIso(date)!;
+  const dayEnd = indiaDayEndIso(date)!;
 
   const [{ data: attendance }, { data: visitData }, { data: orderData }] = await Promise.all([
     supabase
@@ -79,7 +76,7 @@ export default async function DailyCallReportPage({
       </div>
 
       <form method="get" className="flex gap-2">
-        <Input type="date" name="date" defaultValue={date} max={todayIso()} className="max-w-[180px]" />
+        <Input type="date" name="date" defaultValue={date} max={indiaTodayDateKey()} className="max-w-[180px]" />
         <Button type="submit" size="sm" variant="outline">
           View
         </Button>

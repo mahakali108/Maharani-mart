@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { BarChart3, Filter, IndianRupee, ShoppingCart, TrendingUp, type LucideIcon } from 'lucide-react';
 import type { SalesIntel, SalesIntelFilters } from '@/lib/admin/command-center/types';
+import { indiaTodayDateKey } from '@/lib/datetime/india';
 import { Card } from '@/components/ui/card';
 import { BarChart, TopBars, TrendChart } from './charts';
 import { GrowthText, inr, Section, SectionEmptyState } from './shared';
@@ -44,7 +45,7 @@ export function SalesSection({
             <input type="date" name="from" defaultValue={filters.from} max={filters.to} className="field-input" />
           </Field>
           <Field label="To">
-            <input type="date" name="to" defaultValue={filters.to} max={new Date().toISOString().slice(0, 10)} className="field-input" />
+            <input type="date" name="to" defaultValue={filters.to} max={indiaTodayDateKey()} className="field-input" />
           </Field>
           <Field label="Category">
             <select name="category" defaultValue={filters.categoryId ?? ''} className="field-input">

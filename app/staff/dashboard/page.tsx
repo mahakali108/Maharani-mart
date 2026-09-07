@@ -1,15 +1,15 @@
 import { ClipboardCheck, ClipboardList, PackageCheck, Truck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
 import { Card } from '@/components/ui/card';
 
 export default async function StaffDashboardPage() {
   await requirePermission('orders.view.all');
   const supabase = createClient();
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayIso = todayStart.toISOString();
+  // "Today" follows the Asia/Kolkata calendar day (00:00 IST), not server time.
+  const todayIso = indiaDayStartIso(indiaTodayDateKey());
 
   const [ordersToday, pendingOrders, dispatchQueue, dispatchedToday] = await Promise.all([
     supabase
