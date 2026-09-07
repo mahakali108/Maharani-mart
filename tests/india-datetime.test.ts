@@ -24,8 +24,16 @@ import {
   formatIndiaRelativeDate,
   formatIndiaRelativeDateTime,
   formatIndiaTime,
+  indiaAddDaysToKey,
   indiaCalendarDateKey,
+  indiaDateKeyOffset,
   indiaDateParts,
+  indiaDayEndIso,
+  indiaDayStartIso,
+  indiaDiffDays,
+  indiaMonthStart,
+  indiaPreviousMonthStart,
+  indiaTodayDateKey,
   parseTimestamp,
 } from '@/lib/datetime/india';
 
@@ -160,6 +168,67 @@ describe('India (Asia/Kolkata) display formatter', () => {
     expect(parts?.date).toBe(formatIndiaDate(utc));
     expect(parts?.time).toBe(formatIndiaTime(utc));
     expect(`${parts?.date}, ${parts?.time}`).toBe('04 Sep 2026, 07:18 PM');
+  });
+});
+
+describe('Asia/Kolkata calendar-day boundaries (UTC storage, IST day buckets)', () => {
+  it('day start is 00:00 IST = 18:30 UTC on the previous calendar day', () => {
+    // 04 Sep 2026 00:00 IST = 03 Sep 2026 18:30 UTC
+    expect(indiaDayStartIso('2026-09-04')).toBe('2026-09-03T18:30:00.000Z');
+  });
+
+  it('day end is 23:59:59.999 IST = 18:29:59.999 UTC the same calendar day', () => {
+    // 04 Sep 2026 23:59:59.999 IST = 04 Sep 2026 18:29:59.999 UTC
+    expect(indiaDayEndIso('2026-09-04')).toBe('2026-09-04T18:29:59.999Z');
+  });
+
+  it('start and end of an IST day are exactly one India day apart and bracket midnight', () => {
+    const start = new Date(indiaDayStartIso('2026-09-04')!);
+    const end = new Date(indiaDayEndIso('2026-09-04')!);
+    expect(end.getTime() - start.getTime()).toBe(86_399_999);
+    // Both boundaries render to the same India calendar date.
+    expect(indiaCalendarDateKey(start)).toBe('2026-09-04');
+    expect(indiaCalendarDateKey(end)).toBe('2026-09-04');
+    // One ms past day end rolls to the next India day.
+    expect(indiaCalendarDateKey(new Date(end.getTime() + 1))).toBe('2026-09-05');
+  });
+
+  it('returns null for malformed date keys (no fabricated bounds)', () => {
+    expect(indiaDayStartIso('not-a-date')).toBeNull();
+    expect(indiaDayEndIso('2026-9-4')).toBeNull();
+  });
+
+  it('adds/subtracts India calendar days across month boundaries', () => {
+    expect(indiaAddDaysToKey('2026-09-04', 1)).toBe('2026-09-05');
+    expect(indiaAddDaysToKey('2026-09-04', -4)).toBe('2026-08-31');
+    expect(indiaAddDaysToKey('2026-01-01', -1)).toBe('2025-12-31');
+  });
+
+  it('diffDays counts whole India calendar days', () => {
+    expect(indiaDiffDays('2026-09-04', '2026-09-04')).toBe(0);
+    expect(indiaDiffDays('2026-09-01', '2026-09-04')).toBe(3);
+    expect(indiaDiffDays('2026-09-04', '2026-09-01')).toBe(-3);
+  });
+
+  it('today key follows IST even when the UTC date is still the previous day', () => {
+    // 04 Sep 2026 00:30 IST = 03 Sep 2026 19:00 UTC
+    const now = new Date('2026-09-03T19:00:00.000Z');
+    expect(indiaTodayDateKey(now)).toBe('2026-09-04');
+    expect(indiaDateKeyOffset(now, -1)).toBe('2026-09-03');
+  });
+
+  it('month start is the first India calendar day at 00:00 IST', () => {
+    // 04 Sep 2026 07:18 PM IST → month start = 01 Sep 2026 00:00 IST = 31 Aug 18:30 UTC
+    const now = new Date('2026-09-04T13:48:00.000Z');
+    expect(indiaMonthStart(now).toISOString()).toBe('2026-08-31T18:30:00.000Z');
+    expect(indiaPreviousMonthStart(now).toISOString()).toBe('2026-07-31T18:30:00.000Z');
+  });
+
+  it('month start wraps the year at January', () => {
+    // 15 Jan 2026 12:00 IST = 15 Jan 06:30 UTC
+    const now = new Date('2026-01-15T06:30:00.000Z');
+    expect(indiaMonthStart(now).toISOString()).toBe('2025-12-31T18:30:00.000Z');
+    expect(indiaPreviousMonthStart(now).toISOString()).toBe('2025-11-30T18:30:00.000Z');
   });
 });
 

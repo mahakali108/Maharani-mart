@@ -3,14 +3,16 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireSalesman } from '@/lib/salesman/guard';
+import { indiaTodayDateKey } from '@/lib/datetime/india';
 import type { Database } from '@/types/database.types';
 
 type AttendanceInsert = Database['public']['Tables']['attendance']['Insert'];
 
 export type AttendanceResult = { error?: string } | { success: true };
 
+/** Work-day is the Asia/Kolkata calendar date, not the UTC date. */
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return indiaTodayDateKey();
 }
 
 export async function checkInAction(lat: number | null, lng: number | null): Promise<AttendanceResult> {
@@ -28,6 +30,7 @@ export async function checkInAction(lat: number | null, lng: number | null): Pro
 
   const payload: AttendanceInsert = {
     user_id: user.id,
+    work_date: todayDate(),
     punch_in_at: new Date().toISOString(),
     punch_in_lat: lat,
     punch_in_lng: lng,

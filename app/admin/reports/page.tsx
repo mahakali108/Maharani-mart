@@ -1,5 +1,6 @@
 import { BarChart3 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { indiaDayEndIso, indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -25,11 +26,10 @@ interface OrderItemRow {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** First day of the current Asia/Kolkata calendar month, as a `YYYY-MM-DD` key. */
 function firstOfMonth(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  const [year, month] = indiaTodayDateKey().split('-');
+  return `${year}-${month}-01`;
 }
 
 function aggregate<T>(rows: T[], keyFn: (row: T) => string, valueFn: (row: T) => number) {
@@ -55,7 +55,7 @@ export default async function ReportsPage({
 }) {
   const supabase = createClient();
   const from = searchParams.from || firstOfMonth();
-  const to = searchParams.to || new Date().toISOString().slice(0, 10);
+  const to = searchParams.to || indiaTodayDateKey();
 
   // Fetch orders WITHOUT embedded joins (safe pattern documented in
   // app/admin/retailers/page.tsx — embedded resources can silently drop
@@ -64,8 +64,8 @@ export default async function ReportsPage({
     .from('orders')
     .select('id, grand_total, retailer_id, collected_by')
     .neq('status', 'cancelled')
-    .gte('placed_at', `${from}T00:00:00`)
-    .lte('placed_at', `${to}T23:59:59`);
+    .gte('placed_at', indiaDayStartIso(from)!)
+    .lte('placed_at', indiaDayEndIso(to)!);
 
   const orders = (orderData ?? []) as OrderRow[];
   const orderIds = orders.map((o) => o.id);
@@ -158,7 +158,7 @@ export default async function ReportsPage({
               name="to"
               type="date"
               defaultValue={to}
-              max={new Date().toISOString().slice(0, 10)}
+              max={indiaTodayDateKey()}
               className="h-10 rounded-xl border border-ink-200 bg-white px-3 text-sm text-ink-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-600"
             />
           </div>

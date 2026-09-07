@@ -26,6 +26,7 @@ import {
   type RawRetailer,
 } from '@/lib/admin/command-center/compute';
 import { fetchOrders, fetchOrderItems } from '@/lib/admin/command-center/data';
+import { formatIndiaDateTime, indiaMonthStart, indiaPreviousMonthStart, indiaTodayDateKey, indiaDayStartIso, indiaDayEndIso } from '@/lib/datetime/india';
 
 /**
  * Super Admin executive copilot tools.
@@ -153,15 +154,16 @@ async function collectRiskInputs(context: AIToolContext): Promise<RiskInputs | n
 
 async function commandOverview(context: AIToolContext) {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+  const todayKey = indiaTodayDateKey(now);
+  const monthStart = indiaMonthStart(now);
+  const prevMonthStart = indiaPreviousMonthStart(now);
   const d30 = addDays(now, -30);
 
   const [ordersToday, ordersMonth, ordersPrevMonth, orders30d, retailers, profiles, totals] = await Promise.all([
-    fetchOrders(context.supabase, new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString(), new Date(now.getTime() + 86_399_000).toISOString()),
-    fetchOrders(context.supabase, monthStart.toISOString(), now.toISOString()),
+    fetchOrders(context.supabase, indiaDayStartIso(todayKey)!, indiaDayEndIso(todayKey)!),
+    fetchOrders(context.supabase, monthStart.toISOString(), indiaDayEndIso(todayKey)!),
     fetchOrders(context.supabase, prevMonthStart.toISOString(), monthStart.toISOString()),
-    fetchOrders(context.supabase, d30.toISOString(), now.toISOString()),
+    fetchOrders(context.supabase, d30.toISOString(), indiaDayEndIso(todayKey)!),
     fetchRetailers(context),
     fetchProfiles(context),
     fetchInventoryTotals(context),
@@ -214,7 +216,7 @@ async function commandOverview(context: AIToolContext) {
     {
       type: 'insight',
       title: 'Business overview (today + month)',
-      subtitle: `Data as of ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+      subtitle: `Data as of ${formatIndiaDateTime(now)} IST`,
       quality: 'verified',
       source: 'Authorized orders, retailers, profiles and inventory_product_totals rows',
       metrics: [

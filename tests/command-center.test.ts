@@ -11,6 +11,8 @@ import {
   computeSupplierIntel,
   computeTrends,
   computeTopPerformers,
+  localDayEndIso,
+  localMidnightIso,
   summarizeAuditEvent,
   toDateKey,
   type RawExpiryRow,
@@ -78,8 +80,9 @@ void emptyForecastResult;
 // Dates & daily series
 // ---------------------------------------------------------------------------
 
-describe('daily series and date helpers', () => {
+describe('daily series and date helpers (Asia/Kolkata calendar)', () => {
   it('zero-fills missing days and excludes cancelled orders', () => {
+    // NOW is 26 Aug 2026 12:00 UTC = 26 Aug 2026 05:30 PM IST.
     const orders = [
       order({ id: 'a', placed_at: `${TODAY}T09:00:00.000Z`, grand_total: 500 }),
       order({ id: 'b', placed_at: '2026-08-24T09:00:00.000Z', grand_total: 300 }),
@@ -94,9 +97,28 @@ describe('daily series and date helpers', () => {
     expect(series[2]?.orders).toBe(1);
   });
 
-  it('toDateKey uses server-local calendar days', () => {
-    const d = new Date(2026, 7, 26, 1, 2, 3);
-    expect(toDateKey(d)).toBe('2026-08-26');
+  it('toDateKey uses the Asia/Kolkata calendar date, not UTC or the host zone', () => {
+    // 26 Aug 2026 19:00 UTC = 27 Aug 2026 00:30 IST → India date is the 27th.
+    expect(toDateKey('2026-08-26T19:00:00.000Z')).toBe('2026-08-27');
+    // 26 Aug 2026 18:29 UTC = 26 Aug 2026 11:59 PM IST → India date is the 26th.
+    expect(toDateKey('2026-08-26T18:29:00.000Z')).toBe('2026-08-26');
+    // The same UTC instant returns the same India key regardless of host TZ.
+    expect(toDateKey(new Date('2026-08-26T19:00:00.000Z'))).toBe('2026-08-27');
+  });
+
+  it('localMidnightIso/localDayEndIso bracket the IST day (18:30Z prev day → 18:29:59.999Z)', () => {
+    expect(localMidnightIso('2026-08-26')).toBe('2026-08-25T18:30:00.000Z');
+    expect(localDayEndIso('2026-08-26')).toBe('2026-08-26T18:29:59.999Z');
+  });
+
+  it('buckets an order placed at 02:00 IST on the India calendar date', () => {
+    // 26 Aug 2026 02:00 IST = 25 Aug 2026 20:30 UTC.
+    const orders = [order({ id: 'early', placed_at: '2026-08-25T20:30:00.000Z', grand_total: 700 })];
+    const series = buildDailySeries(orders, 2, new Date('2026-08-26T01:00:00.000Z')); // 26 Aug 06:30 IST
+    expect(series.map((p) => p.date)).toEqual(['2026-08-25', '2026-08-26']);
+    // The 02:00 IST order lands on 26 Aug India date.
+    expect(series.find((p) => p.date === '2026-08-26')?.sales).toBe(700);
+    expect(series.find((p) => p.date === '2026-08-25')?.sales).toBe(0);
   });
 });
 

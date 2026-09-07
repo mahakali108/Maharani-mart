@@ -16,6 +16,7 @@ import type {
   SecurityAlert,
 } from '@/lib/admin/control-center/types';
 import { computeAccessStatus } from '@/lib/admin/control-center/types';
+import { indiaAddDaysToKey, indiaDayEnd, indiaTodayDateKey } from '@/lib/datetime/india';
 import type { UserRole } from '@/lib/auth/roles';
 
 // ── Audit Helper ───────────────────────────────────────────────────────────
@@ -672,9 +673,11 @@ export async function getControlCenterOverview(): Promise<ControlCenterOverview>
   await requireSuperAdmin();
   const supabase = createClient();
   const now = new Date();
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  const threeDaysEnd = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-  const sevenDaysEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  // Expiry buckets use Asia/Kolkata calendar-day ends; timestamps stay UTC.
+  const todayKey = indiaTodayDateKey(now);
+  const todayEnd = indiaDayEnd(todayKey) ?? now;
+  const threeDaysEnd = indiaDayEnd(indiaAddDaysToKey(todayKey, 3) ?? todayKey) ?? now;
+  const sevenDaysEnd = indiaDayEnd(indiaAddDaysToKey(todayKey, 7) ?? todayKey) ?? now;
 
   const [profilesRes, accessRes, featuresRes, auditRes] = await Promise.all([
     supabase.from('profiles').select('id, role, is_active').limit(10000),

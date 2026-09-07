@@ -32,7 +32,16 @@ import type {
   TrendPoint,
 } from './types';
 import type { ForecastResult } from '@/lib/ai/forecast/types';
-import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
+import {
+  formatIndiaDate,
+  formatIndiaDateTime,
+  indiaCalendarDateKey,
+  indiaDateKeyOffset,
+  indiaDayEnd,
+  indiaDayEndIso,
+  indiaDayStart,
+  indiaDayStartIso,
+} from '@/lib/datetime/india';
 
 // ---------------------------------------------------------------------------
 // Shared raw-row shapes (as fetched by data.ts)
@@ -160,38 +169,36 @@ export interface RawAiAuditLog {
 }
 
 /**
- * Date helpers — server-local dates, consistent with the existing Reports
- * page and the AI analytics tools (both use server-local calendar days).
+ * Date helpers — calendar day boundaries in Asia/Kolkata (IST). Timestamps are
+ * stored in UTC, but every day bucket ("today", trends, report windows) uses the
+ * India calendar day via the shared formatter (IANA Intl), so a 02:00 IST order
+ * is counted on the India date — never the server/host (UTC) date and never a
+ * hardcoded offset.
  */
-export function toDateKey(value: Date | string): string {
-  const d = typeof value === 'string' ? new Date(value) : value;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+export function toDateKey(value: Date | string | number): string {
+  return indiaCalendarDateKey(value) ?? '1970-01-01';
 }
 
 export function addDays(value: Date, days: number): Date {
   const d = new Date(value);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
+/** UTC instant at which the IST calendar day containing `value` begins. */
 export function startOfDay(value: Date): Date {
-  const d = new Date(value);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  const key = indiaCalendarDateKey(value);
+  return (key && indiaDayStart(key)) || value;
 }
 
-/** ISO instant of local midnight for a date key, e.g. '2026-08-26' -> '2026-08-26T00:00:00.000Z' shifted to local midnight. */
+/** ISO instant (UTC) of 00:00 IST for a `YYYY-MM-DD` date key. */
 export function localMidnightIso(dateKey: string): string {
-  const [y = 1970, m = 1, d = 1] = dateKey.split('-').map(Number);
-  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+  return indiaDayStartIso(dateKey) ?? `${dateKey}T00:00:00.000Z`;
 }
 
+/** ISO instant (UTC) of 23:59:59.999 IST for a `YYYY-MM-DD` date key. */
 export function localDayEndIso(dateKey: string): string {
-  const [y = 1970, m = 1, d = 1] = dateKey.split('-').map(Number);
-  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
+  return indiaDayEndIso(dateKey) ?? `${dateKey}T23:59:59.999Z`;
 }
 
 function daysBetween(from: Date, to: Date): number {
@@ -219,8 +226,7 @@ export function buildDailySeries(orders: RawOrder[], days: number, now = new Dat
   }
   const points: TrendPoint[] = [];
   for (let i = days - 1; i >= 0; i -= 1) {
-    const date = startOfDay(addDays(now, -i));
-    const key = toDateKey(date);
+    const key = indiaDateKeyOffset(now, -i);
     const row = byDay.get(key) ?? { sales: 0, orders: 0 };
     points.push({ date: key, label: key.slice(5), sales: row.sales, orders: row.orders });
   }
@@ -1008,10 +1014,10 @@ export function computeSalesIntel(input: SalesIntelInputs): SalesIntel {
   }, 0) : 0);
   const growthPct = previousPeriodSales > 0 ? roundPct(((totalSales - previousPeriodSales) / previousPeriodSales) * 100) : null;
 
-  // Daily + weekly series on the counted basis.
+  // Daily + weekly series on the counted basis. Bounds are IST day boundaries.
   const daily = new Map<string, { sales: number; orders: number }>();
-  const from = new Date(filters.from + 'T00:00:00');
-  const to = new Date(filters.to + 'T23:59:59');
+  const fromStart = indiaDayStart(filters.from) ?? new Date(`${filters.from}T00:00:00Z`);
+  const toEnd = indiaDayEnd(filters.to) ?? new Date(`${filters.to}T23:59:59Z`);
   for (const o of countedOrders) {
     const key = toDateKey(o.placed_at);
     const row = daily.get(key) ?? { sales: 0, orders: 0 };
@@ -1020,14 +1026,14 @@ export function computeSalesIntel(input: SalesIntelInputs): SalesIntel {
     daily.set(key, row);
   }
   const dailyPoints: TrendPoint[] = [];
-  for (let d = new Date(from); d <= to; d = addDays(d, 1)) {
+  for (let d = new Date(fromStart); d <= toEnd; d = addDays(d, 1)) {
     const key = toDateKey(d);
     const row = daily.get(key) ?? { sales: 0, orders: 0 };
     dailyPoints.push({ date: key, label: key.slice(5), sales: row.sales, orders: row.orders });
   }
   const weekly = new Map<number, { sales: number; orders: number }>();
   for (const point of dailyPoints) {
-    const idx = Math.floor(daysBetween(from, new Date(point.date + 'T00:00:00')) / 7);
+    const idx = Math.floor(daysBetween(fromStart, indiaDayStart(point.date) ?? fromStart) / 7);
     const row = weekly.get(idx) ?? { sales: 0, orders: 0 };
     row.sales = roundMoney(row.sales + point.sales);
     row.orders += point.orders;

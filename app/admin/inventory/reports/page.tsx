@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import type { ProductTotalsViewRow, ExpiryReportViewRow } from '@/types/inventory.types';
-import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { formatIndiaDateTime, indiaDayEndIso, indiaDayStartIso } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 30;
 
@@ -202,8 +202,8 @@ export default async function InventoryReportsPage({
       .order('seq', { ascending: false });
     if (warehouse) query = query.eq('warehouse_id', warehouse);
     if (productIds) query = query.in('product_id', productIds);
-    if (from) query = query.gte('created_at', `${from}T00:00:00.000Z`);
-    if (to) query = query.lte('created_at', `${to}T23:59:59.999Z`);
+    if (from) query = query.gte('created_at', indiaDayStartIso(from)!);
+    if (to) query = query.lte('created_at', indiaDayEndIso(to)!);
     const { data, count } = await query.range(rangeFrom, rangeTo);
     const rows = (data ?? []) as unknown as MovementReportRow[];
     body = (
@@ -228,8 +228,8 @@ export default async function InventoryReportsPage({
       .select('id, grn_number, status, created_at, confirmed_at, warehouses ( name ), grn_items ( id, received_quantity, unit_cost )', { count: 'exact' })
       .order('created_at', { ascending: false });
     if (warehouse) query = query.eq('warehouse_id', warehouse);
-    if (from) query = query.gte('created_at', `${from}T00:00:00.000Z`);
-    if (to) query = query.lte('created_at', `${to}T23:59:59.999Z`);
+    if (from) query = query.gte('created_at', indiaDayStartIso(from)!);
+    if (to) query = query.lte('created_at', indiaDayEndIso(to)!);
     const { data, count } = await query.range(rangeFrom, rangeTo);
     const rows = (data ?? []) as unknown as GrnReportRow[];
     body = (

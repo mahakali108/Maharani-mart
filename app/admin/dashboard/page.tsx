@@ -17,6 +17,12 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import {
+  indiaAddDaysToKey,
+  indiaDayEnd,
+  indiaDayStart,
+  indiaTodayDateKey,
+} from '@/lib/datetime/india';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
@@ -84,34 +90,33 @@ interface ActivityRow {
 // ---------------------------------------------------------------------------
 
 function getDateRange(range: DateRange, customFrom?: string, customTo?: string): { from: Date; to: Date } {
-  const now = new Date();
-  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  // All ranges use Asia/Kolkata calendar-day boundaries; timestamps stay UTC.
+  const todayKey = indiaTodayDateKey();
 
   if (range === 'custom' && customFrom && customTo) {
     return {
-      from: new Date(customFrom + 'T00:00:00'),
-      to: new Date(customTo + 'T23:59:59'),
+      from: indiaDayStart(customFrom) ?? new Date(),
+      to: indiaDayEnd(customTo) ?? new Date(),
     };
   }
 
   switch (range) {
-    case '7d': {
-      const from = new Date(now);
-      from.setDate(from.getDate() - 6);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: endOfDay };
-    }
-    case '30d': {
-      const from = new Date(now);
-      from.setDate(from.getDate() - 29);
-      from.setHours(0, 0, 0, 0);
-      return { from, to: endOfDay };
-    }
+    case '7d':
+      return {
+        from: indiaDayStart(indiaAddDaysToKey(todayKey, -6) ?? todayKey) ?? new Date(),
+        to: indiaDayEnd(todayKey) ?? new Date(),
+      };
+    case '30d':
+      return {
+        from: indiaDayStart(indiaAddDaysToKey(todayKey, -29) ?? todayKey) ?? new Date(),
+        to: indiaDayEnd(todayKey) ?? new Date(),
+      };
     case 'today':
-    default: {
-      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      return { from, to: endOfDay };
-    }
+    default:
+      return {
+        from: indiaDayStart(todayKey) ?? new Date(),
+        to: indiaDayEnd(todayKey) ?? new Date(),
+      };
   }
 }
 

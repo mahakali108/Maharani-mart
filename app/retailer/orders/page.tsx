@@ -17,7 +17,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { formatInr } from '@/lib/retailer/format';
 import { describeOrderTotals } from '@/lib/orders/item-display';
-import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
+import { formatIndiaRelativeDateTime, indiaDayEndIso, indiaDayStartIso } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 15;
 
@@ -93,8 +93,9 @@ export default async function OrdersPage({
 
   if (status) query = query.eq('status', status);
   if (q) query = query.ilike('order_number', `%${q}%`);
-  if (dateFrom) query = query.gte('placed_at', `${dateFrom}T00:00:00.000Z`);
-  if (dateTo) query = query.lte('placed_at', `${dateTo}T23:59:59.999Z`);
+  // Date filters are Asia/Kolkata calendar days; convert to UTC instants.
+  if (dateFrom) query = query.gte('placed_at', indiaDayStartIso(dateFrom)!);
+  if (dateTo) query = query.lte('placed_at', indiaDayEndIso(dateTo)!);
 
   const { data, count } = await query;
   const orders = (data ?? []) as OrderRow[];

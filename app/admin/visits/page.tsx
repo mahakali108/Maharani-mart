@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
-import { formatIndiaTime } from '@/lib/datetime/india';
+import { formatIndiaTime, indiaDayEndIso, indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
 
 const STATUS_STYLES: Record<string, string> = {
   planned: 'bg-ink-100 text-ink-600',
@@ -31,13 +31,13 @@ export default async function AdminVisitsPage({
 }) {
   const supabase = createClient();
   const status = searchParams.status ?? '';
-  const date = searchParams.date || new Date().toISOString().slice(0, 10);
+  const date = searchParams.date || indiaTodayDateKey();
 
   let query = supabase
     .from('visits')
     .select('id, status, check_in_at, check_out_at, notes, profiles ( full_name ), retailers ( shop_name ), orders ( order_number )')
-    .gte('created_at', `${date}T00:00:00`)
-    .lte('created_at', `${date}T23:59:59`)
+    .gte('created_at', indiaDayStartIso(date)!)
+    .lte('created_at', indiaDayEndIso(date)!)
     .order('created_at', { ascending: false });
 
   if (status) query = query.eq('status', status);
@@ -58,7 +58,7 @@ export default async function AdminVisitsPage({
             name="date"
             type="date"
             defaultValue={date}
-            max={new Date().toISOString().slice(0, 10)}
+            max={indiaTodayDateKey()}
             className="h-11 rounded-xl border border-ink-200 bg-white px-3.5 text-sm text-ink-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-600"
           />
           <Select name="status" defaultValue={status}>
