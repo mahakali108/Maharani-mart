@@ -6,8 +6,13 @@ import {
   getProductPriceOverrides,
   resolvePackPrice,
 } from '@/lib/retailer/effective-price';
-import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
+import {
+  piecePriceFromCase,
+  resolveLooseTierSet,
+  type PricingTier,
+} from '@/lib/retailer/case-pricing';
 import { calcDiscountPercent } from '@/lib/retailer/format';
+import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import type { ProductCardProps } from '@/components/retailer/product-card';
 
 export const PRODUCT_CARD_SELECT =
@@ -63,10 +68,45 @@ function bestPricedPack(product: CatalogProductRow, override: number | null) {
   return priced.sort((a, b) => a.piecePrice - b.piecePrice)[0] ?? null;
 }
 
+/**
+ * Builds a one-line "buy more, save more" hint for a product card from the
+ * variant's selling tiers. Example: "7+ pcs se ₹80/pc". Only ever shown when
+ * the admin has configured at least one deeper selling tier — the value comes
+ * from the SAME tier rows the server uses to price the cart / order, so the
+ * card can never advertise a rate the checkout will not honour.
+ */
+export function nextTierHint(
+  tiers: PricingTier[] | null | undefined,
+  unitsPerCase: number,
+  currentFromPrice: number | null
+): { minQuantity: number; pricePerPiece: number; label: string } | null {
+  if (currentFromPrice === null) return null;
+  const loose = resolveLooseTierSet(tiers ?? [], unitsPerCase).tiers;
+  if (loose.length < 2) return null;
+  // Find the next tier the retailer can reach — strictly better rate than the
+  // displayed "from" price, and with a min quantity above 1.
+  const sorted = [...loose].sort((a, b) => a.min_quantity - b.min_quantity);
+  const next = sorted.find(
+    (tier) => tier.min_quantity > 1 && tier.price_per_piece < currentFromPrice
+  );
+  if (!next) return null;
+  const rate = next.price_per_piece;
+  return {
+    minQuantity: next.min_quantity,
+    pricePerPiece: rate,
+    label: `${next.min_quantity}+ pcs se ₹${rate.toFixed(0)}/pc`,
+  };
+}
+
 export function toPricedCard(
   product: CatalogProductRow,
   override: number | null,
-  extras: { isFavorite?: boolean; hasOffer?: boolean; timesOrdered?: number } = {}
+  extras: {
+    isFavorite?: boolean;
+    hasOffer?: boolean;
+    timesOrdered?: number;
+    tierHint?: { minQuantity: number; pricePerPiece: number; label: string } | null;
+  } = {}
 ): PricedCatalogCard {
   const best = bestPricedPack(product, override);
   const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
@@ -82,12 +122,11 @@ export function toPricedCard(
     mrp: best?.pack.mrp,
     packName: best?.pack.pack_name,
     moq: best?.pack.moq ?? 1,
-    unitsPerCase: best?.pack.units_per_case ?? 1,
-    casePrice: best?.price ?? null,
     defaultPackId: best?.pack.id ?? null,
     gstPercent: product.gst_percent,
     isFavorite: extras.isFavorite ?? false,
     hasOffer: extras.hasOffer ?? false,
+    nextTierHint: extras.tierHint ?? null,
     categoryId: product.category_id,
     brandId: product.brand_id,
     createdAt: product.created_at,
@@ -104,18 +143,34 @@ export async function priceCatalogProducts(
   frequency: Map<string, number> = new Map()
 ): Promise<PricedCatalogCard[]> {
   const ids = products.map((product) => product.id);
-  const [overrides, offerIds] = await Promise.all([
+  const [overrides, offerIds, packTiers] = await Promise.all([
     getProductPriceOverrides(supabase, ids, retailerId, areaId),
     getActiveOfferProductIds(supabase, ids),
+    // Pull pricing tiers for every variant we are about to render so we can
+    // surface a "buy more, save more" hint on the card. RLS already keeps
+    // inactive tiers out of the retailer's view; we still filter on
+    // is_active=true above. One query covers every pack of every product in
+    // the working set.
+    loadPackTiers(
+      supabase,
+      products.flatMap((product) => product.product_packs.map((pack) => pack.id))
+    ),
   ]);
 
-  return products.map((product) =>
-    toPricedCard(product, overrides.get(product.id) ?? null, {
+  return products.map((product) => {
+    const override = overrides.get(product.id) ?? null;
+    const offerIdsHas = offerIds.has(product.id);
+    const best = bestPricedPack(product, override);
+    const hint = best
+      ? nextTierHint(packTiers.get(best.pack.id) ?? [], best.pack.units_per_case, best.piecePrice)
+      : null;
+    return toPricedCard(product, override, {
       isFavorite: favoriteIds.has(product.id),
-      hasOffer: offerIds.has(product.id),
+      hasOffer: offerIdsHas,
       timesOrdered: frequency.get(product.id) ?? 0,
-    })
-  );
+      tierHint: hint,
+    });
+  });
 }
 
 export async function loadProductsByIds(

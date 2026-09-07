@@ -11,6 +11,10 @@ export interface GstBreakdownRow {
  * Presentational order summary. Every value is computed by the cart page from
  * the same effective-price / GST / savings helpers the checkout uses — this
  * card renders totals only and never recalculates anything itself.
+ *
+ * The retailer sees PIECE totals, never case totals. The summary below has
+ * been trimmed to "Subtotal → GST → Grand total" so a single number rolls
+ * through cart → checkout → order history.
  */
 export function CartOrderSummary({
   subtotal,
@@ -26,22 +30,30 @@ export function CartOrderSummary({
   orderableCount: number;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
+    <section
+      aria-label="Order summary"
+      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+    >
       <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
         <h2 className="text-sm font-bold text-slate-900">Order summary</h2>
         <p className="mt-0.5 text-[10px] text-slate-500">
-          {orderableCount} orderable item{orderableCount === 1 ? '' : 's'}
+          {orderableCount === 0
+            ? 'No items ready to order yet'
+            : `${orderableCount} item${orderableCount === 1 ? '' : 's'} ready to order`}
         </p>
       </div>
 
       <div className="space-y-3 p-5">
         <div className="flex items-baseline justify-between gap-3 text-xs text-slate-600">
-          <span>Item subtotal</span>
+          <span>Subtotal</span>
           <span className="text-right font-semibold text-slate-800">{formatInr(subtotal)}</span>
         </div>
 
         {gstByRate.map(({ rate, amount }) => (
-          <div key={rate} className="flex items-baseline justify-between gap-3 text-xs text-slate-600">
+          <div
+            key={rate}
+            className="flex items-baseline justify-between gap-3 text-xs text-slate-600"
+          >
             <span>GST {rate}%</span>
             <span className="text-right font-semibold text-slate-800">{formatInr(amount)}</span>
           </div>
@@ -55,10 +67,11 @@ export function CartOrderSummary({
         ) : null}
 
         <div className="flex items-baseline justify-between gap-3 border-t border-dashed border-slate-200 pt-4">
-          <span className="text-sm font-bold text-slate-900">Grand total</span>
-          <span className="text-right text-xl font-bold tracking-tight text-slate-950">{formatInr(grandTotal)}</span>
+          <span className="text-sm font-bold text-slate-900">Total (incl. GST)</span>
+          <span className="text-right text-xl font-bold tracking-tight text-slate-950">
+            {formatInr(grandTotal)}
+          </span>
         </div>
-        <p className="text-right text-[9px] text-slate-400">Inclusive of calculated GST</p>
 
         {orderableCount > 0 ? (
           <Link
@@ -69,7 +82,7 @@ export function CartOrderSummary({
           </Link>
         ) : (
           <span className="flex h-12 w-full cursor-not-allowed items-center justify-center rounded-xl bg-slate-200 px-4 text-xs font-bold text-slate-500">
-            No orderable items
+            No items ready to order
           </span>
         )}
 

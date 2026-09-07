@@ -19,7 +19,7 @@ function BrandMonogram({ name }: { name: string }) {
     .join('')
     .toUpperCase();
 
-  return <span className="text-sm font-black tracking-tight text-blue-700">{monogram || 'B'}</span>;
+  return <span className="text-sm font-black tracking-tight text-primary-700">{monogram || 'B'}</span>;
 }
 
 export function BrandCard({
@@ -33,11 +33,16 @@ export function BrandCard({
     <Link
       href={`/retailer/catalog?brand=${brand.id}`}
       className={cn(
-        'group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md',
+        'group flex h-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
         compact && 'min-h-[4.5rem] rounded-xl p-2.5'
       )}
     >
-      <span className={cn('relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50', compact ? 'h-11 w-11' : 'h-16 w-16')}>
+      <span
+        className={cn(
+          'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50',
+          compact ? 'h-11 w-11' : 'h-16 w-16'
+        )}
+      >
         {brand.logo_url ? (
           <Image
             src={brand.logo_url}
@@ -52,14 +57,27 @@ export function BrandCard({
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className={cn('block truncate font-bold text-slate-900', compact ? 'text-[11px]' : 'text-sm')}>{brand.name}</span>
+        <span
+          className={cn(
+            'block truncate font-bold text-slate-900',
+            compact ? 'text-[11px]' : 'text-sm'
+          )}
+        >
+          {brand.name}
+        </span>
         {!compact ? (
           <span className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500">
-            <Tag className="h-3 w-3" /> {brand.productCount ?? 0} product{brand.productCount === 1 ? '' : 's'}
+            <Tag className="h-3 w-3" aria-hidden="true" />
+            {brand.productCount ?? 0} product{brand.productCount === 1 ? '' : 's'}
           </span>
         ) : null}
       </span>
-      {!compact ? <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:text-primary-600" /> : null}
+      {!compact ? (
+        <ArrowUpRight
+          className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:text-primary-600"
+          aria-hidden="true"
+        />
+      ) : null}
     </Link>
   );
 }

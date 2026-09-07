@@ -41,7 +41,7 @@ const ACCOUNT_LINKS = [
   { href: '#wallet-credit', label: 'Wallet & credit', body: 'Available credit and outstanding balance', icon: WalletCards, tone: 'bg-emerald-50 text-emerald-700' },
   { href: '/retailer/account/ledger', label: 'Credit & ledger', body: 'Order activity on your account, with dates and values', icon: Scale, tone: 'bg-slate-100 text-slate-700' },
   { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
-  { href: '/retailer/quick-order', label: 'Quick Order', body: 'Find products by name', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
+  { href: '/retailer/quick-order', label: 'Quick order', body: 'Find products by name', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
   { href: '/retailer/favorites', label: 'Favourites', body: 'Your saved products for faster restocking', icon: Heart, tone: 'bg-rose-50 text-rose-700' },
   { href: '/retailer/notifications', label: 'Notifications', body: 'Order and account updates', icon: Bell, tone: 'bg-violet-50 text-violet-700' },
   { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-indigo-50 text-indigo-700' },
@@ -53,19 +53,26 @@ export default async function RetailerAccountPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: retailer }, { data: profile }, { count: orderCount }, { count: unreadCount }] = await Promise.all([
-    supabase
-      .from('retailers')
-      .select('shop_name, gstin, address, credit_limit, outstanding_balance, status, areas ( name, district )')
-      .eq('id', user.id)
-      .maybeSingle<RetailerAccountRow>(),
-    supabase.from('profiles').select('phone').eq('id', user.id).maybeSingle<ProfileContactRow>(),
-    supabase.from('orders').select('id', { count: 'exact', head: true }).eq('retailer_id', user.id),
-    supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('recipient_id', user.id).eq('is_read', false),
-  ]);
+  const [{ data: retailer }, { data: profile }, { count: orderCount }, { count: unreadCount }] =
+    await Promise.all([
+      supabase
+        .from('retailers')
+        .select('shop_name, gstin, address, credit_limit, outstanding_balance, status, areas ( name, district )')
+        .eq('id', user.id)
+        .maybeSingle<RetailerAccountRow>(),
+      supabase.from('profiles').select('phone').eq('id', user.id).maybeSingle<ProfileContactRow>(),
+      supabase.from('orders').select('id', { count: 'exact', head: true }).eq('retailer_id', user.id),
+      supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('is_read', false),
+    ]);
 
   const shopName = retailer?.shop_name ?? user.fullName;
-  const area = retailer?.areas ? `${retailer.areas.name}${retailer.areas.district ? `, ${retailer.areas.district}` : ''}` : null;
+  const area = retailer?.areas
+    ? `${retailer.areas.name}${retailer.areas.district ? `, ${retailer.areas.district}` : ''}`
+    : null;
   const initials = shopName
     .split(' ')
     .map((part) => part[0])
@@ -75,30 +82,34 @@ export default async function RetailerAccountPage() {
     .toUpperCase();
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-6 sm:space-y-7">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
-        <Link href="/retailer/home" className="hover:text-primary-600">Home</Link>
+        <Link href="/retailer/home" className="hover:text-primary-600">
+          Home
+        </Link>
         <ChevronRight className="h-3 w-3" />
         <span className="text-slate-800">Account</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-800 to-slate-950 p-5 text-white shadow-lg sm:p-8">
-        <UserRound className="absolute -bottom-8 -right-3 h-44 w-44 text-white/10 sm:h-60 sm:w-60" />
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/60 p-5 shadow-sm sm:p-7">
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white text-xl font-black text-blue-700 shadow-sm sm:h-20 sm:w-20 sm:text-2xl">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary-600 text-xl font-black text-white shadow-sm sm:h-20 sm:w-20 sm:text-2xl">
               {initials || 'MT'}
             </span>
             <div>
-              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-200">
-                <Sparkles className="h-3.5 w-3.5" /> Retailer account
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Your account
               </p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-4xl">{shopName}</h1>
-              <p className="mt-1 text-xs text-blue-100 sm:text-sm">Manage your shop profile, credit and marketplace shortcuts.</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{shopName}</h1>
+              <p className="mt-1 text-xs text-slate-600 sm:text-sm">
+                Manage your shop profile, credit and order shortcuts.
+              </p>
             </div>
           </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1.5 text-[10px] font-bold text-emerald-100">
-            <ShieldCheck className="h-3.5 w-3.5" /> {retailer?.status === 'active' ? 'Account active' : retailer?.status ?? 'Retailer'}
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />{' '}
+            {retailer?.status === 'active' ? 'Account active' : retailer?.status ?? 'Retailer'}
           </span>
         </div>
       </section>
@@ -109,9 +120,9 @@ export default async function RetailerAccountPage() {
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">Your details</p>
-                <h2 className="mt-0.5 text-base font-bold text-slate-900">Retailer / shop information</h2>
+                <h2 className="mt-0.5 text-base font-bold text-slate-900">Shop information</h2>
               </div>
-              <UserRound className="h-5 w-5 text-primary-600" />
+              <UserRound className="h-5 w-5 text-primary-600" aria-hidden="true" />
             </div>
             <dl className="grid gap-x-6 gap-y-4 p-4 sm:grid-cols-2 sm:p-5">
               <div>
@@ -132,11 +143,15 @@ export default async function RetailerAccountPage() {
               </div>
               <div>
                 <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone</dt>
-                <dd className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-900"><Phone className="h-3.5 w-3.5 text-slate-400" /> {profile?.phone ?? 'Not provided'}</dd>
+                <dd className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                  <Phone className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" /> {profile?.phone ?? 'Not provided'}
+                </dd>
               </div>
               <div>
                 <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Service area</dt>
-                <dd className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-900"><MapPin className="h-3.5 w-3.5 text-slate-400" /> {area ?? 'Assigned area'}</dd>
+                <dd className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                  <MapPin className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" /> {area ?? 'Assigned area'}
+                </dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Shop address</dt>
@@ -148,22 +163,35 @@ export default async function RetailerAccountPage() {
           <section className="space-y-3">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">Stay in control</p>
-                <h2 className="mt-0.5 text-base font-bold text-slate-900 sm:text-xl">Account shortcuts</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">Quick links</p>
+                <h2 className="mt-0.5 text-base font-bold text-slate-900 sm:text-lg">Account shortcuts</h2>
               </div>
-              {unreadCount && unreadCount > 0 ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">{unreadCount} unread</span> : null}
+              {unreadCount && unreadCount > 0 ? (
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">
+                  {unreadCount} unread
+                </span>
+              ) : null}
             </div>
             <div className="grid gap-2.5 sm:grid-cols-2">
               {ACCOUNT_LINKS.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <Link key={item.href} href={item.href} className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-4">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.tone}`}><Icon className="h-5 w-5" /></span>
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:p-4"
+                  >
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.tone}`}>
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-bold text-slate-900">{item.label}</span>
                       <span className="mt-0.5 block truncate text-[10px] text-slate-500">{item.body}</span>
                     </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-primary-600" />
+                    <ArrowRight
+                      className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-primary-600"
+                      aria-hidden="true"
+                    />
                   </Link>
                 );
               })}
@@ -173,31 +201,52 @@ export default async function RetailerAccountPage() {
 
         <aside className="space-y-4 lg:sticky lg:top-36">
           <div id="wallet-credit" className="scroll-mt-36">
-            {retailer ? <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} title="Wallet & credit" /> : null}
+            {retailer ? (
+              <CreditSummary
+                creditLimit={retailer.credit_limit}
+                outstandingBalance={retailer.outstanding_balance}
+                title="Wallet & credit"
+              />
+            ) : null}
           </div>
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">At a glance</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <Link href="/retailer/orders" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50">
-                <ClipboardList className="h-4 w-4 text-blue-700" />
+              <Link
+                href="/retailer/orders"
+                className="rounded-xl bg-slate-50 p-3 transition hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              >
+                <ClipboardList className="h-4 w-4 text-primary-600" aria-hidden="true" />
                 <p className="mt-2 text-lg font-bold text-slate-900">{orderCount ?? 0}</p>
                 <p className="text-[10px] text-slate-500">Orders placed</p>
               </Link>
-              <Link href="/retailer/notifications" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50">
-                <Bell className="h-4 w-4 text-blue-700" />
+              <Link
+                href="/retailer/notifications"
+                className="rounded-xl bg-slate-50 p-3 transition hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              >
+                <Bell className="h-4 w-4 text-primary-600" aria-hidden="true" />
                 <p className="mt-2 text-lg font-bold text-slate-900">{unreadCount ?? 0}</p>
                 <p className="text-[10px] text-slate-500">Unread updates</p>
               </Link>
             </div>
           </section>
-          <Link href="/retailer/help" className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 transition hover:border-blue-200 hover:bg-blue-100">
-            <MessageCircle className="h-5 w-5 text-blue-700" />
-            <span className="flex-1"><span className="block text-xs font-bold text-blue-900">Need a hand?</span><span className="mt-0.5 block text-[10px] text-blue-700">Visit the retailer help centre</span></span>
-            <ArrowRight className="h-4 w-4 text-blue-700" />
+          <Link
+            href="/retailer/help"
+            className="flex items-center gap-3 rounded-2xl border border-primary-100 bg-primary-50/60 p-4 transition hover:border-primary-200 hover:bg-primary-50"
+          >
+            <MessageCircle className="h-5 w-5 text-primary-600" aria-hidden="true" />
+            <span className="flex-1">
+              <span className="block text-xs font-bold text-primary-900">Need a hand?</span>
+              <span className="mt-0.5 block text-[10px] text-primary-700">Visit the help centre</span>
+            </span>
+            <ArrowRight className="h-4 w-4 text-primary-700" aria-hidden="true" />
           </Link>
           <form action={logoutAction}>
-            <button type="submit" className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 shadow-sm transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700">
-              <LogOut className="h-4 w-4" /> Logout
+            <button
+              type="submit"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 shadow-sm transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" /> Logout
             </button>
           </form>
         </aside>

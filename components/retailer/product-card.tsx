@@ -3,7 +3,18 @@
 import { useState, useTransition, type MouseEvent } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Check, CheckCircle2, CircleAlert, Heart, ImageOff, Loader2, PackagePlus, ShoppingCart, Sparkles, Tag } from 'lucide-react';
+import {
+  Check,
+  CheckCircle2,
+  CircleAlert,
+  Heart,
+  ImageOff,
+  Loader2,
+  PackagePlus,
+  ShoppingCart,
+  Sparkles,
+  Tag,
+} from 'lucide-react';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
@@ -16,16 +27,18 @@ export interface ProductCardProps {
   brandName?: string;
   imageUrl?: string;
   isNewLaunch: boolean;
+  /** Per-piece "from" rate (the cheapest active variant's piece price). */
   fromPrice: number | null;
   mrp?: number | null;
+  /** Variant / size label, e.g. "50G". */
   packName?: string;
   moq?: number;
-  unitsPerCase?: number;
-  casePrice?: number | null;
   defaultPackId?: string | null;
   gstPercent?: number;
   isFavorite?: boolean;
   hasOffer?: boolean;
+  /** "Buy more, save more" hint computed server-side from selling tiers. */
+  nextTierHint?: { minQuantity: number; pricePerPiece: number; label: string } | null;
   compact?: boolean;
 }
 
@@ -43,6 +56,7 @@ export function ProductCard({
   gstPercent,
   isFavorite = false,
   hasOffer = false,
+  nextTierHint = null,
   compact = false,
 }: ProductCardProps) {
   const [isPending, startTransition] = useTransition();
@@ -51,8 +65,6 @@ export function ProductCard({
   const [error, setError] = useState(false);
   const [favorite, setFavorite] = useState(isFavorite);
   const [quantity, setQuantity] = useState(Math.max(1, moq));
-  // `fromPrice` is the retailer's per-piece "from" rate (resolved server-side
-  // from the cheapest variant). It is never a case total.
   const piecePrice = fromPrice;
   const discount = calcDiscountPercent(mrp, piecePrice);
   const savings = calcSavings(mrp, piecePrice);
@@ -80,12 +92,12 @@ export function ProductCard({
   return (
     <article
       className={cn(
-        'group relative flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_10px_28px_rgba(15,23,42,0.10)] sm:rounded-2xl',
+        'group relative flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md sm:rounded-2xl',
         compact && 'min-w-[10.5rem]'
       )}
     >
       <Link href={`/retailer/catalog/${id}`} className="block p-2 pb-0 sm:p-3 sm:pb-0">
-        <div className="relative aspect-[1.08/1] overflow-hidden rounded-lg bg-gradient-to-br from-slate-50 to-slate-100 sm:rounded-xl">
+        <div className="relative aspect-square overflow-hidden rounded-lg bg-slate-50 sm:rounded-xl">
           {imageUrl ? (
             <Image
               src={imageUrl}
@@ -96,8 +108,8 @@ export function ProductCard({
               unoptimized
             />
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-300">
-              <ImageOff className="h-7 w-7" />
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-300">
+              <ImageOff className="h-7 w-7" aria-hidden="true" />
               <span className="text-[9px] font-semibold uppercase tracking-wider">Image coming soon</span>
             </div>
           )}
@@ -108,17 +120,19 @@ export function ProductCard({
               </span>
             ) : null}
             {hasOffer ? (
-              <span className="flex items-center gap-1 rounded-md bg-amber-400 px-1.5 py-1 text-[9px] font-bold text-slate-950 shadow-sm">
-                <Tag className="h-2.5 w-2.5" /> Offer
+              <span className="flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-1 text-[9px] font-bold text-amber-800 shadow-sm sm:text-[10px]">
+                <Tag className="h-2.5 w-2.5" aria-hidden="true" /> Offer
               </span>
             ) : null}
             {isNewLaunch ? (
               <span className="flex items-center gap-1 rounded-md bg-primary-600 px-1.5 py-1 text-[9px] font-bold text-white shadow-sm sm:text-[10px]">
-                <Sparkles className="h-2.5 w-2.5" /> NEW
+                <Sparkles className="h-2.5 w-2.5" aria-hidden="true" /> NEW
               </span>
             ) : null}
             {unavailable ? (
-              <span className="rounded-md bg-slate-800 px-1.5 py-1 text-[9px] font-bold text-white">Unavailable</span>
+              <span className="rounded-md bg-slate-800 px-1.5 py-1 text-[9px] font-bold text-white">
+                Unavailable
+              </span>
             ) : null}
           </div>
           <button
@@ -128,16 +142,21 @@ export function ProductCard({
             aria-label={favorite ? 'Remove from favourites' : 'Add to favourites'}
             aria-pressed={favorite}
             className={cn(
-              'absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full border bg-white/95 shadow-sm backdrop-blur transition sm:right-2 sm:top-2',
-              favorite ? 'border-primary-200 text-primary-600' : 'border-slate-200 text-slate-400 hover:text-primary-600'
+              'absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full border bg-white/95 shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:right-2 sm:top-2',
+              favorite
+                ? 'border-primary-200 text-primary-600'
+                : 'border-slate-200 text-slate-400 hover:text-primary-600'
             )}
           >
-            <Heart className={cn('h-3.5 w-3.5', favorite && 'fill-primary-600 text-primary-600')} />
+            <Heart
+              className={cn('h-3.5 w-3.5', favorite && 'fill-primary-600 text-primary-600')}
+              aria-hidden="true"
+            />
           </button>
         </div>
       </Link>
 
-      <div className={cn('flex flex-1 flex-col px-2.5 pb-2.5 pt-2', compact ? 'sm:px-2.5 sm:pb-2.5' : 'sm:px-3.5 sm:pb-3.5')}>
+      <div className={cn('flex flex-1 flex-col px-2.5 pb-2.5 pt-2', 'sm:px-3 sm:pb-3 sm:pt-2.5')}>
         <Link href={`/retailer/catalog/${id}`} className="block">
           <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[11px]">
             {brandName ?? 'Maharani Traders'}
@@ -147,8 +166,10 @@ export function ProductCard({
           </h3>
           {packName ? (
             <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500 sm:text-[11px]">
-              <PackagePlus className="h-3 w-3 shrink-0" />
-              {packName} · MOQ {moq} pc{moq === 1 ? '' : 's'}
+              <PackagePlus className="h-3 w-3 shrink-0" aria-hidden="true" />
+              {packName}
+              <span aria-hidden="true">·</span>
+              <span>Min {moq} pc{moq === 1 ? '' : 's'}</span>
             </p>
           ) : null}
 
@@ -164,14 +185,32 @@ export function ProductCard({
               ) : null}
             </div>
           </div>
-          {savings > 0 ? (
-            <p className="text-[10px] font-semibold text-emerald-700">You save {formatInr(savings)}</p>
+          {nextTierHint ? (
+            <p
+              className="mt-1 inline-flex w-fit items-center gap-1 rounded-md bg-primary-50 px-1.5 py-0.5 text-[10px] font-bold text-primary-700 sm:text-[11px]"
+              title={`Buy ${nextTierHint.minQuantity} or more pieces to unlock ₹${nextTierHint.pricePerPiece.toFixed(0)} per piece`}
+            >
+              <Tag className="h-3 w-3" aria-hidden="true" />
+              {nextTierHint.label}
+            </p>
           ) : null}
-          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[9px] sm:text-[10px]">
-            <p className="text-slate-400">GST{gstPercent != null ? ` ${gstPercent}%` : ''} included in price</p>
-            <span className={cn('inline-flex items-center gap-1 font-semibold', unavailable ? 'text-slate-500' : 'text-emerald-700')}>
-              {unavailable ? <CircleAlert className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
-              {unavailable ? 'Currently unavailable' : 'Available to order'}
+          {savings > 0 ? (
+            <p className="mt-1 text-[10px] font-semibold text-emerald-700">You save {formatInr(savings)} per piece</p>
+          ) : null}
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[9px] sm:text-[10px]">
+            <p className="text-slate-400">GST{gstPercent != null ? ` ${gstPercent}%` : ''} included</p>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 font-semibold',
+                unavailable ? 'text-slate-500' : 'text-emerald-700'
+              )}
+            >
+              {unavailable ? (
+                <CircleAlert className="h-3 w-3" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+              )}
+              {unavailable ? 'Currently unavailable' : 'Available'}
             </span>
           </div>
         </Link>
@@ -190,30 +229,37 @@ export function ProductCard({
                 type="button"
                 onClick={handleQuickAdd}
                 disabled={isPending}
+                aria-label={`Add ${quantity} ${name} pieces to cart`}
                 className={cn(
-                  'flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border text-[11px] font-bold transition sm:text-xs',
+                  'flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:text-xs',
                   added
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                     : error
                       ? 'border-primary-200 bg-primary-50 text-primary-700'
-                      : 'border-primary-600 bg-white text-primary-600 hover:bg-primary-600 hover:text-white',
+                      : 'border-primary-600 bg-primary-600 text-white shadow-sm hover:bg-primary-700',
                   'disabled:opacity-60'
                 )}
               >
-                {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : added ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                {isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : added ? (
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
                 {isPending
                   ? 'Adding…'
                   : added
                     ? 'Added to cart'
                     : error
                       ? 'Try again'
-                      : `Add${quantity > 0 ? ` · ${quantity} pc${quantity === 1 ? '' : 's'}` : ''}`}
+                      : `Add · ${quantity} pc${quantity === 1 ? '' : 's'}`}
               </button>
             </>
           ) : (
             <Link
               href={`/retailer/catalog/${id}`}
-              className="flex h-9 w-full items-center justify-center rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 transition hover:border-primary-300 hover:text-primary-600 sm:text-xs"
+              className="flex h-10 w-full items-center justify-center rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600 transition hover:border-primary-300 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:text-xs"
             >
               {unavailable ? 'View details' : 'View packs'}
             </Link>

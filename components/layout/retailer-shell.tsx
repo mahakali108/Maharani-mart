@@ -38,12 +38,15 @@ function CountBadge({ count }: { count: number }) {
 
 export function RetailerShell({
   fullName,
+  areaName,
   role,
   cartCount = 0,
   unreadCount = 0,
   children,
 }: {
   fullName: string;
+  /** Pre-resolved area label, when available. Falls back to a neutral label. */
+  areaName?: string | null;
   role: UserRole;
   cartCount?: number;
   unreadCount?: number;
@@ -69,19 +72,28 @@ export function RetailerShell({
   ];
 
   return (
-    <div className="retailer-theme min-h-screen bg-[#f4f6f8] pb-24 text-slate-900 lg:pb-0">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white text-slate-900 shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
-        <div className="mx-auto max-w-7xl px-3 sm:px-6">
-          <div className="flex h-14 items-center gap-2 lg:h-[4.5rem] lg:gap-6">
-            <Link href="/retailer/home" className="group flex min-w-0 shrink items-center gap-2" aria-label="Maharani Traders home">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white shadow-sm lg:h-9 lg:w-9 lg:text-base">
+    <div className="retailer-theme min-h-screen bg-[#fafafa] pb-24 text-slate-900 lg:pb-0">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-3 sm:px-5">
+          <div className="flex h-14 items-center gap-2 lg:h-16 lg:gap-5">
+            <Link
+              href="/retailer/home"
+              className="group flex min-w-0 shrink items-center gap-2.5"
+              aria-label="Maharani Traders home"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white shadow-sm lg:h-10 lg:w-10 lg:text-base">
                 M
               </span>
               <span className="min-w-0 leading-none">
-                <span className="block truncate text-[13px] font-bold tracking-tight text-slate-900 lg:text-lg">Maharani Traders</span>
-                <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.22em] text-primary-600 lg:block">
-                  Wholesale marketplace
+                <span className="block truncate text-[14px] font-bold tracking-tight text-slate-900 lg:text-lg">
+                  Maharani Traders
                 </span>
+                {areaName ? (
+                  <span className="mt-0.5 hidden items-center gap-1 text-[10px] font-semibold text-slate-500 lg:flex">
+                    <span className="h-1 w-1 rounded-full bg-emerald-500" aria-hidden="true" />
+                    Delivering to {areaName}
+                  </span>
+                ) : null}
               </span>
             </Link>
 
@@ -89,93 +101,100 @@ export function RetailerShell({
               <SearchField />
             </div>
 
-            <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1 lg:gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
               <Link
                 href="/retailer/notifications"
-                className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:h-10 lg:w-10 lg:border lg:border-slate-200"
-                aria-label="Notifications"
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
               >
-                <Bell className="h-[18px] w-[18px] lg:h-5 lg:w-5" />
+                <Bell className="h-[18px] w-[18px] lg:h-5 lg:w-5" aria-hidden="true" />
                 <CountBadge count={unreadCount} />
               </Link>
               <Link
                 href="/retailer/favorites"
-                className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:h-10 lg:w-10 lg:border lg:border-slate-200"
+                className="relative hidden h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:flex"
                 aria-label="Favourites"
               >
-                <Heart className="h-[18px] w-[18px] lg:h-5 lg:w-5" />
+                <Heart className="h-[18px] w-[18px] lg:h-5 lg:w-5" aria-hidden="true" />
               </Link>
               <Link
                 href="/retailer/cart"
-                className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:h-10 lg:w-10 lg:border lg:border-slate-200"
-                aria-label="Cart"
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                aria-label={`Cart${cartCount > 0 ? ` (${cartCount} items)` : ''}`}
               >
-                <ShoppingCart className="h-[18px] w-[18px] lg:h-5 lg:w-5" />
+                <ShoppingCart className="h-[18px] w-[18px] lg:h-5 lg:w-5" aria-hidden="true" />
                 <CountBadge count={cartCount} />
               </Link>
 
               <Link
                 href="/retailer/account"
-                className="ml-0.5 flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 lg:ml-1 lg:h-auto lg:w-auto lg:items-center lg:gap-2 lg:rounded-none lg:border-l lg:border-slate-200 lg:pl-3 lg:text-slate-900 lg:hover:bg-transparent"
+                className="ml-0.5 flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:ml-1 lg:h-auto lg:w-auto lg:items-center lg:gap-2 lg:rounded-xl lg:bg-slate-50 lg:px-2.5 lg:py-1.5 lg:text-slate-900 lg:hover:bg-slate-100"
                 aria-label="Account"
               >
-                <UserRound className="h-[18px] w-[18px] lg:hidden" />
-                <span className="hidden h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-xs font-bold text-primary-700 lg:flex">
+                <UserRound className="h-[18px] w-[18px] lg:hidden" aria-hidden="true" />
+                <span className="hidden h-7 w-7 items-center justify-center rounded-lg bg-primary-50 text-[11px] font-bold text-primary-700 lg:flex">
                   {initials || 'R'}
                 </span>
-                <span className="hidden max-w-[130px] leading-tight lg:block">
-                  <span className="block truncate text-xs font-semibold text-slate-900">{fullName}</span>
+                <span className="hidden max-w-[140px] leading-tight lg:block">
+                  <span className="block truncate text-[12px] font-semibold text-slate-900">{fullName}</span>
                   <span className="mt-0.5 block text-[10px] text-slate-500">{ROLE_LABELS[role]}</span>
                 </span>
               </Link>
               <form action={logoutAction} className="hidden lg:block">
                 <button
                   type="submit"
-                  className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-primary-50 hover:text-primary-600"
+                  className="ml-1 flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                   aria-label="Sign out"
                   title="Sign out"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
                 </button>
               </form>
             </div>
           </div>
 
-          <div className="relative pb-3 lg:hidden">
+          <div className="relative pb-3 pt-1 lg:hidden">
             <SearchField />
           </div>
         </div>
 
-        <div className="hidden border-t border-slate-100 lg:block">
-          <div className="mx-auto flex h-11 max-w-7xl items-center justify-between px-6">
+        <div className="hidden border-t border-slate-100 bg-white lg:block">
+          <div className="mx-auto flex h-11 max-w-7xl items-center justify-between px-5">
             <nav className="flex h-full items-center gap-7" aria-label="Marketplace navigation">
               {DESKTOP_NAV.map((item) => {
                 const pathOnly = item.href.split('#')[0];
-                const active = pathname === pathOnly || (pathOnly !== '/retailer/home' && pathname.startsWith(pathOnly + '/'));
+                const active =
+                  pathname === pathOnly || (pathOnly !== '/retailer/home' && pathname.startsWith(pathOnly + '/'));
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'relative flex h-full items-center text-xs font-semibold transition-colors',
+                      'relative flex h-full items-center text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2',
                       active ? 'text-primary-600' : 'text-slate-600 hover:text-primary-600'
                     )}
+                    aria-current={active ? 'page' : undefined}
                   >
                     {item.label}
-                    {active ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-t bg-primary-600" /> : null}
+                    {active ? (
+                      <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-t bg-primary-600" aria-hidden="true" />
+                    ) : null}
                   </Link>
                 );
               })}
             </nav>
-            <Link href="/retailer/quick-order" className="flex items-center gap-1.5 text-xs font-semibold text-primary-600">
-              <Sparkles className="h-3.5 w-3.5" />
-              Order faster with Quick Order
+            <Link
+              href="/retailer/quick-order"
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-primary-600 hover:text-primary-700"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              Quick order
             </Link>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:py-8">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-7">{children}</main>
       <MobileBottomNav navItems={mobileNav} marketplace />
     </div>
   );
