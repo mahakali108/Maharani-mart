@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Coffee,
   Cookie,
-  LayoutGrid,
   Milk,
   Package,
   Soup,
@@ -93,7 +92,13 @@ export default async function RetailerCatalogPage({
     onlyOffers,
   });
 
-  const [{ data: retailer }, { data: categoryData }, { data: brandData }, favoriteIds, frequency] = await Promise.all([
+  const [
+    { data: retailer },
+    { data: categoryData },
+    { data: brandData },
+    favoriteIds,
+    frequency,
+  ] = await Promise.all([
     supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<{ area_id: string }>(),
     supabase.from('categories').select('id, name, image_url, parent_id').eq('is_active', true).order('sort_order').returns<CategoryRow[]>(),
     supabase.from('brands').select('id, name').eq('is_active', true).order('name').returns<BrandRow[]>(),
@@ -175,7 +180,10 @@ export default async function RetailerCatalogPage({
     query = query.or(clauses.join(','));
   }
   if (selectedCategory) {
-    const scopedIds = [selectedCategory.id, ...categories.filter((category) => category.parent_id === selectedCategory.id).map((category) => category.id)];
+    const scopedIds = [
+      selectedCategory.id,
+      ...categories.filter((category) => category.parent_id === selectedCategory.id).map((category) => category.id),
+    ];
     query = query.in('category_id', scopedIds);
   }
   if (selectedBrand) query = query.eq('brand_id', selectedBrand.id);
@@ -296,9 +304,13 @@ export default async function RetailerCatalogPage({
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-500">
-        <Link href="/retailer/home" className="hover:text-primary-600">Home</Link>
+        <Link href="/retailer/home" className="hover:text-primary-600">
+          Home
+        </Link>
         <ChevronRight className="h-3 w-3" />
-        <Link href="/retailer/catalog" className="hover:text-primary-600">Products</Link>
+        <Link href="/retailer/catalog" className="hover:text-primary-600">
+          Products
+        </Link>
         {selectedCategory ? (
           <>
             <ChevronRight className="h-3 w-3" />
@@ -307,34 +319,43 @@ export default async function RetailerCatalogPage({
         ) : null}
       </div>
 
-      <section className="overflow-hidden rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-primary-950 px-4 py-5 text-white shadow-lg sm:px-7 sm:py-7">
-        <div className="flex items-center justify-between gap-5">
-          <div>
-            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
-              <Sparkles className="h-3.5 w-3.5" /> Wholesale catalog
-            </p>
-            <h1 className="mt-2 text-xl font-bold sm:text-3xl">
-              {selectedCategory?.name ?? selectedBrand?.name ?? (q ? `Results for “${q}”` : 'Everything your shop needs')}
-            </h1>
-            <p className="mt-1 max-w-xl text-xs leading-5 text-slate-200 sm:text-sm">
-              Search by product, brand or category. Your approved retailer prices stay server-side.
-            </p>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div className="flex flex-col gap-4 p-4 sm:p-6">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+              <Sparkles className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+                Maharani Traders
+              </p>
+              <h1 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
+                {selectedCategory?.name ?? selectedBrand?.name ?? (q ? `Results for “${q}”` : 'All products')}
+              </h1>
+              <p className="mt-0.5 text-[11px] leading-5 text-slate-600 sm:text-sm">
+                Search by product, brand, category or size. Your prices are calculated per piece, with GST included.
+              </p>
+            </div>
           </div>
-          <LayoutGrid className="hidden h-20 w-20 text-white/10 sm:block" />
-        </div>
-        <div className="mt-4 max-w-2xl">
-          <SearchField initialQuery={q} variant="hero" />
+          <div className="lg:max-w-2xl">
+            <SearchField initialQuery={q} variant="hero" />
+          </div>
         </div>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
+      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">Browse the marketplace</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">
+              Browse the catalog
+            </p>
             <h2 className="mt-0.5 text-sm font-bold text-slate-900 sm:text-base">Shop by category</h2>
           </div>
-          <Link href={catalogHref({ ...filterValues, category: undefined })} className="flex items-center gap-1 text-[10px] font-bold text-primary-600 sm:text-[11px]">
-            View all products <ChevronRight className="h-3.5 w-3.5" />
+          <Link
+            href={catalogHref({ ...filterValues, category: undefined })}
+            className="flex items-center gap-1 text-[10px] font-bold text-primary-600 sm:text-[11px]"
+          >
+            View all products <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         </div>
         {categoryTiles.length > 0 ? (
@@ -348,43 +369,67 @@ export default async function RetailerCatalogPage({
                   href={catalogHref({ ...filterValues, category: category.id })}
                   className={cn(
                     'group overflow-hidden rounded-xl border bg-slate-50 transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md sm:rounded-2xl',
-                    active ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-100' : 'border-slate-200'
+                    active
+                      ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-100'
+                      : 'border-slate-200'
                   )}
                 >
-                  <div className="relative aspect-[1.25/1] overflow-hidden bg-gradient-to-br from-blue-50 via-white to-slate-100">
+                  <div className="relative aspect-[1.25/1] overflow-hidden bg-slate-50">
                     {category.image_url ? (
-                      <Image src={category.image_url} alt="" fill sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 140px" className="object-cover transition duration-300 group-hover:scale-105" unoptimized />
+                      <Image
+                        src={category.image_url}
+                        alt=""
+                        fill
+                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 140px"
+                        className="object-cover transition duration-300 group-hover:scale-105"
+                        unoptimized
+                      />
                     ) : (
-                      <span className="flex h-full items-center justify-center text-primary-600">
-                        <Icon className="h-8 w-8 transition group-hover:scale-110" />
+                      <span className="flex h-full items-center justify-center text-primary-500">
+                        <Icon className="h-8 w-8 transition group-hover:scale-110" aria-hidden="true" />
                       </span>
                     )}
-                    {active ? <span className="absolute right-2 top-2 rounded-full bg-primary-600 px-2 py-1 text-[8px] font-bold text-white">Selected</span> : null}
+                    {active ? (
+                      <span className="absolute right-2 top-2 rounded-full bg-primary-600 px-2 py-1 text-[8px] font-bold text-white">
+                        Selected
+                      </span>
+                    ) : null}
                   </div>
                   <div className="p-2.5 sm:p-3">
                     <p className="truncate text-[11px] font-bold text-slate-800 sm:text-xs">{category.name}</p>
-                    <p className="mt-0.5 text-[9px] text-slate-500">Browse products <ChevronRight className="inline h-3 w-3" /></p>
+                    <p className="mt-0.5 text-[9px] text-slate-500">
+                      Browse products <ChevronRight className="inline h-3 w-3" aria-hidden="true" />
+                    </p>
                   </div>
                 </Link>
               );
             })}
           </div>
         ) : (
-          <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">Categories will appear here as the catalog is updated.</p>
+          <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">
+            Categories will appear here as the catalog is updated.
+          </p>
         )}
 
         <div className="scrollbar-none flex gap-2 overflow-x-auto border-t border-slate-100 pt-3">
           <Link
             href={catalogHref({ ...filterValues, category: undefined })}
             className={cn(
-              'flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition',
-              !selectedCategory ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
+              'flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+              !selectedCategory
+                ? 'border-primary-600 bg-primary-50 text-primary-700'
+                : 'border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
             )}
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100"><Boxes className="h-4 w-4" /></span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100">
+              <Boxes className="h-4 w-4" aria-hidden="true" />
+            </span>
             All products
           </Link>
-          {(selectedCategory && childCategories.length > 0 ? childCategories : categories.filter((category) => !category.parent_id)).map((category, index) => {
+          {(selectedCategory && childCategories.length > 0
+            ? childCategories
+            : categories.filter((category) => !category.parent_id)
+          ).map((category, index) => {
             const Icon = CATEGORY_ICONS[index % CATEGORY_ICONS.length] ?? Boxes;
             const active = selectedCategory?.id === category.id;
             return (
@@ -392,11 +437,20 @@ export default async function RetailerCatalogPage({
                 key={category.id}
                 href={catalogHref({ ...filterValues, category: category.id })}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition',
-                  active ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
+                  'flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                  active
+                    ? 'border-primary-600 bg-primary-50 text-primary-700'
+                    : 'border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
                 )}
               >
-                <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg', active ? 'bg-white' : 'bg-slate-100')}><Icon className="h-4 w-4" /></span>
+                <span
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-lg',
+                    active ? 'bg-white' : 'bg-slate-100'
+                  )}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
                 {category.name}
               </Link>
             );
@@ -406,14 +460,16 @@ export default async function RetailerCatalogPage({
 
       <CatalogFilters values={filterValues} categories={categories} brands={brands} resultCount={resultCount} />
 
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex items-end justify-between gap-3 px-0.5">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">Catalog results</p>
           <h2 className="mt-0.5 text-base font-bold text-slate-900 sm:text-xl">
-            {selectedCategory?.name ?? selectedBrand?.name ?? (q ? `Results for “${q}”` : 'All wholesale products')}
+            {selectedCategory?.name ?? selectedBrand?.name ?? (q ? `Results for “${q}”` : 'All products')}
           </h2>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {resultCount} product{resultCount === 1 ? '' : 's'} · prices per piece, GST included
+          </p>
         </div>
-        <span className="hidden rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-semibold text-blue-700 sm:inline-flex">Prices for your shop</span>
       </div>
 
       {resultCapped ? (
@@ -428,10 +484,16 @@ export default async function RetailerCatalogPage({
           <AdminEmptyState
             icon={Package}
             title={q ? 'No products match your search' : 'No products available here yet'}
-            body={q ? 'Try a broader product name, brand, category or pack size, or clear a filter.' : 'Your distributor is updating this catalog.'}
+            body={
+              q
+                ? 'Try a broader product name, brand, category or pack size, or clear a filter.'
+                : 'Your distributor is updating this catalog.'
+            }
           />
           <div className="pb-8 text-center">
-            <Link href="/retailer/catalog" className="text-sm font-semibold text-primary-600">Clear filters</Link>
+            <Link href="/retailer/catalog" className="text-sm font-semibold text-primary-600">
+              Clear filters
+            </Link>
           </div>
         </div>
       ) : (
@@ -447,9 +509,9 @@ export default async function RetailerCatalogPage({
               {page > 1 ? (
                 <Link
                   href={catalogPageHref(filterValues, page - 1)}
-                  className="flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
+                  className="flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                 >
-                  <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                  <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Previous
                 </Link>
               ) : (
                 <span className="hidden sm:inline" />
@@ -460,9 +522,9 @@ export default async function RetailerCatalogPage({
               {page < totalPages ? (
                 <Link
                   href={catalogPageHref(filterValues, page + 1)}
-                  className="flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
+                  className="flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                 >
-                  Next <ChevronRight className="h-3.5 w-3.5" />
+                  Next <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
                 </Link>
               ) : (
                 <span className="hidden sm:inline" />

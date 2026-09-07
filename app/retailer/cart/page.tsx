@@ -58,7 +58,10 @@ interface CartItemDetail {
 
 function Breadcrumb() {
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs"
+    >
       <Link href="/retailer/home" className="hover:text-primary-600">
         Home
       </Link>
@@ -96,12 +99,14 @@ export default async function CartPage() {
     return (
       <div className="space-y-5 sm:space-y-6">
         <Breadcrumb />
-        <section className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-12 text-center shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+        <section className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-12 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-50 text-primary-600">
             <ShoppingCart className="h-9 w-9" aria-hidden="true" />
           </span>
           <h1 className="mt-5 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Your cart is empty</h1>
-          <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">Browse Maharani Traders products and start shopping.</p>
+          <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">
+            Browse the catalog and add the products your shop needs today.
+          </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Link
               href="/retailer/catalog"
@@ -125,10 +130,7 @@ export default async function CartPage() {
 
   const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
   const overrideByProduct = await getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null);
-  const tierMap = await loadPackTiers(
-    supabase,
-    items.map((item) => item.pack_id)
-  );
+  const tierMap = await loadPackTiers(supabase, items.map((item) => item.pack_id));
 
   let subtotal = 0;
   let gstTotal = 0;
@@ -202,9 +204,9 @@ export default async function CartPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Review your order</p>
-          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">Shopping cart</h1>
+          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Your cart</h1>
           <p className="mt-1 text-xs text-slate-500">
-            {items.length} line item{items.length === 1 ? '' : 's'} · {totalQuantity} pc{totalQuantity === 1 ? '' : 's'} in total
+            {items.length} line{items.length === 1 ? '' : 's'} · {totalQuantity} pc{totalQuantity === 1 ? '' : 's'} in total
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -219,10 +221,13 @@ export default async function CartPage() {
       </div>
 
       {hasUnavailable ? (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
+        >
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
-            <span className="font-bold">Cart update required.</span> Unavailable products are clearly marked and will be excluded when the order is validated.
+            <span className="font-bold">Heads up.</span> Unavailable items are clearly marked and will be skipped when the order is validated.
           </p>
         </div>
       ) : null}
@@ -248,7 +253,7 @@ export default async function CartPage() {
       ) : null}
 
       {savings > 0 ? (
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm">
             <BadgePercent className="h-5 w-5" aria-hidden="true" />
           </span>
@@ -275,21 +280,25 @@ export default async function CartPage() {
           />
 
           {retailer ? (
-            <CreditSummary creditLimit={retailer.credit_limit} outstandingBalance={retailer.outstanding_balance} orderImpact={grandTotal} />
+            <CreditSummary
+              creditLimit={retailer.credit_limit}
+              outstandingBalance={retailer.outstanding_balance}
+              orderImpact={grandTotal}
+            />
           ) : null}
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="space-y-3">
               {[
-                { icon: PackageCheck, title: 'Piece pricing', body: 'Each piece is priced and larger quantities earn a lower rate' },
+                { icon: PackageCheck, title: 'Piece pricing', body: 'Each piece is priced — bigger quantities earn a lower per-piece rate' },
                 { icon: ReceiptText, title: 'GST transparent', body: 'Tax shown on every invoice' },
-                { icon: Truck, title: 'Track fulfillment', body: 'Status updates after ordering' },
+                { icon: Truck, title: 'Track delivery', body: 'Status updates once your order is confirmed' },
               ].map((item) => (
                 <div key={item.title} className="flex items-start gap-2.5">
                   <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
                   <div>
                     <p className="text-[10px] font-bold text-slate-800">{item.title}</p>
-                    <p className="mt-0.5 text-[9px] text-slate-400">{item.body}</p>
+                    <p className="mt-0.5 text-[9px] text-slate-500">{item.body}</p>
                   </div>
                 </div>
               ))}

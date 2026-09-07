@@ -9,11 +9,10 @@ import InstallPrompt from '@/components/pwa/InstallPrompt';
 // needs next/font/google, which requires network access at build time.
 
 export const metadata: Metadata = {
-  title: 'Maa Kali B2B Ultra Platform',
-  description: 'FMCG B2B Wholesale Distribution — Khagaria District',
+  title: 'Maharani Traders — Order everyday products by the piece',
+  description:
+    'Maharani Traders is the simple, mobile-first ordering app for small retailers. Browse products, place orders and reorder essentials — all in pieces.',
   applicationName: 'Maharani Traders',
-  // Next.js auto-serves app/manifest.ts at /manifest.webmanifest; we also
-  // declare it here so the link tag is explicit.
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
@@ -29,7 +28,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
   themeColor: '#c8102e',
 };
 

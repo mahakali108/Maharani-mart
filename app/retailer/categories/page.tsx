@@ -46,21 +46,23 @@ export default async function CategoriesPage() {
   return (
     <div className="space-y-5 sm:space-y-7">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
-        <Link href="/retailer/home" className="hover:text-primary-600">Home</Link>
+        <Link href="/retailer/home" className="hover:text-primary-600">
+          Home
+        </Link>
         <ChevronRight className="h-3 w-3" />
         <span className="text-slate-800">Categories</span>
       </div>
 
-      <section className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-5 sm:p-7">
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="flex items-start gap-4">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-            <LayoutGrid className="h-5 w-5" />
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+            <LayoutGrid className="h-5 w-5" aria-hidden="true" />
           </span>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Browse the marketplace</p>
-            <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">Shop by category</h1>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Browse the catalog</p>
+            <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Shop by category</h1>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 sm:text-sm">
-              Explore product aisles, then continue to the existing wholesale listing with your category already selected.
+              Explore product aisles and open the catalog with your category already selected.
             </p>
           </div>
         </div>
@@ -70,9 +72,11 @@ export default async function CategoriesPage() {
         <CategoryDirectory categories={directoryCategories} />
       ) : (
         <section className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 text-center">
-          <LayoutGrid className="h-8 w-8 text-slate-300" />
+          <LayoutGrid className="h-8 w-8 text-slate-300" aria-hidden="true" />
           <p className="mt-3 text-sm font-semibold text-slate-700">No categories yet</p>
-          <p className="mt-1 text-xs text-slate-500">Categories will appear as the marketplace catalog is updated.</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Categories will appear as the marketplace catalog is updated.
+          </p>
         </section>
       )}
     </div>
