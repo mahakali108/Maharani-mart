@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { ReturnRowActions } from '@/components/admin/return-row-actions';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface ReturnRequestRow {
   id: string;
@@ -89,7 +90,7 @@ function ReturnsTable({ returns }: { returns: ReturnRequestRow[] }) {
               <td className="px-5 py-3 font-mono text-xs text-ink-500">{r.orders?.order_number ?? '—'}</td>
               <td className="px-5 py-3 text-ink-600">{r.retailers?.shop_name ?? '—'}</td>
               <td className="px-5 py-3 text-ink-600">{r.reason}</td>
-              <td className="px-5 py-3 text-ink-500">{new Date(r.requested_at).toLocaleDateString('en-IN')}</td>
+              <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(r.requested_at)}</td>
               <td className="px-5 py-3">
                 <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[r.status]}`}>
                   {r.status.charAt(0).toUpperCase() + r.status.slice(1)}

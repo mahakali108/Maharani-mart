@@ -8,6 +8,7 @@ import { ProductPackManager } from '@/components/admin/product-pack-manager';
 import { ProductThresholdsForm } from '@/components/admin/product-thresholds-form';
 import { updateProductAction } from '@/lib/admin/products-actions';
 import { loadPackCosts, loadProductCost } from '@/lib/admin/cost-access';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface ProductDetail {
   id: string;
@@ -331,7 +332,7 @@ export default async function EditProductPage({ params }: { params: { id: string
                     <span className={`mr-2 font-semibold ${m.direction === 'out' ? 'text-primary-600' : 'text-green-600'}`}>
                       {m.direction === 'out' ? '−' : '+'}{Math.abs(m.quantity)}
                     </span>
-                    <span className="text-xs text-ink-400">{new Date(m.created_at).toLocaleString('en-IN')}</span>
+                    <span className="text-xs text-ink-400">{formatIndiaDateTime(m.created_at)}</span>
                   </span>
                 </li>
               ))}

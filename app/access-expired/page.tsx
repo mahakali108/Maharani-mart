@@ -1,6 +1,7 @@
 import { Clock, Mail, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { formatIndiaDate } from '@/lib/datetime/india';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,7 @@ export default async function AccessExpiredPage() {
           <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-ink-50 px-4 py-3">
             <Clock className="h-4 w-4 text-ink-500" />
             <span className="text-sm text-ink-700">
-              Expired on {new Date(expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+              Expired on {formatIndiaDate(expiresAt)}
             </span>
           </div>
         ) : null}

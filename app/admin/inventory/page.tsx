@@ -7,6 +7,7 @@ import { StockAdjustmentForm } from '@/components/admin/stock-adjustment-form';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import type { ProductTotalsViewRow, ExpiryReportViewRow } from '@/types/inventory.types';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface RecentMovement {
   id: string;
@@ -130,7 +131,7 @@ export default async function InventoryPage() {
                     <p className={`font-semibold ${m.direction === 'out' ? 'text-primary-600' : 'text-green-600'}`}>
                       {m.direction === 'out' ? '−' : '+'}{Math.abs(m.quantity)}
                     </p>
-                    <p className="text-xs text-ink-400">{new Date(m.created_at).toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-ink-400">{formatIndiaDateTime(m.created_at)}</p>
                   </div>
                 </li>
               ))}
@@ -155,7 +156,7 @@ export default async function InventoryPage() {
                     <Link href={`/admin/inventory/grn/${g.id}`} className="font-mono font-medium text-ink-900 hover:text-primary-600">
                       {g.grn_number}
                     </Link>
-                    <p className="text-xs text-ink-400">{g.warehouses?.name ?? '—'} · {new Date(g.created_at).toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-ink-400">{g.warehouses?.name ?? '—'} · {formatIndiaDateTime(g.created_at)}</p>
                   </div>
                   <StatusBadge status={g.status} />
                 </li>

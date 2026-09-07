@@ -19,6 +19,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -459,7 +460,7 @@ export default async function AdminDashboardPage({
                       {o.order_number}
                     </Link>
                     <p className="text-xs text-ink-400">
-                      {o.retailer_name ?? 'Unknown'} · {new Date(o.placed_at).toLocaleDateString('en-IN')}
+                      {o.retailer_name ?? 'Unknown'} · {formatIndiaDateTime(o.placed_at)}
                     </p>
                   </div>
                   <div className="text-right">
@@ -562,7 +563,7 @@ export default async function AdminDashboardPage({
                       : 'removed'}{' '}
                   {TABLE_LABELS[a.table_name] ?? a.table_name}
                 </span>
-                <span className="text-xs text-ink-400">{new Date(a.created_at).toLocaleString('en-IN')}</span>
+                <span className="text-xs text-ink-400">{formatIndiaDateTime(a.created_at)}</span>
               </li>
             ))}
           </ul>

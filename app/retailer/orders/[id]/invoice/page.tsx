@@ -3,6 +3,7 @@ import { formatQuantitySummary, groupOrderLines, rowUnit, type OrderItemUnit} fr
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { PrintButton } from '@/components/retailer/print-button';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface OrderInvoiceRow {
   id: string;
@@ -104,7 +105,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             <p className="text-sm font-semibold uppercase tracking-wide text-primary-600">Tax Invoice</p>
             <p className="font-mono text-sm text-ink-900">{order.order_number}</p>
             <p className="text-xs text-ink-500">
-              {new Date(order.placed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {formatIndiaDateTime(order.placed_at)}
             </p>
           </div>
         </div>

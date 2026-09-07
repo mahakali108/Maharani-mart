@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { formatIndiaDate } from '@/lib/datetime/india';
 
 interface SchemeRow {
   id: string;
@@ -19,14 +20,6 @@ interface SchemeRow {
   is_festival: boolean;
   starts_at: string;
   ends_at: string;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
 }
 
 export default async function RetailerSchemesPage() {
@@ -137,7 +130,7 @@ export default async function RetailerSchemesPage() {
                 </p>
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
                   <p className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
-                    <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" /> Valid till {formatDate(scheme.ends_at)}
+                    <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" /> Valid till {formatIndiaDate(scheme.ends_at)}
                   </p>
                   <Link
                     href="/retailer/catalog?offers=1"

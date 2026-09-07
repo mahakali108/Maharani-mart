@@ -5,6 +5,7 @@ import { Loader2, LogIn, LogOut, CheckCircle2 } from 'lucide-react';
 import { checkInAction, checkOutAction } from '@/lib/salesman/attendance-actions';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { formatIndiaTime } from '@/lib/datetime/india';
 
 function getLocation(): Promise<{ lat: number | null; lng: number | null }> {
   return new Promise((resolve) => {
@@ -67,7 +68,7 @@ export function AttendanceCheckButton({
         <>
           <p className="flex items-center gap-2 text-sm text-green-700">
             <CheckCircle2 className="h-4 w-4" />
-            Checked in at {punchInAt ? new Date(punchInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+            Checked in at {punchInAt ? formatIndiaTime(punchInAt) : ''}
           </p>
           <Button onClick={handleCheckOut} disabled={isPending} variant="outline" className="w-full">
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
@@ -78,8 +79,8 @@ export function AttendanceCheckButton({
         <p className="flex items-center gap-2 text-sm text-ink-600">
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           Day complete — checked in{' '}
-          {punchInAt ? new Date(punchInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}, checked out{' '}
-          {punchOutAt ? new Date(punchOutAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+          {punchInAt ? formatIndiaTime(punchInAt) : ''}, checked out{' '}
+          {punchOutAt ? formatIndiaTime(punchOutAt) : ''}
         </p>
       )}
     </Card>

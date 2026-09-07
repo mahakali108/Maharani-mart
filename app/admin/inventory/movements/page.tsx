@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const PAGE_SIZE = 30;
 
@@ -177,7 +178,7 @@ export default async function InventoryMovementsPage({
               <tbody className="divide-y divide-ink-100">
                 {movements.map((m) => (
                   <tr key={m.id}>
-                    <td className="whitespace-nowrap px-5 py-3 text-ink-500">{new Date(m.created_at).toLocaleString('en-IN')}</td>
+                    <td className="whitespace-nowrap px-5 py-3 text-ink-500">{formatIndiaDateTime(m.created_at)}</td>
                     <td className="px-5 py-3">
                       <p className="font-medium text-ink-900">{m.products?.name ?? '—'}</p>
                       <p className="font-mono text-xs text-ink-400">{m.products?.sku_code}</p>

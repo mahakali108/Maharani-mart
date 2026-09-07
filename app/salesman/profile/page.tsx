@@ -2,6 +2,7 @@ import { UserCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatIndiaDate } from '@/lib/datetime/india';
 
 interface ProfileRow {
   full_name: string;
@@ -75,7 +76,7 @@ export default async function SalesmanProfilePage() {
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div><dt className="text-ink-400">Area</dt><dd className="font-medium text-ink-900">{area?.name ?? 'Not assigned'}</dd></div>
           <div><dt className="text-ink-400">Warehouse</dt><dd className="font-medium text-ink-900">{warehouse?.name ?? 'Not assigned'}</dd></div>
-          <div><dt className="text-ink-400">Member since</dt><dd className="font-medium text-ink-900">{profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-IN') : '—'}</dd></div>
+          <div><dt className="text-ink-400">Member since</dt><dd className="font-medium text-ink-900">{profile?.created_at ? formatIndiaDate(profile.created_at) : '—'}</dd></div>
         </dl>
       </Card>
     </div>

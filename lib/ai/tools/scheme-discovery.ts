@@ -3,6 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { AIToolDefinition } from '@/lib/ai/types';
 import { dbFailure, unavailable, verified } from '@/lib/ai/tools/helpers';
+import { formatIndiaDate } from '@/lib/datetime/india';
 
 const roles = ['retailer', 'salesman', 'staff', 'admin', 'super_admin'] as const;
 const surfaces = ['retailer', 'salesman', 'staff', 'admin'] as const;
@@ -22,7 +23,7 @@ async function search(input: z.infer<typeof schema>, context: Parameters<AIToolD
     const ids = new Set(((prices ?? []) as { scheme_id: string | null }[]).map((row) => row.scheme_id).filter(Boolean));
     schemes = schemes.filter((item) => ids.has(item.id));
   }
-  return verified({ schemes }, schemes.map((item) => ({ type: 'scheme', id: item.id, title: item.name, subtitle: item.description ?? 'No benefit formula is recorded.', badge: item.is_festival ? 'Festival' : 'Active', quality: 'verified' as const, source: 'Current authorized scheme records', metrics: [{ label: 'Ends', value: new Date(item.ends_at).toLocaleDateString('en-IN'), quality: 'verified' as const }] })));
+  return verified({ schemes }, schemes.map((item) => ({ type: 'scheme', id: item.id, title: item.name, subtitle: item.description ?? 'No benefit formula is recorded.', badge: item.is_festival ? 'Festival' : 'Active', quality: 'verified' as const, source: 'Current authorized scheme records', metrics: [{ label: 'Ends', value: formatIndiaDate(item.ends_at), quality: 'verified' as const }] })));
 }
 
 export const schemeDiscoveryTools: AIToolDefinition[] = [

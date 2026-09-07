@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
@@ -99,6 +100,7 @@ function OrderList({ orders }: { orders: OrderRow[] }) {
               <p className="font-mono text-sm font-medium text-ink-900">{o.order_number}</p>
               <p className="text-xs text-ink-500">{o.retailers?.shop_name}</p>
               <p className="text-xs text-ink-400">{o.retailers?.areas?.name}</p>
+              <p className="text-xs text-ink-400">{formatIndiaDateTime(o.placed_at)}</p>
             </div>
             <div className="text-right">
               <p className="font-semibold text-ink-900">₹{o.grand_total.toFixed(2)}</p>

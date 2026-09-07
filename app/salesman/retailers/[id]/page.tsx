@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface RetailerDetail {
   id: string;
@@ -121,7 +122,7 @@ export default async function SalesmanRetailerDetailPage({ params }: { params: {
               <Link key={order.id} href={`/salesman/orders/${order.id}`} className="flex items-center justify-between py-3">
                 <div>
                   <p className="font-mono text-sm font-medium text-ink-900">{order.order_number}</p>
-                  <p className="text-xs text-ink-400">{new Date(order.placed_at).toLocaleDateString('en-IN')}{order.collected_by === user.id ? ' · Collected by you' : ''}</p>
+                  <p className="text-xs text-ink-400">{formatIndiaDateTime(order.placed_at)}{order.collected_by === user.id ? ' · Collected by you' : ''}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold text-ink-900">₹{order.grand_total.toFixed(2)}</p>

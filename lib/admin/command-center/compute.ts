@@ -32,6 +32,7 @@ import type {
   TrendPoint,
 } from './types';
 import type { ForecastResult } from '@/lib/ai/forecast/types';
+import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 
 // ---------------------------------------------------------------------------
 // Shared raw-row shapes (as fetched by data.ts)
@@ -641,7 +642,7 @@ export function computeRiskCenter(input: RiskInputs): RiskCenter {
         riskItem(
           l.id,
           `AI/provider failure (${l.error_code ?? 'unknown'})`,
-          `${l.request_type}${l.tool_name ? ` · tool ${l.tool_name}` : ''} · ${new Date(l.created_at).toLocaleString('en-IN')}.`,
+          `${l.request_type}${l.tool_name ? ` · tool ${l.tool_name}` : ''} · ${formatIndiaDateTime(l.created_at)}.`,
           'medium',
           'ai_audit_logs'
         )
@@ -819,7 +820,7 @@ export function buildActions(input: {
       source: 'orders + retailers',
       entity: r.shopName,
       entityHref: `/admin/retailers/${r.retailerId}`,
-      reason: `No orders in the last 45 days${r.lastOrderAt ? ` (last order ${r.lastOrderAt.slice(0, 10)})` : ''}.`,
+      reason: `No orders in the last 45 days${r.lastOrderAt ? ` (last order ${formatIndiaDate(r.lastOrderAt)})` : ''}.`,
       recommendedAction: 'Assign a follow-up visit via the salesman route/visit workflow.',
       requiredApproval: 'Visits are planned by staff/salesmen on the existing visits page.',
     });

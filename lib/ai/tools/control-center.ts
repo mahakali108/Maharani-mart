@@ -3,6 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { AICard, AIToolContext, AIToolDefinition } from '@/lib/ai/types';
 import { dbFailure, verified, unavailable } from '@/lib/ai/tools/helpers';
+import { formatIndiaDateTime, formatIndiaDate } from '@/lib/datetime/india';
 
 /**
  * Super Admin Control Center AI tools.
@@ -84,7 +85,7 @@ async function usersExpiringSoon(context: AIToolContext) {
       ],
       lines: items.slice(0, 10).map((i) => ({
         label: `${i.name} (${i.role.replace('_', ' ')})`,
-        value: `${i.daysLeft <= 0 ? 'EXPIRED' : `${i.daysLeft} day(s) left`} · expires ${new Date(i.expiresAt).toLocaleDateString('en-IN')}`,
+        value: `${i.daysLeft <= 0 ? 'EXPIRED' : `${i.daysLeft} day(s) left`} · expires ${formatIndiaDate(i.expiresAt)}`,
       })),
       actions: [{ type: 'link', label: 'Open Access Management', href: '/admin/control-center?tab=access' }],
     },
@@ -172,7 +173,7 @@ async function expiredRetailers(context: AIToolContext) {
       source: 'user_access_periods + profiles + retailers',
       lines: items.slice(0, 10).map((i) => ({
         label: `${i.shop} (${i.name})`,
-        value: `Expired ${i.expiredAt ? new Date(i.expiredAt).toLocaleDateString('en-IN') : 'N/A'}`,
+        value: `Expired ${i.expiredAt ? formatIndiaDate(i.expiredAt) : 'N/A'}`,
       })),
       actions: [{ type: 'link', label: 'Open Access Management', href: '/admin/control-center?tab=access' }],
     },
@@ -246,7 +247,7 @@ async function recentPermissionChanges(context: AIToolContext) {
       source: 'super_admin_audit_logs',
       lines: entries.slice(0, 10).map((e) => ({
         label: `${e.action.replace(/_/g, ' ')}${e.target ? ` → ${e.target}` : ''}`,
-        value: `by ${e.at ? new Date(e.at).toLocaleString('en-IN') : 'N/A'}${e.reason ? ` · ${e.reason}` : ''}`,
+        value: `by ${e.at ? formatIndiaDateTime(e.at) : 'N/A'}${e.reason ? ` · ${e.reason}` : ''}`,
       })),
       actions: [{ type: 'link', label: 'Open Audit Log', href: '/admin/control-center?tab=audit' }],
     },

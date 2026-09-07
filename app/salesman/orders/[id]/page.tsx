@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { MarkDeliveredButton } from '@/components/salesman/mark-delivered-button';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface OrderRow {
   id: string;
@@ -13,6 +14,7 @@ interface OrderRow {
   notes: string | null;
   retailer_id: string;
   collected_by: string | null;
+  placed_at: string;
   retailers: { shop_name: string; address: string | null } | null;
 }
 
@@ -34,7 +36,7 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
 
   const { data: order } = await supabase
     .from('orders')
-    .select('id, order_number, status, grand_total, notes, retailer_id, collected_by, retailers ( shop_name, address )')
+    .select('id, order_number, status, grand_total, notes, retailer_id, collected_by, placed_at, retailers ( shop_name, address )')
     .eq('id', params.id)
     .maybeSingle<OrderRow>();
 
@@ -65,6 +67,7 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
         <h1 className="font-mono text-lg font-semibold text-ink-950">{order.order_number}</h1>
         <p className="text-sm text-ink-500">{order.retailers?.shop_name}</p>
         <p className="text-xs text-ink-400">{order.retailers?.address}</p>
+        <p className="text-xs text-ink-400">Placed {formatIndiaDateTime(order.placed_at)}</p>
       </div>
 
       <Card>

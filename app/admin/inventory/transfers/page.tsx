@@ -8,6 +8,7 @@ import { TransferForm, type BatchOption } from '@/components/admin/transfer-form
 import { TransferActionButtons } from '@/components/admin/transfer-action-buttons';
 import { StatusBadge } from '@/components/admin/status-badge';
 import type { StockTransferRow } from '@/types/inventory.types';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface TransferListRow extends StockTransferRow {
   source: { name: string } | null;
@@ -88,7 +89,7 @@ export default async function TransfersPage() {
                   <p className="font-mono font-medium text-ink-900">{t.transfer_number}</p>
                   <p className="mt-0.5 text-sm text-ink-600">
                     {t.source?.name ?? '—'} → {t.destination?.name ?? '—'} ·{' '}
-                    {new Date(t.created_at).toLocaleString('en-IN')}
+                    {formatIndiaDateTime(t.created_at)}
                   </p>
                   <ul className="mt-2 space-y-1 text-sm text-ink-600">
                     {t.stock_transfer_items.map((item) => (
@@ -104,7 +105,7 @@ export default async function TransfersPage() {
                   <StatusBadge status={t.status} />
                   {t.status === 'pending' ? <TransferActionButtons transferId={t.id} /> : null}
                   {t.status === 'completed' && t.completed_at ? (
-                    <p className="text-xs text-ink-400">Executed {new Date(t.completed_at).toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-ink-400">Executed {formatIndiaDateTime(t.completed_at)}</p>
                   ) : null}
                   {t.status === 'cancelled' && t.cancellation_reason ? (
                     <p className="text-xs text-ink-400">{t.cancellation_reason}</p>

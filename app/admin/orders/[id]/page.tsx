@@ -3,6 +3,7 @@ import { formatQuantitySummary, groupOrderLines, type OrderItemUnit} from '@/lib
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminOrderActions } from '@/components/admin/order-actions-panel';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface OrderDetailRow {
   id: string;
@@ -78,7 +79,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
       <div>
         <h1 className="font-mono text-xl font-semibold text-ink-950">{order.order_number}</h1>
         <p className="text-sm text-ink-500">{order.retailers?.shop_name}</p>
-        <p className="text-xs text-ink-400">{new Date(order.placed_at).toLocaleString('en-IN')}</p>
+        <p className="text-xs text-ink-400">{formatIndiaDateTime(order.placed_at)}</p>
       </div>
 
       <AdminOrderActions
@@ -124,7 +125,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
             {history.map((h) => (
               <li key={h.id} className="flex justify-between">
                 <span className="text-ink-700">{h.status.charAt(0).toUpperCase() + h.status.slice(1)}</span>
-                <span className="text-xs text-ink-400">{new Date(h.created_at).toLocaleString('en-IN')}</span>
+                <span className="text-xs text-ink-400">{formatIndiaDateTime(h.created_at)}</span>
               </li>
             ))}
           </ul>

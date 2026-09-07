@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { formatIndiaTime } from '@/lib/datetime/india';
 
 const STATUS_STYLES: Record<string, string> = {
   planned: 'bg-ink-100 text-ink-600',
@@ -102,8 +103,8 @@ export default async function AdminVisitsPage({
                       {v.status.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-ink-500">{v.check_in_at ? new Date(v.check_in_at).toLocaleTimeString('en-IN') : '—'}</td>
-                  <td className="px-5 py-3 text-ink-500">{v.check_out_at ? new Date(v.check_out_at).toLocaleTimeString('en-IN') : '—'}</td>
+                  <td className="px-5 py-3 text-ink-500">{v.check_in_at ? formatIndiaTime(v.check_in_at) : '—'}</td>
+                  <td className="px-5 py-3 text-ink-500">{v.check_out_at ? formatIndiaTime(v.check_out_at) : '—'}</td>
                   <td className="px-5 py-3">
                     {v.orders ? (
                       <span className="font-mono text-xs text-primary-600">{v.orders.order_number}</span>

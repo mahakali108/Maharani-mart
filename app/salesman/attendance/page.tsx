@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
 import { AttendanceCheckButton } from '@/components/salesman/attendance-check-button';
+import { formatIndiaDate, formatIndiaTime } from '@/lib/datetime/india';
 
 interface AttendanceRow {
   id: string;
@@ -55,13 +56,13 @@ export default async function AttendancePage() {
             {history.map((h) => (
               <Card key={h.id} className="flex items-center justify-between p-3">
                 <p className="text-sm font-medium text-ink-900">
-                  {new Date(h.work_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {formatIndiaDate(h.work_date)}
                 </p>
                 <p className="text-xs text-ink-500">
-                  {new Date(h.punch_in_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  {formatIndiaTime(h.punch_in_at)}
                   {' – '}
                   {h.punch_out_at
-                    ? new Date(h.punch_out_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                    ? formatIndiaTime(h.punch_out_at)
                     : 'not checked out'}
                 </p>
               </Card>

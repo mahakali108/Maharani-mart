@@ -134,7 +134,7 @@ export function OverviewSection({ data }: { data: CommandCenterData }) {
       {/* 2 — Business health */}
       <Section
         title="Business health"
-        subtitle={`Live KPIs from authorized data · as of ${dateTime(overview.dataAsOf)} (server time) · non-cancelled order basis`}
+        subtitle={`Live KPIs from authorized data · as of ${dateTime(overview.dataAsOf)} IST · non-cancelled order basis`}
         icon={Activity}
         status={overview.status}
       >

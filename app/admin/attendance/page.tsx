@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { formatIndiaTime } from '@/lib/datetime/india';
 
 interface AttendanceRow {
   id: string;
@@ -81,9 +82,9 @@ export default async function AdminAttendancePage({
                 <tr key={r.id}>
                   <td className="px-5 py-3 font-medium text-ink-900">{r.profiles?.full_name ?? '—'}</td>
                   <td className="px-5 py-3 capitalize text-ink-600">{r.profiles?.role ?? '—'}</td>
-                  <td className="px-5 py-3 text-ink-600">{new Date(r.punch_in_at).toLocaleTimeString('en-IN')}</td>
+                  <td className="px-5 py-3 text-ink-600">{formatIndiaTime(r.punch_in_at)}</td>
                   <td className="px-5 py-3 text-ink-600">
-                    {r.punch_out_at ? new Date(r.punch_out_at).toLocaleTimeString('en-IN') : (
+                    {r.punch_out_at ? formatIndiaTime(r.punch_out_at) : (
                       <span className="text-amber-600">Still checked in</span>
                     )}
                   </td>

@@ -7,6 +7,7 @@ import { RetailerRowActions } from '@/components/admin/retailer-row-actions';
 import { RetailerAreaReassignForm } from '@/components/admin/retailer-area-reassign-form';
 import { SalesmanAssignmentForm } from '@/components/admin/salesman-assignment-form';
 import { RetailerDocumentsManager, type RetailerDocument } from '@/components/admin/retailer-documents-manager';
+import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface RetailerBaseDetail {
   id: string;
@@ -138,12 +139,12 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
           </div>
           <div>
             <dt className="text-ink-400">Registered</dt>
-            <dd className="mt-0.5 font-medium text-ink-900">{new Date(r.created_at).toLocaleDateString('en-IN')}</dd>
+            <dd className="mt-0.5 font-medium text-ink-900">{formatIndiaDate(r.created_at)}</dd>
           </div>
           <div>
             <dt className="text-ink-400">Approved</dt>
             <dd className="mt-0.5 font-medium text-ink-900">
-              {r.approved_at ? new Date(r.approved_at).toLocaleDateString('en-IN') : 'Not yet approved'}
+              {r.approved_at ? formatIndiaDate(r.approved_at) : 'Not yet approved'}
             </dd>
           </div>
         </dl>
@@ -281,7 +282,7 @@ async function RetailerOrderHistory({ retailerId }: { retailerId: string }) {
                         {o.order_number}
                       </Link>
                     </td>
-                    <td className="px-5 py-2 text-xs text-ink-400">{new Date(o.placed_at).toLocaleDateString('en-IN')}</td>
+                    <td className="px-5 py-2 text-xs text-ink-400">{formatIndiaDateTime(o.placed_at)}</td>
                     <td className="px-5 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ORDER_STATUS_STYLES[o.status] ?? 'bg-ink-100 text-ink-600'}`}>
                         {o.status.charAt(0).toUpperCase() + o.status.slice(1)}

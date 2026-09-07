@@ -5,6 +5,7 @@ import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface RetailerRow {
   id: string;
@@ -166,7 +167,7 @@ export default async function SalesmanRetailersPage({ searchParams }: { searchPa
                       <span className="font-semibold text-ink-900">₹{retailer.recentOrder.grand_total.toFixed(2)}</span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-ink-400">
-                      <span>{new Date(retailer.recentOrder.placed_at).toLocaleDateString('en-IN')}</span>
+                      <span>{formatIndiaDateTime(retailer.recentOrder.placed_at)}</span>
                       <span className="capitalize">{retailer.recentOrder.status}</span>
                     </div>
                   </div>
