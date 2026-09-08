@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { ResendConfirmationForm } from '@/components/auth/resend-confirmation-form';
 
 const initialState: FormState = null;
 
@@ -23,9 +24,12 @@ export function RegisterRetailerForm({ areas }: { areas: Area[] }) {
         </div>
       ) : null}
       {state?.success ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {state.success}
-        </div>
+        <>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {state.success}
+          </div>
+          <ResendConfirmationForm />
+        </>
       ) : null}
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">

@@ -8,6 +8,7 @@ import { loginAction, loginWithPhoneAction, type FormState } from '@/lib/auth/ac
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { ResendConfirmationForm } from '@/components/auth/resend-confirmation-form';
 
 const initialState: FormState = null;
 
@@ -18,8 +19,6 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
 
   const [phoneState, phoneAction] = useFormState(loginWithPhoneAction, initialState);
   const [emailState, emailAction] = useFormState(loginAction, initialState);
-
-  const state = activeTab === 'phone' ? phoneState : emailState;
 
   return (
     <div className="space-y-5">
@@ -62,6 +61,7 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
               {phoneState.error}
             </div>
           ) : null}
+          {phoneState?.code === 'email_not_confirmed' ? <ResendConfirmationForm /> : null}
           {phoneState?.success ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               {phoneState.success}
@@ -142,6 +142,7 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
               {emailState.error}
             </div>
           ) : null}
+          {emailState?.code === 'email_not_confirmed' ? <ResendConfirmationForm /> : null}
           {emailState?.success ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               {emailState.success}
@@ -198,9 +199,6 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
           </p>
         </form>
       )}
-
-      {/* Global error fallback for tab switch */}
-      {state?.error && activeTab === 'phone' && phoneState?.error ? null : null}
     </div>
   );
 }

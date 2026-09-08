@@ -7,11 +7,9 @@ import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { homeForRole, type UserRole } from '@/lib/auth/roles';
 import { normalizePhone } from '@/lib/utils/phone';
 
-export type FormState = {
-  error?: string;
-  success?: string;
-  fieldErrors?: Record<string, string>;
-} | null;
+export type { AuthErrorCode, FormState } from '@/lib/auth/helpers';
+import { isDuplicateSignup, mapSignInError, safeRedirectPath } from '@/lib/auth/helpers';
+import type { FormState } from '@/lib/auth/helpers';
 
 interface ProfileRoleRow {
   role: UserRole;
@@ -33,24 +31,14 @@ const requestResetSchema = z.object({
   email: z.string().email('Enter a valid email address.'),
 });
 
+const resendConfirmationSchema = z.object({
+  email: z.string().email('Enter a valid email address.'),
+});
+
 const updatePasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters.'),
   confirmPassword: z.string().min(1, 'Please confirm your password.'),
 });
-
-/**
- * Only allow redirecting back to a same-site path. The login form
- * renders whatever came in on the `?redirect=` query param (set by
- * middleware.ts when it bounces an unauthenticated visit) into a
- * hidden field, so this must be treated as untrusted input — reject
- * anything that isn't an internal, single-leading-slash path to avoid
- * an open redirect.
- */
-function safeRedirectPath(path: string | undefined): string | null {
-  if (!path) return null;
-  if (!path.startsWith('/') || path.startsWith('//') || path.includes('://')) return null;
-  return path;
-}
 
 export async function loginAction(_prevState: FormState, formData: FormData): Promise<FormState> {
   const parsed = loginSchema.safeParse({
@@ -73,8 +61,8 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
     password: parsed.data.password,
   });
 
-  if (error) {
-    return { error: 'Invalid email or password. Please try again.' };
+  if (error || !data.user) {
+    return mapSignInError(error, 'email');
   }
 
   const { data: profile } = await supabase
@@ -118,10 +106,14 @@ export async function loginWithPhoneAction(_prevState: FormState, formData: Form
 
   // Generic error to avoid account enumeration — same for “phone not found”
   // and “wrong password”.
-  const genericError: FormState = {
-    error: 'Invalid mobile number or password. Please try again.',
-  };
+  const genericError: FormState = mapSignInError(null, 'mobile number');
 
+  // NOTE: redirect() works by throwing a special NEXT_REDIRECT error, so
+  // it must be called OUTSIDE the try/catch below — an earlier version
+  // called it inside `try` and the `catch` swallowed the redirect and
+  // returned `genericError` instead, which made EVERY phone login fail
+  // with "Invalid mobile number or password" even with correct creds.
+  let destination: string;
   try {
     const adminClient = createServiceRoleClient();
 
@@ -150,7 +142,10 @@ export async function loginWithPhoneAction(_prevState: FormState, formData: Form
     });
 
     if (error || !data.user) {
-      return genericError;
+      // A phone that resolves to a real account but whose email is
+      // still unconfirmed gets the actionable recovery message; a
+      // genuinely wrong password stays generic (no enumeration).
+      return mapSignInError(error, 'mobile number');
     }
 
     const { data: profile } = await supabase
@@ -160,10 +155,11 @@ export async function loginWithPhoneAction(_prevState: FormState, formData: Form
       .single<ProfileRoleRow>();
 
     const role = profile?.role ?? 'retailer';
-    redirect(safeRedirectPath(parsed.data.redirect) ?? homeForRole(role));
+    destination = safeRedirectPath(parsed.data.redirect) ?? homeForRole(role);
   } catch {
     return genericError;
   }
+  redirect(destination);
 }
 
 export async function requestPasswordResetAction(_prevState: FormState, formData: FormData): Promise<FormState> {
@@ -200,6 +196,55 @@ export async function requestPasswordResetAction(_prevState: FormState, formData
   return {
     success:
       "If an account exists for that email, you will receive a password reset link shortly. Please check your inbox and spam folder.",
+  };
+}
+
+/**
+ * Re-sends the Supabase signup confirmation email. Used as the recovery
+ * path when login fails with `email_not_confirmed` (the project has
+ * "Confirm email" enabled and the user lost or never received the link).
+ * Always returns a generic message so it can't be used to enumerate
+ * which emails have accounts — except for rate limiting, which is
+ * surfaced so the user knows to wait before retrying.
+ */
+export async function resendConfirmationAction(
+  _prevState: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const parsed = resendConfirmationSchema.safeParse({
+    email: formData.get('email'),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  const supabase = createClient();
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
+
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: parsed.data.email,
+    options: { emailRedirectTo: `${siteUrl}/auth/callback` },
+  });
+
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('rate limit') || msg.includes('too many') || error.status === 429) {
+      return {
+        code: 'recovery_failed',
+        error: 'Too many requests. Please wait a minute, then try again.',
+      };
+    }
+    // Fall through to the generic success message (no enumeration).
+  }
+
+  return {
+    success:
+      'If an account exists for that email, a new confirmation link is on its way. Please check your inbox and spam folder.',
   };
 }
 
@@ -294,7 +339,10 @@ export async function registerRetailerAction(
   // other field) from being created at all.
   const { data: phoneTaken } = await supabase.rpc('is_phone_registered' as never, { p_phone: phone } as never);
   if (phoneTaken) {
-    return { fieldErrors: { phone: 'This phone number is already registered.' } };
+    return {
+      code: 'duplicate_phone',
+      fieldErrors: { phone: 'This phone number is already registered.' },
+    };
   }
 
   // Create the auth user. A DB trigger (handle_new_user, see
@@ -323,24 +371,42 @@ export async function registerRetailerAction(
 
   if (signUpError) {
     if (signUpError.message.toLowerCase().includes('already registered')) {
-      return { error: 'An account with this email already exists. Please log in instead.' };
+      return {
+        code: 'duplicate_email',
+        error: 'An account with this email already exists. Please log in instead.',
+      };
     }
     if (signUpError.message.toLowerCase().includes('phone_already_registered')) {
       // Race condition: two submissions with the same phone number
       // landed on the DB trigger at almost the same instant, past the
       // rpc() check above.
-      return { fieldErrors: { phone: 'This phone number is already registered.' } };
+      return {
+        code: 'duplicate_phone',
+        fieldErrors: { phone: 'This phone number is already registered.' },
+      };
     }
     return { error: signUpError.message };
+  }
+
+  // When "Confirm email" is on, Supabase returns success (not an error)
+  // for an already-registered email, with an obfuscated user whose
+  // `identities` array is empty — catch it so we don't imply a second
+  // account was created.
+  if (isDuplicateSignup(signUpData.user)) {
+    return {
+      code: 'duplicate_email',
+      error: 'An account with this email already exists. Please log in instead.',
+    };
   }
 
   if (!signUpData.session) {
     // Email confirmation is enabled on this Supabase project. The
     // retailer row has already been created by the trigger above —
     // the user just needs to confirm their email before they can log
-    // in and see the pending-approval screen.
+    // in and see the pending-approval screen. Rendered as success
+    // (not an error) with a recovery path below the form.
     return {
-      error: 'Account created. Please check your email to confirm your address, then log in.',
+      success: 'Account created. Please check your email to confirm your address, then log in.',
     };
   }
 
