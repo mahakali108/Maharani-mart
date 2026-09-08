@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Package, Search as SearchIcon, Sparkles } from 'lucide-react';
+import { Bell, Package, Search as SearchIcon, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { BrandCard, type BrandCardData } from '@/components/retailer/brand-card';
@@ -39,6 +39,7 @@ interface BrandRow extends BrandCardData {
 
 interface RetailerRow {
   area_id: string;
+  shop_name: string | null;
 }
 
 /**
@@ -51,9 +52,14 @@ export default async function RetailerHomePage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: retailer }, favoriteIds] = await Promise.all([
-    supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<RetailerRow>(),
+  const [{ data: retailer }, favoriteIds, { count: unreadCount }] = await Promise.all([
+    supabase.from('retailers').select('area_id, shop_name').eq('id', user.id).maybeSingle<RetailerRow>(),
     loadFavoriteIds(supabase, user.id),
+    supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_id', user.id)
+      .eq('is_read', false),
   ]);
 
   const nowIso = new Date().toISOString();
@@ -127,6 +133,30 @@ export default async function RetailerHomePage() {
   return (
     <div className="space-y-5 sm:space-y-7">
       <h1 className="sr-only">Maharani Traders — order everyday products by the piece</h1>
+
+      {/* Retailer greeting — compact, personal, with notification shortcut */}
+      <section className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-base font-bold text-slate-900 sm:text-lg">
+            {getGreeting()}, {user.fullName.split(' ')[0]} 👋
+          </p>
+          {retailer?.shop_name ? (
+            <p className="mt-0.5 text-xs text-slate-500">{retailer.shop_name}</p>
+          ) : null}
+        </div>
+        <Link
+          href="/retailer/notifications"
+          className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm transition hover:border-primary-200 hover:text-primary-600"
+          aria-label={`Notifications${(unreadCount ?? 0) > 0 ? ` (${unreadCount} unread)` : ''}`}
+        >
+          <Bell className="h-5 w-5 text-slate-600" aria-hidden="true" />
+          {(unreadCount ?? 0) > 0 ? (
+            <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-primary-600 px-1 text-[9px] font-bold leading-[14px] text-white">
+              {(unreadCount ?? 0) > 99 ? '99+' : unreadCount}
+            </span>
+          ) : null}
+        </Link>
+      </section>
 
       {/* Promotional banner carousel — only renders when there is a real active
          banner; the carousel component paints a soft light fallback otherwise. */}
@@ -273,4 +303,15 @@ function EmptyState({
       </div>
     </div>
   );
+}
+
+function getGreeting(): string {
+  // IST = UTC + 5:30
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const utcMin = now.getUTCMinutes();
+  const istHour = (utcHour + 5 + (utcMin + 30 >= 60 ? 1 : 0)) % 24;
+  if (istHour < 12) return 'Good morning';
+  if (istHour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
