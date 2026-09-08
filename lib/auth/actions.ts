@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { homeForRole, type UserRole } from '@/lib/auth/roles';
-import { normalizePhone } from '@/lib/utils/phone';
+import { normalizePhone, toE164 } from '@/lib/utils/phone';
 
 export type FormState = {
   error?: string;
@@ -164,6 +164,146 @@ export async function loginWithPhoneAction(_prevState: FormState, formData: Form
   } catch {
     return genericError;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Phone OTP login — uses Supabase Auth signInWithOtp / verifyOtp.
+// Requires SMS provider (e.g. Twilio) configured in the Supabase dashboard.
+// ---------------------------------------------------------------------------
+
+const sendOtpSchema = z.object({
+  phone: z.string().min(1, 'Enter your mobile number.'),
+  redirect: z.string().optional(),
+});
+
+const verifyOtpSchema = z.object({
+  phone: z.string().min(1, 'Phone number is required.'),
+  token: z.string().min(6, 'Enter the 6-digit OTP.').max(6, 'Enter the 6-digit OTP.'),
+  redirect: z.string().optional(),
+});
+
+/**
+ * Step 1: Send OTP to the given Indian mobile number via Supabase Auth.
+ *
+ * The phone number is normalized to E.164 (+91XXXXXXXXXX) before calling
+ * supabase.auth.signInWithOtp. Supabase handles delivery via the configured
+ * SMS provider (Twilio, MessageBird, etc.).
+ *
+ * IMPORTANT: This requires the Supabase project to have a phone provider
+ * enabled. Without it, the request will fail with an auth error — the action
+ * surfaces the real error message instead of faking success.
+ */
+export async function sendPhoneOtpAction(
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = sendOtpSchema.safeParse({
+    phone: formData.get('phone'),
+    redirect: formData.get('redirect') || undefined,
+  });
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  const e164 = toE164(parsed.data.phone);
+  if (!e164) {
+    return { fieldErrors: { phone: 'Enter a valid 10-digit Indian mobile number.' } };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    phone: e164,
+  });
+
+  if (error) {
+    // Surface the real Supabase error — common cases:
+    //   - "Phone provider is not configured" -> SMS not set up
+    //   - "Invalid phone number" -> format issue
+    //   - "Rate limit" -> too many attempts
+    const msg = error.message.toLowerCase();
+    if (msg.includes('rate limit')) {
+      return { error: 'Too many attempts. Please wait a few minutes and try again.' };
+    }
+    if (msg.includes('phone provider') || msg.includes('sms')) {
+      return {
+        error:
+          'Phone login is temporarily unavailable. Please use email/password or contact support.',
+      };
+    }
+    return { error: `Could not send OTP: ${error.message}` };
+  }
+
+  // Success — the OTP has been sent. Return the phone so the form can
+  // show the verification screen.
+  return { success: `OTP sent to ${e164}`, fieldErrors: { _phone: e164 } as unknown as Record<string, string> };
+}
+
+/**
+ * Step 2: Verify the OTP entered by the retailer.
+ *
+ * Calls supabase.auth.verifyOtp with the E.164 phone and 6-digit token.
+ * On success the user is authenticated and redirected to their home page.
+ * On failure the real error is shown (invalid OTP, expired OTP, etc.).
+ */
+export async function verifyPhoneOtpAction(
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = verifyOtpSchema.safeParse({
+    phone: formData.get('phone'),
+    token: formData.get('token'),
+    redirect: formData.get('redirect') || undefined,
+  });
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  const e164 = toE164(parsed.data.phone);
+  if (!e164) {
+    return { fieldErrors: { phone: 'Invalid phone number. Go back and re-enter.' } };
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase.auth.verifyOtp({
+    phone: e164,
+    token: parsed.data.token,
+    type: 'sms',
+  });
+
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('expired')) {
+      return { error: 'OTP has expired. Please request a new one.' };
+    }
+    if (msg.includes('invalid') || msg.includes('token')) {
+      return { error: 'Incorrect OTP. Please check and try again.' };
+    }
+    return { error: `Verification failed: ${error.message}` };
+  }
+
+  if (!data.user) {
+    return { error: 'Verification succeeded but sign-in failed. Please try again.' };
+  }
+
+  // Look up role for redirect
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', data.user.id)
+    .single<ProfileRoleRow>();
+
+  const role = profile?.role ?? 'retailer';
+  redirect(safeRedirectPath(parsed.data.redirect) ?? homeForRole(role));
 }
 
 export async function requestPasswordResetAction(_prevState: FormState, formData: FormData): Promise<FormState> {
