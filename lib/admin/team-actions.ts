@@ -79,6 +79,12 @@ export async function createStaffAction(_prevState: TeamFormState, formData: For
     if (createError.message.toLowerCase().includes('already registered') || createError.message.toLowerCase().includes('already exists')) {
       return { error: 'An account with this email already exists.' };
     }
+    // Race past the is_phone_registered() pre-check above: the
+    // handle_new_user() trigger rejects the duplicate phone (see
+    // supabase/migrations/0012_fix_registration_phone_conflict.sql).
+    if (createError.message.toLowerCase().includes('phone_already_registered')) {
+      return { error: 'This phone number is already registered.' };
+    }
     return { error: createError.message };
   }
   if (!created.user) {
