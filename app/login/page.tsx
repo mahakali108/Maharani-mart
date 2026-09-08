@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { LoginForm } from '@/components/auth/login-form';
 
-export const metadata: Metadata = { title: 'Sign in — Maa Kali B2B' };
+export const metadata: Metadata = { title: 'Sign in — Maharani Traders' };
 
 export default function LoginPage({
   searchParams,
@@ -21,18 +21,18 @@ export default function LoginPage({
         <div className="relative">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-600 text-lg font-bold">
-              MK
+              M
             </div>
-            <span className="text-lg font-semibold">Maa Kali B2B</span>
+            <span className="text-lg font-semibold">Maharani Traders</span>
           </div>
         </div>
         <div className="relative space-y-3">
           <h1 className="text-3xl font-semibold leading-tight">
-            The FMCG distribution backbone for Khagaria retailers.
+            Smart ordering for modern Indian retailers.
           </h1>
           <p className="max-w-md text-ink-300">
-            Smart ordering, live inventory, retailer-wise pricing, and route-ready field
-            operations — all in one platform.
+            Piece-based pricing, live inventory, retailer-wise rates, and instant
+            ordering — built for your shop.
           </p>
         </div>
       </div>
@@ -43,9 +43,9 @@ export default function LoginPage({
           <div className="mb-8 lg:hidden">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white font-bold">
-                MK
+                M
               </div>
-              <span className="text-lg font-semibold text-ink-900">Maa Kali B2B</span>
+              <span className="text-lg font-semibold text-ink-900">Maharani Traders</span>
             </div>
           </div>
 
