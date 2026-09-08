@@ -46,3 +46,10 @@ export function formatPhoneDisplay(phone10: string): string {
   if (!n) return phone10;
   return `+91 ${n.slice(0, 5)} ${n.slice(5)}`;
 }
+
+/** Convert a normalized 10-digit Indian mobile to E.164 format (+91XXXXXXXXXX). */
+export function toE164(phone10: string): string | null {
+  const n = normalizePhone(phone10);
+  if (!n) return null;
+  return `+91${n}`;
+}
