@@ -195,6 +195,9 @@ export async function createProductAction(
   }
   const d = parsed.data;
 
+  if (!d.brandId) return { error: 'Select a brand.' };
+  if (!d.categoryId) return { error: 'Select a category.' };
+
   const supabase = createClient();
   const cost = d.costPrice === '' ? null : Number(d.costPrice);
   // `sku_code` is intentionally omitted — it was removed from the product
@@ -426,9 +429,22 @@ export async function addProductPackAction(
   };
 
   const supabase = createClient();
+
+  // Size labels are the retailer-facing variant identity. Prevent duplicates
+  // before insert so the UI returns a useful message instead of a raw index
+  // error (the same rule is also enforced by migration 0027).
+  const { data: existingVariant } = await supabase
+    .from('product_packs')
+    .select('id')
+    .eq('product_id', productId)
+    .eq('is_active', true)
+    .ilike('pack_name', d.packName.trim())
+    .maybeSingle<{ id: string }>();
+  if (existingVariant) return { error: 'This product already has an active variant with that size.' };
+
   const payload: ProductPackInsert = {
     product_id: productId,
-    pack_name: d.packName,
+    pack_name: d.packName.trim(),
     pack_sku_code: d.packSkuCode,
     units_per_case: d.unitsPerCase,
     base_price: d.mrp,

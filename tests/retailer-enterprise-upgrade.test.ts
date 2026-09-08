@@ -598,9 +598,10 @@ describe('migration hygiene', () => {
     });
   });
 
-  it('adds 0026 (case + loose piece pricing) as the latest migration', () => {
-    expect(migrations[migrations.length - 1]).toBe('0026_case_and_loose_piece_pricing.sql');
+  it('keeps the case/loose pricing migration and adds Powder catalog integrity as the latest migration', () => {
     expect(existsSync(join(migrationsDir, '0026_case_and_loose_piece_pricing.sql'))).toBe(true);
+    expect(migrations[migrations.length - 1]).toBe('0027_powder_category_and_catalog_constraints.sql');
+    expect(existsSync(join(migrationsDir, '0027_powder_category_and_catalog_constraints.sql'))).toBe(true);
   });
 
   it('keeps the case + loose migration additive — no destructive statement, no RLS change', () => {

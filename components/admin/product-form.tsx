@@ -60,8 +60,8 @@ export function ProductForm({
 
         <div>
           <Label htmlFor="brandId">Brand</Label>
-          <Select id="brandId" name="brandId" defaultValue={defaults?.brand_id ?? ''}>
-            <option value="">— None —</option>
+          <Select id="brandId" name="brandId" defaultValue={defaults?.brand_id ?? ''} required={!defaults}>
+            <option value="">— Select brand —</option>
             {brands.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -71,8 +71,8 @@ export function ProductForm({
         </div>
         <div>
           <Label htmlFor="categoryId">Category</Label>
-          <Select id="categoryId" name="categoryId" defaultValue={defaults?.category_id ?? ''}>
-            <option value="">— None —</option>
+          <Select id="categoryId" name="categoryId" defaultValue={defaults?.category_id ?? ''} required={!defaults}>
+            <option value="">— Select category —</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
