@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CircleAlert, Tag } from 'lucide-react';
+import { Check, CircleAlert, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { formatInr } from '@/lib/retailer/format';
 import type { VariantSwitcherItem, VariantSwitcherModel } from '@/lib/retailer/variants';
@@ -40,38 +40,56 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
   const body = (
     <>
       <span className="flex items-center justify-between gap-1">
-        <span className="text-sm font-extrabold leading-none">{variant.label}</span>
-        {variant.isSelected ? <span className="sr-only">(currently viewing)</span> : null}
+        <span
+          className={cn(
+            'truncate text-sm font-extrabold leading-none',
+            variant.isSelected ? 'text-primary-700' : 'text-slate-900'
+          )}
+        >
+          {variant.label}
+        </span>
+        {variant.isSelected ? (
+          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-primary-600 px-1.5 py-0.5 text-[8px] font-bold uppercase leading-none tracking-wide text-white">
+            <Check className="h-2.5 w-2.5" aria-hidden="true" /> Viewing
+          </span>
+        ) : (
+          <span className="sr-only">(currently viewing)</span>
+        )}
       </span>
 
       {pricing ? (
         <>
           <span
             className={cn(
-              'mt-1.5 block text-xs font-bold leading-none',
-              variant.isSelected ? 'text-white' : 'text-slate-900'
+              'mt-1.5 block text-[13px] font-bold leading-none',
+              variant.isSelected ? 'text-primary-700' : 'text-slate-900'
             )}
           >
             {formatInr(pricing.piecePrice)}
-            <span className={cn('font-semibold', variant.isSelected ? 'text-white/80' : 'text-slate-500')}>/pc</span>
+            <span
+              className={cn(
+                'text-[10px] font-semibold',
+                variant.isSelected ? 'text-primary-600' : 'text-slate-500'
+              )}
+            >
+              /pc
+            </span>
           </span>
           {pricing.mrp !== null && pricing.discountPercent > 0 ? (
             <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold leading-none">
-              <span className={cn('line-through', variant.isSelected ? 'text-white/70' : 'text-slate-400')}>
+              <span className={cn('line-through', variant.isSelected ? 'text-primary-300' : 'text-slate-400')}>
                 {formatInr(pricing.mrp)}
               </span>
-              <span className={variant.isSelected ? 'text-emerald-100' : 'text-emerald-700'}>
-                {pricing.discountPercent}% off
-              </span>
+              <span className="text-emerald-700">{pricing.discountPercent}% off</span>
             </span>
           ) : null}
           <span
             className={cn(
-              'mt-1 block text-[10px] font-medium leading-none',
-              variant.isSelected ? 'text-white/80' : 'text-slate-500'
+              'mt-1 block truncate text-[10px] font-medium leading-none',
+              variant.isSelected ? 'text-primary-600/80' : 'text-slate-400'
             )}
           >
-            Quantity tier rates apply
+            {pricing.tierSummary ? `Slabs ${pricing.tierSummary}` : 'Single rate per piece'}
           </span>
         </>
       ) : null}
@@ -82,7 +100,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
             <span
               className={cn(
                 'rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
-                variant.isSelected ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700'
+                variant.isSelected ? 'bg-primary-100 text-primary-700' : 'bg-emerald-50 text-emerald-700'
               )}
             >
               Best value
@@ -92,7 +110,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
             <span
               className={cn(
                 'flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
-                variant.isSelected ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                variant.isSelected ? 'bg-amber-100 text-amber-800' : 'bg-amber-50 text-amber-700'
               )}
             >
               <Tag className="h-2.5 w-2.5" aria-hidden="true" /> Offer
@@ -127,8 +145,8 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
       className={cn(
         'flex w-[8.5rem] shrink-0 snap-start flex-col rounded-2xl border p-2.5 transition sm:w-auto',
         variant.isSelected
-          ? 'border-primary-600 bg-primary-600 text-white shadow-sm ring-2 ring-primary-200'
-          : 'border-slate-200 bg-white text-slate-700 hover:border-primary-300 hover:bg-primary-50'
+          ? 'border-primary-600 bg-primary-50/60 shadow-sm ring-2 ring-primary-100'
+          : 'border-slate-200 bg-white hover:border-primary-300 hover:bg-primary-50/40'
       )}
     >
       {body}

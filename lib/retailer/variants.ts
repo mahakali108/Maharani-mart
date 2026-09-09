@@ -30,7 +30,7 @@
  * both invented and a data leak. See docs/warehouse-gaps.md.
  */
 
-import { round2 } from '@/lib/retailer/case-pricing';
+import { round2, tierRangeLabel, type PricingTier } from '@/lib/retailer/case-pricing';
 import { calcDiscountPercent } from '@/lib/retailer/format';
 
 /** Server-resolved, GST-inclusive numbers for one variant card. */
@@ -47,6 +47,13 @@ export interface VariantPricing {
   discountPercent: number;
   /** True only when an active scheme/offer row really exists for the product. */
   hasOffer: boolean;
+  /**
+   * Compact quantity-slab summary for the size card, e.g. "1–6 · 7–12 · 13+",
+   * or null when the variant has no configured quantity slabs (a single
+   * per-piece rate then applies). Display-only wording — it restates no
+   * pricing rule of its own.
+   */
+  tierSummary: string | null;
 }
 
 /** Pricing inputs a page may supply per pack (already resolved server-side). */
@@ -54,6 +61,8 @@ export interface VariantPricingInput {
   piecePrice: number;
   mrp?: number | null;
   hasOffer?: boolean;
+  /** Optional pre-computed slab summary (display only). */
+  tierSummary?: string | null;
 }
 
 /** A minimal pack shape needed for switcher/gallery decisions. */
@@ -136,6 +145,7 @@ export function buildVariantSwitcher(
           mrp: input.mrp ?? null,
           discountPercent: calcDiscountPercent(input.mrp ?? null, round2(input.piecePrice)),
           hasOffer: input.hasOffer === true,
+          tierSummary: input.tierSummary ?? null,
         }
       : null;
 
@@ -204,4 +214,27 @@ export function variantGalleryImages(
     return [{ id: `pack-${pack!.id}`, image_url: packImage }, ...sorted];
   }
   return sorted;
+}
+
+/**
+ * Compact quantity-slab summary for one variant size card.
+ *
+ * Accepts the variant's already-resolved slab rows (the caller passes the
+ * loose tier set the pricing engine resolved for that variant) and returns a
+ * short label like "1–6 · 7–12 · 13+" — or null when the variant has no
+ * slabs at all, in which case the card falls back to a single-rate note.
+ *
+ * Display-only: this formats ranges the engine already resolved and never
+ * derives, picks or rounds a price of its own.
+ */
+export function formatVariantTierSummary(tiers: PricingTier[] | null | undefined): string | null {
+  const active = (tiers ?? []).filter((tier) => tier.is_active !== false);
+  if (active.length === 0) return null;
+  const labels = active.map((tier) =>
+    tierRangeLabel(tier.min_quantity, tier.max_quantity).replace(/\s*pcs$/i, '')
+  );
+  if (labels.length > 3) {
+    return `${labels[0]} … ${labels[labels.length - 1]}`;
+  }
+  return labels.join(' · ');
 }
