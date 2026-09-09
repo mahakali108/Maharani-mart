@@ -24,6 +24,7 @@ import { formatInr } from '@/lib/retailer/format';
 import { calculateCreditPosition } from '@/lib/orders/credit';
 import { OrderStatusTimeline, type TrackedStatus, type StatusHistoryEntry } from '@/components/retailer/order-status-timeline';
 import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
+import { buildCanonicalProductName } from '@/lib/retailer/product-name';
 
 type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'packed' | 'dispatched' | 'delivered' | 'cancelled' | 'returned';
 
@@ -64,7 +65,7 @@ interface OrderItemRow {
   unit_price: number;
   gst_percent: number;
   line_total: number;
-  products: { name: string; product_images: { image_url: string; sort_order: number }[] } | null;
+  products: { name: string; brands: { name: string } | null; product_images: { image_url: string; sort_order: number }[] } | null;
   product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
@@ -108,7 +109,7 @@ export default async function OrderDetailPage({
     supabase
       .from('order_items')
       .select(
-        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, product_images ( image_url, sort_order ) ), product_packs ( pack_name, units_per_case )'
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, brands ( name ), product_images ( image_url, sort_order ) ), product_packs ( pack_name, units_per_case )'
       )
       .eq('order_id', params.id),
     supabase
@@ -189,13 +190,18 @@ export default async function OrderDetailPage({
             {orderedLines.map((line) => {
               const { first } = line;
               const images = [...(first.products?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+              const canonical = buildCanonicalProductName({
+                brandName: first.products?.brands?.name ?? null,
+                productName: first.products?.name ?? null,
+                packName: first.product_packs?.pack_name ?? null,
+              });
               return (
                 <div key={line.key} className="flex items-center gap-3 py-4 sm:gap-4">
                   <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-50 sm:h-20 sm:w-20">
-                    {images[0]?.image_url ? <Image src={images[0].image_url} alt={first.products?.name ?? ''} fill className="object-contain p-1.5" unoptimized /> : <div className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></div>}
+                    {images[0]?.image_url ? <Image src={images[0].image_url} alt={canonical} fill className="object-contain p-1.5" unoptimized /> : <div className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-5 w-5" /></div>}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm">{first.products?.name ?? 'Unknown product'}</p>
+                    <p className="line-clamp-2 break-words text-xs font-bold leading-4 text-slate-900 sm:text-sm">{canonical}</p>
                     <p className="mt-1 text-[10px] font-medium text-slate-500">
                       {first.product_packs?.pack_name ?? 'Pack'} · Qty {formatQuantitySummary(line.quantity)}
                     </p>

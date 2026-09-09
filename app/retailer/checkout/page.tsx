@@ -22,6 +22,8 @@ import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
+import { buildCanonicalProductName } from '@/lib/retailer/product-name';
+import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
 
 interface CartItemDetail {
   id: string;
@@ -46,6 +48,7 @@ interface CartItemDetail {
     name: string;
     gst_percent: number;
     is_active: boolean;
+    brands: { name: string } | null;
     product_images: { image_url: string; sort_order: number }[];
   } | null;
 }
@@ -68,11 +71,11 @@ export default async function CheckoutPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: cartData }, { data: retailer }, { data: profile }] = await Promise.all([
+  const [{ data: cartData }, { data: retailer }, { data: profile }, walletSummary] = await Promise.all([
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, product_images ( image_url, sort_order ) )'
+        'id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -82,6 +85,7 @@ export default async function CheckoutPage() {
       .eq('id', user.id)
       .maybeSingle<RetailerCreditRow>(),
     supabase.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle<CheckoutProfileRow>(),
+    getRetailerWalletSummary(supabase, user.id),
   ]);
 
   const items = (cartData ?? []) as unknown as CartItemDetail[];
@@ -127,11 +131,18 @@ export default async function CheckoutPage() {
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     // Prefer the variant's own image (matches the product page size switcher).
     const lineImage = pack?.image_url ?? images[0]?.image_url;
+    const canonical = buildCanonicalProductName({
+      brandName: product?.brands?.name ?? null,
+      productName: product?.name ?? null,
+      packName: pack?.pack_name ?? null,
+    });
     return {
       id: item.id,
       quantity: item.quantity,
       packName: pack?.pack_name ?? 'Unknown pack',
       productName: product?.name ?? 'Unknown product',
+      canonicalName: canonical,
+      brandName: product?.brands?.name ?? null,
       imageUrl: lineImage,
       unitPrice,
       piecePrice: pricing.unitPrice,
@@ -239,7 +250,7 @@ export default async function CheckoutPage() {
                     {line.imageUrl ? (
                       <Image
                         src={line.imageUrl}
-                        alt={line.productName}
+                        alt={line.canonicalName}
                         fill
                         sizes="56px"
                         className="object-contain p-1"
@@ -252,7 +263,7 @@ export default async function CheckoutPage() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-bold text-slate-900">{line.productName}</p>
+                    <p className="break-words font-bold text-slate-900">{line.canonicalName}</p>
                     <p className="mt-1 text-[10px] text-slate-500">
                       {line.packName} · {line.pieces} pc{line.pieces === 1 ? '' : 's'} × {formatInr(line.piecePrice)}/pc
                     </p>
@@ -271,11 +282,43 @@ export default async function CheckoutPage() {
           </section>
 
           {retailer ? (
-            <CreditSummary
-              creditLimit={retailer.credit_limit}
-              outstandingBalance={retailer.outstanding_balance}
-              orderImpact={grandTotal}
-            />
+            <div className="space-y-3">
+              <CreditSummary
+                creditLimit={retailer.credit_limit}
+                outstandingBalance={retailer.outstanding_balance}
+                orderImpact={grandTotal}
+              />
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wallet Ledger (Real-time)</p>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                  <div>
+                    <p className="text-slate-500">Limit</p>
+                    <p className="font-bold text-slate-900">{formatPaise(walletSummary.creditLimitPaise)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Outstanding</p>
+                    <p className="font-bold text-slate-900">{formatPaise(walletSummary.outstandingPaise)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Available</p>
+                    <p className={`font-bold ${walletSummary.availablePaise < 0 ? 'text-primary-600' : 'text-emerald-600'}`}>
+                      {formatPaise(walletSummary.availablePaise)}
+                    </p>
+                  </div>
+                </div>
+                {walletSummary.isOverLimit ? (
+                  <p className="mt-2 rounded-lg bg-primary-50 px-2 py-1.5 text-[10px] font-bold text-primary-700">
+                    Over limit — this order will be rejected server-side unless payment is recorded.
+                  </p>
+                ) : null}
+                <p className="mt-2 text-[10px] leading-4 text-slate-500">
+                  Server-authoritative: checkout will atomically debit your wallet. No fake balances.
+                </p>
+                <Link href="/retailer/account/ledger" className="mt-2 inline-block text-[10px] font-bold text-primary-600 hover:underline">
+                  View wallet ledger →
+                </Link>
+              </div>
+            </div>
           ) : null}
 
           {/* 3. PAYMENT / CREDIT */}

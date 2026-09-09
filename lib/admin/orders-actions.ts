@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { notifyOrderEvent } from '@/lib/notifications/notify';
 import type { Database } from '@/types/database.types';
+import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
 
 type OrderStatusEnum = Database['public']['Enums']['order_status'];
 
@@ -110,9 +111,9 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
 
   const { data: order } = await supabase
     .from('orders')
-    .select('status, warehouse_id')
+    .select('status, warehouse_id, retailer_id')
     .eq('id', orderId)
-    .maybeSingle<{ status: OrderStatusEnum; warehouse_id: string | null }>();
+    .maybeSingle<{ status: OrderStatusEnum; warehouse_id: string | null; retailer_id: string }>();
 
   if (!order) return { error: 'Order not found.' };
   if (order.status === 'dispatched' || order.status === 'delivered') {
@@ -126,9 +127,18 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
     .eq('id', orderId);
   if (error) return { error: error.message };
 
+  // Wallet reversal: create ORDER_REVERSAL credit entry, do not overwrite original
+  try {
+    const user = await supabase.auth.getUser();
+    await reverseOrderWalletDebit(orderId, order.retailer_id, reason || 'Order cancelled', user.data.user?.id ?? null);
+  } catch (err) {
+    console.warn('Wallet reversal failed (non-blocking):', err);
+  }
+
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
   revalidatePath('/admin/inventory');
+  revalidatePath(`/admin/wallets/${order.retailer_id}`);
   return { success: true };
 }
 

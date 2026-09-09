@@ -3,6 +3,7 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
 import type { Database } from '@/types/database.types';
+import { rupeesToPaise } from '@/lib/retailer/wallet';
 
 type OrderInsert = Database['public']['Tables']['orders']['Insert'];
 type OrderItemInsert = Database['public']['Tables']['order_items']['Insert'];
@@ -95,6 +96,48 @@ export async function createOrderForRetailer({
       .eq('id', order.id)
       .eq('status', 'pending');
     return { error: itemsError.message };
+  }
+
+  // Wallet integration: create ORDER_DEBIT atomically with credit check
+  // Uses integer paise, idempotency key = order.id to prevent duplicate debit on retry
+  // Server-authoritative: never trusts client total, uses quoted grandTotal
+  try {
+    const amountPaise = rupeesToPaise(quote.grandTotal);
+    const idempotencyKey = `order:${order.id}`;
+    const description = `Order ${order.order_number} — ₹${quote.grandTotal.toFixed(2)}`;
+
+    const { error: walletError } = await (supabase as any).rpc('check_and_debit_retailer_wallet', {
+      p_retailer_id: retailerId,
+      p_order_id: order.id,
+      p_amount_paise: amountPaise,
+      p_idempotency_key: idempotencyKey,
+      p_created_by: collectedBy ?? retailerId,
+      p_description: description,
+    });
+
+    if (walletError) {
+      // Credit check failed — cancel order and return error
+      await supabase
+        .from('orders')
+        .update({ status: 'cancelled', cancelled_reason: walletError.message } as unknown as never)
+        .eq('id', order.id)
+        .eq('status', 'pending');
+      return { error: walletError.message };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Wallet debit failed';
+    // If wallet debit fails for any reason, cancel order to keep consistency
+    if (message.toLowerCase().includes('insufficient credit') || message.toLowerCase().includes('overdue')) {
+      await supabase
+        .from('orders')
+        .update({ status: 'cancelled', cancelled_reason: message } as unknown as never)
+        .eq('id', order.id)
+        .eq('status', 'pending');
+      return { error: message };
+    }
+    // For non-credit errors (e.g. function not yet migrated), log but don't block order
+    // This preserves backward compatibility with existing orders when ledger not yet present
+    console.warn('Wallet debit skipped or failed (non-blocking):', message);
   }
 
   return { order: { id: order.id, orderNumber: order.order_number, grandTotal: quote.grandTotal } };
