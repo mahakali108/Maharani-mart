@@ -8,18 +8,16 @@ import {
   togglePackActiveAction,
   deleteProductPackAction,
   movePackAction,
-  setPackImageAction,
   duplicatePackAction,
   type PackFormState,
 } from '@/lib/admin/products-actions';
 import { PackCasePricing, type PackPricingTier } from '@/components/admin/pack-case-pricing';
-import { MediaUploadField } from '@/components/media/media-upload-field';
-import { StoredImage } from '@/components/media/stored-image';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { ToggleActiveButton } from '@/components/admin/toggle-active-button';
 import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
+import { ProductPackImageManager, type PackImage } from '@/components/admin/product-pack-image-manager';
 
 export interface Pack {
   id: string;
@@ -38,6 +36,8 @@ export interface Pack {
   allow_loose_pieces: boolean;
   is_active: boolean;
   tiers: PackPricingTier[];
+  /** Ordered gallery for this variant (product_pack_images). */
+  packImages?: PackImage[];
 }
 
 const initialState: PackFormState = null;
@@ -181,35 +181,12 @@ export function ProductPackManager({
                   />
                 </div>
                 <div className="border-t border-ink-100 bg-white px-3 py-3">
-                  <p className="mb-2 text-xs font-medium text-ink-500">
-                    Variant image — shown on the retailer size switcher for <strong>{pack.pack_name}</strong> (falls
-                    back to the product gallery when empty).
-                  </p>
-                  <div className="flex items-center gap-3">
-                    {pack.image_url ? (
-                      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-ink-100">
-                        <StoredImage src={pack.image_url} alt={`${pack.pack_name} image`} size="thumb" fill className="object-contain" />
-                      </div>
-                    ) : null}
-                    <MediaUploadField
-                      kind="product-gallery"
-                      ownerId={productId}
-                      hasExisting={!!pack.image_url}
-                      label={pack.image_url ? 'Replace variant image' : 'Upload variant image'}
-                      onUploaded={(media) => setPackImageAction(pack.id, productId, media.ref)}
-                    />
-                    {pack.image_url ? (
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => startTransition(() => setPackImageAction(pack.id, productId, null))}
-                        className="flex h-9 items-center gap-1.5 rounded-xl border border-ink-200 px-3 text-xs font-medium text-ink-600 transition hover:border-primary-200 hover:text-primary-600 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
+                  <ProductPackImageManager
+                    productId={productId}
+                    packId={pack.id}
+                    packName={pack.pack_name}
+                    images={pack.packImages ?? []}
+                  />
                 </div>
               </div>
             );

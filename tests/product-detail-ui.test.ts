@@ -126,18 +126,33 @@ describe('variant image fallback', () => {
   });
 
   it('the page feeds the SELECTED pack into the gallery', () => {
-    expect(read('app/retailer/catalog/[id]/page.tsx')).toContain('variantGalleryImages(selectedPack, productImages)');
+    const page = read('app/retailer/catalog/[id]/page.tsx');
+    // Universal gallery: selected variant gallery takes priority, fallback to parent
+    expect(page).toContain('variantGalleryImages(');
+    expect(page).toContain('selectedPack');
+    expect(page).toContain('productImages');
+    // Variant gallery per pack (0028) is used when available
+    expect(page).toContain('packImagesByPackId');
+    expect(page).toContain('product_pack_images');
   });
 
   it('the gallery renders contain-fit and opens a native dialog lightbox', () => {
     const gallery = read('components/retailer/product-gallery.tsx');
     expect(gallery).toContain('object-contain');
-    expect(gallery).toContain('aspect-square');
+    // Full-size mobile image area: large height, not tiny image in large empty card
+    expect(gallery).toMatch(/min-h-\[360px\]|min-h-\[420px\]|min-h-\[520px\]/);
     expect(gallery).toContain('<dialog');
     expect(gallery).toContain('showModal()');
-    expect(gallery).toContain('aria-label={`Open image viewer for ${name}`}');
-    // No image → the existing placeholder, not a broken img tag.
+    expect(gallery).toContain('Open image viewer for');
+    // Accessible alt text and counter for multiple images
+    expect(gallery).toContain('aria-label');
     expect(gallery).toContain('Product image unavailable');
+    // Swipe, keyboard, zoom controls
+    expect(gallery).toContain('onTouchStart');
+    expect(gallery).toContain('ArrowLeft');
+    expect(gallery).toContain('ZoomIn');
+    // Thumbnail strip is scrollable and accessible
+    expect(gallery).toContain('overflow-x-auto');
   });
 });
 

@@ -385,6 +385,121 @@ export async function reorderProductImageAction(productId: string, imageId: stri
   revalidatePath(`/admin/products/${productId}`);
 }
 
+export async function setProductImagePrimaryAction(productId: string, imageId: string) {
+  await requirePermission('products.edit');
+  const supabase = createClient();
+  const { data: rows, error } = await supabase
+    .from('product_images')
+    .select('id, sort_order')
+    .eq('product_id', productId)
+    .order('sort_order')
+    .returns<SortableRow[]>();
+  if (error) throw new Error(error.message);
+  if (!rows || rows.length === 0) return;
+  const target = rows.find((r) => r.id === imageId);
+  if (!target) throw new Error('Image not found for this product.');
+  // Move target to sort_order 0, shift others accordingly by reassigning sequential orders
+  const ordered = [...rows].sort((a, b) => a.sort_order - b.sort_order);
+  const withoutTarget = ordered.filter((r) => r.id !== imageId);
+  const reordered = [target, ...withoutTarget];
+  for (let idx = 0; idx < reordered.length; idx += 1) {
+    const row = reordered[idx]!;
+    await supabase.from('product_images').update({ sort_order: idx } as unknown as never).eq('id', row.id);
+  }
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+// ----------------------------------------------------------------------------
+// Variant gallery (product_pack_images) — multiple images per variant
+// ----------------------------------------------------------------------------
+
+type PackImageInsert = Database['public']['Tables']['product_pack_images']['Insert'];
+
+export async function addPackImageAction(packId: string, productId: string, imageUrl: string, sortOrder: number) {
+  await requirePermission('products.edit');
+  if (!isRenderableMediaRef(imageUrl)) throw new Error('Invalid image reference.');
+  const supabase = createClient();
+  // Validate pack belongs to product
+  const { data: pack, error: packErr } = await supabase
+    .from('product_packs')
+    .select('id, product_id')
+    .eq('id', packId)
+    .eq('product_id', productId)
+    .maybeSingle<{ id: string; product_id: string }>();
+  if (packErr) throw new Error(packErr.message);
+  if (!pack) throw new Error('Pack not found for this product.');
+  const payload: PackImageInsert = { product_pack_id: packId, image_url: imageUrl, sort_order: sortOrder };
+  const { error } = await supabase.from('product_pack_images').insert(payload as unknown as never);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath(`/retailer/catalog/${packId}`);
+}
+
+export async function removePackImageAction(imageId: string, packId: string, productId: string) {
+  await requirePermission('products.edit');
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('product_pack_images')
+    .delete()
+    .eq('id', imageId)
+    .eq('product_pack_id', packId)
+    .select('image_url')
+    .maybeSingle<{ image_url: string }>();
+  if (error) throw new Error(error.message);
+  if (data) await deleteMedia(data.image_url);
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath(`/retailer/catalog/${packId}`);
+}
+
+export async function reorderPackImageAction(
+  productId: string,
+  packId: string,
+  imageId: string,
+  direction: 'up' | 'down'
+) {
+  await requirePermission('products.edit');
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('product_pack_images')
+    .select('id, sort_order')
+    .eq('product_pack_id', packId)
+    .order('sort_order')
+    .returns<SortableRow[]>();
+  if (data) await swapSortOrder('product_pack_images', data, imageId, direction);
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function setPackImagePrimaryAction(packId: string, productId: string, imageId: string) {
+  await requirePermission('products.edit');
+  const supabase = createClient();
+  const { data: pack } = await supabase
+    .from('product_packs')
+    .select('id, product_id')
+    .eq('id', packId)
+    .eq('product_id', productId)
+    .maybeSingle<{ id: string; product_id: string }>();
+  if (!pack) throw new Error('Pack not found for this product.');
+  const { data: rows, error } = await supabase
+    .from('product_pack_images')
+    .select('id, sort_order')
+    .eq('product_pack_id', packId)
+    .order('sort_order')
+    .returns<SortableRow[]>();
+  if (error) throw new Error(error.message);
+  if (!rows || rows.length === 0) return;
+  const target = rows.find((r) => r.id === imageId);
+  if (!target) throw new Error('Image not found for this pack.');
+  const ordered = [...rows].sort((a, b) => a.sort_order - b.sort_order);
+  const withoutTarget = ordered.filter((r) => r.id !== imageId);
+  const reordered = [target, ...withoutTarget];
+  for (let idx = 0; idx < reordered.length; idx += 1) {
+    const row = reordered[idx]!;
+    await supabase.from('product_pack_images').update({ sort_order: idx } as unknown as never).eq('id', row.id);
+  }
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath(`/retailer/catalog/${packId}`);
+}
+
 // ----------------------------------------------------------------------------
 // Product packs
 // ----------------------------------------------------------------------------
@@ -591,7 +706,7 @@ interface SortableRow {
  * a drag-and-drop library for Phase 2A.
  */
 async function swapSortOrder(
-  table: 'product_packs' | 'product_images',
+  table: 'product_packs' | 'product_images' | 'product_pack_images',
   rows: SortableRow[],
   rowId: string,
   direction: 'up' | 'down'
@@ -947,6 +1062,22 @@ export async function duplicatePackAction(packId: string, productId: string) {
       created_by: user.id,
     }));
     await supabase.from('product_pricing_tiers').insert(newTiers as unknown as never);
+  }
+
+  // Copy variant gallery images (0028)
+  const { data: sourceImages } = await supabase
+    .from('product_pack_images')
+    .select('image_url, sort_order')
+    .eq('product_pack_id', packId)
+    .order('sort_order');
+  if (sourceImages && (sourceImages as unknown as { image_url: string; sort_order: number }[]).length > 0) {
+    const images = sourceImages as unknown as { image_url: string; sort_order: number }[];
+    const newImages = images.map((img) => ({
+      product_pack_id: newPack.id,
+      image_url: img.image_url,
+      sort_order: img.sort_order,
+    }));
+    await supabase.from('product_pack_images').insert(newImages as unknown as never);
   }
 
   revalidatePath(`/admin/products/${productId}`);

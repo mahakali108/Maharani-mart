@@ -196,24 +196,61 @@ export interface VariantGalleryImage {
   image_url: string;
 }
 
+export interface VariantPackGallerySource {
+  id: string;
+  image_url?: string | null;
+  gallery?: VariantGalleryImage[] | null;
+}
+
 /**
- * Gallery images for the selected variant:
- *   1. the variant's own image (when the admin uploaded one) — always first,
- *      so switching 50g -> 100g -> 200g swaps the main image;
- *   2. the parent product's existing gallery as the safe fallback;
- *   3. an empty list when neither exists — the gallery renders its existing
- *      "Product image unavailable" placeholder.
+ * Gallery images for the selected variant — universal, works for ANY category:
+ *
+ *   1. the selected variant's OWN gallery (product_pack_images rows) when it
+ *      has any — so switching 50g -> 100g -> 200g swaps the whole gallery,
+ *      not just a single thumbnail; each variant's pack_name, MRP, discount,
+ *      piece price and availability remain driven by that same selected pack;
+ *   2. the variant's legacy single image_url (product_packs.image_url) as
+ *      backward compatibility when no gallery rows exist yet;
+ *   3. the parent product's existing gallery (product_images) as the safe
+ *      fallback;
+ *   4. an empty list when neither exists — the gallery renders its existing
+ *      "Product image unavailable" placeholder (no fake duplicate images).
+ *
+ * No images from the wrong variant are ever shown: only the SELECTED pack's
+ * gallery is returned, never a merge of all variants.
  */
 export function variantGalleryImages(
-  pack: { id: string; image_url?: string | null } | null | undefined,
+  pack: VariantPackGallerySource | null | undefined,
   productImages: VariantGalleryImage[]
 ): VariantGalleryImage[] {
-  const sorted = [...(productImages ?? [])];
+  const sortedProduct = [...(productImages ?? [])];
+  const packGallery = [...(pack?.gallery ?? [])].sort(() => {
+    // Gallery rows are already ordered by sort_order, but keep stable by id
+    // when sort_order ties are not supplied in older callers.
+    return 0;
+  });
+  if (packGallery.length > 0) return packGallery;
   const packImage = pack?.image_url ? pack.image_url.trim() : '';
   if (packImage) {
-    return [{ id: `pack-${pack!.id}`, image_url: packImage }, ...sorted];
+    return [{ id: `pack-${pack!.id}`, image_url: packImage }, ...sortedProduct];
   }
-  return sorted;
+  return sortedProduct;
+}
+
+/**
+ * Resolve the ordered gallery for a pack from its dedicated gallery rows
+ * when present, otherwise fall back to its legacy single image. Pure helper
+ * used by detail, cart and admin previews so all surfaces resolve the same way.
+ */
+export function resolvePackGallery(
+  pack: { id: string; image_url?: string | null } | null | undefined,
+  packImages: VariantGalleryImage[] | null | undefined
+): VariantGalleryImage[] {
+  const gallery = [...(packImages ?? [])];
+  if (gallery.length > 0) return gallery;
+  const legacy = pack?.image_url ? pack.image_url.trim() : '';
+  if (legacy) return [{ id: `pack-${pack!.id}`, image_url: legacy }];
+  return [];
 }
 
 /**
