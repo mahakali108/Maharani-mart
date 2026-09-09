@@ -21,7 +21,7 @@ import {
   paiseToRupees,
   formatPaise,
 } from '@/lib/retailer/wallet';
-import { loadRetailerLedger, LEDGER_PAGE_SIZE } from '@/lib/retailer/ledger';
+import { loadRetailerLedger } from '@/lib/retailer/ledger';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending confirmation',
@@ -184,7 +184,6 @@ export default async function RetailerLedgerPage({
                 <ul className="divide-y divide-slate-100 lg:hidden">
                   {walletLedger.entries.map((entry) => {
                     const isDebit = entry.direction === 'debit';
-                    const isCredit = entry.direction === 'credit';
                     const amount = paiseToRupees(entry.amount_paise);
                     if (entry.transaction_type === 'CREDIT_LIMIT_CHANGE') return null; // hide from retailer
                     return (

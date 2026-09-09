@@ -1,6 +1,5 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
-import { rupeesToPaise } from '@/lib/retailer/wallet';
 
 export async function reverseOrderWalletDebit(orderId: string, retailerId: string, reason: string, createdBy: string | null) {
   const supabase = createClient();

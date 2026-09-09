@@ -106,7 +106,11 @@ export async function createOrderForRetailer({
     const idempotencyKey = `order:${order.id}`;
     const description = `Order ${order.order_number} — ₹${quote.grandTotal.toFixed(2)}`;
 
-    const { error: walletError } = await (supabase as any).rpc('check_and_debit_retailer_wallet', {
+    const { error: walletError } = await (
+      supabase as unknown as {
+        rpc: (name: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
+      }
+    ).rpc('check_and_debit_retailer_wallet', {
       p_retailer_id: retailerId,
       p_order_id: order.id,
       p_amount_paise: amountPaise,

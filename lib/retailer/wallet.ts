@@ -72,7 +72,9 @@ export async function getRetailerOutstandingPaise(
   retailerId: string
 ): Promise<number> {
   // Use DB function for authoritative calculation
-  const { data, error } = await (supabase as any).rpc('get_retailer_outstanding_paise', {
+  const { data, error } = await (
+    supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
+  ).rpc('get_retailer_outstanding_paise', {
     p_retailer_id: retailerId,
   });
   if (error) {
@@ -91,7 +93,9 @@ export async function getRetailerCreditLimitPaise(
   supabase: ReturnType<typeof createClient>,
   retailerId: string
 ): Promise<number> {
-  const { data, error } = await (supabase as any).rpc('get_retailer_credit_limit_paise', {
+  const { data, error } = await (
+    supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
+  ).rpc('get_retailer_credit_limit_paise', {
     p_retailer_id: retailerId,
   });
   if (error) {

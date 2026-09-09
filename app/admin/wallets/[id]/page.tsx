@@ -107,7 +107,6 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
   const outstandingPaise = legacyOutstandingPaise + ledgerDebit - ledgerCredit;
   const availablePaise = limitPaise - outstandingPaise;
 
-  const totalCreditGranted = paiseToRupees(limitPaise);
   const totalUsed = paiseToRupees(ledgerDebit + legacyOutstandingPaise);
   const totalPaidBack = paiseToRupees(ledgerCredit);
   const overduePaise = outstandingPaise > limitPaise ? outstandingPaise - limitPaise : 0;
@@ -136,7 +135,6 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
         available={paiseToRupees(availablePaise)}
         totalUsed={totalUsed}
         totalPaidBack={totalPaidBack}
-        totalCreditGranted={totalCreditGranted}
         overdue={paiseToRupees(overduePaise)}
         allowOverdue={creditAccount?.allow_overdue ?? false}
       />

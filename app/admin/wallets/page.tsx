@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { formatIndiaDate } from '@/lib/datetime/india';
 import { rupeesToPaise, paiseToRupees } from '@/lib/retailer/wallet';
 
 interface RetailerRow {

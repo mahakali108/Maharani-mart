@@ -14,7 +14,7 @@ import {
 import { calcDiscountPercent } from '@/lib/retailer/format';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import type { ProductCardProps } from '@/components/retailer/product-card';
-import { buildProductCardName, buildCanonicalProductName } from '@/lib/retailer/product-name';
+import { buildProductCardName } from '@/lib/retailer/product-name';
 
 export const PRODUCT_CARD_SELECT =
   'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, image_url, is_active, sort_order )';

@@ -65,7 +65,9 @@ export async function setCreditLimitAction(
   const overduePaise = rupeesToPaise(options?.overdueLimitRupees ?? 0);
 
   // Check current outstanding to warn if limit would be below outstanding
-  const { data: outstandingData } = await (supabase as any).rpc('get_retailer_outstanding_paise', {
+  const { data: outstandingData } = await (
+    supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown }> }
+  ).rpc('get_retailer_outstanding_paise', {
     p_retailer_id: retailerId,
   });
   const outstandingPaise = Number(outstandingData ?? 0);

@@ -6,7 +6,6 @@ interface Props {
   available: number;
   totalUsed: number;
   totalPaidBack: number;
-  totalCreditGranted: number;
   overdue: number;
   allowOverdue: boolean;
 }
@@ -17,7 +16,6 @@ export function WalletBalanceCards({
   available,
   totalUsed,
   totalPaidBack,
-  totalCreditGranted,
   overdue,
   allowOverdue,
 }: Props) {

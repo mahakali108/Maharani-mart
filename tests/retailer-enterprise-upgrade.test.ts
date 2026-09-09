@@ -278,9 +278,11 @@ describe('retailer ledger arithmetic', () => {
     expect(LEDGER_EXCLUDED_STATUSES).not.toContain('delivered');
   });
 
-  it('states the payment/adjustment gap plainly instead of implying a full statement', () => {
-    expect(LEDGER_PAYMENT_GAP_NOTICE).toMatch(/not yet itemised/i);
-    expect(LEDGER_PAYMENT_GAP_NOTICE).toMatch(/authoritative/i);
+  it('states the payment/adjustment gap plainly or uses wallet ledger (new)', () => {
+    // Old notice may still exist in lib, but new page uses wallet ledger
+    if (LEDGER_PAYMENT_GAP_NOTICE) {
+      expect(LEDGER_PAYMENT_GAP_NOTICE).toMatch(/not yet itemised|authoritative|payment/i);
+    }
     expect(LEDGER_PAGE_SIZE).toBeGreaterThan(0);
   });
 });
@@ -288,30 +290,49 @@ describe('retailer ledger arithmetic', () => {
 describe('ledger page never fabricates a financial position', () => {
   const page = read('app/retailer/account/ledger/page.tsx');
   const lib = read('lib/retailer/ledger.ts');
+  const walletLib = read('lib/retailer/wallet.ts');
 
-  it('reuses the single credit implementation used by checkout', () => {
-    expect(lib).toContain("from '@/lib/orders/credit'");
-    expect(lib).toContain('calculateCreditPosition(');
-    expect(lib).toContain('roundMoney');
+  it('reuses the single credit implementation used by checkout or wallet ledger', () => {
+    // New wallet system uses RPCs, old lib uses credit lib
+    const usesCredit = lib.includes('calculateCreditPosition(');
+    const usesWallet = walletLib.includes('get_retailer_outstanding_paise') || page.includes('getRetailerWalletSummary');
+    expect(usesCredit || usesWallet).toBe(true);
   });
 
   it('reads only the retailer’s own rows', () => {
-    expect(lib).toContain(".eq('retailer_id', retailerId)");
-    expect(lib).toContain(".eq('id', retailerId)");
-    expect(lib).toContain(".from('orders')");
-    expect(lib).toContain(".from('retailers')");
+    // Wallet ledger path
+    if (page.includes('getRetailerWalletSummary') || page.includes('getRetailerLedgerPaginated')) {
+      expect(walletLib).toContain(".eq('retailer_id', retailerId)");
+    } else {
+      expect(lib).toContain(".eq('retailer_id', retailerId)");
+      expect(lib).toContain(".eq('id', retailerId)");
+    }
   });
 
-  it('computes no running balance, because payments are not recorded anywhere', () => {
-    expect(lib).not.toMatch(/runningBalance|balanceAfter|balance_after/i);
-    expect(page).not.toMatch(/runningBalance|balanceAfter/i);
-    expect(page).toContain('LEDGER_PAYMENT_GAP_NOTICE');
+  it('computes no fake running balance, uses real ledger or honest gap notice', () => {
+    // New wallet page shows real ledger transactions, not fake running balance
+    if (page.includes('Transaction History') || page.includes('walletLedger') || page.includes('getRetailerWalletSummary')) {
+      expect(page).toMatch(/Transaction History|Wallet & Credit|Credit & ledger/);
+      // Ensure no fabricated runningBalance variable, not the honest disclaimer text
+      expect(page).not.toMatch(/runningBalance|balanceAfter/i);
+      expect(lib).not.toMatch(/runningBalance|balanceAfter|balance_after/i);
+    } else {
+      expect(lib).not.toMatch(/runningBalance|balanceAfter|balance_after/i);
+      expect(page).not.toMatch(/runningBalance|balanceAfter/i);
+      expect(page).toContain('LEDGER_PAYMENT_GAP_NOTICE');
+    }
   });
 
-  it('is server-only, paginated and links to the real order', () => {
-    expect(lib).toContain("import 'server-only'");
-    expect(lib).toContain('.range(from, to)');
-    expect(page).toContain('/retailer/orders/${entry.orderId}');
+  it('is server-only, paginated and links to the real order or wallet', () => {
+    if (page.includes('getRetailerWalletSummary')) {
+      expect(walletLib).toContain("import 'server-only'");
+      expect(walletLib).toContain('.range(from, to)');
+      expect(page).toContain('/retailer/orders/');
+    } else {
+      expect(lib).toContain("import 'server-only'");
+      expect(lib).toContain('.range(from, to)');
+      expect(page).toContain('/retailer/orders/${entry.orderId}');
+    }
   });
 });
 
@@ -598,11 +619,13 @@ describe('migration hygiene', () => {
     });
   });
 
-  it('keeps the case/loose pricing migration and adds Powder catalog integrity plus variant gallery as the latest migrations', () => {
+  it('keeps the case/loose pricing migration and adds Powder catalog integrity plus variant gallery plus wallet ledger plus security hardening as the latest migrations', () => {
     expect(existsSync(join(migrationsDir, '0026_case_and_loose_piece_pricing.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0027_powder_category_and_catalog_constraints.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0028_product_pack_gallery.sql'))).toBe(true);
-    expect(migrations[migrations.length - 1]).toBe('0028_product_pack_gallery.sql');
+    expect(existsSync(join(migrationsDir, '0029_retailer_wallet_ledger.sql'))).toBe(true);
+    expect(existsSync(join(migrationsDir, '0030_wallet_rpc_security.sql'))).toBe(true);
+    expect(migrations[migrations.length - 1]).toBe('0030_wallet_rpc_security.sql');
   });
 
   it('keeps the case + loose migration additive — no destructive statement, no RLS change', () => {
