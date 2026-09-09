@@ -365,6 +365,10 @@ describe('Phase 6 — admin can create unlimited variants without typing a code'
     expect(manager).toContain('name="packName"');
     expect(manager).toContain('name="casePrice"');
     expect(manager).toContain('name="unitsPerCase"');
-    expect(manager).toContain('setPackImageAction');
+    // Variant gallery manager is present for each pack (0028)
+    expect(manager).toContain('ProductPackImageManager');
+    const galleryManager = read('components/admin/product-pack-image-manager.tsx');
+    expect(galleryManager).toContain('setPackImagePrimaryAction');
+    expect(galleryManager).toContain('kind="product-gallery"');
   });
 });

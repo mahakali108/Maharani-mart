@@ -347,6 +347,32 @@ export interface Database {
         ];
       };
 
+      product_pack_images: {
+        Row: {
+          id: string;
+          product_pack_id: string;
+          image_url: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_pack_id: string;
+          image_url: string;
+          sort_order?: number;
+        };
+        Update: Partial<Database['public']['Tables']['product_pack_images']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'product_pack_images_product_pack_id_fkey';
+            columns: ['product_pack_id'];
+            isOneToOne: false;
+            referencedRelation: 'product_packs';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
       product_packs: {
         Row: {
           id: string;

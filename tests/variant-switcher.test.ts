@@ -270,7 +270,11 @@ describe('product size / variant switcher', () => {
 
     it('the page feeds the SELECTED pack image into the gallery and cart/checkout prefer it too', () => {
       const page = read('app/retailer/catalog/[id]/page.tsx');
-      expect(page).toContain('variantGalleryImages(selectedPack, productImages)');
+      expect(page).toContain('variantGalleryImages(');
+      expect(page).toContain('selectedPack');
+      expect(page).toContain('productImages');
+      // New variant gallery (0028) is used: separate per-pack images with fallback
+      expect(page).toContain('product_pack_images');
       const cart = read('app/retailer/cart/page.tsx');
       expect(cart).toContain('pack?.image_url ?? images[0]?.image_url');
       const checkout = read('app/retailer/checkout/page.tsx');
@@ -496,12 +500,24 @@ describe('product size / variant switcher', () => {
       expect(types).toContain('image_url: string | null;');
     });
 
-    it('admin can attach an image to each pack variant through the existing pack manager', () => {
+    it('admin can attach multiple images to each pack variant through the variant gallery manager', () => {
       const manager = read('components/admin/product-pack-manager.tsx');
-      expect(manager).toContain('setPackImageAction');
-      expect(manager).toContain("kind=\"product-gallery\"");
+      // Pack manager now delegates to the dedicated variant gallery manager
+      expect(manager).toContain('ProductPackImageManager');
+      expect(manager).toContain('packImages');
+      const galleryManager = read('components/admin/product-pack-image-manager.tsx');
+      expect(galleryManager).toContain('addPackImageAction');
+      expect(galleryManager).toContain('removePackImageAction');
+      expect(galleryManager).toContain('reorderPackImageAction');
+      expect(galleryManager).toContain('setPackImagePrimaryAction');
+      expect(galleryManager).toContain("kind=\"product-gallery\"");
+      expect(galleryManager).toContain('multiple');
       const actions = read('lib/admin/products-actions.ts');
+      // Legacy single-image action is kept for backward compatibility
       expect(actions).toContain('setPackImageAction');
+      // New gallery actions enforce product ownership and validate refs
+      expect(actions).toContain('addPackImageAction');
+      expect(actions).toContain('product_pack_images');
       expect(actions).toContain(".eq('product_id', productId)"); // pack must belong to the product
       // SKU code stays removed from the workflow.
       expect(actions).not.toContain('skuCode: z.string()');

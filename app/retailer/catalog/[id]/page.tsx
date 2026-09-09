@@ -74,6 +74,13 @@ interface PackRow {
   sort_order: number;
 }
 
+interface PackImageRow {
+  id: string;
+  product_pack_id: string;
+  image_url: string;
+  sort_order: number;
+}
+
 interface CartItemRow {
   id: string;
   pack_id: string;
@@ -211,6 +218,33 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     rawPacks.map((pack) => pack.id)
   );
 
+  // Variant galleries: separate per-pack image sets (product_pack_images) with
+  // legacy single image_url as fallback. Each variant's gallery is independent;
+  // we never merge galleries across variants.
+  const packIds = rawPacks.map((pack) => pack.id);
+  const packImagesByPackId = new Map<string, { id: string; image_url: string; sort_order: number }[]>();
+  if (packIds.length > 0) {
+    const { data: packImageData } = await supabase
+      .from('product_pack_images')
+      .select('id, product_pack_id, image_url, sort_order')
+      .in('product_pack_id', packIds)
+      .order('sort_order')
+      .returns<PackImageRow[]>();
+    const grouped = new Map<string, PackImageRow[]>();
+    for (const row of (packImageData ?? []) as PackImageRow[]) {
+      const list = grouped.get(row.product_pack_id) ?? [];
+      list.push(row);
+      grouped.set(row.product_pack_id, list);
+    }
+    // Ensure each list is sorted and mapped to gallery shape
+    for (const [packId, rows] of grouped) {
+      packImagesByPackId.set(
+        packId,
+        [...rows].sort((a, b) => a.sort_order - b.sort_order).map((r) => ({ id: r.id, image_url: r.image_url, sort_order: r.sort_order }))
+      );
+    }
+  }
+
   let cartSubtotal = 0;
   let cartGstTotal = 0;
   let cartSavingsTotal = 0;
@@ -343,10 +377,18 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   );
   const variantSwitcher = buildVariantSwitcher(rawPacks, selectedPack?.id ?? null, variantPricing);
 
-  // Main image: the selected variant's own image when it has one, otherwise
-  // the parent product's existing gallery (existing fallback behaviour).
+  // Main image: the selected variant's OWN gallery when it has one,
+  // otherwise the legacy single image_url, otherwise the parent product's
+  // existing gallery. Switching size swaps the whole gallery, MRP, discount,
+  // piece price, availability and cart identity together.
   const productImages = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
-  const images = variantGalleryImages(selectedPack, productImages);
+  const selectedPackGallery = selectedPack ? (packImagesByPackId.get(selectedPack.id) ?? []) : [];
+  const images = variantGalleryImages(
+    selectedPack
+      ? { id: selectedPack.id, image_url: selectedPack.image_url, gallery: selectedPackGallery }
+      : null,
+    productImages
+  );
   const galleryAlt = [product.name, selectedPack?.pack_name].filter(Boolean).join(' — ');
 
   const hasCartItems = (cartSummary?.itemCount ?? 0) > 0;

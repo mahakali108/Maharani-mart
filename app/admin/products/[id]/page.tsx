@@ -51,6 +51,7 @@ interface ProductPackRow {
   allow_loose_pieces: boolean;
   is_active: boolean;
   tiers: PackTierRow[];
+  packImages: { id: string; image_url: string; sort_order: number }[];
 }
 
 interface PackTierRow {
@@ -162,19 +163,26 @@ export default async function EditProductPage({ params }: { params: { id: string
     ? { ...(productRow as Omit<ProductDetail, 'cost_price'>), cost_price: productCost }
     : null;
 
-  const rawPacks = ((packData ?? []) as unknown as Omit<ProductPackRow, 'tiers' | 'cost_price'>[]).map(
+  const rawPacks = ((packData ?? []) as unknown as Omit<ProductPackRow, 'tiers' | 'cost_price' | 'packImages'>[]).map(
     (pack) => ({ ...pack, cost_price: packCosts.get(pack.id) ?? null })
-  ) as Omit<ProductPackRow, 'tiers'>[];
+  ) as Omit<ProductPackRow, 'tiers' | 'packImages'>[];
   const packIds = rawPacks.map((pack) => pack.id);
-  const { data: tierData } =
+  const [{ data: tierData }, { data: packImageData }] =
     packIds.length > 0
-      ? await supabase
-          .from('product_pricing_tiers')
-          .select('id, product_pack_id, min_quantity, max_quantity, price_per_piece, rule_type, label')
-          .in('product_pack_id', packIds)
-          .eq('is_active', true)
-          .order('min_quantity')
-      : ({ data: null } as { data: null });
+      ? await Promise.all([
+          supabase
+            .from('product_pricing_tiers')
+            .select('id, product_pack_id, min_quantity, max_quantity, price_per_piece, rule_type, label')
+            .in('product_pack_id', packIds)
+            .eq('is_active', true)
+            .order('min_quantity'),
+          supabase
+            .from('product_pack_images')
+            .select('id, product_pack_id, image_url, sort_order')
+            .in('product_pack_id', packIds)
+            .order('sort_order'),
+        ])
+      : ([{ data: null }, { data: null }] as unknown as [{ data: null }, { data: null }]);
 
   const tiersByPack = new Map<string, PackTierRow[]>();
   for (const row of (tierData ?? []) as (PackTierRow & { product_pack_id: string })[]) {
@@ -190,7 +198,18 @@ export default async function EditProductPage({ params }: { params: { id: string
     tiersByPack.set(row.product_pack_id, list);
   }
 
-  const packs = rawPacks.map((pack) => ({ ...pack, tiers: tiersByPack.get(pack.id) ?? [] })) as ProductPackRow[];
+  const packImagesByPack = new Map<string, { id: string; image_url: string; sort_order: number }[]>();
+  for (const row of (packImageData ?? []) as unknown as { id: string; product_pack_id: string; image_url: string; sort_order: number }[]) {
+    const list = packImagesByPack.get(row.product_pack_id) ?? [];
+    list.push({ id: row.id, image_url: row.image_url, sort_order: row.sort_order });
+    packImagesByPack.set(row.product_pack_id, list);
+  }
+
+  const packs = rawPacks.map((pack) => ({
+    ...pack,
+    tiers: tiersByPack.get(pack.id) ?? [],
+    packImages: [...(packImagesByPack.get(pack.id) ?? [])].sort((a, b) => a.sort_order - b.sort_order),
+  })) as ProductPackRow[];
 
   // Case selling price for the product form defaults = the auto-seeded default
   // pack's case price. That pack is the first one by sort order, matching how
