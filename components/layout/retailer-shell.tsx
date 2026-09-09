@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
+  ArrowLeft,
   BadgeCheck,
   Bell,
   Heart,
@@ -53,6 +54,7 @@ export function RetailerShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const initials = fullName
     .split(' ')
     .map((part) => part[0])
@@ -60,6 +62,20 @@ export function RetailerShell({
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+  // Product detail pages (parent product id or an exact variant/pack route —
+  // both shapes use /retailer/catalog/<uuid>) get a compact back button in
+  // the header. Every other retailer page keeps the existing header layout.
+  const isProductDetail =
+    /^\/retailer\/catalog\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname);
+
+  function handleBack() {
+    // In-app navigation (App Router maintains history.state.idx) → real back.
+    // Deep link / fresh open → land on the catalog instead of leaving the app.
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) router.back();
+    else router.replace('/retailer/catalog');
+  }
 
   // Keep the primary retail IA reserved for shopping. Operational tools stay
   // in Account and contextual links rather than taking a bottom-nav slot.
@@ -73,9 +89,19 @@ export function RetailerShell({
 
   return (
     <div className="retailer-theme min-h-screen bg-[#fafafa] pb-24 text-slate-900 lg:pb-0">
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 pt-[env(safe-area-inset-top)] text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-3 sm:px-5">
-          <div className="flex h-14 items-center gap-2 lg:h-16 lg:gap-5">
+          <div className="flex h-14 items-center gap-1.5 lg:h-16 lg:gap-5">
+            {isProductDetail ? (
+              <button
+                type="button"
+                onClick={handleBack}
+                aria-label="Go back"
+                className="-ml-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:-ml-1"
+              >
+                <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+              </button>
+            ) : null}
             <Link
               href="/retailer/home"
               className="group flex min-w-0 shrink items-center gap-2.5"

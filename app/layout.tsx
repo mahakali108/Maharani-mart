@@ -29,6 +29,10 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  // Expose the notch/home-indicator insets so the sticky header and the
+  // bottom navigation can pad with env(safe-area-inset-*) on Android /
+  // Capacitor (no visual change on web where the insets are 0).
+  viewportFit: 'cover',
   themeColor: '#c8102e',
 };
 

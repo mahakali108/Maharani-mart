@@ -21,12 +21,19 @@ import { getProductPriceOverride, getProductPriceOverrides, resolvePackPrice } f
 import { piecePriceFromCase, resolveLooseTierSet, tierRangeLabel, type PricingTier } from '@/lib/retailer/case-pricing';
 import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
-import { buildVariantSwitcher, isUuidLike, variantGalleryImages } from '@/lib/retailer/variants';
+import {
+  buildVariantSwitcher,
+  formatVariantTierSummary,
+  isUuidLike,
+  variantGalleryImages,
+} from '@/lib/retailer/variants';
 import { PackSelector } from '@/components/retailer/pack-selector';
 import { RetailerPriceSchedule } from '@/components/retailer/pricing-schedule';
 import { VariantSwitcher } from '@/components/retailer/variant-switcher';
 import { FavoriteToggle } from '@/components/retailer/favorite-toggle';
 import { ProductGallery } from '@/components/retailer/product-gallery';
+import { ShareButton } from '@/components/retailer/share-button';
+import { cn } from '@/lib/utils/cn';
 import { ProductRail } from '@/components/retailer/product-rail';
 import { RecentlyViewedRail, RecentlyViewedTracker } from '@/components/retailer/recently-viewed';
 import { loadFavoriteIds } from '@/lib/retailer/catalog';
@@ -326,6 +333,11 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         piecePrice: pieceRateForPack(pack, packTiers.get(pack.id) ?? []),
         mrp: pack.mrp,
         hasOffer: hasActiveScheme,
+        // The variant's own resolved quantity slabs, rendered as a compact
+        // "1–6 · 7–12 · 13+" hint on its size card. Display-only wording.
+        tierSummary: formatVariantTierSummary(
+          resolveLooseTierSet(packTiers.get(pack.id) ?? [], pack.units_per_case).tiers
+        ),
       },
     ])
   );
@@ -337,31 +349,47 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const images = variantGalleryImages(selectedPack, productImages);
   const galleryAlt = [product.name, selectedPack?.pack_name].filter(Boolean).join(' — ');
 
+  const hasCartItems = (cartSummary?.itemCount ?? 0) > 0;
+
   return (
-    <div className="space-y-5 pb-20 sm:space-y-6 lg:pb-8">
+    <div
+      className={cn(
+        'space-y-5 pb-20 sm:space-y-6 lg:pb-8',
+        // Mobile: the sticky bar sits above the bottom navigation while the
+        // cart is not empty, so leave room for it under the page content.
+        hasCartItems && 'pb-36 sm:pb-36'
+      )}
+    >
       <RecentlyViewedTracker productId={product.id} />
 
-      {/* Breadcrumb Navigation */}
+      {/* Breadcrumb — compact and overflow-safe: every segment can
+          truncate, so long names can never break the page width (320px ok). */}
       <nav
-        className="flex items-center gap-1.5 overflow-hidden text-[10px] font-semibold text-slate-500 sm:text-xs"
+        className="flex min-w-0 items-center gap-1.5 overflow-hidden text-[10px] font-semibold text-slate-500 sm:text-xs"
         aria-label="Breadcrumb"
       >
-        <Link href="/retailer/catalog" className="flex shrink-0 items-center gap-1 hover:text-primary-600">
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Products
+        <Link
+          href="/retailer/catalog"
+          className="flex min-w-0 shrink-0 items-center gap-1 rounded hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+        >
+          <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Products
         </Link>
         {product.categories ? (
           <>
-            <ChevronRight className="h-3 w-3 shrink-0" />
+            <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
             <Link
               href={`/retailer/catalog?category=${product.categories.id}`}
-              className="shrink-0 hover:text-primary-600"
+              className="max-w-[34%] truncate rounded hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              title={product.categories.name}
             >
               {product.categories.name}
             </Link>
           </>
         ) : null}
-        <ChevronRight className="h-3 w-3 shrink-0" />
-        <span className="truncate text-slate-800">{product.name}</span>
+        <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate text-slate-800" title={product.name}>
+          {product.name}
+        </span>
       </nav>
 
       {/* Main Responsive Grid Layout */}
@@ -395,6 +423,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               favoriteSlot={
                 <FavoriteToggle productId={product.id} initialFavorite={favoriteIds.has(product.id)} compact />
               }
+              shareSlot={<ShareButton title={product.name} />}
             />
           </section>
 
@@ -652,7 +681,13 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       {/* 9. CART SUMMARY / CHECKOUT ACCESS (Full Width Section) */}
       <section
         aria-label="Cart summary"
-        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
+        className={cn(
+          'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6',
+          // On mobile the sticky bar already surfaces these totals, so the
+          // section only stays where it adds value: empty-cart guidance on
+          // phones, and always on desktop (where the sticky bar is hidden).
+          hasCartItems && 'hidden lg:block'
+        )}
       >
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">

@@ -102,7 +102,7 @@ export function SearchField({
         value={value}
         autoFocus={autoFocus}
         autoComplete="off"
-        placeholder="Search products, brands, categories or sizes"
+        placeholder="Search products, brands, categories"
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           setValue(event.target.value);
