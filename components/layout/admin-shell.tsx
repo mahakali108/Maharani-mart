@@ -18,6 +18,7 @@ import {
   Sparkles,
   Settings,
   ScrollText,
+  Wallet,
 } from 'lucide-react';
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Pricing & Schemes', href: '/admin/pricing', icon: Tag },
   { label: 'Inventory', href: '/admin/inventory', icon: Warehouse },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
+  { label: 'Wallets', href: '/admin/wallets', icon: Wallet },
   { label: 'Retailers', href: '/admin/retailers', icon: Users },
   { label: 'Staff & Salesmen', href: '/admin/team', icon: UserCog },
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },

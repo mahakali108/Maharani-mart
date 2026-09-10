@@ -22,6 +22,7 @@ import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { RetailerLineBreakdown } from '@/components/retailer/pricing-schedule';
 import { QtyStepper } from '@/components/retailer/qty-stepper';
 import { cn } from '@/lib/utils/cn';
+import { buildCanonicalProductName } from '@/lib/retailer/product-name';
 
 /**
  * One cart line. The quantity is a PIECE count (0026): the retailer may order
@@ -72,6 +73,12 @@ export function CartItemRow({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [favorite, setFavorite] = useState(isFavorite);
+
+  const canonicalName = buildCanonicalProductName({
+    brandName: brandName ?? null,
+    productName,
+    packName,
+  });
 
   // Retailer piece pricing: quantity Q is billed at Q × (applicable tier rate).
   // No internal case price is carried to the client; the server-supplied
@@ -155,7 +162,7 @@ export function CartItemRow({
           {imageUrl ? (
             <Image
               src={imageUrl}
-              alt={productName}
+              alt={canonicalName}
               fill
               sizes="(max-width: 640px) 80px, 96px"
               className="object-contain p-1.5"
@@ -170,8 +177,8 @@ export function CartItemRow({
         </div>
 
         <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-xs font-bold leading-4 text-slate-900 sm:text-sm sm:leading-5">
-            {productName}
+          <h3 className="line-clamp-2 break-words text-xs font-bold leading-4 text-slate-900 sm:text-sm sm:leading-5">
+            {canonicalName}
           </h3>
 
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] font-medium text-slate-500 sm:text-[11px]">

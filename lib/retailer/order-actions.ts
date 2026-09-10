@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 import type { Database } from '@/types/database.types';
+import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
 
 type ReturnRequestInsert = Database['public']['Tables']['return_requests']['Insert'];
 
@@ -31,8 +32,15 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
   if (error) return { error: error.message };
   if (!data) return { error: 'This order can no longer be cancelled — it may already be processing.' };
 
+  try {
+    await reverseOrderWalletDebit(orderId, user.id, reason || 'Retailer cancelled order', user.id);
+  } catch (err) {
+    console.warn('Wallet reversal failed (non-blocking):', err);
+  }
+
   revalidatePath(`/retailer/orders/${orderId}`);
   revalidatePath('/retailer/orders');
+  revalidatePath('/retailer/account/ledger');
   return { success: true };
 }
 

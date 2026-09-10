@@ -14,6 +14,7 @@ import {
 import { calcDiscountPercent } from '@/lib/retailer/format';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import type { ProductCardProps } from '@/components/retailer/product-card';
+import { buildProductCardName } from '@/lib/retailer/product-name';
 
 export const PRODUCT_CARD_SELECT =
   'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, image_url, is_active, sort_order )';
@@ -110,9 +111,16 @@ export function toPricedCard(
 ): PricedCatalogCard {
   const best = bestPricedPack(product, override);
   const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
+  // Universal product name: use canonical product name, not category.
+  // Product card shows brand separately, so we build name as product + pack (size)
+  // without duplicating size if already in product name.
+  const cardName = buildProductCardName({
+    productName: product.name,
+    packName: best?.pack.pack_name ?? null,
+  });
   return {
     id: product.id,
-    name: product.name,
+    name: cardName,
     brandName: product.brands?.name,
     // Prefer the shown variant's own image (Phase 3), falling back to the
     // parent product's gallery exactly as before when it has none.

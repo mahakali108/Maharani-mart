@@ -1,5 +1,6 @@
 'use server';
 
+import { buildCanonicalProductName } from '@/lib/retailer/product-name';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
@@ -20,40 +21,18 @@ export interface SearchSuggestionResult {
 }
 
 export async function searchSuggestionsAction(rawQuery: string): Promise<SearchSuggestionResult> {
-  // Authorisation happens FIRST and always against Supabase. The optional
-  // Turso cache below is only reached by an already-authorised caller, and
-  // the cached payload is catalog-wide (no prices, no favourites, no
-  // per-retailer data), so a cache hit can never leak anything.
   await requirePermission('products.view');
   const q = sanitizeSearchTerm(rawQuery);
   if (q.length < 2) return { products: [], brands: [], categories: [] };
-
-  // If Turso is unset or unreachable this transparently runs the Supabase
-  // query exactly as before — suggestions are a convenience, never a source
-  // of truth.
   return cachedSearchSuggestions(q, () => loadSearchSuggestions(q));
 }
 
-/** A product matched through one of its variants (pack size) or its barcode. */
 interface PackMatchRow {
   pack_name: string;
   product_id: string;
   products: { id: string; name: string; brands: { name: string } | null } | null;
 }
 
-/**
- * The authoritative Supabase read behind the suggestions dropdown.
- *
- * Matches every real, retailer-visible field: product NAME, BRAND, CATEGORY,
- * product/pack BARCODE (EAN/UPC) and the VARIANT/SIZE itself — a pack's
- * `pack_name` IS the size ("50g", "100g", "5L Jar"), so typing a size surfaces
- * the products that sell it. Internal SKU codes are deliberately not a search
- * field and are never returned.
- *
- * All four queries are selective-column, `is_active`-scoped and hard-limited,
- * so the dropdown never pulls the catalog into the browser. RLS keeps inactive
- * packs and other retailers' data out of the match set.
- */
 async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult> {
   const supabase = createClient();
   const like = `"%${q}%"`;
@@ -67,8 +46,6 @@ async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult>
       .order('name')
       .limit(6)
       .returns<{ id: string; name: string; brands: { name: string } | null }[]>(),
-    // The parent product's name/brand is embedded here on purpose: it means a
-    // size or barcode hit needs no second round trip to become a suggestion.
     supabase
       .from('product_packs')
       .select('pack_name, product_id, products ( id, name, brands ( name ) )')
@@ -94,18 +71,26 @@ async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult>
       .returns<{ id: string; name: string }[]>(),
   ]);
 
-  // Name/barcode hits first (the retailer typed a product), then size/barcode
-  // hits that are not already listed, each labelled with the size that matched.
   const merged = new Map<string, { id: string; name: string; brandName?: string; variantHint?: string }>();
   for (const product of products ?? []) {
-    merged.set(product.id, { id: product.id, name: product.name, brandName: product.brands?.name ?? undefined });
+    const canonical = buildCanonicalProductName({
+      brandName: product.brands?.name ?? null,
+      productName: product.name,
+      packName: null,
+    });
+    merged.set(product.id, { id: product.id, name: canonical, brandName: product.brands?.name ?? undefined });
   }
   for (const match of packMatches ?? []) {
     const parent = match.products;
     if (!parent?.id || merged.has(parent.id)) continue;
+    const canonical = buildCanonicalProductName({
+      brandName: parent.brands?.name ?? null,
+      productName: parent.name,
+      packName: match.pack_name,
+    });
     merged.set(parent.id, {
       id: parent.id,
-      name: parent.name,
+      name: canonical,
       brandName: parent.brands?.name ?? undefined,
       variantHint: match.pack_name,
     });

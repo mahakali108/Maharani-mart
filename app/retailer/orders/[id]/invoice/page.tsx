@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { PrintButton } from '@/components/retailer/print-button';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { buildCanonicalProductName } from '@/lib/retailer/product-name';
 
 interface OrderInvoiceRow {
   id: string;
@@ -35,7 +36,7 @@ interface OrderItemRow {
   unit_price: number;
   gst_percent: number;
   line_total: number;
-  products: { name: string } | null;
+  products: { name: string; brands: { name: string } | null } | null;
   product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
@@ -62,7 +63,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
     supabase
       .from('order_items')
       .select(
-        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name ), product_packs ( pack_name, units_per_case )'
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, brands ( name ) ), product_packs ( pack_name, units_per_case )'
       )
       .eq('order_id', params.id),
   ]);
@@ -129,10 +130,16 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-50">
-            {invoiceLines.map((line) => (
+            {invoiceLines.map((line) => {
+              const canonical = buildCanonicalProductName({
+                brandName: line.first.products?.brands?.name ?? null,
+                productName: line.first.products?.name ?? null,
+                packName: line.first.product_packs?.pack_name ?? null,
+              });
+              return (
               <tr key={line.key}>
                 <td className="py-2">
-                  <p className="font-medium text-ink-900">{line.first.products?.name ?? '—'}</p>
+                  <p className="font-medium text-ink-900">{canonical}</p>
                   <p className="font-mono text-xs text-ink-400">{line.first.product_packs?.pack_name}</p>
                 </td>
                 <td className="py-2 text-ink-600">{formatQuantitySummary(line.quantity)}</td>
@@ -152,7 +159,8 @@ export default async function InvoicePage({ params }: { params: { id: string } }
                 <td className="py-2 text-right text-ink-600">{line.first.gst_percent}%</td>
                 <td className="py-2 text-right font-medium text-ink-900">₹{line.total.toFixed(2)}</td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
 

@@ -40,6 +40,7 @@ import { loadFavoriteIds } from '@/lib/retailer/catalog';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { getCoPurchasedCards, getSimilarProductCards } from '@/lib/retailer/personalization';
 import { formatIndiaDate } from '@/lib/datetime/india';
+import { buildCanonicalProductName, buildBreadcrumbProductName } from '@/lib/retailer/product-name';
 
 interface ProductDetailRow {
   id: string;
@@ -389,30 +390,37 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       : null,
     productImages
   );
-  const galleryAlt = [product.name, selectedPack?.pack_name].filter(Boolean).join(' — ');
+
+  // Universal canonical name: Brand + Product + Variant size, without duplication.
+  // Fixes root cause where generic category or truncated name was shown.
+  const canonicalProductName = buildCanonicalProductName({
+    brandName: product.brands?.name ?? null,
+    productName: product.name,
+    packName: selectedPack?.pack_name ?? null,
+  });
+  const breadcrumbName = buildBreadcrumbProductName(product.name);
+  const galleryAlt = canonicalProductName;
 
   const hasCartItems = (cartSummary?.itemCount ?? 0) > 0;
 
   return (
     <div
       className={cn(
-        'space-y-5 pb-20 sm:space-y-6 lg:pb-8',
-        // Mobile: the sticky bar sits above the bottom navigation while the
-        // cart is not empty, so leave room for it under the page content.
-        hasCartItems && 'pb-36 sm:pb-36'
+        'mx-auto w-full max-w-full space-y-4 overflow-x-hidden pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-5 lg:pb-8',
+        'min-w-0',
+        hasCartItems && 'pb-[calc(9rem+env(safe-area-inset-bottom))] sm:pb-36'
       )}
     >
       <RecentlyViewedTracker productId={product.id} />
 
-      {/* Breadcrumb — compact and overflow-safe: every segment can
-          truncate, so long names can never break the page width (320px ok). */}
+      {/* Breadcrumb — compact, overflow-safe, 320px safe, no horizontal scroll */}
       <nav
-        className="flex min-w-0 items-center gap-1.5 overflow-hidden text-[10px] font-semibold text-slate-500 sm:text-xs"
+        className="flex min-w-0 items-center gap-1 overflow-hidden text-[10px] font-semibold text-slate-500 sm:gap-1.5 sm:text-xs"
         aria-label="Breadcrumb"
       >
         <Link
           href="/retailer/catalog"
-          className="flex min-w-0 shrink-0 items-center gap-1 rounded hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+          className="flex min-w-0 shrink-0 items-center gap-1 rounded px-1 py-0.5 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
         >
           <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Products
         </Link>
@@ -421,7 +429,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
             <Link
               href={`/retailer/catalog?category=${product.categories.id}`}
-              className="max-w-[34%] truncate rounded hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              className="max-w-[28%] truncate rounded px-1 py-0.5 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:max-w-[34%]"
               title={product.categories.name}
             >
               {product.categories.name}
@@ -429,17 +437,16 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
           </>
         ) : null}
         <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-slate-800" title={product.name}>
-          {product.name}
+        <span className="min-w-0 flex-1 truncate break-words text-slate-800" title={canonicalProductName}>
+          {breadcrumbName}
         </span>
       </nav>
 
-      {/* Main Responsive Grid Layout */}
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,1.15fr)] lg:gap-8">
-        {/* Left Column: 1. Product Image / Gallery & Desktop Quick Summary */}
-        <div className="space-y-4 lg:sticky lg:top-36">
-          {/* 1. PRODUCT IMAGE / GALLERY */}
-          <section aria-label="Product gallery">
+      {/* Mobile-first single column, desktop two-column at lg */}
+      <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
+        {/* Left Column: Large Product Gallery — full mobile width, contain-fit, no crop */}
+        <div className="min-w-0 space-y-4 lg:sticky lg:top-36">
+          <section aria-label="Product gallery" className="min-w-0 w-full">
             <ProductGallery
               name={galleryAlt}
               images={images}
@@ -465,7 +472,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               favoriteSlot={
                 <FavoriteToggle productId={product.id} initialFavorite={favoriteIds.has(product.id)} compact />
               }
-              shareSlot={<ShareButton title={product.name} />}
+              shareSlot={<ShareButton title={canonicalProductName} />}
             />
           </section>
 
@@ -508,44 +515,50 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
           ) : null}
         </div>
 
-        {/* Right Column: 2. Product Name, 3. Brand, 4. MRP, 5. Multi-Price Tiers, 6. Delivery, 7. Details */}
-        <div className="space-y-5">
-          {/* Header Card: Brand, Name, and MRP / Wholesale Reference Price */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-6">
-            {/* 3. BRAND & AVAILABILITY */}
-            <div className="flex flex-wrap items-center gap-2">
+        {/* Right Column: Mobile order per spec */}
+        <div className="min-w-0 space-y-4 sm:space-y-5">
+          {/* Brand and availability + Complete real product name */}
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5 lg:p-6">
+            {/* Brand and availability */}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {product.brands?.name ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700">
+                <span className="max-w-full truncate rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700">
                   {product.brands.name}
                 </span>
               ) : null}
               {selectedAvailable ? (
-                <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+                <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> Available
                 </span>
               ) : (
-                <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+                <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
                   <CircleAlert className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" /> Currently unavailable
                 </span>
               )}
             </div>
 
-            {/* 2. PRODUCT NAME */}
-            <h1 className="mt-3 text-xl font-extrabold leading-tight tracking-tight text-slate-950 sm:text-2xl lg:text-3xl">
-              {product.name}
+            {/* Complete real product name — universal, brand + product + variant */}
+            <h1 className="mt-3 min-w-0 break-words text-[18px] font-extrabold leading-[1.25] tracking-tight text-slate-950 sm:text-xl lg:text-2xl">
+              {canonicalProductName}
             </h1>
+            {/* Secondary line: show canonical source for debugging / audit */}
+            <p className="mt-1.5 text-[10px] leading-4 text-slate-400">
+              {product.brands?.name ? `${product.brands.name} · ` : ''}
+              {product.name}
+              {selectedPack?.pack_name ? ` · ${selectedPack.pack_name}` : ''}
+            </p>
 
-            {/* SIZE / VARIANT SWITCHER — navigates to each variant's own route */}
-            <VariantSwitcher model={variantSwitcher} productName={product.name} />
+            {/* Size/variant selector */}
+            <VariantSwitcher model={variantSwitcher} productName={canonicalProductName} />
 
-            {/* 4. MRP & RETAIL PIECE PRICE OVERVIEW — for the SELECTED variant */}
+            {/* Pricing */}
             {selectedPiecePrice !== null ? (
-              <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="mt-4 min-w-0 border-t border-slate-100 pt-4">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
                   {isViewingVariant ? `Piece price · ${selectedPack?.pack_name}` : 'Piece price from'}
                 </p>
-                <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                  <p className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-2">
+                  <p className="break-words text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
                     {formatInr(selectedPiecePrice)}
                     <span className="text-sm font-semibold text-slate-500 sm:text-base">/pc</span>
                   </p>
@@ -561,7 +574,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   ) : null}
                 </div>
                 {saveAmount > 0 ? (
-                  <p className="mt-1 text-xs font-bold text-emerald-700 sm:text-sm">
+                  <p className="mt-1 break-words text-xs font-bold text-emerald-700 sm:text-sm">
                     You save {formatInr(saveAmount)} per piece vs MRP
                   </p>
                 ) : null}
@@ -570,15 +583,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                     Best rate of {formatInr(selectedPiecePrice)}/pc at {selectedTierLabel}
                   </p>
                 ) : null}
-                <p className="mt-1 text-[10px] text-slate-500">
+                <p className="mt-1 text-[10px] leading-4 text-slate-500">
                   GST {product.gst_percent}% included in every price above · buy more pieces to save more
                 </p>
-                {/*
-                  Retail piece-price slab table for the SELECTED variant
-                  (product_pricing_tiers of THIS pack). Rendered by the shared
-                  schedule component so the cart, checkout and this page can
-                  never show three slightly different tables.
-                */}
                 {selectedPack ? (
                   <RetailerPriceSchedule
                     className="mt-2.5"
@@ -589,7 +596,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 ) : null}
                 {selectedPack &&
                 resolveLooseTierSet(selectedTiers, selectedPack.units_per_case).tiers.length > 0 ? (
-                  <p className="mt-1.5 text-[10px] font-semibold text-emerald-700">
+                  <p className="mt-1.5 text-[10px] font-semibold leading-4 text-emerald-700">
                     You can order as few as 1 pc — buying a full case is never compulsory.
                   </p>
                 ) : null}
@@ -597,11 +604,11 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             ) : null}
           </section>
 
-          {/* 5. MULTI-PRICE / MULTI-PACK TIERS */}
+          {/* 5. MULTI-PRICE / MULTI-PACK TIERS — Quantity selector per spec */}
           <PackSelector
             packs={packs}
             gstPercent={product.gst_percent}
-            productName={product.name}
+            productName={canonicalProductName}
             cartSummary={cartSummary}
             selectedPackId={selectedPack?.id ?? null}
           />
