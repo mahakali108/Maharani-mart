@@ -30,13 +30,28 @@ Proper ledger, not simple editable field. Reuses existing retailer IDs and order
 
 ### RPCs (server-authoritative, integer paise)
 - `get_retailer_outstanding_paise(p_retailer_id uuid) -> bigint`
-  Outstanding = legacy retailers.outstanding_balance*100 + sum(debits) - sum(credits) excluding CREDIT_LIMIT_CHANGE and reversed.
+  Outstanding = frozen `opening_outstanding_paise` baseline + sum(valid debits) - sum(valid credits),
+  excluding CREDIT_LIMIT_CHANGE and reversed rows. The live `retailers.outstanding_balance`
+  mirror is NOT an input (migration 0031) — reading it there caused double counting.
 - `get_retailer_credit_limit_paise(p_retailer_id uuid) -> bigint`
   Reads retailer_credit_accounts, fallback to legacy retailers.credit_limit.
 - `get_retailer_available_credit_paise(p_retailer_id uuid) -> bigint`
   limit - outstanding.
 - `check_and_debit_retailer_wallet(p_retailer_id, p_order_id, p_amount_paise, p_idempotency_key, p_created_by, p_description) -> uuid`
-  SELECT FOR UPDATE on credit account to prevent race, checks allow_overdue + overdue_limit_paise, returns existing id on idempotency hit, prevents duplicate order debit.
+  Idempotency lookup FIRST (a retry returns the existing id before any credit check), then
+  SELECT FOR UPDATE on the credit account to prevent concurrent over-limit orders, checks
+  allow_overdue + overdue_limit_paise, and tolerates a concurrent duplicate insert via a
+  unique-violation handler.
+
+### Outstanding model (corrected in 0031)
+- `retailer_credit_accounts.opening_outstanding_paise` is the FROZEN pre-wallet baseline,
+  migrated once from `retailers.outstanding_balance`.
+- `outstanding = opening_outstanding_paise + valid debits - valid credits`.
+- `trg_sync_outstanding_on_ledger` still mirrors the corrected outstanding into
+  `retailers.outstanding_balance` for legacy readers (dashboard, command center, AI tools),
+  but that mirror is an OUTPUT only and is never fed back into the calculation.
+- `_can_access_retailer_wallet` additionally allows a salesman for their ASSIGNED retailers
+  (salesman order capture debits the retailer wallet through the same server path).
 
 ### Triggers
 - `trg_retailer_credit_accounts_updated_at` — auto update updated_at
@@ -73,13 +88,20 @@ Proper ledger, not simple editable field. Reuses existing retailer IDs and order
 ## Safety / Rules
 - No data dropped, no existing column dropped, no RLS weakened
 - All amounts integer paise, no float errors
-- Outstanding = debits - credits, Available = limit - outstanding
+- Outstanding = frozen opening baseline + debits - credits, Available = limit - outstanding
 - Ledger immutable — no delete, corrections via reversal/adjustment with audit reason
 - Every balance-changing action requires amount, reason, confirmation, server-side authorization, Admin cannot delete transactions
+- A limit reduction below current outstanding is never applied silently: the server requires explicit
+  Admin confirmation (confirmBelowOutstanding) or an approved overdue policy
 - Only authorized Admin/staff may change limits; retailers cannot change own
 - Server-authoritative credit calculations, prevent duplicate debit/credit via idempotency_key unique
+- Order debit idempotency is checked FIRST (before credit), and reversals use a deterministic
+  `reversal:<sourceId>` key so retries can never double-insert
 - Race protection via SELECT FOR UPDATE
-- Checkout integration atomic debit
+- Checkout integration: quote reads the authoritative wallet position (RPC, integer paise) and
+  rejects the order before it is written when the limit would be exceeded; the debit is then
+  recorded atomically via the RPC with the order id as the idempotency key
+- Salesman order capture is authorized for assigned retailers only (wallet RPC access scoped)
 - Payment recording with method/date/reference/notes
 - Credit limit rules with allow_overdue + overdue_limit_paise
 - Mobile wallet UI safe-area, no horizontal scroll

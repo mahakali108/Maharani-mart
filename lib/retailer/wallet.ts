@@ -24,6 +24,8 @@ export interface CreditAccount {
   id: string;
   retailer_id: string;
   credit_limit_paise: number;
+  /** Frozen pre-wallet outstanding baseline in paise (migration 0031). */
+  opening_outstanding_paise: number;
   allow_overdue: boolean;
   overdue_limit_paise: number;
   created_at: string;
@@ -61,7 +63,7 @@ export async function getRetailerCreditAccount(
 ): Promise<CreditAccount | null> {
   const { data } = await supabase
     .from('retailer_credit_accounts')
-    .select('id, retailer_id, credit_limit_paise, allow_overdue, overdue_limit_paise, created_at, updated_at')
+    .select('id, retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue, overdue_limit_paise, created_at, updated_at')
     .eq('retailer_id', retailerId)
     .maybeSingle<CreditAccount>();
   return data ?? null;
@@ -71,42 +73,74 @@ export async function getRetailerOutstandingPaise(
   supabase: ReturnType<typeof createClient>,
   retailerId: string
 ): Promise<number> {
-  // Use DB function for authoritative calculation
-  const { data, error } = await (
-    supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
-  ).rpc('get_retailer_outstanding_paise', {
-    p_retailer_id: retailerId,
-  });
-  if (error) {
-    // Fallback to legacy calculation if function fails
-    const { data: retailer } = await supabase
-      .from('retailers')
-      .select('outstanding_balance')
-      .eq('id', retailerId)
-      .maybeSingle<{ outstanding_balance: number }>();
-    return rupeesToPaise(retailer?.outstanding_balance ?? 0);
+  // Authoritative DB function (integer paise), with a legacy-column fallback
+  // when the function is unavailable (not-yet-migrated DB or a mocked client).
+  try {
+    const { data, error } = await (
+      supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
+    ).rpc('get_retailer_outstanding_paise', {
+      p_retailer_id: retailerId,
+    });
+    if (!error && data !== null && data !== undefined) return Number(data);
+  } catch {
+    // fall through to legacy
   }
-  return Number(data ?? 0);
+  const { data: retailer } = await supabase
+    .from('retailers')
+    .select('outstanding_balance')
+    .eq('id', retailerId)
+    .maybeSingle<{ outstanding_balance: number }>();
+  return rupeesToPaise(retailer?.outstanding_balance ?? 0);
 }
 
 export async function getRetailerCreditLimitPaise(
   supabase: ReturnType<typeof createClient>,
   retailerId: string
 ): Promise<number> {
-  const { data, error } = await (
-    supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
-  ).rpc('get_retailer_credit_limit_paise', {
-    p_retailer_id: retailerId,
-  });
-  if (error) {
-    const { data: retailer } = await supabase
-      .from('retailers')
-      .select('credit_limit')
-      .eq('id', retailerId)
-      .maybeSingle<{ credit_limit: number }>();
-    return rupeesToPaise(retailer?.credit_limit ?? 0);
+  // Authoritative DB function (integer paise), with a legacy-column fallback.
+  try {
+    const { data, error } = await (
+      supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
+    ).rpc('get_retailer_credit_limit_paise', {
+      p_retailer_id: retailerId,
+    });
+    if (!error && data !== null && data !== undefined) return Number(data);
+  } catch {
+    // fall through to legacy
   }
-  return Number(data ?? 0);
+  const { data: retailer } = await supabase
+    .from('retailers')
+    .select('credit_limit')
+    .eq('id', retailerId)
+    .maybeSingle<{ credit_limit: number }>();
+  return rupeesToPaise(retailer?.credit_limit ?? 0);
+}
+
+export interface WalletPosition {
+  creditLimitPaise: number;
+  outstandingPaise: number;
+  availablePaise: number;
+}
+
+/**
+ * Authoritative wallet position from the database RPCs (integer paise), with a
+ * legacy-column fallback when the wallet functions have not been deployed yet.
+ * Used by the server-side order quote so the credit check reads the ledger, not
+ * a client-supplied or stale balance.
+ */
+export async function getRetailerWalletPosition(
+  supabase: ReturnType<typeof createClient>,
+  retailerId: string
+): Promise<WalletPosition> {
+  const [creditLimitPaise, outstandingPaise] = await Promise.all([
+    getRetailerCreditLimitPaise(supabase, retailerId),
+    getRetailerOutstandingPaise(supabase, retailerId),
+  ]);
+  return {
+    creditLimitPaise,
+    outstandingPaise,
+    availablePaise: creditLimitPaise - outstandingPaise,
+  };
 }
 
 export async function getRetailerWalletSummary(

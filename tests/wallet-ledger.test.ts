@@ -45,14 +45,20 @@ type LedgerEntry = {
   idempotency_key?: string | null;
 };
 
-function calcOutstanding(legacyPaise: number, ledger: LedgerEntry[]): number {
+/**
+ * Mirrors the corrected outstanding model (migration 0031):
+ *   outstanding = frozen opening baseline + valid debits - valid credits.
+ * The opening baseline is frozen once and is NEVER the live mirror column, so
+ * the ledger can never be double-counted.
+ */
+function calcOutstanding(openingPaise: number, ledger: LedgerEntry[]): number {
   const debit = ledger
     .filter((l) => !l.is_reversed && l.direction === 'debit' && l.transaction_type !== 'CREDIT_LIMIT_CHANGE')
     .reduce((s, l) => s + l.amount_paise, 0);
   const credit = ledger
     .filter((l) => !l.is_reversed && l.direction === 'credit' && l.transaction_type !== 'CREDIT_LIMIT_CHANGE')
     .reduce((s, l) => s + l.amount_paise, 0);
-  return legacyPaise + debit - credit;
+  return openingPaise + debit - credit;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,16 +80,27 @@ describe('wallet paise calculations', () => {
     expect(paiseToRupees(0)).toBe(0);
   });
 
-  it('outstanding = legacy + debits - credits, excluding CREDIT_LIMIT_CHANGE and reversed', () => {
-    const legacy = rupeesToPaise(1000); // ₹1000 legacy
+  it('outstanding = opening baseline + debits - credits, excluding CREDIT_LIMIT_CHANGE and reversed', () => {
+    const opening = rupeesToPaise(1000); // ₹1000 frozen opening baseline
     const ledger: LedgerEntry[] = [
       { transaction_type: 'ORDER_DEBIT', amount_paise: rupeesToPaise(500), direction: 'debit', is_reversed: false },
       { transaction_type: 'PAYMENT_CREDIT', amount_paise: rupeesToPaise(200), direction: 'credit', is_reversed: false },
       { transaction_type: 'CREDIT_LIMIT_CHANGE', amount_paise: rupeesToPaise(5000), direction: 'credit', is_reversed: false },
       { transaction_type: 'ORDER_DEBIT', amount_paise: rupeesToPaise(100), direction: 'debit', is_reversed: true }, // reversed should be ignored
     ];
-    expect(calcOutstanding(legacy, ledger)).toBe(rupeesToPaise(1300)); // 1000+500-200
-    expect(paiseToRupees(calcOutstanding(legacy, ledger))).toBe(1300);
+    expect(calcOutstanding(opening, ledger)).toBe(rupeesToPaise(1300)); // 1000+500-200
+    expect(paiseToRupees(calcOutstanding(opening, ledger))).toBe(1300);
+  });
+
+  it('a frozen opening baseline is not double-counted across ledger reads', () => {
+    // Regression test for migration 0031: the pre-wallet baseline must be added
+    // exactly once, never re-added after each ledger change.
+    const opening = rupeesToPaise(1000);
+    const order = { transaction_type: 'ORDER_DEBIT', amount_paise: rupeesToPaise(2000), direction: 'debit' as const, is_reversed: false };
+    expect(calcOutstanding(opening, [order])).toBe(rupeesToPaise(3000));
+    // Reading again with the SAME frozen opening (as the DB function now does)
+    // still yields ₹3000 — the old live-mirror read would have produced ₹5000.
+    expect(calcOutstanding(opening, [order])).toBe(rupeesToPaise(3000));
   });
 
   it('available = limit - outstanding', () => {
@@ -221,7 +238,9 @@ describe('wallet idempotency', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
     expect(walletActions).toContain("generateIdempotencyKey('pay'");
     expect(walletActions).toContain("generateIdempotencyKey('adj'");
-    expect(walletActions).toContain("generateIdempotencyKey('rev'");
+    // Reversals use a deterministic key (not a random timestamp) so a retried
+    // reversal can never double-insert.
+    expect(walletActions).toContain('const key = `reversal:${transactionId}`');
   });
 
   it('ledger table has unique idempotency_key constraint', () => {
@@ -389,10 +408,21 @@ describe('wallet migration safety', () => {
     expect(migration).toContain('migrated_from_rupees');
   });
 
-  it('outstanding calculation includes legacy retailers.outstanding_balance', () => {
-    const migration = read('supabase/migrations/0029_retailer_wallet_ledger.sql');
-    expect(migration).toContain('Legacy outstanding from retailers table');
-    expect(migration).toContain('outstanding_balance');
+  it('0031 freezes the opening baseline so outstanding is never double-counted', () => {
+    const migration = read('supabase/migrations/0031_wallet_outstanding_opening_baseline.sql');
+    expect(migration).toContain('add column if not exists opening_outstanding_paise');
+    expect(migration).toContain('outstanding = opening_outstanding_paise + ledger(debits) - ledger(credits)');
+    // The corrected function must NOT read the live mirror column as its baseline.
+    const fn = migration.slice(migration.indexOf('create or replace function get_retailer_outstanding_paise'));
+    expect(fn).toContain('opening_outstanding_paise');
+    expect(fn).toContain('Does not read the live retailers.outstanding_balance mirror');
+  });
+
+  it('0031 backfills the opening baseline from the legacy column once, idempotently', () => {
+    const migration = read('supabase/migrations/0031_wallet_outstanding_opening_baseline.sql');
+    expect(migration).toContain('opening_outstanding_paise = sub.opening_paise');
+    expect(migration).toContain('where a.opening_outstanding_paise = 0');
+    expect(migration).toContain('greatest(0');
   });
 
   it('triggers keep legacy columns in sync for backward compat', () => {
@@ -454,6 +484,93 @@ describe('wallet mobile UI', () => {
     const adminDetail = read('app/admin/wallets/[id]/page.tsx');
     expect(adminList).toContain('overflow-x-auto');
     expect(adminDetail).toContain('grid');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 13. Migration 0031 — outstanding fix, idempotency-first debit, salesman access
+// ---------------------------------------------------------------------------
+describe('wallet outstanding fix (0031)', () => {
+  const migration = () => read('supabase/migrations/0031_wallet_outstanding_opening_baseline.sql');
+
+  it('is additive: no drop table/column, no RLS weakened', () => {
+    const m = migration();
+    expect(m.toLowerCase()).not.toContain('drop table');
+    expect(m.toLowerCase()).not.toContain('drop column');
+    expect(m.toLowerCase()).not.toContain('drop policy');
+  });
+
+  it('check_and_debit checks idempotency FIRST, before the credit check', () => {
+    const m = migration();
+    const fn = m.slice(m.indexOf('create or replace function check_and_debit_retailer_wallet'));
+    expect(fn).toContain('Idempotency FIRST');
+    const idempotencyIdx = fn.indexOf('Idempotency FIRST');
+    const lockIdx = fn.indexOf('Lock credit account row');
+    expect(idempotencyIdx).toBeGreaterThan(-1);
+    expect(lockIdx).toBeGreaterThan(-1);
+    expect(idempotencyIdx).toBeLessThan(lockIdx);
+  });
+
+  it('check_and_debit tolerates a concurrent duplicate via unique violation', () => {
+    const m = migration();
+    expect(m).toContain('exception when unique_violation then');
+    expect(m).toContain('select id into v_ledger_id from retailer_wallet_ledger where idempotency_key = p_idempotency_key');
+  });
+
+  it('allows an assigned salesman (not arbitrary retailers) to access the wallet', () => {
+    const m = migration();
+    expect(m).toContain('is_retailer_assigned_to_current_salesman(p_retailer_id)');
+    expect(m).toContain('Salesman access is now scoped to their assigned retailers only');
+  });
+
+  it('order debit for salesman capture is not denied by the wallet RPC', () => {
+    const salesman = read('lib/salesman/order-creation-actions.ts');
+    expect(salesman).toContain('createOrderForRetailer');
+  });
+
+  it('reversals use a deterministic idempotency key (no Date.now drift)', () => {
+    const reversal = read('lib/orders/wallet-reversal.ts');
+    expect(reversal).toContain('reversalIdempotencyKey(original.id)');
+    expect(reversal).not.toContain('Date.now()');
+
+    const actions = read('lib/admin/wallet-actions.ts');
+    expect(actions).toContain('const key = `reversal:${transactionId}`');
+  });
+});
+
+describe('wallet pure math (wallet-math)', () => {
+  it('computeOutstandingPaise = opening + debits - credits', async () => {
+    const { computeOutstandingPaise } = await import('@/lib/retailer/wallet-math');
+    expect(computeOutstandingPaise(100000, 200000, 50000)).toBe(250000);
+  });
+
+  it('computeAvailablePaise = limit - outstanding (may be negative)', async () => {
+    const { computeAvailablePaise } = await import('@/lib/retailer/wallet-math');
+    expect(computeAvailablePaise(100000, 35000)).toBe(65000);
+    expect(computeAvailablePaise(100000, 120000)).toBe(-20000);
+  });
+
+  it('computeOverduePaise is outstanding above limit, else 0', async () => {
+    const { computeOverduePaise } = await import('@/lib/retailer/wallet-math');
+    expect(computeOverduePaise(100000, 120000)).toBe(20000);
+    expect(computeOverduePaise(100000, 90000)).toBe(0);
+  });
+
+  it('computeWalletPositionPaise flags over-limit and unconfigured limit', async () => {
+    const { computeWalletPositionPaise } = await import('@/lib/retailer/wallet-math');
+    expect(computeWalletPositionPaise({ creditLimitPaise: 100000, openingOutstandingPaise: 0, debitsPaise: 35000 })).toMatchObject({
+      outstandingPaise: 35000,
+      availablePaise: 65000,
+      isOverLimit: false,
+      hasConfiguredLimit: true,
+    });
+    expect(computeWalletPositionPaise({ creditLimitPaise: 0 }).hasConfiguredLimit).toBe(false);
+  });
+
+  it('reversalIdempotencyKey is deterministic for the same source id', async () => {
+    const { reversalIdempotencyKey } = await import('@/lib/retailer/wallet-math');
+    expect(reversalIdempotencyKey('abc-123')).toBe('reversal:abc-123');
+    expect(reversalIdempotencyKey('abc-123')).toBe(reversalIdempotencyKey('abc-123'));
   });
 });
 

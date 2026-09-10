@@ -284,8 +284,8 @@ export default async function CheckoutPage() {
           {retailer ? (
             <div className="space-y-3">
               <CreditSummary
-                creditLimit={retailer.credit_limit}
-                outstandingBalance={retailer.outstanding_balance}
+                creditLimit={walletSummary.creditLimitRupees}
+                outstandingBalance={walletSummary.outstandingRupees}
                 orderImpact={grandTotal}
               />
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -343,7 +343,7 @@ export default async function CheckoutPage() {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-600">Method</span>
                 <span className="font-bold text-slate-900">
-                  {retailer && retailer.credit_limit > 0
+                  {walletSummary.hasConfiguredLimit
                     ? 'Business credit account'
                     : 'No credit facility configured'}
                 </span>

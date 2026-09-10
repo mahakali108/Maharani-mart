@@ -6,6 +6,7 @@ import { getProductPriceOverrides, resolvePackCasePrice } from '@/lib/retailer/e
 import { calculateRetailerPiecePrice, type RetailerPiecePricing } from '@/lib/retailer/retailer-pricing';
 import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
+import { getRetailerWalletPosition, paiseToRupees } from '@/lib/retailer/wallet';
 
 export interface RequestedQuoteLine {
   packId: string;
@@ -176,6 +177,13 @@ export async function quoteOrderForRetailer({
   if (retailerError || !retailer) return { error: 'Retailer not found or not assigned to you.' };
   if (retailer.status !== 'active') return { error: 'Orders can only be created for an active retailer.' };
 
+  // Authoritative credit position from the wallet ledger (integer paise). The
+  // helper falls back to the legacy mirror columns if the wallet RPCs are not
+  // yet deployed, so this never breaks an existing quote path.
+  const walletPosition = await getRetailerWalletPosition(supabase, retailer.id);
+  const creditLimitRupees = paiseToRupees(walletPosition.creditLimitPaise);
+  const outstandingRupees = paiseToRupees(walletPosition.outstandingPaise);
+
   const { data: packData, error: packError } = await supabase
     .from('product_packs')
     .select(
@@ -287,7 +295,7 @@ export async function quoteOrderForRetailer({
       discountTotal: 0,
       grandTotal,
       lines: quotedLines,
-      credit: calculateCreditPosition(retailer.credit_limit, retailer.outstanding_balance, grandTotal),
+      credit: calculateCreditPosition(creditLimitRupees, outstandingRupees, grandTotal),
     },
   };
 }

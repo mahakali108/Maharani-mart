@@ -44,7 +44,7 @@ export async function setCreditLimitAction(
   retailerId: string,
   creditLimitRupees: number,
   reason: string,
-  options?: { allowOverdue?: boolean; overdueLimitRupees?: number }
+  options?: { allowOverdue?: boolean; overdueLimitRupees?: number; confirmBelowOutstanding?: boolean }
 ): Promise<WalletActionResult> {
   await requirePermission('retailers.edit');
   const parsed = setLimitSchema.safeParse({
@@ -64,7 +64,7 @@ export async function setCreditLimitAction(
   const limitPaise = rupeesToPaise(creditLimitRupees);
   const overduePaise = rupeesToPaise(options?.overdueLimitRupees ?? 0);
 
-  // Check current outstanding to warn if limit would be below outstanding
+  // Authoritative outstanding from the wallet RPC (falls back server-side).
   const { data: outstandingData } = await (
     supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown }> }
   ).rpc('get_retailer_outstanding_paise', {
@@ -72,9 +72,15 @@ export async function setCreditLimitAction(
   });
   const outstandingPaise = Number(outstandingData ?? 0);
 
-  if (limitPaise < outstandingPaise && !options?.allowOverdue) {
-    // Still allow, but require explicit confirmation in UI — here we just proceed
-    // but log the consequence
+  // A limit reduction that pushes the account over-limit must never be applied
+  // silently: it requires an explicit Admin confirmation of the consequence
+  // (or an approved overdue policy).
+  if (limitPaise < outstandingPaise && !options?.allowOverdue && !options?.confirmBelowOutstanding) {
+    return {
+      error: `New limit ₹${creditLimitRupees.toFixed(2)} is below the current outstanding ₹${(outstandingPaise / 100).toFixed(
+        2
+      )}. Confirm the over-limit consequence to continue.`,
+    };
   }
 
   // Upsert credit account
@@ -295,7 +301,9 @@ export async function reverseTransactionAction(
   // Create reversal entry with opposite direction
   const reversalDirection = original.direction === 'debit' ? 'credit' : 'debit';
   const reversalType = original.transaction_type === 'ORDER_DEBIT' ? 'ORDER_REVERSAL' : 'ADJUSTMENT';
-  const key = generateIdempotencyKey('rev', retailerId);
+  // Deterministic key: a retried reversal maps to the same key and the ledger's
+  // unique idempotency_key constraint blocks a duplicate reversal entry.
+  const key = `reversal:${transactionId}`;
 
   const { data: account } = await supabase
     .from('retailer_credit_accounts')
@@ -323,7 +331,12 @@ export async function reverseTransactionAction(
     reversal_of: original.id,
   } as never);
 
-  if (insertError) return { error: insertError.message };
+  if (insertError) {
+    // A concurrent/retried reversal already created the entry with the same
+    // deterministic key — treat as success rather than double-reversing.
+    if (insertError.code === '23505') return { success: true, message: 'Transaction already reversed.' };
+    return { error: insertError.message };
+  }
 
   // Mark original as reversed
   await supabase
