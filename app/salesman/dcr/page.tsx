@@ -82,18 +82,18 @@ export default async function DailyCallReportPage({
         </Button>
       </form>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="p-3.5 text-center">
-          <p className="text-lg font-semibold text-ink-950">{completedVisits}</p>
-          <p className="text-xs text-ink-400">Visits Completed</p>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <Card className="min-w-0 p-2.5 text-center sm:p-3.5">
+          <p className="break-words text-base font-semibold text-ink-950 sm:text-lg">{completedVisits}</p>
+          <p className="mt-0.5 text-[10px] leading-tight text-ink-400 sm:text-xs">Visits Completed</p>
         </Card>
-        <Card className="p-3.5 text-center">
-          <p className="text-lg font-semibold text-ink-950">{orders.length}</p>
-          <p className="text-xs text-ink-400">Orders Collected</p>
+        <Card className="min-w-0 p-2.5 text-center sm:p-3.5">
+          <p className="break-words text-base font-semibold text-ink-950 sm:text-lg">{orders.length}</p>
+          <p className="mt-0.5 text-[10px] leading-tight text-ink-400 sm:text-xs">Orders Collected</p>
         </Card>
-        <Card className="p-3.5 text-center">
-          <p className="text-lg font-semibold text-ink-950">₹{totalCollected.toFixed(0)}</p>
-          <p className="text-xs text-ink-400">Value Collected</p>
+        <Card className="min-w-0 p-2.5 text-center sm:p-3.5">
+          <p className="break-words text-base font-semibold text-ink-950 sm:text-lg">₹{totalCollected.toFixed(0)}</p>
+          <p className="mt-0.5 text-[10px] leading-tight text-ink-400 sm:text-xs">Value Collected</p>
         </Card>
       </div>
 
@@ -122,7 +122,7 @@ export default async function DailyCallReportPage({
         ) : (
           <ul className="space-y-2 text-sm">
             {visits.map((v) => (
-              <li key={v.id} className="flex items-center justify-between">
+              <li key={v.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <span className="text-ink-700">{v.retailers?.shop_name ?? 'Unknown retailer'}</span>
                 <span className="text-xs text-ink-400">{v.status.replace('_', ' ')}</span>
               </li>
@@ -140,7 +140,7 @@ export default async function DailyCallReportPage({
         ) : (
           <ul className="space-y-2 text-sm">
             {orders.map((o) => (
-              <li key={o.id} className="flex items-center justify-between">
+              <li key={o.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <span className="text-ink-700">
                   {o.retailers?.shop_name} · <span className="font-mono text-xs">{o.order_number}</span>
                 </span>

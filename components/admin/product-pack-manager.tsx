@@ -79,8 +79,8 @@ export function ProductPackManager({
           {packs.map((pack, index) => {
             const piecePrice = piecePriceFromCase(pack.case_price, pack.units_per_case);
             return (
-              <div key={pack.id} className="overflow-hidden rounded-xl border border-ink-100">
-                <table className="w-full text-sm">
+              <div key={pack.id} className="table-scroll rounded-xl border border-ink-100">
+                <table className="w-full min-w-[860px] text-sm">
                   <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                     <tr>
                       <th className="whitespace-nowrap px-4 py-2.5 font-medium">Pack</th>

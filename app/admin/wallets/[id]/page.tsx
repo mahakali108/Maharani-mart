@@ -197,8 +197,8 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
         <CardHeader>
           <CardTitle>Linked Orders & Invoices (last 20)</CardTitle>
         </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-scroll overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
               <tr>
                 <th className="px-5 py-2">Order</th>

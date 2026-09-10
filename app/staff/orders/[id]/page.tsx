@@ -78,11 +78,11 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
         </CardHeader>
         <ul className="space-y-2 text-sm">
           {items.map((item) => (
-            <li key={item.id} className="flex justify-between">
-              <span className="text-ink-700">{item.products?.name} ({item.product_packs?.pack_name})</span>
+            <li key={item.id} className="flex min-w-0 justify-between gap-3">
+              <span className="min-w-0 break-words text-ink-700">{item.products?.name} ({item.product_packs?.pack_name})</span>
               {/* Pickers work per billing row: 1 Case means one sealed case, 6
                   loose pieces are broken out of a case in the pick area. */}
-              <span className="font-semibold text-ink-900">
+              <span className="shrink-0 font-semibold text-ink-900">
                 × {formatRowQuantity(item)}
                 <span className="ml-1 text-xs font-normal text-ink-400">({rowPieces(item)} pcs)</span>
               </span>

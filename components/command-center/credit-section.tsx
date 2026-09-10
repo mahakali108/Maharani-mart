@@ -58,7 +58,7 @@ export function CreditSection({ credit }: { credit: CreditOverview }) {
               <p className="mb-3 text-xs font-semibold text-ink-700">Credit-limit utilization distribution</p>
               <ul className="space-y-2">
                 {credit.buckets.map((bucket) => (
-                  <li key={bucket.label} className="flex items-center justify-between text-xs">
+                  <li key={bucket.label} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="text-ink-600">{bucket.label}</span>
                     <span className="font-bold text-ink-900">{bucket.count}</span>
                   </li>

@@ -110,8 +110,8 @@ export default async function LowStockPage({
             {movers.map((m) => {
               const p = nameById.get(m.product_id);
               return (
-                <li key={m.product_id} className="flex items-center justify-between px-5 py-2.5 text-sm">
-                  <span className="font-medium text-ink-900">
+                <li key={m.product_id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm">
+                  <span className="min-w-0 break-words font-medium text-ink-900">
                     {p?.name ?? 'Unknown product'} <span className="font-mono text-xs text-ink-400">{p?.sku_code}</span>
                   </span>
                   <span className="text-ink-600">
@@ -138,8 +138,8 @@ export default async function LowStockPage({
 function Row({ t, highlight }: { t: ProductTotalsViewRow; highlight: string }) {
   const isHighlight = highlight === t.product_id;
   return (
-    <li className={`flex items-center justify-between px-5 py-2.5 text-sm ${isHighlight ? 'bg-primary-50' : ''}`}>
-      <div>
+    <li className={`flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm ${isHighlight ? 'bg-primary-50' : ''}`}>
+      <div className="min-w-0 break-words">
         <Link href={`/admin/products/${t.product_id}`} className="font-medium text-ink-900 hover:text-primary-600">
           {t.product_name}
         </Link>{' '}

@@ -58,8 +58,8 @@ export default async function BannersPage() {
           body="Add your first banner above — it'll appear on the retailer home screen once active."
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <table className="w-full text-sm">
+        <Card className="table-scroll p-0">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
               <tr>
                 <th className="px-5 py-3 font-medium">Preview</th>

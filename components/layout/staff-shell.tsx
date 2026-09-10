@@ -45,7 +45,9 @@ export function StaffShell({
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar fullName={fullName} role={role} onMenuClick={() => setMobileNavOpen(true)} />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="w-full min-w-0 flex-1 p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8">
+          {children}
+        </main>
       </div>
     </div>
   );

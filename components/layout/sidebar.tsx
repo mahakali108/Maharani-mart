@@ -39,16 +39,16 @@ export function Sidebar({
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-ink-950 text-white transition-transform duration-200 lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] flex-col bg-ink-950 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-white transition-transform duration-200 lg:static lg:max-w-none lg:translate-x-0 lg:pb-0 lg:pl-0',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
+        <div className="flex min-h-[4rem] items-center gap-3 border-b border-white/10 px-5 pt-[env(safe-area-inset-top)] lg:pt-0">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 font-bold">
-            MK
+            MT
           </div>
           <div>
-            <p className="text-sm font-semibold leading-tight">Maa Kali B2B</p>
+            <p className="text-sm font-semibold leading-tight">Maharani Traders</p>
             <p className="text-xs leading-tight text-ink-400">{brandLabel}</p>
           </div>
         </div>

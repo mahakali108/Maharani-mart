@@ -645,7 +645,7 @@ export function PackSelector({
                           type="button"
                           onClick={() => handleUpdateSinglePack(pack)}
                           disabled={isCurrentPending}
-                          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                         >
                           {isCurrentPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -659,13 +659,13 @@ export function PackSelector({
                           type="button"
                           onClick={() => handleIncrement(pack)}
                           disabled={isCurrentPending}
-                          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                         >
                           <Plus className="h-4 w-4" />
                           Add pieces
                         </button>
                       ) : isItemInCart && !isModified ? (
-                        <div className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700">
+                        <div className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700">
                           <Check className="h-4 w-4 text-emerald-600" />
                           In cart · {formatInr(pricing.lineTotal)}
                         </div>
@@ -674,7 +674,7 @@ export function PackSelector({
                           type="button"
                           onClick={() => handleUpdateSinglePack(pack)}
                           disabled={isCurrentPending}
-                          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                         >
                           {isCurrentPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -688,7 +688,7 @@ export function PackSelector({
                           type="button"
                           onClick={() => handleAddSinglePack(pack)}
                           disabled={isCurrentPending || !pricing.orderable}
-                          className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                         >
                           {isCurrentPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -702,7 +702,7 @@ export function PackSelector({
                         type="button"
                         onClick={() => handleBuyPack(pack)}
                         disabled={isPending}
-                        className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-primary-600 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                        className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl bg-primary-600 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
                       >
                         {isPending && pendingPackId === 'buynow' ? (
                           <Loader2 className="h-4 w-4 animate-spin" />

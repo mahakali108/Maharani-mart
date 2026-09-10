@@ -84,7 +84,7 @@ export function BannerEditForm({
             ))}
           </Select>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>
             <Label htmlFor="startsAt">Starts</Label>
             <Input id="startsAt" name="startsAt" type="date" defaultValue={startsAt ? startsAt.slice(0, 10) : ''} />

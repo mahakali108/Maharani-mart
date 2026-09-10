@@ -124,7 +124,7 @@ export default async function ForecastDashboardPage({
           ) : (
             <ul className="space-y-2">
               {needsReorder.slice(0, 5).map((f) => (
-                <li key={f.productId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                <li key={f.productId} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink-900">{f.productName}</p>
                     <p className="text-xs text-ink-400">{f.skuCode} · {f.explanation}</p>
@@ -146,7 +146,7 @@ export default async function ForecastDashboardPage({
           ) : (
             <ul className="space-y-2">
               {summary.forecasts.filter((f) => f.overstockWarning || f.deadStockWarning).slice(0, 5).map((f) => (
-                <li key={f.productId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                <li key={f.productId} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink-900">{f.productName}</p>
                     <p className="text-xs text-ink-400">{f.overstockWarning ? 'Overstock' : 'Dead stock'}</p>
@@ -166,7 +166,7 @@ export default async function ForecastDashboardPage({
         ) : (
           <ul className="divide-y divide-ink-100">
             {expiryRisk.map((row, index) => (
-              <li key={index} className="flex items-center justify-between py-2 text-sm">
+              <li key={index} className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2 text-sm">
                 <span className="font-medium text-ink-900">{row.product_name}</span>
                 <span className="text-ink-600">
                   {row.days_remaining === null ? 'No expiry' : row.days_remaining < 0 ? `${-row.days_remaining}d overdue` : `${row.days_remaining}d left`}
@@ -233,7 +233,7 @@ function StatCard({ icon: Icon, label, value, sub, accent, href }: { icon: React
 function RiskRow({ f }: { f: ForecastResult }) {
   const badge = riskBadge(f.stockOutRisk);
   return (
-    <li className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+    <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-ink-900">{f.productName}</p>
         <p className="truncate text-xs text-ink-400">{f.skuCode} · cover ≈ {f.stockOutDays ?? '—'} d</p>

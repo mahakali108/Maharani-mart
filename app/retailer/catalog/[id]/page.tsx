@@ -49,6 +49,7 @@ interface ProductDetailRow {
   units_per_case: number;
   gst_percent: number;
   hsn_code: string | null;
+  barcode: string | null;
   lead_time_days: number;
   is_new_launch: boolean;
   brand_id: string | null;
@@ -65,6 +66,7 @@ interface PackRow {
   base_price: number;
   ptr: number | null;
   case_price: number;
+  barcode: string | null;
   mrp: number | null;
   /** Minimum order quantity in PIECES. */
   moq: number;
@@ -155,7 +157,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     supabase
       .from('products')
       .select(
-        'id, name, unit, units_per_case, gst_percent, hsn_code, lead_time_days, is_new_launch, brand_id, category_id, brands ( name ), categories ( id, name ), product_images ( id, image_url, sort_order )'
+        'id, name, unit, units_per_case, gst_percent, hsn_code, barcode, lead_time_days, is_new_launch, brand_id, category_id, brands ( name ), categories ( id, name ), product_images ( id, image_url, sort_order )'
       )
       .eq('id', productId)
       .eq('is_active', true)
@@ -163,7 +165,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     supabase
       .from('product_packs')
       .select(
-        'id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, allow_loose_pieces, image_url, is_active, sort_order'
+        'id, pack_name, units_per_case, base_price, ptr, case_price, barcode, mrp, moq, allow_loose_pieces, image_url, is_active, sort_order'
       )
       .eq('product_id', productId)
       .order('sort_order')
@@ -690,21 +692,41 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Product details</h2>
             </div>
             <dl className="grid grid-cols-2 gap-2.5 text-xs sm:grid-cols-4">
-              <div className="rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Base unit</dt>
-                <dd className="mt-1 font-bold capitalize text-slate-900">{product.unit}</dd>
+                <dd className="mt-1 break-words font-bold capitalize text-slate-900">{product.unit}</dd>
               </div>
-              <div className="rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Sold by</dt>
-                <dd className="mt-1 font-bold text-slate-900">Individual pieces</dd>
+                <dd className="mt-1 break-words font-bold text-slate-900">Individual pieces</dd>
               </div>
-              <div className="rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">GST rate</dt>
-                <dd className="mt-1 font-bold text-slate-900">{product.gst_percent}%</dd>
+                <dd className="mt-1 break-words font-bold text-slate-900">{product.gst_percent}%</dd>
               </div>
-              <div className="rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">HSN code</dt>
-                <dd className="mt-1 font-bold font-mono text-slate-900">{product.hsn_code ?? '—'}</dd>
+                <dd className="mt-1 break-words font-mono font-bold text-slate-900">{product.hsn_code ?? '—'}</dd>
+              </div>
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">EAN / Barcode</dt>
+                <dd className="mt-1 break-all font-mono font-bold text-slate-900">
+                  {selectedPack?.barcode ?? product.barcode ?? '—'}
+                </dd>
+              </div>
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Selected size</dt>
+                <dd className="mt-1 break-words font-bold text-slate-900">{selectedPack?.pack_name ?? '—'}</dd>
+              </div>
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Min order (MOQ)</dt>
+                <dd className="mt-1 break-words font-bold text-slate-900">
+                  {selectedPack ? `${selectedPack.moq} pc${selectedPack.moq === 1 ? '' : 's'}` : '—'}
+                </dd>
+              </div>
+              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Category</dt>
+                <dd className="mt-1 break-words font-bold text-slate-900">{product.categories?.name ?? '—'}</dd>
               </div>
             </dl>
           </section>

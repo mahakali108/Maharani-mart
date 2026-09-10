@@ -65,12 +65,12 @@ export default async function SalesmanVisitsPage({
           <div className="space-y-2">
             {visits.map((v) => (
               <Card key={v.id} className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-medium text-ink-900">{v.retailers?.shop_name ?? 'Unknown retailer'}</p>
-                    {v.retailers?.address ? <p className="text-xs text-ink-400">{v.retailers.address}</p> : null}
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words font-medium text-ink-900">{v.retailers?.shop_name ?? 'Unknown retailer'}</p>
+                    {v.retailers?.address ? <p className="break-words text-xs text-ink-400">{v.retailers.address}</p> : null}
                   </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[v.status]}`}>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[v.status]}`}>
                     {v.status.replace('_', ' ')}
                   </span>
                 </div>

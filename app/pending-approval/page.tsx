@@ -3,7 +3,7 @@ import { Clock } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
 import { Button } from '@/components/ui/button';
 
-export const metadata: Metadata = { title: 'Approval pending — Maa Kali B2B' };
+export const metadata: Metadata = { title: 'Approval pending — Maharani Traders' };
 
 export default function PendingApprovalPage() {
   return (
@@ -14,7 +14,7 @@ export default function PendingApprovalPage() {
         </div>
         <h1 className="text-xl font-semibold text-ink-950">Your account is under review</h1>
         <p className="mt-2 text-sm text-ink-500">
-          Thanks for registering your shop with Maa Kali B2B. An admin needs to verify and
+          Thanks for registering your shop with Maharani Traders. An admin needs to verify and
           approve your account before you can browse the catalog and place orders. This usually
           doesn&apos;t take long — you&apos;ll be notified once it&apos;s approved.
         </p>

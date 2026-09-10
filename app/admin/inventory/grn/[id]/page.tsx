@@ -133,7 +133,7 @@ export default async function GrnDetailPage({ params }: { params: { id: string }
           </CardHeader>
           <ul className="divide-y divide-ink-100">
             {movements.map((m) => (
-              <li key={m.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
+              <li key={m.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm">
                 <span className="font-medium text-ink-900">
                   {m.products?.name ?? '—'}{' '}
                   <span className="font-mono text-xs text-ink-400">{m.inventory_batches?.batch_number}</span>

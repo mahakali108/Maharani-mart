@@ -74,7 +74,7 @@ export default async function AdminRouteDetailPage({ params }: { params: { id: s
         ) : (
           <ul className="divide-y divide-ink-100">
             {stops.map((stop) => (
-              <li key={stop.id} className="flex items-center justify-between py-2.5">
+              <li key={stop.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2.5">
                 <div>
                   <p className="text-sm font-medium text-ink-900">{stop.retailers?.shop_name ?? '—'}</p>
                   <p className="text-xs text-ink-400">{stop.visit_day ? DAY_LABELS[stop.visit_day] : 'Any day'}</p>

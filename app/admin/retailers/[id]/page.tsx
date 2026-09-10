@@ -244,7 +244,7 @@ async function RetailerOrderHistory({ retailerId }: { retailerId: string }) {
       </CardHeader>
 
       {totalOrders > 0 ? (
-        <div className="mb-4 grid grid-cols-3 gap-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-ink-50 p-3">
             <p className="text-xs text-ink-500">Total Orders</p>
             <p className="mt-1 text-lg font-semibold text-ink-950">{totalOrders}</p>
@@ -264,8 +264,8 @@ async function RetailerOrderHistory({ retailerId }: { retailerId: string }) {
         <p className="text-sm text-ink-500">This retailer has not placed any orders yet.</p>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="table-scroll overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                 <tr>
                   <th className="px-5 py-2 font-medium">Order</th>

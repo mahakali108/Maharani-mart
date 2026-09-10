@@ -51,14 +51,14 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
 
   function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6">
           <div className="mb-4 flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <h3 className="text-sm font-semibold text-ink-900">Confirm Action</h3>
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
+            <h3 className="break-words text-sm font-semibold text-ink-900">Confirm Action</h3>
           </div>
-          <p className="mb-4 text-sm text-ink-600">{message}</p>
-          <div className="flex justify-end gap-2">
+          <p className="mb-4 break-words text-sm text-ink-600">{message}</p>
+          <div className="flex flex-wrap justify-end gap-2">
             <button
               onClick={onCancel}
               className="rounded-xl px-4 py-2 text-sm font-medium text-ink-600 hover:bg-ink-100"
@@ -82,10 +82,10 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
       {/* User Info Card */}
       <div className="rounded-xl border border-ink-100 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-ink-900">{userView.fullName}</h2>
-            <p className="text-sm text-ink-500">ID: {userView.id}</p>
-            <p className="text-sm text-ink-500">Phone: {userView.phone}</p>
+          <div className="min-w-0">
+            <h2 className="break-words text-lg font-semibold text-ink-900">{userView.fullName}</h2>
+            <p className="break-all text-sm text-ink-500">ID: {userView.id}</p>
+            <p className="break-words text-sm text-ink-500">Phone: {userView.phone}</p>
             <p className="text-sm text-ink-500">
               Created: {formatIndiaDate(userView.createdAt)}
             </p>

@@ -254,7 +254,7 @@ export default async function EditProductPage({ params }: { params: { id: string
           </Link>
         </CardHeader>
 
-        <div className="mb-4 grid grid-cols-3 gap-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-ink-50 p-3">
             <p className="text-xs text-ink-500">Current stock</p>
             <p className="mt-1 text-xl font-semibold text-ink-950">{totalOnHand}</p>
@@ -288,8 +288,8 @@ export default async function EditProductPage({ params }: { params: { id: string
             <h4 className="mb-2 text-sm font-semibold text-ink-800">Warehouse stock</h4>
             <ul className="divide-y divide-ink-100 rounded-xl border border-ink-100">
               {stock.map((s) => (
-                <li key={s.warehouse_id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                  <span className="font-medium text-ink-900">{s.warehouses?.name ?? '—'}</span>
+                <li key={s.warehouse_id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                  <span className="min-w-0 break-words font-medium text-ink-900">{s.warehouses?.name ?? '—'}</span>
                   <span className="text-ink-600">
                     {s.quantity} on hand · {s.reserved_quantity} reserved ·{' '}
                     <span className="font-semibold text-ink-900">{s.quantity - s.reserved_quantity} available</span>
@@ -343,8 +343,8 @@ export default async function EditProductPage({ params }: { params: { id: string
             <h4 className="mb-2 text-sm font-semibold text-ink-800">Recent movements</h4>
             <ul className="divide-y divide-ink-100 rounded-xl border border-ink-100">
               {movements.map((m) => (
-                <li key={m.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                  <span className="text-ink-600">
+                <li key={m.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
+                  <span className="min-w-0 break-words text-ink-600">
                     {m.movement_type.replace(/_/g, ' ')} · {m.warehouses?.name ?? '—'}
                   </span>
                   <span>

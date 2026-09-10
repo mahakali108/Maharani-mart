@@ -1,8 +1,8 @@
 {
-  "name": "maa-kali-b2b-ultra",
+  "name": "maharani-traders",
   "version": "0.1.0",
   "private": true,
-  "description": "Maa Kali B2B Ultra Platform — FMCG Distribution, Khagaria District",
+  "description": "Maharani Traders — B2B Wholesale & Distribution App, Khagaria District",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -175,9 +175,9 @@ export default async function OrderDetailPage({
           </div>
         </div>
         <div className="grid grid-cols-3 border-t border-slate-100 bg-slate-50/70">
-          <div className="border-r border-slate-100 px-4 py-3 text-center"><p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Products</p><p className="mt-1 text-xs font-bold text-slate-800">{items.length} line{items.length === 1 ? '' : 's'}</p></div>
-          <div className="border-r border-slate-100 px-4 py-3 text-center"><p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Quantity</p><p className="mt-1 text-xs font-bold text-slate-800">{totalQuantity} pc{totalQuantity === 1 ? '' : 's'}</p></div>
-          <div className="px-4 py-3 text-center"><p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Order value</p><p className="mt-1 text-xs font-bold text-slate-800">₹{order.grand_total.toFixed(2)}</p></div>
+          <div className="min-w-0 border-r border-slate-100 px-2 py-3 text-center sm:px-4"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Products</p><p className="mt-1 break-words text-xs font-bold text-slate-800">{items.length} line{items.length === 1 ? '' : 's'}</p></div>
+          <div className="min-w-0 border-r border-slate-100 px-2 py-3 text-center sm:px-4"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Quantity</p><p className="mt-1 break-words text-xs font-bold text-slate-800">{totalQuantity} pc{totalQuantity === 1 ? '' : 's'}</p></div>
+          <div className="min-w-0 px-2 py-3 text-center sm:px-4"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Order value</p><p className="mt-1 break-words text-xs font-bold text-slate-800">₹{order.grand_total.toFixed(2)}</p></div>
         </div>
       </section>
 
@@ -215,7 +215,7 @@ export default async function OrderDetailPage({
                       ))}
                     </ul>
                   </div>
-                  <div className="shrink-0 text-right"><p className="text-sm font-bold text-slate-950">₹{line.total.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-slate-400">Line total</p></div>
+                  <div className="shrink-0 text-right"><p className="text-sm font-bold text-slate-950">₹{line.total.toFixed(2)}</p><p className="mt-0.5 text-[9px] text-slate-400">Line total</p></div>
                 </div>
               );
             })}

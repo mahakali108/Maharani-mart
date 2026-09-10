@@ -65,22 +65,22 @@ export default async function SalesmanDashboardPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card className="p-4">
           <Store className="h-5 w-5 text-primary-600" />
-          <p className="mt-2 text-2xl font-semibold text-ink-950">{assignedRetailers ?? 0}</p>
+          <p className="mt-2 break-words text-2xl font-semibold text-ink-950">{assignedRetailers ?? 0}</p>
           <p className="text-xs text-ink-500">Active Retailers</p>
         </Card>
         <Card className="p-4">
           <ClipboardList className="h-5 w-5 text-primary-600" />
-          <p className="mt-2 text-2xl font-semibold text-ink-950">{todayOrders.length}</p>
+          <p className="mt-2 break-words text-2xl font-semibold text-ink-950">{todayOrders.length}</p>
           <p className="text-xs text-ink-500">Orders Collected</p>
         </Card>
         <Card className="p-4">
           <Users className="h-5 w-5 text-primary-600" />
-          <p className="mt-2 text-2xl font-semibold text-ink-950">{todayVisits ?? 0}</p>
+          <p className="mt-2 break-words text-2xl font-semibold text-ink-950">{todayVisits ?? 0}</p>
           <p className="text-xs text-ink-500">Visits Logged</p>
         </Card>
         <Card className="p-4">
           <ShoppingCart className="h-5 w-5 text-primary-600" />
-          <p className="mt-2 text-2xl font-semibold text-ink-950">₹{todayValue.toFixed(0)}</p>
+          <p className="mt-2 break-words text-2xl font-semibold text-ink-950">₹{todayValue.toFixed(0)}</p>
           <p className="text-xs text-ink-500">Order Value Today</p>
         </Card>
       </div>
@@ -99,7 +99,7 @@ export default async function SalesmanDashboardPage() {
         </div>
       </Card>
 
-      <Card className="flex items-center justify-between">
+      <Card className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-ink-500">Orders awaiting delivery</p>
           <p className="mt-1 text-xl font-semibold text-ink-950">{deliveries ?? 0}</p>

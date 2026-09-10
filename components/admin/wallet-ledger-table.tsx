@@ -51,8 +51,8 @@ export function WalletLedgerTable({ ledger, retailerId }: { ledger: LedgerRow[];
   return (
     <div className="space-y-3">
       {error ? <p className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-700">{error}</p> : null}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="table-scroll">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
             <tr>
               <th className="px-4 py-2">Date</th>
