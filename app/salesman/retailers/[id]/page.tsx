@@ -94,7 +94,7 @@ export default async function SalesmanRetailerDetailPage({ params }: { params: {
         </dl>
       </Card>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card className="p-3">
           <p className="text-xs text-ink-400">Credit limit</p>
           <p className="mt-1 text-sm font-semibold text-ink-900">{retailer.credit_limit > 0 ? `₹${retailer.credit_limit.toFixed(2)}` : 'Not set'}</p>
@@ -119,12 +119,12 @@ export default async function SalesmanRetailerDetailPage({ params }: { params: {
         ) : (
           <div className="divide-y divide-ink-100">
             {recentOrders.map((order) => (
-              <Link key={order.id} href={`/salesman/orders/${order.id}`} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="font-mono text-sm font-medium text-ink-900">{order.order_number}</p>
-                  <p className="text-xs text-ink-400">{formatIndiaDateTime(order.placed_at)}{order.collected_by === user.id ? ' · Collected by you' : ''}</p>
+              <Link key={order.id} href={`/salesman/orders/${order.id}`} className="flex min-w-0 items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="break-all font-mono text-sm font-medium text-ink-900">{order.order_number}</p>
+                  <p className="break-words text-xs text-ink-400">{formatIndiaDateTime(order.placed_at)}{order.collected_by === user.id ? ' · Collected by you' : ''}</p>
                 </div>
-                <div className="text-right">
+                <div className="shrink-0 text-right">
                   <p className="text-sm font-semibold text-ink-900">₹{order.grand_total.toFixed(2)}</p>
                   <p className="text-xs capitalize text-ink-400">{order.status}</p>
                 </div>

@@ -95,7 +95,7 @@ function OrderList({ orders }: { orders: OrderRow[] }) {
     <div className="space-y-2">
       {orders.map((o) => (
         <Link key={o.id} href={`/salesman/orders/${o.id}`}>
-          <Card className="flex items-center justify-between p-4">
+          <Card className="flex min-w-0 flex-wrap items-center justify-between gap-3 p-4">
             <div>
               <p className="font-mono text-sm font-medium text-ink-900">{o.order_number}</p>
               <p className="text-xs text-ink-500">{o.retailers?.shop_name}</p>

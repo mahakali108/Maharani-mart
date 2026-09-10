@@ -95,38 +95,41 @@ export default async function InvoicePage({ params }: { params: { id: string } }
       </div>
 
       <div className="rounded-2xl border border-ink-100 bg-white p-6 print:rounded-none print:border-0 print:p-0 sm:p-8">
-        <div className="flex items-start justify-between border-b border-ink-100 pb-4">
-          <div>
-            <p className="text-lg font-semibold text-ink-950">{company.name}</p>
-            <p className="text-xs text-ink-500">{company.address}</p>
-            <p className="text-xs text-ink-500">GSTIN: {company.gstin}</p>
-            <p className="text-xs text-ink-500">{company.phone}</p>
+        <div className="flex min-w-0 items-start justify-between gap-3 border-b border-ink-100 pb-4">
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-lg font-semibold text-ink-950">{company.name}</p>
+            <p className="break-words text-xs text-ink-500">{company.address}</p>
+            <p className="break-words text-xs text-ink-500">GSTIN: {company.gstin}</p>
+            <p className="break-words text-xs text-ink-500">{company.phone}</p>
           </div>
-          <div className="text-right">
+          <div className="min-w-0 shrink-0 text-right">
             <p className="text-sm font-semibold uppercase tracking-wide text-primary-600">Tax Invoice</p>
-            <p className="font-mono text-sm text-ink-900">{order.order_number}</p>
-            <p className="text-xs text-ink-500">
+            <p className="break-all font-mono text-sm text-ink-900">{order.order_number}</p>
+            <p className="break-words text-xs text-ink-500">
               {formatIndiaDateTime(order.placed_at)}
             </p>
           </div>
         </div>
 
-        <div className="mt-4 border-b border-ink-100 pb-4">
+        <div className="mt-4 min-w-0 border-b border-ink-100 pb-4">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Billed to</p>
-          <p className="mt-1 text-sm font-semibold text-ink-900">{retailer?.shop_name}</p>
-          <p className="text-xs text-ink-500">{retailer?.address ?? '—'}</p>
-          {retailer?.areas?.name ? <p className="text-xs text-ink-500">{retailer.areas.name}</p> : null}
-          {retailer?.gstin ? <p className="text-xs text-ink-500">GSTIN: {retailer.gstin}</p> : null}
+          <p className="mt-1 break-words text-sm font-semibold text-ink-900">{retailer?.shop_name}</p>
+          <p className="break-words text-xs text-ink-500">{retailer?.address ?? '—'}</p>
+          {retailer?.areas?.name ? <p className="break-words text-xs text-ink-500">{retailer.areas.name}</p> : null}
+          {retailer?.gstin ? <p className="break-words text-xs text-ink-500">GSTIN: {retailer.gstin}</p> : null}
         </div>
 
-        <table className="mt-4 w-full text-sm">
+        {/* On phones the line-item table scrolls inside its own container so the
+            page never grows wider than the screen; print output is unchanged. */}
+        <div className="table-scroll mt-4 print:overflow-visible">
+          <table className="w-full min-w-[560px] text-sm print:min-w-0">
           <thead>
             <tr className="border-b border-ink-100 text-left text-xs uppercase tracking-wide text-ink-400">
-              <th className="py-2 font-medium">Item</th>
-              <th className="py-2 font-medium">Qty</th>
-              <th className="py-2 text-right font-medium">Unit Price</th>
-              <th className="py-2 text-right font-medium">GST %</th>
-              <th className="py-2 text-right font-medium">Total</th>
+              <th className="py-2 pr-3 font-medium">Item</th>
+              <th className="py-2 pr-3 font-medium">Qty</th>
+              <th className="py-2 pl-3 text-right font-medium">Unit Price</th>
+              <th className="py-2 pl-3 text-right font-medium">GST %</th>
+              <th className="py-2 pl-3 text-right font-medium">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-50">
@@ -162,7 +165,8 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
 
         <p className="mt-2 text-[10px] leading-4 text-ink-400">
           Each line is billed per piece at the retail piece rate shown. Rates are GST-inclusive, and each line

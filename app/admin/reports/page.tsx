@@ -212,11 +212,11 @@ function ReportTable({ title, rows }: { title: string; rows: { label: string; to
       ) : (
         <ul className="space-y-1.5">
           {rows.map((r) => (
-            <li key={r.label} className="flex justify-between text-sm">
-              <span className="text-ink-700">
+            <li key={r.label} className="flex min-w-0 justify-between gap-3 text-sm">
+              <span className="min-w-0 break-words text-ink-700">
                 {r.label} <span className="text-xs text-ink-400">({r.count})</span>
               </span>
-              <span className="font-medium text-ink-900">₹{r.total.toFixed(2)}</span>
+              <span className="shrink-0 font-medium text-ink-900">₹{r.total.toFixed(2)}</span>
             </li>
           ))}
         </ul>

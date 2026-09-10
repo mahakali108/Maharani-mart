@@ -3,7 +3,7 @@ import { ShieldAlert } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
 import { Button } from '@/components/ui/button';
 
-export const metadata: Metadata = { title: 'Not authorized — Maa Kali B2B' };
+export const metadata: Metadata = { title: 'Not authorized — Maharani Traders' };
 
 export default function UnauthorizedPage() {
   return (

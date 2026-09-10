@@ -456,19 +456,19 @@ export default async function AdminDashboardPage({
           ) : (
             <ul className="divide-y divide-ink-100">
               {recentOrders.map((o) => (
-                <li key={o.id} className="flex items-center justify-between px-5 py-3 text-sm">
-                  <div>
+                <li key={o.id} className="flex min-w-0 items-center justify-between gap-3 px-5 py-3 text-sm">
+                  <div className="min-w-0">
                     <Link
                       href={`/admin/orders/${o.id}`}
                       className="font-mono text-xs font-medium text-ink-900 hover:text-primary-600"
                     >
                       {o.order_number}
                     </Link>
-                    <p className="text-xs text-ink-400">
+                    <p className="break-words text-xs text-ink-400">
                       {o.retailer_name ?? 'Unknown'} · {formatIndiaDateTime(o.placed_at)}
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <p className="font-medium text-ink-900">₹{o.grand_total.toFixed(2)}</p>
                     <StatusBadge status={o.status} />
                   </div>
@@ -490,17 +490,17 @@ export default async function AdminDashboardPage({
           ) : (
             <ul className="divide-y divide-ink-100">
               {topProducts.map((p, idx) => (
-                <li key={p.product_id} className="flex items-center justify-between px-5 py-3 text-sm">
-                  <div className="flex items-center gap-3">
+                <li key={p.product_id} className="flex min-w-0 items-center justify-between gap-3 px-5 py-3 text-sm">
+                  <div className="flex min-w-0 items-center gap-3">
                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-600">
                       {idx + 1}
                     </span>
                     <div>
-                      <p className="font-medium text-ink-900">{p.product_name}</p>
+                      <p className="break-words font-medium text-ink-900">{p.product_name}</p>
                       <p className="text-xs text-ink-400">{p.total_qty} cases sold</p>
                     </div>
                   </div>
-                  <p className="font-semibold text-ink-900">₹{p.total_revenue.toFixed(2)}</p>
+                  <p className="shrink-0 break-words font-semibold text-ink-900">₹{p.total_revenue.toFixed(2)}</p>
                 </li>
               ))}
             </ul>
@@ -524,9 +524,9 @@ export default async function AdminDashboardPage({
           </div>
           <ul className="divide-y divide-ink-100">
             {lowStock.slice(0, 5).map((p) => (
-              <li key={p.product_id} className="flex items-center justify-between px-5 py-2.5 text-sm">
-                <span className="text-ink-700">{p.product_name}</span>
-                <span className="flex items-center gap-2">
+              <li key={p.product_id} className="flex min-w-0 items-center justify-between gap-3 px-5 py-2.5 text-sm">
+                <span className="min-w-0 break-words text-ink-700">{p.product_name}</span>
+                <span className="flex shrink-0 items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${p.stock_status === 'out_of_stock' ? 'bg-primary-50 text-primary-700' : 'bg-amber-50 text-amber-700'}`}>
                     {p.stock_status === 'out_of_stock' ? 'Out of stock' : 'Low stock'}
                   </span>
@@ -558,8 +558,8 @@ export default async function AdminDashboardPage({
         ) : (
           <ul className="divide-y divide-ink-100">
             {activity.map((a) => (
-              <li key={a.id} className="flex items-center justify-between px-5 py-3 text-sm">
-                <span className="text-ink-700">
+              <li key={a.id} className="flex min-w-0 items-center justify-between gap-3 px-5 py-3 text-sm">
+                <span className="min-w-0 break-words text-ink-700">
                   <span className="font-medium text-ink-900">{a.changed_by_name ?? 'System'}</span>{' '}
                   {a.action === 'INSERT' || a.action === 'insert'
                     ? 'added'
@@ -568,7 +568,7 @@ export default async function AdminDashboardPage({
                       : 'removed'}{' '}
                   {TABLE_LABELS[a.table_name] ?? a.table_name}
                 </span>
-                <span className="text-xs text-ink-400">{formatIndiaDateTime(a.created_at)}</span>
+                <span className="shrink-0 text-xs text-ink-400">{formatIndiaDateTime(a.created_at)}</span>
               </li>
             ))}
           </ul>
@@ -622,10 +622,10 @@ function StatCard({
   href?: string;
 }) {
   const content = (
-    <div className="flex items-start justify-between">
-      <div>
-        <p className="text-xs text-ink-500">{label}</p>
-        <p className={`mt-1 text-xl font-semibold ${warn ? 'text-primary-600' : accent ? 'text-ink-950' : 'text-ink-950'}`}>
+    <div className="flex min-w-0 items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="break-words text-xs text-ink-500">{label}</p>
+        <p className={`mt-1 break-words text-xl font-semibold ${warn ? 'text-primary-600' : accent ? 'text-ink-950' : 'text-ink-950'}`}>
           {value}
         </p>
         {hint ? <p className="mt-0.5 text-[11px] text-ink-400">{hint}</p> : null}

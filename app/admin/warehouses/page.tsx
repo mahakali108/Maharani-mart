@@ -56,8 +56,8 @@ export default async function WarehousesPage() {
           body="Add your first warehouse above — inventory and orders need at least one warehouse to dispatch from."
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <table className="w-full text-sm">
+        <Card className="table-scroll p-0">
+          <table className="w-full min-w-[600px] text-sm">
             <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
               <tr>
                 <th className="px-5 py-3 font-medium">Name</th>

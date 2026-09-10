@@ -148,15 +148,15 @@ export default async function SalesmanRetailersPage({ searchParams }: { searchPa
                 </div>
 
                 <div className="mt-3 grid grid-cols-2 gap-2 border-t border-ink-100 pt-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-wide text-ink-400">Credit limit</p>
-                    <p className="text-xs font-medium text-ink-800">
+                    <p className="break-words text-xs font-medium text-ink-800">
                       {retailer.credit_limit > 0 ? `₹${retailer.credit_limit.toFixed(2)}` : 'Not set'}
                     </p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-wide text-ink-400">Outstanding</p>
-                    <p className="text-xs font-medium text-ink-800">₹{retailer.outstanding_balance.toFixed(2)}</p>
+                    <p className="break-words text-xs font-medium text-ink-800">₹{retailer.outstanding_balance.toFixed(2)}</p>
                   </div>
                 </div>
 

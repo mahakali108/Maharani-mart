@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { ForgotPasswordForm } from '@/components/auth/forgot-password-form';
 
-export const metadata: Metadata = { title: 'Forgot password — Maa Kali B2B' };
+export const metadata: Metadata = { title: 'Forgot password — Maharani Traders' };
 
 export default function ForgotPasswordPage() {
   return (
@@ -11,8 +11,8 @@ export default function ForgotPasswordPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-primary-700/30 via-transparent to-transparent" />
         <div className="relative">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-600 text-lg font-bold">MK</div>
-            <span className="text-lg font-semibold">Maa Kali B2B</span>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-600 text-lg font-bold">MT</div>
+            <span className="text-lg font-semibold">Maharani Traders</span>
           </div>
         </div>
         <div className="relative space-y-3">
@@ -28,8 +28,8 @@ export default function ForgotPasswordPage() {
         <div className="mx-auto w-full max-w-sm animate-fade-in">
           <div className="mb-8 lg:hidden">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white font-bold">MK</div>
-              <span className="text-lg font-semibold text-ink-900">Maa Kali B2B</span>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white font-bold">MT</div>
+              <span className="text-lg font-semibold text-ink-900">Maharani Traders</span>
             </div>
           </div>
 

@@ -101,12 +101,12 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
         </CardHeader>
         <div className="space-y-2">
           {orderLines.map((line) => (
-            <div key={line.key} className="flex justify-between text-sm">
-              <span className="text-ink-700">
+            <div key={line.key} className="flex min-w-0 justify-between gap-3 text-sm">
+              <span className="min-w-0 break-words text-ink-700">
                 {line.first.products?.name} ({line.first.product_packs?.pack_name}) ×{' '}
                 {formatQuantitySummary(line.quantity)}
               </span>
-              <span className="font-medium text-ink-900">₹{line.total.toFixed(2)}</span>
+              <span className="shrink-0 font-medium text-ink-900">₹{line.total.toFixed(2)}</span>
             </div>
           ))}
         </div>
@@ -123,7 +123,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
           </CardHeader>
           <ul className="space-y-2 text-sm">
             {history.map((h) => (
-              <li key={h.id} className="flex justify-between">
+              <li key={h.id} className="flex min-w-0 justify-between gap-3">
                 <span className="text-ink-700">{h.status.charAt(0).toUpperCase() + h.status.slice(1)}</span>
                 <span className="text-xs text-ink-400">{formatIndiaDateTime(h.created_at)}</span>
               </li>

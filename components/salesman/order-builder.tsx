@@ -164,13 +164,13 @@ export function SalesmanOrderBuilder({
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl bg-ink-50 p-3">
+          <div className="min-w-0 rounded-xl bg-ink-50 p-3">
             <p className="text-xs text-ink-400">Outstanding</p>
-            <p className="mt-0.5 font-semibold text-ink-900">₹{credit.outstanding.toFixed(2)}</p>
+            <p className="mt-0.5 break-words font-semibold text-ink-900">₹{credit.outstanding.toFixed(2)}</p>
           </div>
-          <div className="rounded-xl bg-ink-50 p-3">
+          <div className="min-w-0 rounded-xl bg-ink-50 p-3">
             <p className="text-xs text-ink-400">Available credit</p>
-            <p className="mt-0.5 font-semibold text-ink-900">
+            <p className="mt-0.5 break-words font-semibold text-ink-900">
               {availableCredit === null ? 'Not configured' : `₹${availableCredit.toFixed(2)}`}
             </p>
           </div>

@@ -291,17 +291,17 @@ export default async function CheckoutPage() {
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wallet Ledger (Real-time)</p>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-slate-500">Limit</p>
-                    <p className="font-bold text-slate-900">{formatPaise(walletSummary.creditLimitPaise)}</p>
+                    <p className="break-words font-bold text-slate-900">{formatPaise(walletSummary.creditLimitPaise)}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-slate-500">Outstanding</p>
-                    <p className="font-bold text-slate-900">{formatPaise(walletSummary.outstandingPaise)}</p>
+                    <p className="break-words font-bold text-slate-900">{formatPaise(walletSummary.outstandingPaise)}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-slate-500">Available</p>
-                    <p className={`font-bold ${walletSummary.availablePaise < 0 ? 'text-primary-600' : 'text-emerald-600'}`}>
+                    <p className={`break-words font-bold ${walletSummary.availablePaise < 0 ? 'text-primary-600' : 'text-emerald-600'}`}>
                       {formatPaise(walletSummary.availablePaise)}
                     </p>
                   </div>

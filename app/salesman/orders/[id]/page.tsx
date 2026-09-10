@@ -83,7 +83,7 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
         </CardHeader>
         <ul className="space-y-1.5 text-sm">
           {orderLines.map((line) => (
-            <li key={line.key} className="flex justify-between">
+            <li key={line.key} className="flex min-w-0 justify-between gap-3">
               <span className="text-ink-700">
                 {line.first.products?.name} ({line.first.product_packs?.pack_name})
               </span>

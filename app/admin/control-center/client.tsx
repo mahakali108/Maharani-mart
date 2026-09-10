@@ -236,7 +236,7 @@ export function ControlCenterClient({
 
         {/* Users Table */}
         <div className="overflow-x-auto rounded-xl border border-ink-100 bg-white">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[680px] text-left text-sm">
             <thead>
               <tr className="border-b border-ink-100 bg-ink-50">
                 <th className="px-4 py-3 font-medium text-ink-600">Name</th>
@@ -319,7 +319,7 @@ export function ControlCenterClient({
         {showAddForm && (
           <div className="rounded-xl border border-ink-100 bg-white p-4">
             <h4 className="mb-3 text-sm font-semibold text-ink-900">New Feature</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input
                 placeholder="Key (e.g. my_feature)"
                 value={newFeature.key}
@@ -544,7 +544,7 @@ export function ControlCenterClient({
 
         {/* All Users Access Table */}
         <div className="overflow-x-auto rounded-xl border border-ink-100 bg-white">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[680px] text-left text-sm">
             <thead>
               <tr className="border-b border-ink-100 bg-ink-50">
                 <th className="px-4 py-3 font-medium text-ink-600">User</th>

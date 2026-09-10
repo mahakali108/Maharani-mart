@@ -112,8 +112,8 @@ export default async function AdminWalletsPage({
         <CardHeader>
           <CardTitle>Retailers ({retailers?.length ?? 0})</CardTitle>
         </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-scroll overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
               <tr>
                 <th className="px-5 py-2 font-medium">Shop</th>

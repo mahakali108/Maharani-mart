@@ -120,7 +120,7 @@ export default async function InventoryPage() {
           ) : (
             <ul className="divide-y divide-ink-100">
               {movements.map((m) => (
-                <li key={m.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
+                <li key={m.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-ink-900">{m.products?.name ?? 'Unknown product'}</p>
                     <p className="text-xs text-ink-400">
@@ -151,8 +151,8 @@ export default async function InventoryPage() {
           ) : (
             <ul className="divide-y divide-ink-100">
               {grns.map((g) => (
-                <li key={g.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
-                  <div>
+                <li key={g.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm">
+                  <div className="min-w-0 break-words">
                     <Link href={`/admin/inventory/grn/${g.id}`} className="font-mono font-medium text-ink-900 hover:text-primary-600">
                       {g.grn_number}
                     </Link>
@@ -179,8 +179,8 @@ export default async function InventoryPage() {
           </CardHeader>
           <ul className="divide-y divide-primary-100">
             {expiredBatches.slice(0, 5).map((b) => (
-              <li key={b.batch_id} className="flex items-center justify-between py-2 text-sm">
-                <span className="font-medium text-ink-900">
+              <li key={b.batch_id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                <span className="min-w-0 break-words font-medium text-ink-900">
                   {b.product_name} <span className="font-mono text-xs text-ink-400">{b.batch_number}</span>
                 </span>
                 <span className="text-ink-600">{b.warehouse_name} · {b.current_quantity} units expired</span>

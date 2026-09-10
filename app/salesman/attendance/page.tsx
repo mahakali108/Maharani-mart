@@ -55,7 +55,7 @@ export default async function AttendancePage() {
         ) : (
           <div className="space-y-2">
             {history.map((h) => (
-              <Card key={h.id} className="flex items-center justify-between p-3">
+              <Card key={h.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 p-3">
                 <p className="text-sm font-medium text-ink-900">
                   {formatIndiaDate(h.work_date)}
                 </p>

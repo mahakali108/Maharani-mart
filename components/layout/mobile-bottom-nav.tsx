@@ -27,7 +27,7 @@ export function MobileBottomNav({
         'fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t bg-white/95 backdrop-blur-xl lg:hidden',
         marketplace
           ? 'h-[calc(4.25rem+env(safe-area-inset-bottom))] border-slate-200 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(15,23,42,0.08)]'
-          : 'h-16 border-ink-100'
+          : 'h-[calc(4rem+env(safe-area-inset-bottom))] border-ink-100 pb-[env(safe-area-inset-bottom)]'
       )}
       aria-label="Primary navigation"
     >

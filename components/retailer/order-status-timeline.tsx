@@ -86,8 +86,8 @@ export function OrderStatusTimeline({ status, history }: { status: TrackedStatus
               <li key={stage.key} className="relative z-10 flex flex-col items-center px-1 text-center">
                 <span className={`flex h-10 w-10 items-center justify-center rounded-full border-4 border-white shadow-sm ${reached ? isCurrent ? 'bg-primary-600 text-white ring-2 ring-primary-100' : 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Icon className="h-4 w-4" /></span>
                 <p className={`mt-2 text-[10px] font-bold ${reached ? 'text-slate-800' : 'text-slate-400'}`}>{stage.label}</p>
-                <p className="mt-0.5 text-[8px] leading-3 text-slate-400">{reached && event ? formatIndiaRelativeDateTime(event.created_at) : 'Awaiting'}</p>
-                {reached && event?.note ? <p className="mt-1 line-clamp-2 text-[8px] leading-3 text-slate-500">{event.note}</p> : null}
+                <p className="mt-0.5 text-[9px] leading-3 text-slate-400">{reached && event ? formatIndiaRelativeDateTime(event.created_at) : 'Awaiting'}</p>
+                {reached && event?.note ? <p className="mt-1 line-clamp-2 text-[9px] leading-3 text-slate-500">{event.note}</p> : null}
               </li>
             );
           })}

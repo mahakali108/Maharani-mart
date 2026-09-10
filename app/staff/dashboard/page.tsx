@@ -59,7 +59,7 @@ export default async function StaffDashboardPage() {
             return (
               <Card key={metric.label} className="p-4">
                 <Icon className="h-5 w-5 text-primary-600" />
-                <p className="mt-2 text-2xl font-semibold text-ink-950">{metric.value}</p>
+                <p className="mt-2 break-words text-2xl font-semibold text-ink-950">{metric.value}</p>
                 <p className="text-xs text-ink-500">{metric.label}</p>
               </Card>
             );

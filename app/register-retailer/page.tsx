@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { RegisterRetailerForm } from '@/components/auth/register-retailer-form';
 
-export const metadata: Metadata = { title: 'Register your shop — Maa Kali B2B' };
+export const metadata: Metadata = { title: 'Register your shop — Maharani Traders' };
 
 export default async function RegisterRetailerPage() {
   const supabase = createClient();
@@ -20,9 +20,9 @@ export default async function RegisterRetailerPage() {
       <div className="mx-auto max-w-2xl animate-fade-in">
         <div className="mb-8 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white font-bold">
-            MK
+            MT
           </div>
-          <span className="text-lg font-semibold text-ink-900">Maa Kali B2B</span>
+          <span className="text-lg font-semibold text-ink-900">Maharani Traders</span>
         </div>
 
         <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-premium sm:p-10">

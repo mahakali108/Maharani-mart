@@ -85,7 +85,7 @@ export default async function CatalogPage({
             body="Add your first brand above — products can optionally be linked to one."
           />
         ) : (
-          <Card className="overflow-hidden p-0">
+          <Card className="table-scroll p-0">
             <table className="w-full text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                 <tr>
@@ -139,7 +139,7 @@ export default async function CatalogPage({
             body="Add your first category above — products need a category to appear correctly in the retailer catalog."
           />
         ) : (
-          <Card className="overflow-hidden p-0">
+          <Card className="table-scroll p-0">
             <table className="w-full text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                 <tr>
