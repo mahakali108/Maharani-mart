@@ -625,7 +625,8 @@ describe('migration hygiene', () => {
     expect(existsSync(join(migrationsDir, '0028_product_pack_gallery.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0029_retailer_wallet_ledger.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0030_wallet_rpc_security.sql'))).toBe(true);
-    expect(migrations[migrations.length - 1]).toBe('0030_wallet_rpc_security.sql');
+    expect(existsSync(join(migrationsDir, '0031_wallet_outstanding_opening_baseline.sql'))).toBe(true);
+    expect(migrations[migrations.length - 1]).toBe('0031_wallet_outstanding_opening_baseline.sql');
   });
 
   it('keeps the case + loose migration additive — no destructive statement, no RLS change', () => {

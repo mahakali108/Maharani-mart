@@ -38,10 +38,12 @@ export function WalletLimitForm({
       setError('Reason must be at least 5 characters');
       return;
     }
+    let confirmBelowOutstanding = false;
     if (limitNum < currentOutstanding && !allowOverdueState) {
-      if (!confirm(`New limit ₹${limitNum.toFixed(2)} is below current outstanding ₹${currentOutstanding.toFixed(2)}. This will make account over-limit. Continue?`)) {
+      if (!confirm(`New limit ₹${limitNum.toFixed(2)} is below current outstanding ₹${currentOutstanding.toFixed(2)}. This will make the account over-limit and block new credit orders. Continue?`)) {
         return;
       }
+      confirmBelowOutstanding = true;
     }
     setError(null);
     setMessage(null);
@@ -49,6 +51,7 @@ export function WalletLimitForm({
       const result = await setCreditLimitAction(retailerId, limitNum, reason.trim(), {
         allowOverdue: allowOverdueState,
         overdueLimitRupees: Number(overdueLimitState) || 0,
+        confirmBelowOutstanding,
       });
       if ('error' in result) setError(result.error);
       else {

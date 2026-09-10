@@ -25,6 +25,7 @@ import { ProductRail } from '@/components/retailer/product-rail';
 import { RecentlyViewedRail } from '@/components/retailer/recently-viewed';
 import { loadFavoriteIds } from '@/lib/retailer/catalog';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
+import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { getFrequentlyOrderedCards } from '@/lib/retailer/personalization';
 
 interface CartItemDetail {
@@ -75,7 +76,7 @@ export default async function CartPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: cartData }, { data: retailer }, favoriteIds] = await Promise.all([
+  const [{ data: cartData }, { data: retailer }, favoriteIds, walletSummary] = await Promise.all([
     supabase
       .from('cart_items')
       .select(
@@ -89,6 +90,7 @@ export default async function CartPage() {
       .eq('id', user.id)
       .maybeSingle<{ area_id: string; credit_limit: number; outstanding_balance: number }>(),
     loadFavoriteIds(supabase, user.id),
+    getRetailerWalletSummary(supabase, user.id),
   ]);
 
   const items = (cartData ?? []) as unknown as CartItemDetail[];
@@ -279,13 +281,11 @@ export default async function CartPage() {
             orderableCount={availableCount}
           />
 
-          {retailer ? (
-            <CreditSummary
-              creditLimit={retailer.credit_limit}
-              outstandingBalance={retailer.outstanding_balance}
-              orderImpact={grandTotal}
-            />
-          ) : null}
+          <CreditSummary
+            creditLimit={walletSummary.creditLimitRupees}
+            outstandingBalance={walletSummary.outstandingRupees}
+            orderImpact={grandTotal}
+          />
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="space-y-3">

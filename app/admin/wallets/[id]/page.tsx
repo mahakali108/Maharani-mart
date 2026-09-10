@@ -8,6 +8,7 @@ import { WalletPaymentForm } from '@/components/admin/wallet-payment-form';
 import { WalletAdjustmentForm } from '@/components/admin/wallet-adjustment-form';
 import { WalletLimitForm } from '@/components/admin/wallet-limit-form';
 import { rupeesToPaise, paiseToRupees } from '@/lib/retailer/wallet';
+import { computeAvailablePaise, computeOutstandingPaise, computeOverduePaise } from '@/lib/retailer/wallet-math';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface RetailerDetail {
@@ -23,6 +24,7 @@ interface CreditAccountDetail {
   id: string;
   retailer_id: string;
   credit_limit_paise: number;
+  opening_outstanding_paise: number;
   allow_overdue: boolean;
   overdue_limit_paise: number;
   created_at: string;
@@ -67,7 +69,7 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
         .maybeSingle<RetailerDetail>(),
       supabase
         .from('retailer_credit_accounts')
-        .select('id, retailer_id, credit_limit_paise, allow_overdue, overdue_limit_paise, created_at, updated_at, notes')
+        .select('id, retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue, overdue_limit_paise, created_at, updated_at, notes')
         .eq('retailer_id', params.id)
         .maybeSingle<CreditAccountDetail>(),
       supabase
@@ -102,14 +104,18 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
     .filter((l) => !l.is_reversed && l.direction === 'credit' && l.transaction_type !== 'CREDIT_LIMIT_CHANGE')
     .reduce((sum, l) => sum + Number(l.amount_paise), 0);
 
-  const legacyOutstandingPaise = rupeesToPaise(retailer.outstanding_balance);
+  // Authoritative: outstanding = frozen opening baseline + ledger delta. The
+  // legacy mirror column is only the opening fallback before the credit account
+  // row exists (a brand-new retailer with no ledger entries).
+  const openingOutstandingPaise =
+    creditAccount?.opening_outstanding_paise ?? rupeesToPaise(retailer.outstanding_balance);
   const limitPaise = creditAccount?.credit_limit_paise ?? rupeesToPaise(retailer.credit_limit);
-  const outstandingPaise = legacyOutstandingPaise + ledgerDebit - ledgerCredit;
-  const availablePaise = limitPaise - outstandingPaise;
+  const outstandingPaise = computeOutstandingPaise(openingOutstandingPaise, ledgerDebit, ledgerCredit);
+  const availablePaise = computeAvailablePaise(limitPaise, outstandingPaise);
 
-  const totalUsed = paiseToRupees(ledgerDebit + legacyOutstandingPaise);
+  const totalUsed = paiseToRupees(computeOutstandingPaise(openingOutstandingPaise, ledgerDebit, 0));
   const totalPaidBack = paiseToRupees(ledgerCredit);
-  const overduePaise = outstandingPaise > limitPaise ? outstandingPaise - limitPaise : 0;
+  const overduePaise = computeOverduePaise(limitPaise, outstandingPaise);
 
   return (
     <div className="space-y-6">

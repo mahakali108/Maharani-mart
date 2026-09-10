@@ -1,5 +1,6 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
+import { reversalIdempotencyKey } from '@/lib/retailer/wallet-math';
 
 export async function reverseOrderWalletDebit(orderId: string, retailerId: string, reason: string, createdBy: string | null) {
   const supabase = createClient();
@@ -21,7 +22,9 @@ export async function reverseOrderWalletDebit(orderId: string, retailerId: strin
     .eq('retailer_id', retailerId)
     .maybeSingle<{ id: string }>();
 
-  const idempotencyKey = `reversal:${orderId}:${Date.now()}`;
+  // Deterministic key: a retried cancellation maps to the same key and the
+  // ledger's unique idempotency_key constraint prevents a duplicate reversal.
+  const idempotencyKey = reversalIdempotencyKey(original.id);
 
   const { error } = await supabase.from('retailer_wallet_ledger').insert({
     retailer_id: retailerId,
@@ -43,7 +46,12 @@ export async function reverseOrderWalletDebit(orderId: string, retailerId: strin
     },
   } as never);
 
-  if (error) return { error: error.message };
+  if (error) {
+    // A concurrent/retried reversal with the same deterministic key already
+    // created the entry — treat as success rather than double-reversing.
+    if (error.code === '23505') return { success: true };
+    return { error: error.message };
+  }
 
   await supabase
     .from('retailer_wallet_ledger')

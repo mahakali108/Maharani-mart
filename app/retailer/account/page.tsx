@@ -22,6 +22,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { logoutAction } from '@/lib/auth/actions';
 import { CreditSummary } from '@/components/retailer/credit-summary';
+import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 
 interface RetailerAccountRow {
   shop_name: string;
@@ -53,7 +54,7 @@ export default async function RetailerAccountPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: retailer }, { data: profile }, { count: orderCount }, { count: unreadCount }] =
+  const [{ data: retailer }, { data: profile }, { count: orderCount }, { count: unreadCount }, walletSummary] =
     await Promise.all([
       supabase
         .from('retailers')
@@ -67,6 +68,7 @@ export default async function RetailerAccountPage() {
         .select('id', { count: 'exact', head: true })
         .eq('recipient_id', user.id)
         .eq('is_read', false),
+      getRetailerWalletSummary(supabase, user.id),
     ]);
 
   const shopName = retailer?.shop_name ?? user.fullName;
@@ -201,13 +203,11 @@ export default async function RetailerAccountPage() {
 
         <aside className="space-y-4 lg:sticky lg:top-36">
           <div id="wallet-credit" className="scroll-mt-36">
-            {retailer ? (
-              <CreditSummary
-                creditLimit={retailer.credit_limit}
-                outstandingBalance={retailer.outstanding_balance}
-                title="Wallet & credit"
-              />
-            ) : null}
+            <CreditSummary
+              creditLimit={walletSummary.creditLimitRupees}
+              outstandingBalance={walletSummary.outstandingRupees}
+              title="Wallet & credit"
+            />
           </div>
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">At a glance</p>

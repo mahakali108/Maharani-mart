@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { rupeesToPaise, paiseToRupees } from '@/lib/retailer/wallet';
+import { computeAvailablePaise, computeOutstandingPaise } from '@/lib/retailer/wallet-math';
 
 interface RetailerRow {
   id: string;
@@ -17,6 +18,7 @@ interface RetailerRow {
 interface CreditAccountRow {
   retailer_id: string;
   credit_limit_paise: number;
+  opening_outstanding_paise: number;
   allow_overdue: boolean;
 }
 
@@ -42,7 +44,7 @@ export default async function AdminWalletsPage({
     query.returns<RetailerRow[]>(),
     supabase
       .from('retailer_credit_accounts')
-      .select('retailer_id, credit_limit_paise, allow_overdue')
+      .select('retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue')
       .returns<CreditAccountRow[]>(),
   ]);
 
@@ -130,9 +132,13 @@ export default async function AdminWalletsPage({
                 const account = accountByRetailer.get(r.id);
                 const limitPaise = account?.credit_limit_paise ?? rupeesToPaise(r.credit_limit);
                 const ledgerAgg = ledgerByRetailer.get(r.id) ?? { debit: 0, credit: 0 };
-                const legacyOutstandingPaise = rupeesToPaise(r.outstanding_balance);
-                const outstandingPaise = legacyOutstandingPaise + ledgerAgg.debit - ledgerAgg.credit;
-                const availablePaise = limitPaise - outstandingPaise;
+                // Authoritative: outstanding = frozen opening baseline + ledger
+                // delta. The legacy mirror column is only used as the opening
+                // fallback when the credit account row hasn't been created yet
+                // (a brand-new retailer with no ledger entries).
+                const openingPaise = account?.opening_outstanding_paise ?? rupeesToPaise(r.outstanding_balance);
+                const outstandingPaise = computeOutstandingPaise(openingPaise, ledgerAgg.debit, ledgerAgg.credit);
+                const availablePaise = computeAvailablePaise(limitPaise, outstandingPaise);
                 const limitRupees = paiseToRupees(limitPaise);
                 const outstandingRupees = paiseToRupees(outstandingPaise);
                 const availableRupees = paiseToRupees(availablePaise);
@@ -190,9 +196,9 @@ export default async function AdminWalletsPage({
         </CardHeader>
         <div className="space-y-2 text-xs leading-5 text-ink-600">
           <p>
-            <strong>Outstanding balance</strong> = Total valid debit entries (ORDER_DEBIT, MANUAL_DEBIT) minus total valid
-            credit entries (PAYMENT_CREDIT, REFUND_CREDIT, MANUAL_CREDIT, ORDER_REVERSAL) + legacy outstanding_balance for
-            backward compatibility.
+            <strong>Outstanding balance</strong> = frozen opening balance (pre-wallet) + total valid debit entries
+            (ORDER_DEBIT, MANUAL_DEBIT, ADJUSTMENT) − total valid credit entries (PAYMENT_CREDIT, REFUND_CREDIT,
+            MANUAL_CREDIT, ORDER_REVERSAL, ADJUSTMENT). The opening balance is frozen once and never added twice.
           </p>
           <p>
             <strong>Available credit</strong> = Credit limit minus outstanding balance. Uses integer paise for all
