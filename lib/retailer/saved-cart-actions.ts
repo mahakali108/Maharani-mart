@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
+import { validatePackForCart } from '@/lib/retailer/cart-service';
 
 export type SavedCartActionResult = { error?: string } | { success: true; savedCartId?: string };
 
@@ -224,7 +225,18 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
   let skippedCount = 0;
   for (const item of typedSavedItems) {
     const pack = packById.get(item.pack_id);
+    // Cheap pre-filter (avoids an RPC round-trip per dead line), then the
+    // FULL validation every add path uses: active pack/product, CURRENT MOQ,
+    // and the piece-pricing engine (whole pieces, no unpriced loose
+    // remainder for case-only packs). A line that fails is counted and
+    // reported back — never silently dropped and never carried into the
+    // cart as an unorderable quantity.
     if (!pack || !pack.is_active || !pack.products?.is_active || item.quantity < pack.moq) {
+      skippedCount += 1;
+      continue;
+    }
+    const validationError = await validatePackForCart(supabase, item.pack_id, item.quantity);
+    if (validationError) {
       skippedCount += 1;
       continue;
     }

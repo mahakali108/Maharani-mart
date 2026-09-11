@@ -59,13 +59,14 @@ export async function saveAddressAction(formData: FormData): Promise<AddressActi
     pincode: value.pincode,
     is_default: value.isDefault ?? false,
   };
+  const updatePayload = { ...payload, updated_at: new Date().toISOString() };
 
   if (value.addressId) {
     // Ownership is re-checked by RLS (retailer_addresses_owner_update) and
     // the explicit .eq() below gives a clean error instead of a silent no-op.
     const { data, error } = await supabase
       .from('retailer_addresses')
-      .update(payload as unknown as never)
+      .update(updatePayload as unknown as never)
       .eq('id', value.addressId)
       .eq('retailer_id', user.id)
       .select('id')
