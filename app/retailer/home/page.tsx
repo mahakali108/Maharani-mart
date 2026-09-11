@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { Package, Search as SearchIcon, Sparkles } from 'lucide-react';
+import { ArrowDownCircle, BarChart3, BadgePercent, Package, RotateCcw, Search as SearchIcon, Sparkles, Wallet } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
 import { BrandCard, type BrandCardData } from '@/components/retailer/brand-card';
 import { CategoryCard, type CategoryCardData } from '@/components/retailer/category-card';
 import { ProductRail } from '@/components/retailer/product-rail';
@@ -51,9 +52,10 @@ export default async function RetailerHomePage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: retailer }, favoriteIds] = await Promise.all([
+  const [{ data: retailer }, favoriteIds, walletSummary] = await Promise.all([
     supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<RetailerRow>(),
     loadFavoriteIds(supabase, user.id),
+    getRetailerWalletSummary(supabase, user.id),
   ]);
 
   const nowIso = new Date().toISOString();
@@ -127,6 +129,57 @@ export default async function RetailerHomePage() {
   return (
     <div className="space-y-5 sm:space-y-7">
       <h1 className="sr-only">Maharani Traders — order everyday products by the piece</h1>
+
+      {/* Credit summary strip — real wallet numbers, one tap to the ledger. */}
+      <section
+        aria-label="Credit summary"
+        className="grid grid-cols-3 divide-x divide-slate-100 rounded-2xl border border-slate-200 bg-white shadow-sm"
+      >
+        <Link href="/retailer/account/ledger" className="min-w-0 p-3 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:p-4">
+          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+            <Wallet className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" /> <span className="truncate">Outstanding</span>
+          </span>
+          <span className="mt-1 block truncate text-sm font-bold tracking-tight text-slate-950 sm:text-base">
+            {formatPaise(walletSummary.outstandingPaise)}
+          </span>
+        </Link>
+        <Link href="/retailer/account/ledger" className="min-w-0 p-3 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:p-4">
+          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+            <ArrowDownCircle className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" /> <span className="truncate">Available credit</span>
+          </span>
+          <span className="mt-1 block truncate text-sm font-bold tracking-tight text-emerald-700 sm:text-base">
+            {walletSummary.hasConfiguredLimit ? formatPaise(walletSummary.availablePaise) : '—'}
+          </span>
+        </Link>
+        <Link href="/retailer/account/ledger" className="min-w-0 p-3 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:p-4">
+          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+            <BarChart3 className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" /> <span className="truncate">Credit limit</span>
+          </span>
+          <span className="mt-1 block truncate text-sm font-bold tracking-tight text-slate-950 sm:text-base">
+            {walletSummary.hasConfiguredLimit ? formatPaise(walletSummary.creditLimitPaise) : 'Not set'}
+          </span>
+        </Link>
+      </section>
+
+      {/* Quick actions — the four things retailers do most. */}
+      <nav aria-label="Quick actions" className="grid grid-cols-4 gap-2">
+        <Link href="/retailer/quick-order" className="flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-2.5 text-center shadow-sm transition hover:border-primary-200 hover:bg-primary-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><SearchIcon className="h-4 w-4" aria-hidden="true" /></span>
+          <span className="w-full truncate text-[9px] font-bold text-slate-700">Quick order</span>
+        </Link>
+        <Link href="/retailer/orders" className="flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-2.5 text-center shadow-sm transition hover:border-primary-200 hover:bg-primary-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><RotateCcw className="h-4 w-4" aria-hidden="true" /></span>
+          <span className="w-full truncate text-[9px] font-bold text-slate-700">Reorder</span>
+        </Link>
+        <Link href="/retailer/schemes" className="flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-2.5 text-center shadow-sm transition hover:border-primary-200 hover:bg-primary-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-700"><BadgePercent className="h-4 w-4" aria-hidden="true" /></span>
+          <span className="w-full truncate text-[9px] font-bold text-slate-700">Offers</span>
+        </Link>
+        <Link href="/retailer/reports" className="flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-2.5 text-center shadow-sm transition hover:border-primary-200 hover:bg-primary-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><BarChart3 className="h-4 w-4" aria-hidden="true" /></span>
+          <span className="w-full truncate text-[9px] font-bold text-slate-700">Reports</span>
+        </Link>
+      </nav>
 
       {/* Promotional banner carousel — only renders when there is a real active
          banner; the carousel component paints a soft light fallback otherwise. */}

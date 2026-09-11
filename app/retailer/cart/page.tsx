@@ -17,6 +17,7 @@ import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CartItemRow } from '@/components/retailer/cart-item-row';
+import { CartSaveControls } from '@/components/retailer/cart-save-controls';
 import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
 import { CartCheckoutBar } from '@/components/retailer/cart-checkout-bar';
 import { ClearCartButton } from '@/components/retailer/clear-cart-button';
@@ -212,6 +213,7 @@ export default async function CartPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <CartSaveControls itemCount={items.length} />
           <ClearCartButton itemCount={items.length} />
           <Link
             href="/retailer/catalog"

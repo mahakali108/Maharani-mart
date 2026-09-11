@@ -23,6 +23,8 @@ import { requireUser } from '@/lib/auth/session';
 import { logoutAction } from '@/lib/auth/actions';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
+import { computeProfileCompletion } from '@/lib/retailer/profile-completion';
+import { KeyRound, MapPinned, NotebookText, PieChart, Settings2, Folders } from 'lucide-react';
 
 interface RetailerAccountRow {
   shop_name: string;
@@ -39,6 +41,12 @@ interface ProfileContactRow {
 }
 
 const ACCOUNT_LINKS = [
+  { href: '/retailer/account/edit', label: 'Edit profile', body: 'Shop, owner and contact details', icon: NotebookText, tone: 'bg-sky-50 text-sky-700' },
+  { href: '/retailer/account/addresses', label: 'Address book', body: 'Saved delivery addresses for checkout', icon: MapPinned, tone: 'bg-teal-50 text-teal-700' },
+  { href: '/retailer/reports', label: 'Purchase reports', body: 'Monthly totals, GST, top products, statements', icon: PieChart, tone: 'bg-orange-50 text-orange-700' },
+  { href: '/retailer/cart/saved', label: 'Saved carts', body: 'Your reusable order lists', icon: Folders, tone: 'bg-lime-50 text-lime-700' },
+  { href: '/retailer/account/security', label: 'Security', body: 'Password, sessions and account requests', icon: KeyRound, tone: 'bg-rose-50 text-rose-700' },
+  { href: '/retailer/account/notification-preferences', label: 'Notification settings', body: 'Choose which updates you receive', icon: Settings2, tone: 'bg-fuchsia-50 text-fuchsia-700' },
   { href: '#wallet-credit', label: 'Wallet & credit', body: 'Available credit and outstanding balance', icon: WalletCards, tone: 'bg-emerald-50 text-emerald-700' },
   { href: '/retailer/account/ledger', label: 'Credit & ledger', body: 'Order activity on your account, with dates and values', icon: Scale, tone: 'bg-slate-100 text-slate-700' },
   { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
@@ -54,7 +62,7 @@ export default async function RetailerAccountPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: retailer }, { data: profile }, { count: orderCount }, { count: unreadCount }, walletSummary] =
+  const [{ data: retailer }, { data: profile }, { count: orderCount }, { count: unreadCount }, walletSummary, { count: addressCount }] =
     await Promise.all([
       supabase
         .from('retailers')
@@ -69,6 +77,10 @@ export default async function RetailerAccountPage() {
         .eq('recipient_id', user.id)
         .eq('is_read', false),
       getRetailerWalletSummary(supabase, user.id),
+      supabase
+        .from('retailer_addresses')
+        .select('id', { count: 'exact', head: true })
+        .eq('retailer_id', user.id),
     ]);
 
   const shopName = retailer?.shop_name ?? user.fullName;
@@ -82,6 +94,15 @@ export default async function RetailerAccountPage() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+  const completion = computeProfileCompletion({
+    fullName: user.fullName,
+    phone: profile?.phone ?? null,
+    shopName: retailer?.shop_name ?? null,
+    address: retailer?.address ?? null,
+    gstin: retailer?.gstin ?? null,
+    addressCount: addressCount ?? 0,
+  });
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -109,11 +130,37 @@ export default async function RetailerAccountPage() {
               </p>
             </div>
           </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />{' '}
-            {retailer?.status === 'active' ? 'Account active' : retailer?.status ?? 'Retailer'}
-          </span>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <span
+              className={
+                retailer?.status === 'active'
+                  ? 'inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700'
+                  : 'inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-[10px] font-bold text-amber-700'
+              }
+            >
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />{' '}
+              {retailer?.status === 'active'
+                ? 'Account active & approved'
+                : retailer?.status === 'pending_approval'
+                  ? 'Awaiting approval'
+                  : retailer?.status === 'suspended'
+                    ? 'Account suspended'
+                    : 'Retailer'}
+            </span>
+            {retailer && retailer.credit_limit > 0 ? (
+              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-bold text-blue-700">
+                <WalletCards className="h-3.5 w-3.5" aria-hidden="true" /> Credit approved
+              </span>
+            ) : (
+              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-bold text-slate-600">
+                <WalletCards className="h-3.5 w-3.5" aria-hidden="true" /> Credit not configured
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Profile completion — real fields only, computed server-side. */}
+        <ProfileCompletionBar completion={completion} />
       </section>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-7">
@@ -251,6 +298,31 @@ export default async function RetailerAccountPage() {
           </form>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function ProfileCompletionBar({ completion }: { completion: ReturnType<typeof computeProfileCompletion> }) {
+  const done = completion.percent >= 100;
+  return (
+    <div className="relative mt-5 border-t border-slate-100 pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Profile completion</p>
+        <p className={done ? 'text-[11px] font-bold text-emerald-700' : 'text-[11px] font-bold text-primary-700'}>
+          {completion.percent}%{done ? ' — complete' : ''}
+        </p>
+      </div>
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={completion.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completion">
+        <div
+          className={done ? 'h-full rounded-full bg-emerald-500 transition-all' : 'h-full rounded-full bg-primary-500 transition-all'}
+          style={{ width: `${Math.max(4, completion.percent)}%` }}
+        />
+      </div>
+      {!done && completion.missing.length > 0 ? (
+        <p className="mt-2 text-[10px] leading-4 text-slate-500">
+          Missing: {completion.missing.join(', ')}. A complete profile speeds up approvals and delivery.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -39,6 +39,8 @@ import { RecentlyViewedRail, RecentlyViewedTracker } from '@/components/retailer
 import { loadFavoriteIds } from '@/lib/retailer/catalog';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { getCoPurchasedCards, getSimilarProductCards } from '@/lib/retailer/personalization';
+import { ProductIssueReport, StockAlertButton } from '@/components/retailer/product-feedback';
+import { availabilityBadge, isOutOfStock, normalizeAvailabilityState } from '@/lib/retailer/availability';
 import { formatIndiaDate } from '@/lib/datetime/india';
 import { buildCanonicalProductName, buildBreadcrumbProductName } from '@/lib/retailer/product-name';
 
@@ -216,6 +218,29 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   // Only ACTIVE packs are orderable — they feed the PackSelector exactly as before.
   const rawPacks = (packData ?? []) as PackRow[];
   const activePacks = rawPacks.filter((pack) => pack.is_active);
+
+  // Real availability from the sanctioned RPC plus this retailer's own
+  // availability alerts for the product's packs (owner-only rows). Used for
+  // the availability chip and the "notify me when available" control.
+  const [{ data: availabilityRows }, { data: alertRows }] = await Promise.all([
+    (
+      supabase as unknown as {
+        rpc: (name: string, args: Record<string, unknown>) => Promise<{
+          data: { product_id: string; available_quantity: number; stock_status: string }[] | null;
+          error: unknown;
+        }>;
+      }
+    ).rpc('get_retailer_product_availability', { p_product_ids: [product.id] }),
+    supabase
+      .from('retailer_stock_alerts')
+      .select('pack_id')
+      .eq('retailer_id', user.id)
+      .in('pack_id', rawPacks.length > 0 ? rawPacks.map((pack) => pack.id) : ['00000000-0000-0000-0000-000000000000']),
+  ]);
+  const availabilityState = normalizeAvailabilityState(availabilityRows?.[0]?.stock_status);
+  const availabilityLabel = availabilityBadge(availabilityState);
+  const subscribedAlertPackId = (alertRows ?? []).length > 0 ? activePacks[0]?.id ?? null : null;
+  const notifyTargetPackId = activePacks[0]?.id ?? null;
   const packTiers = await loadPackTiers(
     supabase,
     rawPacks.map((pack) => pack.id)
@@ -614,6 +639,20 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             cartSummary={cartSummary}
             selectedPackId={selectedPack?.id ?? null}
           />
+
+          {/* Availability status, availability request and problem report — real data only. */}
+          <section
+            aria-label="Availability and product feedback"
+            className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+          >
+            {availabilityLabel ? (
+              <span className={availabilityLabel.className}>{availabilityLabel.label}</span>
+            ) : null}
+            {isOutOfStock(availabilityState) && notifyTargetPackId ? (
+              <StockAlertButton packId={subscribedAlertPackId ?? notifyTargetPackId} subscribed={!!subscribedAlertPackId} />
+            ) : null}
+            <ProductIssueReport productId={product.id} packId={selectedPack?.id ?? null} />
+          </section>
 
           {/* Active Schemes / Offers if any — same real data, lighter card */}
           {schemes.length > 0 ? (

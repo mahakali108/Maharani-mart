@@ -18,6 +18,7 @@ import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
 import { QuickOrderRow, type QuickOrderPack } from '@/components/retailer/quick-order-row';
+import { BulkOrderPanel } from '@/components/retailer/bulk-order-panel';
 
 interface QuickOrderProductRow {
   id: string;
@@ -163,6 +164,8 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
           </div>
         ))}
       </div>
+
+      <BulkOrderPanel />
 
       {!q ? (
         <section className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[1fr_0.9fr]">

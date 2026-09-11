@@ -14,7 +14,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { AdminEmptyState } from '@/components/admin/empty-state';
-import { ProductCard } from '@/components/retailer/product-card';
+import { CompareGrid } from '@/components/retailer/compare-grid';
 import { CatalogFilters } from '@/components/retailer/catalog-filters';
 import { SearchField } from '@/components/retailer/search-field';
 import { cn } from '@/lib/utils/cn';
@@ -498,11 +498,7 @@ export default async function RetailerCatalogPage({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
-            {cards.map((card) => (
-              <ProductCard key={card.id} {...card} />
-            ))}
-          </div>
+          <CompareGrid cards={cards} />
 
           {totalPages > 1 ? (
             <nav className="flex items-center justify-center gap-3 pt-1" aria-label="Catalog pages">
