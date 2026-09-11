@@ -755,6 +755,262 @@ export interface Database {
         ];
       };
 
+      // ─── 0032_retailer_address_book.sql ───
+      retailer_addresses: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          label: string;
+          receiver_name: string;
+          phone: string;
+          line1: string;
+          line2: string | null;
+          landmark: string | null;
+          city: string;
+          district: string | null;
+          state: string;
+          pincode: string;
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          label?: string;
+          receiver_name: string;
+          phone: string;
+          line1: string;
+          line2?: string | null;
+          landmark?: string | null;
+          city: string;
+          district?: string | null;
+          state?: string;
+          pincode: string;
+          is_default?: boolean;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_addresses']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_addresses_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
+      // ─── 0033_retailer_saved_carts.sql ───
+      retailer_saved_carts: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          name: string;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_saved_carts']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_saved_carts_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
+      retailer_saved_cart_items: {
+        Row: {
+          id: string;
+          saved_cart_id: string;
+          retailer_id: string;
+          product_id: string;
+          pack_id: string;
+          quantity: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          saved_cart_id: string;
+          retailer_id: string;
+          product_id: string;
+          pack_id: string;
+          quantity: number;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_saved_cart_items']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_saved_cart_items_saved_cart_id_fkey';
+            columns: ['saved_cart_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailer_saved_carts';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retailer_saved_cart_items_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retailer_saved_cart_items_product_id_fkey';
+            columns: ['product_id'];
+            isOneToOne: false;
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retailer_saved_cart_items_pack_id_fkey';
+            columns: ['pack_id'];
+            isOneToOne: false;
+            referencedRelation: 'product_packs';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
+      // ─── 0034_retailer_product_feedback.sql ───
+      retailer_product_issues: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          product_id: string;
+          pack_id: string | null;
+          issue_type: 'wrong_information' | 'image_problem' | 'pricing_problem' | 'stock_problem' | 'other';
+          message: string;
+          status: 'open' | 'reviewing' | 'resolved';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          product_id: string;
+          pack_id?: string | null;
+          issue_type: 'wrong_information' | 'image_problem' | 'pricing_problem' | 'stock_problem' | 'other';
+          message: string;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_product_issues']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_product_issues_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retailer_product_issues_product_id_fkey';
+            columns: ['product_id'];
+            isOneToOne: false;
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retailer_product_issues_pack_id_fkey';
+            columns: ['pack_id'];
+            isOneToOne: false;
+            referencedRelation: 'product_packs';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
+      retailer_stock_alerts: {
+        Row: {
+          retailer_id: string;
+          pack_id: string;
+          created_at: string;
+        };
+        Insert: {
+          retailer_id: string;
+          pack_id: string;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_stock_alerts']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_stock_alerts_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retailer_stock_alerts_pack_id_fkey';
+            columns: ['pack_id'];
+            isOneToOne: false;
+            referencedRelation: 'product_packs';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
+      // ─── 0035_retailer_profile_rpc_prefs_requests.sql ───
+      retailer_notification_prefs: {
+        Row: {
+          retailer_id: string;
+          order_updates: boolean;
+          payment_updates: boolean;
+          wallet_updates: boolean;
+          offer_updates: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          retailer_id: string;
+          order_updates?: boolean;
+          payment_updates?: boolean;
+          wallet_updates?: boolean;
+          offer_updates?: boolean;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_notification_prefs']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_notification_prefs_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
+      retailer_account_requests: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          request_type: 'account_deletion' | 'data_export';
+          note: string | null;
+          status: 'submitted' | 'reviewing' | 'completed' | 'rejected';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          request_type: 'account_deletion' | 'data_export';
+          note?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_account_requests']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'retailer_account_requests_retailer_id_fkey';
+            columns: ['retailer_id'];
+            isOneToOne: false;
+            referencedRelation: 'retailers';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+
       orders: {
         Row: {
           id: string;
@@ -774,6 +1030,8 @@ export interface Database {
           delivered_at: string | null;
           placed_at: string;
           updated_at: string;
+          /** 0036: server-side snapshot of the delivery address chosen at checkout. */
+          shipping_address: { line: string; label?: string; receiverName?: string; phone?: string } | null;
         };
         Insert: {
           id?: string;
@@ -791,6 +1049,7 @@ export interface Database {
           dispatched_by?: string | null;
           dispatched_at?: string | null;
           delivered_at?: string | null;
+          shipping_address?: { line: string; label?: string; receiverName?: string; phone?: string } | null;
         };
         Update: Partial<Database['public']['Tables']['orders']['Insert']>;
         Relationships: [
@@ -1481,6 +1740,13 @@ export interface Database {
       };
     };
     Functions: {
+      // 0035: retailer self-service shop profile update (name + address only).
+      // SECURITY DEFINER; validates scope server-side and updates only
+      // retailers.shop_name / retailers.address for auth.uid().
+      update_my_shop_profile: {
+        Args: { p_shop_name: string; p_address: string };
+        Returns: undefined;
+      };
       consume_ai_rate_limit: {
         Args: { p_bucket: string; p_limit: number; p_window_seconds: number };
         Returns: { allowed: boolean; remaining: number; retry_after_seconds: number };
