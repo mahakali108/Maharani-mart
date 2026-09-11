@@ -62,6 +62,7 @@ describe('category image storage bucket — single canonical name', () => {
       ...insertedBucketIds(read('supabase/migrations/0006_retailer_documents.sql')),
       ...insertedBucketIds(MIGRATION_0016),
       ...insertedBucketIds(MIGRATION_0021),
+      ...insertedBucketIds(read('supabase/migrations/0045_delivery_payment_proof_buckets.sql')),
     ]);
     for (const config of Object.values(MEDIA_KIND_CONFIG)) {
       expect(created, `bucket ${config.bucket}`).toContain(config.bucket);

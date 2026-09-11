@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  PackageCheck, BadgeIndianRupee,
   LayoutDashboard,
   Gauge,
   Package,
@@ -14,12 +15,16 @@ import {
   BarChart3,
   Image as ImageIcon,
   Bell,
+  BellRing,
   MapPin,
   Sparkles,
   Settings,
   ScrollText,
   Wallet,
+  Target,
+  IndianRupee,
 } from 'lucide-react';
+
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import type { UserRole } from '@/lib/auth/roles';
@@ -36,9 +41,14 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Pricing & Schemes', href: '/admin/pricing', icon: Tag },
   { label: 'Inventory', href: '/admin/inventory', icon: Warehouse },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
+  { label: 'Delivered Orders', href: '/admin/delivered', icon: PackageCheck },
   { label: 'Wallets', href: '/admin/wallets', icon: Wallet },
+  { label: 'Collections', href: '/admin/collections', icon: BadgeIndianRupee },
   { label: 'Retailers', href: '/admin/retailers', icon: Users },
   { label: 'Staff & Salesmen', href: '/admin/team', icon: UserCog },
+  { label: 'Targets', href: '/admin/targets', icon: Target },
+  { label: 'Commissions', href: '/admin/commissions', icon: IndianRupee },
+  { label: 'Follow-ups', href: '/admin/follow-ups', icon: BellRing },
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },

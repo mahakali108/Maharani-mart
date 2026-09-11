@@ -259,7 +259,8 @@ describe('premium upgrade — security posture of the new surface', () => {
 
 describe('premium upgrade — migration hygiene', () => {
   it('adds 0032–0036 after the wallet baseline and never touches existing tables destructively', () => {
-    expect(migrations[migrations.length - 1]).toBe('0036_order_shipping_address.sql');
+    const latest = migrations[migrations.length - 1] as string;
+    expect(latest > '0036_order_shipping_address.sql').toBe(true); // later phases append, never reorder
     for (const file of migrations.slice(-5)) {
       const sql = read(`supabase/migrations/${file}`);
       expect(sql).not.toMatch(/drop table|truncate\b|alter table .* drop column/i);

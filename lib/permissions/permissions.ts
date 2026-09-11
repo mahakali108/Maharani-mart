@@ -30,6 +30,12 @@ export type Permission =
   | 'orders.deliver'
   | 'orders.return.request'
   | 'orders.return.manage'
+  | 'deliveries.view.all'
+  | 'deliveries.view.assigned'
+  | 'deliveries.execute'
+  | 'deliveries.assign'
+  | 'collections.record'
+  | 'collections.verify'
   | 'returns.request'
   | 'returns.manage'
   | 'inventory.adjust'
@@ -40,6 +46,10 @@ export type Permission =
   | 'retailers.assign_salesman'
   | 'retailers.manage_wallet'
   | 'team.manage'
+  | 'targets.manage'
+  | 'commissions.manage'
+  | 'followups.manage.own'
+  | 'notifications.broadcast'
   | 'reports.view.all'
   | 'reports.view.area'
   | 'reports.view.own'
@@ -54,8 +64,10 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
+    'deliveries.view.all', 'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record', 'collections.verify',
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet',
-    'team.manage', 'reports.view.all', 'banners.manage', 'routes.manage.all',
+    'team.manage', 'targets.manage', 'commissions.manage', 'notifications.broadcast',
+    'reports.view.all', 'banners.manage', 'routes.manage.all',
     'command_center.view',
   ],
   admin: [
@@ -63,7 +75,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
+    'deliveries.view.all', 'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record', 'collections.verify',
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet',
+    'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all',
   ],
   staff: [
@@ -71,12 +85,14 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.return.manage', 'returns.manage',
+    'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record',
     'retailers.view', 'reports.view.area', 'retailers.manage_wallet',
   ],
   salesman: [
     'products.view',
     'orders.view.own', 'orders.create', 'orders.deliver',
-    'retailers.view', 'reports.view.own', 'routes.manage.own',
+    'deliveries.view.assigned', 'deliveries.execute', 'collections.record',
+    'retailers.view', 'reports.view.own', 'routes.manage.own', 'followups.manage.own',
   ],
   retailer: [
     'products.view',

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
+import { isReturnWindowOpen } from '@/lib/delivery/return-window';
 import type { Database } from '@/types/database.types';
 import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
 
@@ -158,6 +159,21 @@ export async function requestReturnAction(
   if (!reason.trim()) return { error: 'Please describe the reason for the return.' };
 
   const supabase = createClient();
+
+  // Return window (Phase 4): the deadline is snapshotted on the delivery at
+  // completion. If the order predates the deliveries module (no delivery
+  // row), the window is open — the legacy behaviour is unchanged.
+  const { data: delivery } = await supabase
+    .from('order_deliveries')
+    .select('return_deadline')
+    .eq('order_id', orderId)
+    .maybeSingle<{ return_deadline: string | null }>();
+  if (delivery?.return_deadline && !isReturnWindowOpen(delivery.return_deadline)) {
+    return {
+      error: `The return window for this order closed on ${delivery.return_deadline}. Contact support if something is wrong.`,
+    };
+  }
+
   const payload: ReturnRequestInsert = {
     order_id: orderId,
     order_item_id: orderItemId,
