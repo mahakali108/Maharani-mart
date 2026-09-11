@@ -49,6 +49,7 @@ interface OrderDetailRow {
   grand_total: number;
   notes: string | null;
   placed_at: string;
+  shipping_address: { line: string; label?: string; receiverName?: string; phone?: string } | null;
 }
 
 interface OrderItemRow {
@@ -102,7 +103,7 @@ export default async function OrderDetailPage({
   const [{ data: order }, { data: itemData }, { data: historyData }, { data: retailer }, { data: profile }] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, order_number, status, subtotal, gst_total, discount_total, grand_total, notes, placed_at')
+      .select('id, order_number, status, subtotal, gst_total, discount_total, grand_total, notes, placed_at, shipping_address')
       .eq('id', params.id)
       .eq('retailer_id', user.id)
       .maybeSingle<OrderDetailRow>(),
@@ -234,7 +235,18 @@ export default async function OrderDetailPage({
             </div>
           </section>
 
-          {retailer ? (
+          {order.shipping_address?.line ? (
+            <DeliveryAddressCard
+              address={{
+                shopName: order.shipping_address.label ?? retailer?.shop_name ?? null,
+                contactName: order.shipping_address.receiverName ?? profile?.full_name ?? user.fullName,
+                address: order.shipping_address.line,
+                area: null,
+                phone: order.shipping_address.phone ?? profile?.phone ?? null,
+              }}
+              note="Delivery address frozen when the order was placed — later profile changes do not affect it."
+            />
+          ) : retailer ? (
             <DeliveryAddressCard
               address={{
                 shopName: retailer.shop_name ?? null,
@@ -245,7 +257,7 @@ export default async function OrderDetailPage({
                   : null,
                 phone: profile?.phone ?? null,
               }}
-              note="This is the registered shop address on your account. Orders do not store their own address snapshot, so an update to your profile is reflected here too."
+              note="This is the registered shop address on your account. Orders placed before address snapshots use the profile address."
             />
           ) : null}
 

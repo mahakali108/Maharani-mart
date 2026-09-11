@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
-import { indiaDayEndIso, indiaDayStartIso } from '@/lib/datetime/india';
 import { formatIndiaDate, indiaMonthStart } from '@/lib/datetime/india';
 
 /**

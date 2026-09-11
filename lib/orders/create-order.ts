@@ -60,6 +60,8 @@ export async function createOrderForRetailer({
     discount_total: quote.discountTotal,
     grand_total: quote.grandTotal,
     notes: notes.trim() || null,
+    // 0036: the address that was true AT ORDER TIME, frozen onto the order.
+    shipping_address: shippingAddress ?? null,
   };
 
   const { data: order, error: orderError } = await supabase

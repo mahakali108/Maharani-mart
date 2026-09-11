@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { CheckCircle2, Loader2, LockKeyhole, MapPin } from 'lucide-react';
 import { placeOrderAction } from '@/lib/retailer/checkout-actions';
+import { useCheckoutAddress } from '@/components/retailer/checkout-address-context';
 
 export interface CheckoutFormProps {
   grandTotal: number;
@@ -23,12 +24,15 @@ export function CheckoutForm({
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Selected address-book id (null = registered shop address). Resolved and
+  // snapshotted server-side — see placeOrderAction.
+  const { selectedAddressId } = useCheckoutAddress();
 
   function handlePlaceOrder() {
     if (disabled) return;
     setError(null);
     startTransition(async () => {
-      const result = await placeOrderAction(notes);
+      const result = await placeOrderAction(notes, selectedAddressId ?? undefined);
       if (result && 'error' in result) setError(result.error ?? 'Failed to place order.');
     });
   }

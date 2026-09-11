@@ -20,7 +20,9 @@ import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CreditSummary } from '@/components/retailer/credit-summary';
-import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card';
+import { CheckoutAddressProvider } from '@/components/retailer/checkout-address-context';
+import { CheckoutAddressSelector } from '@/components/retailer/checkout-address-selector';
+import type { SavedAddress } from '@/components/retailer/address-form';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
 import { buildCanonicalProductName } from '@/lib/retailer/product-name';
 import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
@@ -71,7 +73,7 @@ export default async function CheckoutPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: cartData }, { data: retailer }, { data: profile }, walletSummary] = await Promise.all([
+  const [{ data: cartData }, { data: retailer }, { data: profile }, walletSummary, { data: addressRows }] = await Promise.all([
     supabase
       .from('cart_items')
       .select(
@@ -86,7 +88,16 @@ export default async function CheckoutPage() {
       .maybeSingle<RetailerCreditRow>(),
     supabase.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle<CheckoutProfileRow>(),
     getRetailerWalletSummary(supabase, user.id),
+    supabase
+      .from('retailer_addresses')
+      .select('id, label, receiver_name, phone, line1, line2, landmark, city, district, state, pincode, is_default')
+      .eq('retailer_id', user.id)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true }),
   ]);
+
+  const savedAddresses = ((addressRows ?? []) as unknown as SavedAddress[]).filter((row) => row.id);
+  const defaultAddress = savedAddresses.find((row) => row.is_default) ?? savedAddresses[0] ?? null;
 
   const items = (cartData ?? []) as unknown as CartItemDetail[];
   if (items.length === 0) redirect('/retailer/cart');
@@ -158,6 +169,7 @@ export default async function CheckoutPage() {
   const totalPieces = lines.reduce((sum, line) => sum + line.pieces, 0);
 
   return (
+    <CheckoutAddressProvider defaultAddressId={defaultAddress?.id ?? null}>
     <div className="space-y-5 sm:space-y-6">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
         <Link href="/retailer/cart" className="flex items-center gap-1 hover:text-primary-600">
@@ -213,11 +225,12 @@ export default async function CheckoutPage() {
                 <h2 className="text-sm font-bold text-slate-900">Delivery address</h2>
               </div>
               <div className="p-4 sm:p-5">
-                <DeliveryAddressCard
-                  address={{
+                <CheckoutAddressSelector
+                  addresses={savedAddresses}
+                  shop={{
                     shopName: retailer.shop_name ?? null,
                     contactName: profile?.full_name ?? user.fullName,
-                    address: retailer.address ?? null,
+                    addressText: retailer.address ?? null,
                     area: retailer.areas
                       ? `${retailer.areas.name}${retailer.areas.district ? `, ${retailer.areas.district}` : ''}`
                       : null,
@@ -417,5 +430,6 @@ export default async function CheckoutPage() {
         </aside>
       </div>
     </div>
+    </CheckoutAddressProvider>
   );
 }

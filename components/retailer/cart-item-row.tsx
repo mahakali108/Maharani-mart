@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
+  BookmarkPlus,
   Boxes,
   CircleAlert,
   Heart,
@@ -15,6 +16,7 @@ import {
   updateCartQuantityAction,
   removeCartItemAction,
 } from '@/lib/retailer/cart-actions';
+import { saveCartItemForLaterAction } from '@/lib/retailer/saved-cart-actions';
 import { toggleFavoriteAction } from '@/lib/retailer/favorite-actions';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { suggestedQuantities, type PricingTier } from '@/lib/retailer/case-pricing';
@@ -114,6 +116,18 @@ export function CartItemRow({
       } else {
         router.refresh();
       }
+    });
+  }
+
+  function handleSaveLineForLater() {
+    setError(null);
+    startTransition(async () => {
+      const result = await saveCartItemForLaterAction(id);
+      if ('error' in result && result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
     });
   }
 
@@ -300,6 +314,16 @@ export function CartItemRow({
 
       {/* Cell E — actions */}
       <div className="flex items-center justify-between gap-2 md:col-span-3 md:flex-row-reverse md:items-center">
+        <button
+          type="button"
+          onClick={handleSaveLineForLater}
+          disabled={isPending}
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 disabled:opacity-50"
+          aria-label={`Save ${productName} for later`}
+        >
+          <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
+          <span className="hidden sm:inline">Save for later</span>
+        </button>
         <button
           type="button"
           onClick={handleRemove}

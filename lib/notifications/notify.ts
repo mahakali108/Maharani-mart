@@ -4,11 +4,20 @@ import type { Database } from '@/types/database.types';
 
 export type NotificationChannel = 'whatsapp' | 'sms' | 'push' | 'in_app';
 
+/**
+ * Transactional categories (order/payment/wallet/account) are always
+ * delivered — they are records of the retailer's own money and orders.
+ * `promotional` respects the retailer's notification preferences
+ * (retailer_notification_prefs.offer_updates, migration 0035).
+ */
+export type NotificationCategory = 'transactional' | 'promotional';
+
 export interface NotifyInput {
   recipientId: string;
   title: string;
   body: string;
   linkUrl?: string;
+  category?: NotificationCategory;
 }
 
 type NotificationInsert = Database['public']['Tables']['notifications']['Insert'];
@@ -38,6 +47,22 @@ type NotificationLogInsert = Database['public']['Tables']['notification_logs']['
 
 export async function createInAppNotification(input: NotifyInput) {
   const supabase = createClient();
+
+  // Preference gate for promotional notifications. Transactional notices
+  // (orders, payments, wallet, account) always go through.
+  if ((input.category ?? 'transactional') === 'promotional') {
+    try {
+      const { data: prefs } = await supabase
+        .from('retailer_notification_prefs')
+        .select('offer_updates')
+        .eq('retailer_id', input.recipientId)
+        .maybeSingle<{ offer_updates: boolean }>();
+      if (prefs && prefs.offer_updates === false) return;
+    } catch {
+      // On any prefs read failure, deliver — missing prefs row means "on".
+    }
+  }
+
   const payload: NotificationInsert = {
     recipient_id: input.recipientId,
     title: input.title,
