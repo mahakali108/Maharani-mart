@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { createOrderForRetailer } from '@/lib/orders/create-order';
-import { formatAddressLine } from '@/lib/retailer/address-actions';
+import { formatAddressLine } from '@/lib/retailer/address-shared';
 
 export type CheckoutResult = { error?: string } | { success: true; orderId: string };
 

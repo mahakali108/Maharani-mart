@@ -40,6 +40,7 @@ import { loadFavoriteIds } from '@/lib/retailer/catalog';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { getCoPurchasedCards, getSimilarProductCards } from '@/lib/retailer/personalization';
 import { ProductIssueReport, StockAlertButton } from '@/components/retailer/product-feedback';
+import { availabilityBadge, isOutOfStock, normalizeAvailabilityState } from '@/lib/retailer/availability';
 import { formatIndiaDate } from '@/lib/datetime/india';
 import { buildCanonicalProductName, buildBreadcrumbProductName } from '@/lib/retailer/product-name';
 
@@ -218,9 +219,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const rawPacks = (packData ?? []) as PackRow[];
   const activePacks = rawPacks.filter((pack) => pack.is_active);
 
-  // Real availability from the sanctioned RPC + this retailer's own stock
-  // alerts for the product's packs (owner-only rows). Used for the stock
-  // chip and the "notify me when available" control.
+  // Real availability from the sanctioned RPC plus this retailer's own
+  // availability alerts for the product's packs (owner-only rows). Used for
+  // the availability chip and the "notify me when available" control.
   const [{ data: availabilityRows }, { data: alertRows }] = await Promise.all([
     (
       supabase as unknown as {
@@ -236,15 +237,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       .eq('retailer_id', user.id)
       .in('pack_id', rawPacks.length > 0 ? rawPacks.map((pack) => pack.id) : ['00000000-0000-0000-0000-000000000000']),
   ]);
-  const stockStatus = availabilityRows?.[0]?.stock_status ?? 'unknown';
-  const stockLabel =
-    stockStatus === 'out_of_stock'
-      ? 'Out of stock'
-      : stockStatus === 'low_stock'
-        ? 'Low stock'
-        : stockStatus === 'in_stock'
-          ? 'In stock'
-          : null;
+  const availabilityState = normalizeAvailabilityState(availabilityRows?.[0]?.stock_status);
+  const availabilityLabel = availabilityBadge(availabilityState);
   const subscribedAlertPackId = (alertRows ?? []).length > 0 ? activePacks[0]?.id ?? null : null;
   const notifyTargetPackId = activePacks[0]?.id ?? null;
   const packTiers = await loadPackTiers(
@@ -646,25 +640,15 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             selectedPackId={selectedPack?.id ?? null}
           />
 
-          {/* Stock status, availability request and problem report — real data only. */}
+          {/* Availability status, availability request and problem report — real data only. */}
           <section
             aria-label="Availability and product feedback"
             className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
           >
-            {stockLabel ? (
-              <span
-                className={
-                  stockStatus === 'out_of_stock'
-                    ? 'rounded-full bg-rose-50 px-3 py-1.5 text-[11px] font-bold text-rose-700'
-                    : stockStatus === 'low_stock'
-                      ? 'rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-700'
-                      : 'rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700'
-                }
-              >
-                {stockLabel}
-              </span>
+            {availabilityLabel ? (
+              <span className={availabilityLabel.className}>{availabilityLabel.label}</span>
             ) : null}
-            {stockStatus === 'out_of_stock' && notifyTargetPackId ? (
+            {isOutOfStock(availabilityState) && notifyTargetPackId ? (
               <StockAlertButton packId={subscribedAlertPackId ?? notifyTargetPackId} subscribed={!!subscribedAlertPackId} />
             ) : null}
             <ProductIssueReport productId={product.id} packId={selectedPack?.id ?? null} />

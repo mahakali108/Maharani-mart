@@ -7,7 +7,7 @@ import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 
 export type SavedCartActionResult = { error?: string } | { success: true; savedCartId?: string };
 
-export const SAVE_FOR_LATER_CART_NAME = 'Saved for later';
+const SAVE_FOR_LATER_CART_NAME = 'Saved for later';
 const MAX_SAVED_CARTS = 20;
 const MAX_LINES_PER_SAVED_CART = 100;
 

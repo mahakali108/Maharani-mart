@@ -21,7 +21,7 @@ const issueSchema = z.object({
   message: z.string().trim().min(3, 'Describe the problem in a few words.').max(1000),
 });
 
-export function isIssueType(value: string): value is IssueType {
+function isIssueType(value: string): value is IssueType {
   return (ISSUE_TYPES as readonly string[]).includes(value);
 }
 

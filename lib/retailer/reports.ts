@@ -84,9 +84,10 @@ export function buildMonthTrend(
   for (let i = monthsBack - 1; i >= 0; i -= 1) {
     const d = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() - i, 1));
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     buckets.set(key, {
       monthKey: key,
-      label: d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' }),
+      label: `${monthNames[d.getUTCMonth()]} ${d.getUTCFullYear()}`,
       orderCount: 0,
       purchaseValue: 0,
     });

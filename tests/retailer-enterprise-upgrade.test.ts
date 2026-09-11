@@ -520,13 +520,20 @@ describe('delivery address and settlement use real rows only', () => {
 
   it('is wired into checkout and the order detail with an honest label', () => {
     const checkout = read('app/retailer/checkout/page.tsx');
-    expect(checkout).toContain('DeliveryAddressCard');
+    // Address selection lives in CheckoutAddressSelector, which still renders
+    // the same honest DeliveryAddressCard for every option (saved entries and
+    // the registered shop address fallback).
+    expect(checkout).toContain('CheckoutAddressProvider');
+    expect(checkout).toContain('CheckoutAddressSelector');
+    expect(read('components/retailer/checkout-address-selector.tsx')).toContain('DeliveryAddressCard');
     expect(checkout).toContain("select('area_id, credit_limit, outstanding_balance, shop_name, address, areas ( name, district )')");
     expect(checkout).toContain('Payment terms (for example Net-15 or Net-30) are set by your distributor');
 
     const detail = read('app/retailer/orders/[id]/page.tsx');
     expect(detail).toContain('DeliveryAddressCard');
-    expect(detail).toContain('orders do not store their own address snapshot'.replace('orders', 'Orders'));
+    // Orders now freeze the chosen address (0036); the honest label says so.
+    expect(detail).toContain('shipping_address');
+    expect(detail).toContain('Delivery address frozen when the order was placed');
     expect(detail).toContain('/retailer/account/ledger');
   });
 
@@ -626,7 +633,14 @@ describe('migration hygiene', () => {
     expect(existsSync(join(migrationsDir, '0029_retailer_wallet_ledger.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0030_wallet_rpc_security.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0031_wallet_outstanding_opening_baseline.sql'))).toBe(true);
-    expect(migrations[migrations.length - 1]).toBe('0031_wallet_outstanding_opening_baseline.sql');
+    // Retailer premium upgrade (address book, saved carts, product feedback,
+    // profile RPC/prefs/requests, order address snapshot) — additive chain.
+    expect(existsSync(join(migrationsDir, '0032_retailer_address_book.sql'))).toBe(true);
+    expect(existsSync(join(migrationsDir, '0033_retailer_saved_carts.sql'))).toBe(true);
+    expect(existsSync(join(migrationsDir, '0034_retailer_product_feedback.sql'))).toBe(true);
+    expect(existsSync(join(migrationsDir, '0035_retailer_profile_rpc_prefs_requests.sql'))).toBe(true);
+    expect(existsSync(join(migrationsDir, '0036_order_shipping_address.sql'))).toBe(true);
+    expect(migrations[migrations.length - 1]).toBe('0036_order_shipping_address.sql');
   });
 
   it('keeps the case + loose migration additive — no destructive statement, no RLS change', () => {
