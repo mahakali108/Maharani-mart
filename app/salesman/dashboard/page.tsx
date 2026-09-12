@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CalendarCheck, ClipboardList, Clock, MapPin, Route, ShoppingCart, Store, Users } from 'lucide-react';
+import { BellRing, CalendarCheck, ClipboardList, Clock, MapPin, Route, ShoppingCart, Store, Target, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
@@ -51,6 +51,8 @@ export default async function SalesmanDashboardPage() {
     { label: 'Create Order', href: '/salesman/orders/new', icon: ShoppingCart },
     { label: 'Routes', href: '/salesman/routes', icon: Route },
     { label: 'Visits', href: '/salesman/visits', icon: MapPin },
+    { label: 'Reminders', href: '/salesman/follow-ups', icon: BellRing },
+    { label: 'My Targets', href: '/salesman/targets', icon: Target },
     { label: 'Attendance', href: '/salesman/attendance', icon: Clock },
     { label: 'Daily Report', href: '/salesman/dcr', icon: CalendarCheck },
   ];

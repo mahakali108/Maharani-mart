@@ -1,8 +1,12 @@
 import { notFound } from 'next/navigation';
 import { formatQuantitySummary, groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/session';
+import { can } from '@/lib/permissions/permissions';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminOrderActions } from '@/components/admin/order-actions-panel';
+import { DeliveryAssignmentPanel } from '@/components/admin/delivery-assignment-panel';
+import { DeliveryStatusBadge } from '@/components/delivery/delivery-status-badge';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface OrderDetailRow {
@@ -47,9 +51,10 @@ interface WarehouseOption {
 }
 
 export default async function AdminOrderDetailPage({ params }: { params: { id: string } }) {
+  const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: order }, { data: itemData }, { data: historyData }, { data: warehouseData }] = await Promise.all([
+  const [{ data: order }, { data: itemData }, { data: historyData }, { data: warehouseData }, { data: deliveryData }, { data: staffData }] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, status, warehouse_id, subtotal, gst_total, grand_total, notes, cancelled_reason, placed_at, retailers ( shop_name, address )')
@@ -63,6 +68,18 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
       .eq('order_id', params.id),
     supabase.from('order_status_history').select('id, status, note, created_at').eq('order_id', params.id).order('created_at'),
     supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
+    // Phase 4: the delivery task (exists once the order has been dispatched).
+    supabase
+      .from('order_deliveries')
+      .select('id, delivery_status, assigned_staff_id')
+      .eq('order_id', params.id)
+      .maybeSingle<{ id: string; delivery_status: string; assigned_staff_id: string | null }>(),
+    supabase
+      .from('profiles')
+      .select('id, full_name, role')
+      .in('role', ['staff', 'salesman'])
+      .eq('is_active', true)
+      .order('full_name'),
   ]);
 
   if (!order) notFound();
@@ -88,6 +105,30 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
         warehouseId={order.warehouse_id}
         warehouses={warehouses}
       />
+
+      {deliveryData ? (
+        <DeliveryAssignmentPanel
+          orderId={order.id}
+          deliveryStatus={deliveryData.delivery_status}
+          currentAssigneeId={deliveryData.assigned_staff_id}
+          staffOptions={((staffData ?? []) as { id: string; full_name: string; role: string }[]).map((s) => ({
+            id: s.id,
+            fullName: s.full_name,
+            role: s.role,
+          }))}
+          canAssign={can(user.role, 'deliveries.assign')}
+          canReturnToWarehouse={can(user.role, 'orders.return.manage')}
+        />
+      ) : null}
+
+      {deliveryData && (order.status === 'dispatched' || order.status === 'delivered' || order.status === 'returned') ? (
+        <p className="text-xs text-ink-400">
+          Delivery task: <DeliveryStatusBadge status={deliveryData.delivery_status} />{' '}
+          <a href={`/admin/delivered/${order.id}`} className="text-primary-600 hover:underline">
+            Open the delivery record →
+          </a>
+        </p>
+      ) : null}
 
       {order.cancelled_reason ? (
         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">

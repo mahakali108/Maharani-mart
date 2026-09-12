@@ -1685,9 +1685,240 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['super_admin_audit_logs']['Insert']>;
         Relationships: [];
       };
+      // Added by 0038_staff_targets_commissions.sql
+      staff_targets: {
+        Row: {
+          id: string;
+          user_id: string;
+          period_type: string;
+          period_start: string;
+          period_end: string;
+          metric: string;
+          target_value: number;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          period_type: string;
+          period_start: string;
+          period_end: string;
+          metric: string;
+          target_value: number;
+          is_active?: boolean;
+          created_by?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['staff_targets']['Insert']>;
+        Relationships: [];
+      };
+
+      staff_commissions: {
+        Row: {
+          id: string;
+          user_id: string;
+          period_start: string;
+          period_end: string;
+          basis: string;
+          rate_percent: number;
+          basis_amount_paise: number;
+          computed_amount_paise: number;
+          status: string;
+          notes: string | null;
+          created_by: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          paid_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          period_start: string;
+          period_end: string;
+          basis: string;
+          rate_percent: number;
+          basis_amount_paise?: number;
+          computed_amount_paise?: number;
+          status?: string;
+          notes?: string | null;
+          created_by?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          paid_at?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['staff_commissions']['Insert']>;
+        Relationships: [];
+      };
+
+      // Added by 0039_follow_ups.sql
+      follow_ups: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          owner_id: string;
+          due_date: string;
+          note: string;
+          status: string;
+          visit_id: string | null;
+          order_id: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          owner_id: string;
+          due_date: string;
+          note: string;
+          status?: string;
+          visit_id?: string | null;
+          order_id?: string | null;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['follow_ups']['Insert']>;
+        Relationships: [];
+      };
+
+      // Added by 0043_deliveries_module.sql
+      order_deliveries: {
+        Row: {
+          id: string;
+          order_id: string;
+          delivery_status: string;
+          assigned_staff_id: string | null;
+          assigned_at: string | null;
+          assigned_by: string | null;
+          dispatched_at: string | null;
+          in_progress_at: string | null;
+          delivered_at: string | null;
+          receiver_name: string | null;
+          otp_hash: string | null;
+          otp_verified_at: string | null;
+          otp_attempts: number;
+          signature_url: string | null;
+          photo_url: string | null;
+          delivery_notes: string | null;
+          failure_reason: string | null;
+          return_window_days: number | null;
+          return_deadline: string | null;
+          completed_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          delivery_status?: string;
+          assigned_staff_id?: string | null;
+          assigned_at?: string | null;
+          assigned_by?: string | null;
+          dispatched_at?: string | null;
+          in_progress_at?: string | null;
+          delivered_at?: string | null;
+          receiver_name?: string | null;
+          otp_hash?: string | null;
+          otp_verified_at?: string | null;
+          otp_attempts?: number;
+          signature_url?: string | null;
+          photo_url?: string | null;
+          delivery_notes?: string | null;
+          failure_reason?: string | null;
+          return_window_days?: number | null;
+          return_deadline?: string | null;
+          completed_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['order_deliveries']['Insert']>;
+        Relationships: [];
+      };
+
+      order_delivery_items: {
+        Row: {
+          id: string;
+          delivery_id: string;
+          order_item_id: string;
+          quantity_ordered: number;
+          quantity_delivered: number;
+          quantity_missing: number;
+          quantity_damaged: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          delivery_id: string;
+          order_item_id: string;
+          quantity_ordered: number;
+          quantity_delivered?: number;
+          quantity_missing?: number;
+          quantity_damaged?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['order_delivery_items']['Insert']>;
+        Relationships: [];
+      };
+
+      // Added by 0044_payment_collections.sql
+      payment_collections: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          order_id: string | null;
+          collected_by: string;
+          amount_paise: number;
+          method: string;
+          reference_number: string | null;
+          proof_url: string | null;
+          notes: string | null;
+          status: string;
+          verified_by: string | null;
+          verified_at: string | null;
+          ledger_entry_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          order_id?: string | null;
+          collected_by: string;
+          amount_paise: number;
+          method: string;
+          reference_number?: string | null;
+          proof_url?: string | null;
+          notes?: string | null;
+          status?: string;
+          verified_by?: string | null;
+          verified_at?: string | null;
+          ledger_entry_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['payment_collections']['Insert']>;
+        Relationships: [];
+      };
     };
 
     Views: {
+      // Added by 0041_area_stock_view.sql
+      inventory_area_totals: {
+        Row: {
+          area_id: string;
+          area_name: string;
+          product_id: string;
+          product_name: string;
+          sku_code: string | null;
+          quantity_on_hand: number;
+          quantity_reserved: number;
+          updated_at: string;
+        };
+        Relationships: [];
+      };
       // Added by 0017_inventory_batches_fefo_grn.sql
       inventory_product_totals: {
         Row: {
@@ -1738,6 +1969,7 @@ export interface Database {
         };
         Relationships: [];
       };
+
     };
     Functions: {
       // 0035: retailer self-service shop profile update (name + address only).

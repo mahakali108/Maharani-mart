@@ -24,7 +24,11 @@ Full system design lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 1. Create a new project at [supabase.com](https://supabase.com).
 2. In the SQL Editor, run the migrations **in order** — every file in
-   `supabase/migrations/` (currently `0001`–`0021`), not just the first few.
+   `supabase/migrations/` (currently `0001`–`0045`), not just the first few.
+   Migrations `0037`–`0045` (staff scope, targets/commissions, follow-ups,
+   schemes audit, area stock view, order state machine, deliveries module,
+   payment collections, private proof buckets) belong to the Phase 2–4
+   upgrade — apply them before deploying code that uses those features.
    The ones that matter most:
    - `supabase/migrations/0001_init.sql` — full schema, enums, RLS policies (no seed data)
    - `supabase/migrations/0002_auth_trigger.sql` — auto-creates `profiles` rows on signup, adds retailer self-registration policy
@@ -33,10 +37,20 @@ Full system design lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
    - `supabase/migrations/0013_rls_and_storage_hardening.sql` — storage policy hardening
    - `supabase/migrations/0016_storage_paths_category_bucket.sql` — creates the public `category-images` bucket (category image uploads fail with “Bucket not found” without it)
    - `supabase/migrations/0021_ensure_category_images_bucket.sql` — idempotent ensure-safe re-check of `category-images`; applies cleanly whether or not 0016 ran
+   - `supabase/migrations/0042`–`0045` — order-status state-machine trigger, deliveries module (`order_deliveries`), payment collections, private `delivery-proofs`/`payment-proofs` buckets. **0045 must run last** (its storage policies reference the tables from 0043/0044).
 
    Skipping any of these leaves the deployed schema behind the code — e.g.
    applying only 0001–0003 is exactly why a category image upload can fail with
    `Upload failed: Bucket not found`.
+
+   One-command check + apply + live smoke test (idempotent, skips what is
+   already applied, rolls its test fixture back):
+   ```bash
+   DATABASE_URL="<Supabase connection string>" ./scripts/production-validate.sh
+   ```
+   See `docs/PRODUCTION_VERIFICATION_CHECKLIST.md` for the full live
+   validation checklist (RLS role matrix, private buckets, delivery
+   transitions).
 
    Or, if you use the Supabase CLI locally:
    ```bash

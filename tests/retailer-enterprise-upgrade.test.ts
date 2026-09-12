@@ -640,7 +640,8 @@ describe('migration hygiene', () => {
     expect(existsSync(join(migrationsDir, '0034_retailer_product_feedback.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0035_retailer_profile_rpc_prefs_requests.sql'))).toBe(true);
     expect(existsSync(join(migrationsDir, '0036_order_shipping_address.sql'))).toBe(true);
-    expect(migrations[migrations.length - 1]).toBe('0036_order_shipping_address.sql');
+    const latest = migrations[migrations.length - 1] as string;
+    expect(latest > '0036_order_shipping_address.sql').toBe(true); // later phases append, never reorder
   });
 
   it('keeps the case + loose migration additive — no destructive statement, no RLS change', () => {

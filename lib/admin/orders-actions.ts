@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/admin/guard';
 import { notifyOrderEvent } from '@/lib/notifications/notify';
 import type { Database } from '@/types/database.types';
 import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
+import { canTransitionOrderStatus, describeTransitionError } from '@/lib/orders/state-machine';
 
 type OrderStatusEnum = Database['public']['Enums']['order_status'];
 
@@ -145,6 +146,20 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
 export async function updateOrderStatusAction(orderId: string, status: OrderStatusEnum): Promise<OrderActionResult> {
   await requirePermission('orders.approve');
   const supabase = createClient();
+
+  // Phase 4: transitions must follow the shared state machine
+  // (lib/orders/state-machine.ts). The 0042 DB trigger enforces the same
+  // table; this pre-check turns a raw Postgres denial into a clear message.
+  const { data: order } = await supabase
+    .from('orders')
+    .select('status, order_number')
+    .eq('id', orderId)
+    .maybeSingle<{ status: OrderStatusEnum; order_number: string }>();
+  if (!order) return { error: 'Order not found.' };
+
+  if (!canTransitionOrderStatus(order.status, status)) {
+    return { error: describeTransitionError(order.status, status) ?? 'That status change is not allowed.' };
+  }
 
   const { error } = await supabase.from('orders').update({ status } as unknown as never).eq('id', orderId);
   if (error) return { error: error.message };

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { DispatchButton } from '@/components/staff/dispatch-button';
+import { PickPackButtons } from '@/components/staff/pick-pack-buttons';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface OrderRow {
@@ -92,6 +93,9 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
       </Card>
 
       {canDispatch ? <DispatchButton orderId={order.id} /> : null}
+      {order.warehouse_id && (order.status === 'confirmed' || order.status === 'processing') ? (
+        <PickPackButtons orderId={order.id} status={order.status} />
+      ) : null}
     </div>
   );
       }
