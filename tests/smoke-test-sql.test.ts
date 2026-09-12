@@ -14,8 +14,11 @@ const sql = readFileSync(join(__dirname, '..', 'supabase', 'smoke-test.sql'), 'u
 describe('smoke-test.sql structure', () => {
   it('runs everything inside a transaction and rolls back (no seed data persists)', () => {
     expect(sql).toContain('BEGIN;');
-    // Rollback must come after the last assertion block.
-    expect(sql.lastIndexOf('ROLLBACK;')).toBeGreaterThan(sql.lastIndexOf('DO $$'));
+    // Rollback must come after the last assertion block (§G); only the
+    // completion NOTICE blocks (no DML/DDL) may follow it.
+    expect(sql.lastIndexOf('ROLLBACK;')).toBeGreaterThan(sql.lastIndexOf('§G'));
+    const tail = sql.slice(sql.lastIndexOf('ROLLBACK;'));
+    expect(tail).not.toMatch(/\b(insert|update|delete|create|alter|drop|select set_config)\b/i);
     expect(sql.indexOf('BEGIN;')).toBeLessThan(sql.indexOf('create temp table'));
   });
 
@@ -24,7 +27,23 @@ describe('smoke-test.sql structure', () => {
       expect(sql).toContain(persona);
     }
     expect((sql.match(/set local role authenticated;/g) ?? []).length).toBeGreaterThanOrEqual(6);
-    expect((sql.match(/set local request\.jwt\.claims/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    // Impersonation MUST go through set_config: `SET x = <expression>` is not
+    // valid PostgreSQL (`SET ... = format(...)` fails with a syntax error),
+    // in psql and in the Supabase SQL Editor alike.
+    expect((sql.match(/set_config\('request\.jwt\.claims'/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect(sql).not.toMatch(/set local request\.jwt\.claims\s*=/);
+  });
+
+  it('is Supabase SQL Editor-safe: no psql meta-commands', () => {
+    // \echo is psql-only and aborts the whole script in the editor; progress
+    // is reported with RAISE NOTICE instead.
+    expect(sql).not.toMatch(/^\\echo/m);
+    expect(sql).toContain('RAISE NOTICE');
+  });
+
+  it('snapshots only one order line so the §E split test exercises the CHECK, not the unique constraint', () => {
+    expect(sql).toContain('oi.quantity = 10');
+    expect(sql).toContain('select d.id, oi.id, oi.quantity');
   });
 
   it('exercises admin, staff (assignee + out-of-scope), salesman and retailer sections', () => {

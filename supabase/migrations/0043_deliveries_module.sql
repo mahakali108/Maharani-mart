@@ -22,8 +22,12 @@
 --   6 wrong attempts lock the task (otp_attempts check <= 10) so brute
 --   force is structurally bounded.
 -- * order_delivery_items snapshots each line's ordered quantity at dispatch
---   and records delivered/missing/damaged at completion; the split
---   constraint guarantees delivered + missing + damaged = ordered.
+--   and records delivered/missing/damaged at completion. Dispatch inserts
+--   the snapshot with all three outcome quantities at ZERO (pending state);
+--   completion overwrites them with the counted split. The split constraint
+--   therefore accepts exactly two states per row: all-zeros (pending, set
+--   only by dispatch) or delivered + missing + damaged = ordered
+--   (completed, validated again by completeDeliveryAction server-side).
 -- * Delivery proofs live in the private `delivery-proofs` bucket
 --   (migration 0045); signature_url/photo_url store OBJECT PATHS, never
 --   public URLs.
@@ -94,10 +98,26 @@ create table if not exists order_delivery_items (
   constraint order_delivery_items_qty_check
     check (quantity_ordered >= 0 and quantity_delivered >= 0 and quantity_missing >= 0 and quantity_damaged >= 0),
   constraint order_delivery_items_split
-    check (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)
+    check (
+      (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)
+      or (quantity_delivered = 0 and quantity_missing = 0 and quantity_damaged = 0)
+    )
 );
 
 create index if not exists idx_order_delivery_items_delivery on order_delivery_items(delivery_id);
+
+-- Repair path: `create table if not exists` is a no-op when the table
+-- already exists, so a database that applied 0043 before the pending-zero
+-- fix would keep the old exact-equality constraint (which rejects every
+-- dispatch snapshot). Re-apply the constraint idempotently: every row that
+-- satisfied the old `=` also satisfies the new `=` OR all-zeros, so this
+-- can never fail on existing data.
+alter table order_delivery_items drop constraint if exists order_delivery_items_split;
+alter table order_delivery_items add constraint order_delivery_items_split
+  check (
+    (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)
+    or (quantity_delivered = 0 and quantity_missing = 0 and quantity_damaged = 0)
+  );
 
 -- ----------------------------------------------------------------------------
 -- RLS

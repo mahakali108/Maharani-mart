@@ -19,13 +19,19 @@
 --   delivery-proofs
 --     read : admin+; the retailer of the order (only the two files linked
 --            from THEIR delivery row); the assigned delivery staff/salesman;
+--            the collecting salesman; the retailer's assigned salesman;
 --            staff whose assignment covers the order
+--            (mirrors can_current_user_view_delivery in 0043)
 --     write: admin+; the assigned staff/salesman of that order's delivery
 --            task (uploading proof at completion)
 --   payment-proofs
---     read : admin+; the retailer (their folder); the collecting salesman
---            (rows they recorded)
+--     read : admin+; the retailer (their payments/{retailerId}/ folder);
+--            the collecting salesman (rows they recorded)
 --     write: admin+; a salesman for a retailer assigned to them
+--
+-- No UPDATE/DELETE storage policies: proofs are append-only (every upload
+-- mints a fresh UUID path with upsert:false, so nothing is ever overwritten
+-- or removed through the app).
 --
 -- SAFETY: additive & re-runnable (bucket insert on conflict, policies
 -- dropped + recreated). No existing bucket is touched.
@@ -80,6 +86,7 @@ create policy "delivery_proofs_bucket_read" on storage.objects
              o.retailer_id = auth.uid()
              or od.assigned_staff_id = auth.uid()
              or o.collected_by = auth.uid()
+             or is_retailer_assigned_to_current_salesman(o.retailer_id)
              or (current_user_role() = 'staff' and is_order_assigned_to_current_staff(o.id))
            )
       )
@@ -105,13 +112,21 @@ create policy "delivery_proofs_bucket_write" on storage.objects
 -- payment-proofs policies
 -- ----------------------------------------------------------------------------
 
+-- Object paths inside this bucket are `payments/{retailerId}/{uuid}.webp`,
+-- so storage.foldername(name) is {payments, retailerId}: the retailer id is
+-- segment [2], NOT [1] ([1] is the literal 'payments' — comparing or
+-- casting it as a UUID breaks every read and raises
+-- `invalid input syntax for type uuid: "payments"` on every write).
 drop policy if exists "payment_proofs_bucket_read" on storage.objects;
 create policy "payment_proofs_bucket_read" on storage.objects
   for select using (
     bucket_id = 'payment-proofs'
     and (
       is_admin_or_above()
-      or (storage.foldername(name))[1] = auth.uid()::text
+      or (
+        (storage.foldername(name))[1] = 'payments'
+        and (storage.foldername(name))[2] = auth.uid()::text
+      )
       or exists (
         select 1
           from payment_collections pc
@@ -129,7 +144,17 @@ create policy "payment_proofs_bucket_write" on storage.objects
       is_admin_or_above()
       or (
         current_user_role() = 'salesman'
-        and is_retailer_assigned_to_current_salesman((storage.foldername(name))[1]::uuid)
+        and (storage.foldername(name))[1] = 'payments'
+        -- The folder segment must be a well-formed UUID before casting: a
+        -- CASE (not a bare AND — Postgres may reorder AND branches) turns a
+        -- crafted path into a clean policy denial instead of a uuid cast
+        -- error that aborts the statement.
+        and case
+          when (storage.foldername(name))[2]
+                 ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+          then is_retailer_assigned_to_current_salesman((storage.foldername(name))[2]::uuid)
+          else false
+        end
       )
     )
   );

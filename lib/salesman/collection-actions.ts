@@ -59,8 +59,10 @@ function isValidPaymentProofRef(ref: string | null | undefined, retailerId: stri
 
 /**
  * Record a field collection for a retailer ASSIGNED TO THE CALLING SALESMAN
- * (or any retailer, for admin/staff with `collections.record` — though the
+ * (or any retailer, for an admin with `collections.record` — though the
  * normal admin path remains recordPaymentAction which credits immediately).
+ * Staff hold no `collections.record` permission and are rejected with the
+ * permission error below, matching the 0044 RLS insert policy.
  */
 export async function recordCollectionAction(input: CollectionInput): Promise<CollectionActionResult> {
   const user = await requireUser();

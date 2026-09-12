@@ -11,10 +11,15 @@
 --   (Supabase dashboard → Project Settings → Database → Connection string).
 --
 -- REQUIREMENTS
---   * migrations 0042–0045 applied (see docs/PRODUCTION_VERIFICATION_CHECKLIST.md §1)
+--   * migrations 0037–0045 applied (see docs/PRODUCTION_VERIFICATION_CHECKLIST.md §1)
 --   * run as the `postgres` role (the direct connection string role) so the
 --     fixture can be created; RLS is then exercised by impersonating real
---     user roles with `set local role authenticated` + JWT claims.
+--     user roles with `set local role authenticated` + `set_config(...)` JWT
+--     claims. (`SET x = <expression>` is NOT valid PostgreSQL — impersonation
+--     must go through set_config, which this script does.)
+--
+-- SUPABASE SQL EDITOR: this script is editor-safe (no psql \echo
+-- meta-commands, no client-side features). Paste and run as-is.
 --
 -- WHAT IT DOES
 --   * Everything runs inside ONE transaction and ends with ROLLBACK —
@@ -29,7 +34,7 @@
 -- that is fine as long as each block ends with a `PASS:` notice.
 -- ============================================================================
 
-\echo '== Phase 4 smoke test (everything rolls back at the end) =='
+DO $$ BEGIN RAISE NOTICE '== Phase 4 smoke test (everything rolls back at the end) =='; END $$;
 
 BEGIN;
 
@@ -81,7 +86,7 @@ BEGIN
     v_admin, v_staff, v_salesman, v_retailer;
 END $$;
 
-\echo '-- §0 fixture: two throwaway orders + one delivery task (rolled back)'
+DO $$ BEGIN RAISE NOTICE '-- §0 fixture: two throwaway orders + one delivery task (rolled back)'; END $$;
 
 update retailers
    set assigned_salesman_id = (select salesman_id from smoke_personas)
@@ -114,11 +119,15 @@ select o.id, 'assigned',
        md5(o.id::text || ':000000')
   from smoke_orders o;
 
+-- Snapshot ONLY the qty=10 line (pending zeros for delivered/missing/damaged,
+-- allowed by the 0043 split constraint). The qty=4 line stays unsnapshotted so
+-- the §E split test below exercises the CHECK, not the unique constraint.
 insert into order_delivery_items (delivery_id, order_item_id, quantity_ordered)
-select d.id, oi.id, 10
+select d.id, oi.id, oi.quantity
   from order_deliveries d
   join order_items oi on oi.order_id = d.order_id
- where d.order_id in (select id from smoke_orders);
+ where d.order_id in (select id from smoke_orders)
+   and oi.quantity = 10;
 
 insert into payment_collections (retailer_id, collected_by, amount_paise, method, status)
 values ((select retailer_id from smoke_personas),
@@ -148,8 +157,8 @@ select id from orders where order_number like 'SMOKE-TRANSITION-%';
 -- §A ADMIN — full visibility, can manage collections
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select admin_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}',
+  (select admin_id::text from smoke_personas))), true);
 
 DO $$
 BEGIN
@@ -182,8 +191,8 @@ END $$;
 -- §B STAFF — assignee yes, out-of-scope staff no
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select staff_assignee_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}',
+  (select staff_assignee_id::text from smoke_personas))), true);
 
 DO $$
 BEGIN
@@ -218,8 +227,8 @@ BEGIN
 END $$;
 
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select staff_outsider_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}',
+  (select staff_outsider_id::text from smoke_personas))), true);
 
 DO $$
 DECLARE v_outsider uuid := (select staff_outsider_id from smoke_personas);
@@ -251,8 +260,8 @@ END $$;
 -- §C SALESMAN — assigned retailer only
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select salesman_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}',
+  (select salesman_id::text from smoke_personas))), true);
 
 DO $$
 BEGIN
@@ -311,8 +320,8 @@ END $$;
 -- §D RETAILER — read own, write nothing
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select retailer_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}',
+  (select retailer_id::text from smoke_personas))), true);
 
 DO $$
 BEGIN
@@ -368,8 +377,8 @@ BEGIN
 END $$;
 
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select retailer_outsider_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}',
+  (select retailer_outsider_id::text from smoke_personas))), true);
 
 DO $$
 DECLARE v_outsider uuid := (select retailer_outsider_id from smoke_personas);
@@ -561,6 +570,6 @@ set local role postgres;
 
 ROLLBACK;
 
-\echo '== SMOKE TEST COMPLETE — all fixture data rolled back =='
-\echo 'If every section printed PASS (or documented SKIP for missing personas),'
-\echo 'the Phase 4 RLS / trigger / bucket checks are live-verified.'
+DO $$ BEGIN RAISE NOTICE '== SMOKE TEST COMPLETE — all fixture data rolled back =='; END $$;
+DO $$ BEGIN RAISE NOTICE 'If every section printed PASS (or documented SKIP for missing personas),'; END $$;
+DO $$ BEGIN RAISE NOTICE 'the Phase 4 RLS / trigger / bucket checks are live-verified.'; END $$;

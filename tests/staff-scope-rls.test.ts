@@ -30,10 +30,27 @@ describe('0037 is additive and re-runnable', () => {
   });
 
   it('pairs every create policy with a drop policy if exists', () => {
-    const creates = sql.match(/create policy/g)?.length ?? 0;
-    const drops = sql.match(/drop policy if exists/g)?.length ?? 0;
-    expect(creates).toBeGreaterThan(0);
-    expect(drops).toBe(creates);
+    // Every policy 0037 creates must be dropped first (re-runnability).
+    // Drops may EXCEED creates: 0037 also retires stale policies from
+    // 0001/0005/0014 (areas, warehouses, visits, route_customers reads)
+    // that would otherwise survive alongside the scoped replacements —
+    // RLS is permissive (OR), so a leftover broad policy defeats scoping.
+    const created = [...sql.matchAll(/create policy "([^"]+)" on (\w+)/g)];
+    expect(created.length).toBeGreaterThan(0);
+    for (const [, name, table] of created) {
+      expect(sql).toContain(`drop policy if exists "${name}" on ${table}`);
+    }
+    // And the known stale policies are explicitly retired.
+    for (const stale of [
+      '"areas_read" on areas',
+      '"areas_staff_insert" on areas',
+      '"warehouses_read" on warehouses',
+      '"warehouses_staff_insert" on warehouses',
+      '"warehouses_staff_update" on warehouses',
+      '"route_customers_owner_or_staff" on route_customers',
+    ]) {
+      expect(sql).toContain(`drop policy if exists ${stale}`);
+    }
   });
 
   it('replaces policies only via drop-if-exists (established 0013/0014 pattern)', () => {
@@ -94,8 +111,18 @@ describe('0037 removes network-wide staff access (decision D1)', () => {
 
   it('preserves visits owner access and scopes the staff branch by retailer area', () => {
     expect(sql).toContain('salesman_id = auth.uid()');
-    const visitsPolicy = sql.match(/create policy "visits_owner_or_staff"[\s\S]*?;/)?.[0] ?? '';
-    expect(visitsPolicy).toContain('is_retailer_area_assigned_to_current_staff(retailer_id)');
+    // 0014's three operation-specific policies are retired (the old read
+    // policy grants network-wide staff access) and replaced by scoped
+    // read/insert/update policies that keep the salesman-assignment guard.
+    for (const stale of ['visits_owner_or_staff_read', 'visits_assigned_salesman_insert', 'visits_assigned_salesman_update']) {
+      expect(sql).toContain(`drop policy if exists "${stale}" on visits`);
+    }
+    for (const fresh of ['visits_scoped_read', 'visits_scoped_insert', 'visits_scoped_update']) {
+      expect(sql).toContain(`create policy "${fresh}" on visits`);
+    }
+    const insertPolicy = sql.match(/create policy "visits_scoped_insert"[\s\S]*?;/)?.[0] ?? '';
+    expect(insertPolicy).toContain('is_retailer_assigned_to_current_salesman(retailer_id)');
+    expect(insertPolicy).toContain('is_retailer_area_assigned_to_current_staff(retailer_id)');
   });
 });
 

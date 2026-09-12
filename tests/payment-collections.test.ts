@@ -25,9 +25,9 @@ const ROLES = ['super_admin', 'admin', 'staff', 'salesman', 'retailer'] as const
 
 describe('Phase 4 permission matrix', () => {
   describe('collections.record', () => {
-    it('sales executives and the back office may record collections', () => {
+    it('sales executives and finance may record collections; warehouse staff may not', () => {
       expect(can('salesman', 'collections.record')).toBe(true);
-      expect(can('staff', 'collections.record')).toBe(true);
+      expect(can('staff', 'collections.record')).toBe(false);
       expect(can('admin', 'collections.record')).toBe(true);
       expect(can('super_admin', 'collections.record')).toBe(true);
     });

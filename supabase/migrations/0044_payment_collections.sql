@@ -16,12 +16,18 @@
 --   idempotency key (`collection:<id>`) and links ledger_entry_id — the
 --   retailer's outstanding falls only when finance confirms the money.
 -- * Rejection records the reason; nothing is credited.
--- * Status is one-way: pending → verified | rejected. No deletes.
+-- * Status is one-way: pending → verified | rejected, enforced by a BEFORE
+--   UPDATE trigger (not just the app) — money state must never depend on
+--   client cooperation. No deletes.
 -- * proof_url stores an OBJECT PATH in the private `payment-proofs`
 --   bucket (migration 0045), never a public URL.
+-- * ledger_entry_id is a real FK to retailer_wallet_ledger: a verified
+--   collection always links the PAYMENT_CREDIT row that verification wrote.
 --
 -- RLS:
---   admin+      full read + update (verification)
+--   admin+      read + insert (back-office corrections; the wallet is still
+--               credited ONLY by the verification step, never by the insert)
+--               + update (verification)
 --   retailer    read-only, own collections — NO insert/update/delete
 --   salesman    insert ONLY for retailers assigned to them (0014 helper);
 --               read own collected rows
@@ -73,12 +79,25 @@ create policy "payment_collections_read" on payment_collections
   );
 
 -- A salesman records a collection only for a retailer assigned to them.
+-- Admin+ may also insert (back-office corrections on behalf of the field);
+-- the wallet is still credited only by verification, so this grants no
+-- money movement. Every row starts `pending`: a pre-verified insert would
+-- skip the ledger credit, so the status is pinned here, not just in the app.
+-- (Renamed from payment_collections_salesman_insert: the old name is dropped
+-- so a re-run converges instead of stacking a redundant policy.)
 drop policy if exists "payment_collections_salesman_insert" on payment_collections;
-create policy "payment_collections_salesman_insert" on payment_collections
+drop policy if exists "payment_collections_authorized_insert" on payment_collections;
+create policy "payment_collections_authorized_insert" on payment_collections
   for insert with check (
-    current_user_role() = 'salesman'
-    and collected_by = auth.uid()
-    and is_retailer_assigned_to_current_salesman(retailer_id)
+    status = 'pending'
+    and (
+      is_admin_or_above()
+      or (
+        current_user_role() = 'salesman'
+        and collected_by = auth.uid()
+        and is_retailer_assigned_to_current_salesman(retailer_id)
+      )
+    )
   );
 
 -- Verification is admin-only (finance). Salesmen can never flip a status.
@@ -88,6 +107,36 @@ create policy "payment_collections_admin_update" on payment_collections
   with check (is_admin_or_above());
 
 -- No DELETE policy: collections are money history.
+
+-- ledger_entry_id links the PAYMENT_CREDIT row written at verification.
+-- Nullable (pending rows have none yet); set-null on the impossible delete
+-- keeps the collection readable as money history either way.
+alter table payment_collections drop constraint if exists payment_collections_ledger_entry_fk;
+alter table payment_collections
+  add constraint payment_collections_ledger_entry_fk
+  foreign key (ledger_entry_id) references retailer_wallet_ledger(id) on delete set null;
+
+-- One-way status: pending → verified | rejected. Same-status updates are
+-- legal no-ops (lets admin touch notes without tripping the machine).
+create or replace function enforce_collection_status_oneway() returns trigger as $$
+begin
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+
+  if not (old.status = 'pending' and new.status in ('verified', 'rejected')) then
+    raise exception 'INVALID_COLLECTION_STATUS_TRANSITION: % -> %', old.status, new.status
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_enforce_collection_status_oneway on payment_collections;
+create trigger trg_enforce_collection_status_oneway
+  before update of status on payment_collections
+  for each row execute function enforce_collection_status_oneway();
 
 drop trigger if exists trg_audit_payment_collections on payment_collections;
 create trigger trg_audit_payment_collections after insert or update or delete on payment_collections

@@ -118,10 +118,17 @@ describe('0043 delivery tasks', () => {
     expect(sql43).toContain('check (otp_attempts >= 0 and otp_attempts <= 10)');
   });
 
-  it('keeps the split invariant: delivered + missing + damaged = ordered', () => {
-    expect(sql43).toContain(
-      'check (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)'
-    );
+  it('keeps the split invariant: completed rows sum to ordered, dispatch rows rest at all-zeros', () => {
+    // Dispatch inserts the snapshot with delivered/missing/damaged = 0/0/0
+    // (pending state); completion overwrites with the counted split. The
+    // constraint must accept exactly those two states — a bare `= ordered`
+    // rejects every dispatch insert (check_violation on quantity_ordered > 0).
+    expect(sql43).toContain('quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered');
+    expect(sql43).toContain('quantity_delivered = 0 and quantity_missing = 0 and quantity_damaged = 0');
+    // And the repair path re-applies the constraint for databases that ran
+    // 0043 before the fix (CREATE TABLE IF NOT EXISTS would otherwise keep
+    // the old exact-equality check forever).
+    expect(sql43).toContain('alter table order_delivery_items drop constraint if exists order_delivery_items_split');
   });
 
   it('validates receiver name and note lengths', () => {
@@ -347,7 +354,12 @@ describe('0045 proof buckets are private', () => {
 
   it('bucket write policies require the assigned delivery person / assigned salesman', () => {
     expect(sql45).toContain('od.assigned_staff_id = auth.uid()');
-    expect(sql45).toContain('is_retailer_assigned_to_current_salesman((storage.foldername(name))[1]::uuid)');
+    // Object paths are payments/{retailerId}/{uuid}.webp, so foldername is
+    // {payments, retailerId}: the id is segment [2] ([1] is the literal
+    // 'payments' — casting it as UUID raises on every write).
+    expect(sql45).toContain("(storage.foldername(name))[1] = 'payments'");
+    expect(sql45).toContain('is_retailer_assigned_to_current_salesman((storage.foldername(name))[2]::uuid)');
+    expect(sql45).not.toContain('(storage.foldername(name))[1]::uuid');
   });
 
   it('has no public read grant anywhere', () => {
@@ -420,10 +432,21 @@ describe('0044 payment collections schema', () => {
     expect(body).not.toMatch(/create policy "payment_collections[^"]*(insert|update|delete)[^"]*"\s+for (insert|update|delete)[\s\S]*?retailer_id = auth\.uid\(\)/);
   });
 
-  it('salesman insert policy is scoped to retailers assigned to them', () => {
-    const policy = sql44.match(/create policy "payment_collections_salesman_insert"[\s\S]*?;/)?.[0] ?? '';
+  it('insert policy is scoped to assigned retailers for salesmen, open to admin+ for corrections', () => {
+    const policy = sql44.match(/create policy "payment_collections_authorized_insert"[\s\S]*?;/)?.[0] ?? '';
     expect(policy).toContain('is_retailer_assigned_to_current_salesman(retailer_id)');
     expect(policy).toContain('collected_by = auth.uid()');
+    expect(policy).toContain('is_admin_or_above()');
+    // Every row starts pending: a pre-verified insert would skip the ledger.
+    expect(policy).toContain("status = 'pending'");
+  });
+
+  it('enforces the one-way status in the database, not just the app', () => {
+    expect(sql44).toContain('create or replace function enforce_collection_status_oneway');
+    expect(sql44).toContain('INVALID_COLLECTION_STATUS_TRANSITION');
+    expect(sql44).toContain('drop trigger if exists trg_enforce_collection_status_oneway on payment_collections');
+    expect(sql44).toContain('payment_collections_ledger_entry_fk');
+    expect(sql44).toContain('references retailer_wallet_ledger(id)');
   });
 
   it('only admin+ can update (verify/reject)', () => {

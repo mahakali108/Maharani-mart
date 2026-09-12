@@ -85,7 +85,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.return.manage', 'returns.manage',
-    'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record',
+    // No collections.record: field collections are a salesman/finance flow
+    // (0044 RLS grants insert to salesmen for assigned retailers + admin+).
+    'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign',
     'retailers.view', 'reports.view.area', 'retailers.manage_wallet',
   ],
   salesman: [

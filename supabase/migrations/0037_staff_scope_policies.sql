@@ -24,9 +24,10 @@
 -- retailer and salesman branch from 0001/0008/0009/0014 is preserved
 -- verbatim.
 --
--- Hardening bonus (additive): `areas` and `warehouses` shipped without RLS
--- in 0001 — any anon key could list them. They now require an authenticated
--- session to read and admin+ to write.
+-- Hardening bonus: `areas` and `warehouses` got RLS in 0005 with broad
+-- staff+ write policies (and `areas_read`/`warehouses_read` let even anon
+-- list active rows). The old policies are dropped below; both tables now
+-- require an authenticated session to read and admin+ to write.
 --
 -- SAFETY
 -- ------
@@ -43,7 +44,13 @@
 --       pick, pack and create orders.
 --     - `attendance` stays owner-or-staff+ — HR data, and the only page
 --       that lists it is admin-only.
---     - `audit_logs` stays admin-only (unchanged since 0013).
+--     - `audit_logs` stays staff+ read-only (unchanged since 0006).
+-- * `routes` creation is now admin-only (was: any staff). Staff keep
+--   update on routes in their assigned areas and full customer assignment
+--   (route_customers) on those routes — an admin creates the beat, the
+--   area's staff fill it.
+-- * `visits` keeps the 0014 salesman-assignment guard on writes verbatim;
+--   only the staff branch gains area scoping.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -124,7 +131,8 @@ as $$
 $$;
 
 -- The transfer touches (source or destination) a warehouse assigned to the
--- current staff member.
+-- current staff member. Column names match 0017: stock_transfers uses
+-- source_warehouse_id / destination_warehouse_id.
 create or replace function is_transfer_warehouse_assigned_to_current_staff(p_transfer_id uuid)
 returns boolean
 language sql stable security definer set search_path = public, pg_temp
@@ -135,8 +143,8 @@ as $$
         from stock_transfers t
        where t.id = p_transfer_id
          and (
-           is_warehouse_assigned_to_current_staff(t.from_warehouse_id)
-           or is_warehouse_assigned_to_current_staff(t.to_warehouse_id)
+           is_warehouse_assigned_to_current_staff(t.source_warehouse_id)
+           or is_warehouse_assigned_to_current_staff(t.destination_warehouse_id)
          )
     );
 $$;
@@ -422,8 +430,8 @@ create policy "stock_transfers_staff_insert" on stock_transfers
     or (
       current_user_role() = 'staff'
       and (
-        is_warehouse_assigned_to_current_staff(from_warehouse_id)
-        or is_warehouse_assigned_to_current_staff(to_warehouse_id)
+        is_warehouse_assigned_to_current_staff(source_warehouse_id)
+        or is_warehouse_assigned_to_current_staff(destination_warehouse_id)
       )
     )
   );
@@ -475,12 +483,69 @@ create policy "return_requests_staff_update" on return_requests
     or (current_user_role() = 'staff' and is_order_assigned_to_current_staff(order_id))
   );
 
+-- 0014 replaced the original all-or-nothing visits policy with three
+-- operation-specific policies (read + assigned-only insert/update). All three
+-- must be retired here: the old read policy grants network-wide staff access
+-- (is_staff_or_above) and a single FOR ALL replacement would let a salesman
+-- insert visits for UNASSIGNED retailers (0014 explicitly forbids that).
 drop policy if exists "visits_owner_or_staff" on visits;
-create policy "visits_owner_or_staff" on visits
-  for all using (
+drop policy if exists "visits_owner_or_staff_read" on visits;
+drop policy if exists "visits_assigned_salesman_insert" on visits;
+drop policy if exists "visits_assigned_salesman_update" on visits;
+drop policy if exists "visits_scoped_read" on visits;
+drop policy if exists "visits_scoped_insert" on visits;
+drop policy if exists "visits_scoped_update" on visits;
+
+-- Salesmen keep read access to their own visits (including history left
+-- behind by a reassignment); staff are scoped to assigned retailer areas.
+create policy "visits_scoped_read" on visits
+  for select using (
     salesman_id = auth.uid()
     or is_admin_or_above()
     or (current_user_role() = 'staff' and is_retailer_area_assigned_to_current_staff(retailer_id))
+  );
+
+-- Writes preserve the 0014 salesman-assignment guard verbatim and scope
+-- staff writes to assigned retailer areas (staff may log on behalf of any
+-- salesman for an in-scope retailer, as before, but no longer anywhere).
+create policy "visits_scoped_insert" on visits
+  for insert with check (
+    is_admin_or_above()
+    or (
+      current_user_role() = 'salesman'
+      and salesman_id = auth.uid()
+      and is_retailer_assigned_to_current_salesman(retailer_id)
+    )
+    or (
+      current_user_role() = 'staff'
+      and is_retailer_area_assigned_to_current_staff(retailer_id)
+    )
+  );
+
+create policy "visits_scoped_update" on visits
+  for update using (
+    is_admin_or_above()
+    or (
+      current_user_role() = 'salesman'
+      and salesman_id = auth.uid()
+      and is_retailer_assigned_to_current_salesman(retailer_id)
+    )
+    or (
+      current_user_role() = 'staff'
+      and is_retailer_area_assigned_to_current_staff(retailer_id)
+    )
+  )
+  with check (
+    is_admin_or_above()
+    or (
+      current_user_role() = 'salesman'
+      and salesman_id = auth.uid()
+      and is_retailer_assigned_to_current_salesman(retailer_id)
+    )
+    or (
+      current_user_role() = 'staff'
+      and is_retailer_area_assigned_to_current_staff(retailer_id)
+    )
   );
 
 drop policy if exists "notifications_authorized_insert" on notifications;
@@ -515,6 +580,23 @@ create policy "routes_staff_update" on routes
   for update using (
     is_admin_or_above()
     or (current_user_role() = 'staff' and is_area_assigned_to_current_staff(area_id))
+  );
+
+-- The 0001 SELECT policy (route_customers_owner_or_staff) grants every staff
+-- member network-wide read via is_staff_or_above(). It must be retired or
+-- the write scoping below is theatre: staff could still list every beat.
+drop policy if exists "route_customers_owner_or_staff" on route_customers;
+create policy "route_customers_owner_or_staff" on route_customers
+  for select using (
+    exists (
+      select 1 from routes r
+      where r.id = route_id
+        and (
+          r.salesman_id = auth.uid()
+          or is_admin_or_above()
+          or (current_user_role() = 'staff' and is_area_assigned_to_current_staff(r.area_id))
+        )
+    )
   );
 
 drop policy if exists "route_customers_staff_write" on route_customers;
@@ -567,6 +649,12 @@ create policy "route_customers_staff_delete" on route_customers
 
 alter table areas enable row level security;
 
+-- Retire the broad 0005 policies: RLS is permissive (OR), so leaving
+-- areas_read (anon can read active rows) or areas_staff_insert (any staff
+-- can insert) in place would silently defeat the tightening below.
+drop policy if exists "areas_read" on areas;
+drop policy if exists "areas_staff_insert" on areas;
+
 drop policy if exists "areas_authenticated_read" on areas;
 create policy "areas_authenticated_read" on areas
   for select using (auth.uid() is not null);
@@ -584,6 +672,12 @@ create policy "areas_admin_delete" on areas
   for delete using (is_admin_or_above());
 
 alter table warehouses enable row level security;
+
+-- Retire the broad 0005 policies (see areas note above): without these
+-- drops, staff keep insert/update on warehouses through the old policies.
+drop policy if exists "warehouses_read" on warehouses;
+drop policy if exists "warehouses_staff_insert" on warehouses;
+drop policy if exists "warehouses_staff_update" on warehouses;
 
 drop policy if exists "warehouses_authenticated_read" on warehouses;
 create policy "warehouses_authenticated_read" on warehouses

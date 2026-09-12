@@ -33,6 +33,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUser, type CurrentUser } from '@/lib/auth/session';
 import { can } from '@/lib/permissions/permissions';
 import { createInAppNotification, notifyOrderEvent } from '@/lib/notifications/notify';
+import { rupeesToPaise } from '@/lib/retailer/wallet';
 import { createClient } from '@/lib/supabase/server';
 import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
 
@@ -431,7 +432,10 @@ export async function completeDeliveryAction(
 
     const value = values.get(line.order_item_id);
     settlementLines.push({
-      lineTotalPaise: value?.line_total ?? 0,
+      // order_items.line_total is RUPEES (numeric); the settlement engine and
+      // the wallet ledger are integer PAISE. Convert, or the shortfall credit
+      // is 100x too small (matches the ORDER_DEBIT path in create-order.ts).
+      lineTotalPaise: rupeesToPaise(value?.line_total ?? 0),
       quantityOrdered: line.quantity_ordered,
       quantityMissing: missing,
       quantityDamaged: damaged,

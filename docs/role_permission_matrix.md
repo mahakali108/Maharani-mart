@@ -31,6 +31,14 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | View all reports | ✅ | ✅ | area-scoped | own-area | own orders |
 | Manage routes (all) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Manage own route/visits | — | — | — | ✅ | — |
+| Dispatch orders (confirmed/processing/packed → dispatched) | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Assign deliveries to staff/salesman | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Execute deliveries (start/complete/fail, incl. OTP + proofs) | ✅ | ✅ | ✅ (assigned) | ✅ (assigned) | ❌ |
+| Return to warehouse (RTO) | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Record field collections (pending queue) | ✅ | ✅ | ❌ | ✅ (assigned retailers) | ❌ |
+| Verify / reject collections (credits wallet) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Request a return (own delivered orders, in window) | — | — | — | — | ✅ |
+| Manage returns / refunds | ✅ | ✅ | ✅ | ❌ | ❌ |
 
 ## Notes
 

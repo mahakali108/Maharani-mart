@@ -39,23 +39,33 @@ order) against the target project:
 
 | # | File | Depends on | What it creates |
 |---|------|-----------|-----------------|
-| 1 | `supabase/migrations/0042_order_state_machine.sql` | 0001 (`orders`) | `enforce_order_status_transitions()` + `trg_enforce_order_status_transitions` on `orders` |
-| 2 | `supabase/migrations/0043_deliveries_module.sql` | 0001 (`current_user_role`, `is_admin_or_above`, `log_audit`), 0014 (`is_retailer_assigned_to_current_salesman`), 0037 (`is_order_assigned_to_current_staff`) | `order_deliveries`, `order_delivery_items`, `can_current_user_view_delivery()`, RLS policies, `enforce_delivery_status_transitions()` + trigger, audit triggers |
-| 3 | `supabase/migrations/0044_payment_collections.sql` | 0001 helpers, `retailers`, `orders` | `payment_collections`, RLS policies, audit trigger |
-| 4 | `supabase/migrations/0045_delivery_payment_proof_buckets.sql` | **0043 + 0044** (its storage policies query `order_deliveries` / `payment_collections`) | private buckets `delivery-proofs` + `payment-proofs` and their storage policies |
+| 1 | `supabase/migrations/0037_staff_scope_policies.sql` | 0001 helpers, 0005 (`areas`/`warehouses` RLS), 0014 (salesman helpers), 0017 (inventory tables) | 7 assignment helpers, scoped staff RLS on orders/retailers/inventory/routes/visits, tightened `areas`/`warehouses` RLS |
+| 2 | `supabase/migrations/0038_staff_targets_commissions.sql` | 0001 (`profiles`, `log_audit`) | `staff_targets`, `staff_commissions`, RLS, audit triggers |
+| 3 | `supabase/migrations/0039_follow_ups.sql` | 0001 (`log_audit`), 0014 (salesman helper), `retailers`/`visits`/`orders` | `follow_ups`, RLS, audit trigger |
+| 4 | `supabase/migrations/0040_schemes_audit.sql` | 0001 (`schemes`, `log_audit`) | `trg_audit_schemes` |
+| 5 | `supabase/migrations/0041_area_stock_view.sql` | `areas`, `warehouses`, `inventory_stock`, `products` | `inventory_area_totals` view (security_invoker) |
+| 6 | `supabase/migrations/0042_order_state_machine.sql` | 0001 (`orders`) | `enforce_order_status_transitions()` + `trg_enforce_order_status_transitions` on `orders` |
+| 7 | `supabase/migrations/0043_deliveries_module.sql` | 0001 (`current_user_role`, `is_admin_or_above`, `log_audit`), 0014 (`is_retailer_assigned_to_current_salesman`), **0037** (`is_order_assigned_to_current_staff`) | `order_deliveries`, `order_delivery_items`, `can_current_user_view_delivery()`, RLS policies, `enforce_delivery_status_transitions()` + trigger, audit triggers |
+| 8 | `supabase/migrations/0044_payment_collections.sql` | 0001 helpers, `retailers`, `orders`, 0029 (`retailer_wallet_ledger` for the `ledger_entry_id` FK) | `payment_collections`, RLS policies, `enforce_collection_status_oneway()` + trigger, audit trigger |
+| 9 | `supabase/migrations/0045_delivery_payment_proof_buckets.sql` | **0043 + 0044** (its storage policies query `order_deliveries` / `payment_collections`), 0037 + 0014 (helpers used in storage policies) | private buckets `delivery-proofs` + `payment-proofs` and their storage policies |
 
 Rules that MUST hold:
 
+- Run **0037 first**: 0043 calls `is_order_assigned_to_current_staff()` and
+  0045 calls it too — without 0037 they fail with
+  `function is_order_assigned_to_current_staff(uuid) does not exist`.
+  (0037 itself needs the `source_warehouse_id`/`destination_warehouse_id`
+  columns from 0017; the old `from/to_warehouse_id` names never existed.)
 - **0045 must run last** — its `storage.objects` policies reference the tables
-  created by 0043/0044; applying it first fails with `relation "order_deliveries" does not exist`.
-- 0042–0044 have no dependency on each other, but keep the lexicographic
-  order — the migration runner enforces it and the test-suite assertions
-  assume it.
-- All four are **additive and re-runnable** (`create or replace`, `drop … if
+  created by 0043/0044; applying it first fails with `relation \"order_deliveries\" does not exist`.
+- Keep the lexicographic order throughout — the migration runner enforces it
+  and the test-suite assertions assume it.
+- All nine are **additive and re-runnable** (`create or replace`, `drop … if
   exists`, `insert … on conflict do update`). Zero `drop table` / `drop column`
   / `truncate` / `delete from` statements. No business data is inserted.
-- If 0037–0041 are not yet applied to the target, they must be applied first
-  (0043 calls the 0037 helper directly).
+- In the Supabase SQL Editor, run each file and confirm SUCCESS before
+  pasting the next — a mid-file error aborts that file, and later files
+  that depend on it then fail with missing-function/relation errors.
 
 ### Post-application verification SQL (run as postgres / in the SQL editor)
 
@@ -68,9 +78,10 @@ select proname from pg_proc where proname in
 
 select tgname from pg_trigger where tgname in
   ('trg_enforce_order_status_transitions','trg_enforce_delivery_status_transitions',
+   'trg_enforce_collection_status_oneway',
    'trg_audit_order_deliveries','trg_audit_order_delivery_items','trg_audit_payment_collections')
   and not tgisinternal;
--- expect: 5 rows
+-- expect: 6 rows
 
 select id, public, file_size_limit from storage.buckets
   where id in ('delivery-proofs','payment-proofs');
@@ -78,7 +89,15 @@ select id, public, file_size_limit from storage.buckets
 
 select count(*) from pg_policies where schemaname='public'
   and tablename in ('order_deliveries','order_delivery_items','payment_collections');
--- expect: 10 policies (3 + 5 + 2)
+-- expect: 10 policies (3 + 4 + 3)
+
+-- No stale pre-0037 policies may remain on the rescoped tables:
+select count(*) from pg_policies where policyname in
+  ('areas_read','areas_staff_insert','warehouses_read',
+   'warehouses_staff_insert','warehouses_staff_update',
+   'visits_owner_or_staff_read','visits_assigned_salesman_insert',
+   'visits_assigned_salesman_update');
+-- expect: 0 rows
 
 select count(*) from pg_policies where schemaname='storage' and tablename='objects'
   and policyname like '%proof%';
@@ -103,8 +122,8 @@ with `ROLLBACK` (no data is left behind). What it asserts:
 | Role | Must be able to | Must NOT be able to |
 |------|-----------------|---------------------|
 | admin / super_admin | see all deliveries, all collections; update/verify them | — (full access by design) |
-| staff | see/touch deliveries only within their assigned warehouse/area scope or where `assigned_staff_id = auth.uid()`; insert delivery tasks on dispatch for in-scope orders | see deliveries in other areas; delete any delivery row; insert a collection for an unassigned retailer |
-| salesman | see deliveries where they are the assignee / collected the order / own the retailer; insert collections **only** for retailers assigned to them | verify/reject collections; update any delivery; see other salesmen's retailers' collections |
+| staff | see/touch deliveries only within their assigned warehouse/area scope or where `assigned_staff_id = auth.uid()`; insert delivery tasks on dispatch for in-scope orders | see deliveries in other areas; delete any delivery row; insert/verify any collection (salesman-record / admin-verify flow) |
+| salesman | see deliveries where they are the assignee / collected the order / own the retailer; execute (start/complete/fail) deliveries assigned to them; insert collections **only** for retailers assigned to them | verify/reject collections; insert delivery tasks (dispatch is staff/admin); update deliveries they are not assigned to; see other salesmen's retailers' collections |
 | retailer | read own orders' deliveries and collections | insert/update/delete `order_deliveries`, `order_delivery_items`, `payment_collections`; update `orders.status` to anything except the legal self-cancel of a `pending` order |
 | anon | nothing | no select on any Phase 4 table |
 
@@ -135,7 +154,7 @@ HTTP checks (from any machine with network access to the project):
 ```bash
 # 1) Public/object URL must NOT serve the file (private bucket):
 curl -s -o /dev/null -w '%{http_code}\n' \
-  "https://<PROJECT>.supabase.co/storage/v1/object/public/delivery-proofs/delivers/<orderId>/<file>.webp"
+  "https://<PROJECT>.supabase.co/storage/v1/object/public/delivery-proofs/deliveries/<orderId>/<file>.webp"
 # expect: 400 or 403 — never 200
 
 # 2) Signed URL fetched by the OWNING retailer session must return 200

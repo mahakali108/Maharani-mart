@@ -59,9 +59,13 @@ apply_if_needed() {  # apply_if_needed <file> <label> <probe-sql>
   fi
 }
 
-# Signature objects per migration (any one proves the migration ran).
+# Signature objects per migration. Each probe MUST check the LAST object its
+# migration creates: probing an early object reports "already applied" after a
+# PARTIAL run (a mid-file failure leaves early objects behind) and the repair
+# would then be skipped forever. 0037's last statement creates the
+# warehouses_authenticated_read policy.
 apply_if_needed "0037_staff_scope_policies.sql" "0037 staff scope" \
-  "select case when exists (select 1 from pg_proc where proname = 'is_order_assigned_to_current_staff') then 1 else 0 end"
+  "select case when exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'warehouses' and policyname = 'warehouses_authenticated_read') then 1 else 0 end"
 apply_if_needed "0038_staff_targets_commissions.sql" "0038 targets/commissions" \
   "select case when to_regclass('public.staff_targets') is not null then 1 else 0 end"
 apply_if_needed "0039_follow_ups.sql" "0039 follow-ups" \
@@ -83,12 +87,18 @@ echo "== 2/4 Post-application sanity checks =="
 "${PSQL[@]}" -tAc "
 select 'triggers: ' || count(*) from pg_trigger where tgname in (
   'trg_enforce_order_status_transitions','trg_enforce_delivery_status_transitions',
+  'trg_enforce_collection_status_oneway',
   'trg_audit_order_deliveries','trg_audit_order_delivery_items','trg_audit_payment_collections')
   and not tgisinternal;
 select 'proof buckets private: ' || count(*) from storage.buckets
   where id in ('delivery-proofs','payment-proofs') and public = false;
+select 'stale 0005/0014 policies remaining: ' || count(*) from pg_policies
+  where policyname in ('areas_read','areas_staff_insert','warehouses_read',
+    'warehouses_staff_insert','warehouses_staff_update',
+    'visits_owner_or_staff_read','visits_assigned_salesman_insert',
+    'visits_assigned_salesman_update');
 "
-echo "  (expect: triggers: 5 · proof buckets private: 2)"
+echo "  (expect: triggers: 6 · proof buckets private: 2 · stale policies: 0)"
 
 echo "== 3/4 Live RLS / transition / bucket smoke test =="
 psql "$DATABASE_URL" -f "$SMOKE"
