@@ -21,6 +21,8 @@ const sql45 = read('supabase/migrations/0045_delivery_payment_proof_buckets.sql'
 const dispatchSrc = read('lib/staff/dispatch-actions.ts');
 const deliverySrc = read('lib/delivery/delivery-actions.ts');
 const retailerOrderSrc = read('lib/retailer/order-actions.ts');
+const salesmanActions = read('lib/salesman/collection-actions.ts');
+const adminActions = read('lib/admin/collections-actions.ts');
 const signedUrlSrc = read('lib/storage/signed-url.ts');
 const mediaTypesSrc = read('lib/media/types.ts');
 const mediaAccessSrc = read('lib/media/access.ts');
@@ -359,6 +361,18 @@ describe('proof viewing uses signed URLs only', () => {
     expect(signedUrlSrc).toContain("export type PrivateBucket = 'retailer-documents' | 'delivery-proofs' | 'payment-proofs'");
   });
 
+  it('the upload pipeline can never mint a public URL for a private kind', () => {
+    const uploadSrc = read('lib/media/supabase.ts');
+    expect(uploadSrc).toContain('if (!config.private) {');
+    expect(uploadSrc).toContain('ref: config.private ? path : (url ?? path)');
+  });
+
+  it('no code constructs a public URL for the proof buckets', () => {
+    for (const source of [signedUrlSrc, mediaTypesSrc, mediaAccessSrc, read('lib/media/supabase.ts'), read('lib/delivery/proof-url.ts')]) {
+      expect(source).not.toMatch(/getPublicUrl\([^)]*proof/i);
+    }
+  });
+
   it('resolveProofUrl routes object paths to the right bucket and never exposes others', () => {
     const proofSrc = read('lib/delivery/proof-url.ts');
     expect(proofSrc).toContain("prefix: 'deliveries/'");
@@ -419,6 +433,52 @@ describe('0044 payment collections schema', () => {
 
   it('audits every change', () => {
     expect(sql44).toContain('trg_audit_payment_collections');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end chain: dispatch → task → assignment → completion → collection
+// (gate 6 — static trace of the exact call order; the live run is
+// docs/PRODUCTION_VERIFICATION_CHECKLIST.md §6)
+// ---------------------------------------------------------------------------
+
+describe('dispatch → delivery → collection chain', () => {
+  it('step 1 — dispatch creates the task WITH the OTP hash before the retailer notification', () => {
+    expect(dispatchSrc.indexOf('generateDeliveryOtp()')).toBeLessThan(dispatchSrc.indexOf('otp_hash: otpHash'));
+    // The OTP hash is stored before the OTP text is sent to the retailer.
+    expect(dispatchSrc.indexOf('otp_hash: otpHash')).toBeLessThan(dispatchSrc.indexOf('Your delivery OTP is'));
+  });
+
+  it('step 2 — assignment re-scopes execution and notifies the new assignee', () => {
+    expect(deliverySrc).toContain('Delivery assigned to you');
+    expect(deliverySrc).toContain('staffDeliveryLink');
+    // Reassignment is refused once the task is completed.
+    expect(deliverySrc).toContain('already completed — it can no longer be reassigned');
+  });
+
+  it('step 3 — completion is the only path to delivered/partially_delivered, and it notifies the retailer', () => {
+    expect(deliverySrc).toContain('Order delivered');
+    expect(deliverySrc).toContain('Order partially delivered');
+    expect(deliverySrc).toContain('credited back to your wallet');
+    // The order flip to delivered lives in the SAME action, after the claim.
+    expect(deliverySrc.indexOf("delivery_status: finalStatus")).toBeLessThan(
+      deliverySrc.indexOf("status: 'delivered', delivered_at: nowIso")
+    );
+  });
+
+  it('step 4 — a collection is recorded pending, scoped to the salesman\u2019s retailer', () => {
+    expect(salesmanActions).toContain("status: 'pending'");
+    expect(salesmanActions).toContain('retailers assigned to you');
+  });
+
+  it('step 5 — only verification credits the wallet, and it links the ledger entry', () => {
+    expect(adminActions).toContain("'PAYMENT_CREDIT'");
+    expect(adminActions).toContain('ledger_entry_id: ledgerEntry?.id ?? null');
+  });
+
+  it('the retailer OTP notification and the completion summary link to the retailer delivery record', () => {
+    expect(dispatchSrc).toContain('linkUrl: `/retailer/orders/${orderId}/delivery`');
+    expect(deliverySrc).toContain('linkUrl: `/retailer/orders/${orderId}/delivery`');
   });
 });
 
