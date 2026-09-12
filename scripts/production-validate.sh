@@ -16,8 +16,9 @@
 # Connection string (URI). It is only used locally by psql.
 #
 # Alternative (no psql): paste each migration listed below into the Supabase
-# SQL Editor in the same order, then run supabase/smoke-test.sql there
-# (remove the leading \echo / psql meta-commands if the editor rejects them).
+# SQL Editor in the same order, then paste + run supabase/smoke-test.sql
+# there as ONE execution — the smoke script is plain SQL (no psql
+# meta-commands), so the editor accepts it as-is.
 # ============================================================================
 
 set -euo pipefail
