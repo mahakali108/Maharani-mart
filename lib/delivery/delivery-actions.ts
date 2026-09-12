@@ -588,6 +588,27 @@ export async function recordFailedDeliveryAction(
     return { error: `This order is ${order.status.replace(/_/g, ' ')} — a failed-delivery re-open is not possible.` };
   }
 
+  // --- 0046: a failed task is terminal, so every line must balance BEFORE
+  // the parent flips. Nothing reached the customer, therefore each line is
+  // recorded as fully missing (delivered 0 / missing = ordered / damaged 0).
+  // Re-dispatch resets these rows, so this is purely the truthful record of
+  // the failed attempt — never a faked count. ---
+  const { data: failLines } = await supabase
+    .from('order_delivery_items')
+    .select('id, quantity_ordered')
+    .eq('delivery_id', delivery.id);
+  for (const line of (failLines ?? []) as { id: string; quantity_ordered: number }[]) {
+    const { error: lineError } = await supabase
+      .from('order_delivery_items')
+      .update({
+        quantity_delivered: 0,
+        quantity_missing: line.quantity_ordered,
+        quantity_damaged: 0,
+      } as never)
+      .eq('id', line.id);
+    if (lineError) return { error: lineError.message };
+  }
+
   const { data: claimed, error } = await supabase
     .from('order_deliveries')
     .update({

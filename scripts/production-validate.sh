@@ -2,7 +2,7 @@
 # ============================================================================
 # scripts/production-validate.sh — Phase 4 production validation (ONE COMMAND)
 #
-# Applies every unapplied migration (0037–0045) in order, then runs the live
+# Applies every unapplied migration (0037–0046) in order, then runs the live
 # RLS/trigger/bucket smoke test. Safe to re-run: every migration is additive
 # and idempotent, and the smoke test rolls its fixture back completely.
 #
@@ -78,20 +78,23 @@ apply_if_needed "0044_payment_collections.sql" "0044 payment collections" \
   "select case when to_regclass('public.payment_collections') is not null then 1 else 0 end"
 apply_if_needed "0045_delivery_payment_proof_buckets.sql" "0045 proof buckets" \
   "select case when exists (select 1 from storage.buckets where id = 'delivery-proofs') then 1 else 0 end"
+apply_if_needed "0046_delivery_split_terminal_states.sql" "0046 terminal split" \
+  "select case when exists (select 1 from pg_trigger where tgname = 'trg_enforce_delivery_lines_complete' and not tgisinternal) then 1 else 0 end"
 
 echo "== 2/4 Post-application sanity checks =="
 "${PSQL[@]}" -tAc "
 select 'triggers: ' || count(*) from pg_trigger where tgname in (
   'trg_enforce_order_status_transitions','trg_enforce_delivery_status_transitions',
-  'trg_audit_order_deliveries','trg_audit_order_delivery_items','trg_audit_payment_collections')
+  'trg_audit_order_deliveries','trg_audit_order_delivery_items','trg_audit_payment_collections',
+  'trg_enforce_delivery_split','trg_enforce_delivery_lines_complete')
   and not tgisinternal;
 select 'proof buckets private: ' || count(*) from storage.buckets
   where id in ('delivery-proofs','payment-proofs') and public = false;
 "
-echo "  (expect: triggers: 5 · proof buckets private: 2)"
+echo "  (expect: triggers: 7 · proof buckets private: 2)"
 
 echo "== 3/4 Live RLS / transition / bucket smoke test =="
-psql "$DATABASE_URL" -f "$SMOKE"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$SMOKE"
 
 echo "== 4/4 Next steps (docs/PRODUCTION_VERIFICATION_CHECKLIST.md) =="
 cat <<'EOF'

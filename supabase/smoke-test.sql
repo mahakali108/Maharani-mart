@@ -5,13 +5,15 @@
 --
 -- HOW TO RUN (against the real project):
 --
---   psql "$DATABASE_URL" -f supabase/smoke-test.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/smoke-test.sql
 --
+--   ON_ERROR_STOP=1 is REQUIRED: without it psql exits 0 even when the
+--   script fails, which would report a false success (finding F6).
 --   $DATABASE_URL = the project's direct Postgres connection string
 --   (Supabase dashboard → Project Settings → Database → Connection string).
 --
 -- REQUIREMENTS
---   * migrations 0042–0045 applied (see docs/PRODUCTION_VERIFICATION_CHECKLIST.md §1)
+--   * migrations 0042–0046 applied (see docs/PRODUCTION_VERIFICATION_CHECKLIST.md §1)
 --   * run as the `postgres` role (the direct connection string role) so the
 --     fixture can be created; RLS is then exercised by impersonating real
 --     user roles with `set local role authenticated` + JWT claims.
@@ -114,15 +116,44 @@ select o.id, 'assigned',
        md5(o.id::text || ':000000')
   from smoke_orders o;
 
+-- Dispatch-state snapshot: 0/0/0 counts with a non-terminal parent — allowed
+-- by the 0046 pre-completion invariant (delivered+missing+damaged <= ordered).
+-- Only the qty-10 line is attached; the qty-4 line stays UNATTACHED so the
+-- §E split test below genuinely exercises the terminal-state enforcement
+-- (finding F3).
 insert into order_delivery_items (delivery_id, order_item_id, quantity_ordered)
-select d.id, oi.id, 10
+select d.id, oi.id, oi.quantity
   from order_deliveries d
   join order_items oi on oi.order_id = d.order_id
- where d.order_id in (select id from smoke_orders);
+ where d.order_id in (select id from smoke_orders)
+   and oi.quantity = 10;
 
 insert into payment_collections (retailer_id, collected_by, amount_paise, method, status)
 values ((select retailer_id from smoke_personas),
         (select salesman_id from smoke_personas), 5000, 'cash', 'pending');
+
+-- The dispatch-state snapshot above (0/0/0 counts, non-terminal parent) must
+-- have been ACCEPTED — this is the 0046/F1 proof that dispatch can succeed.
+DO $$
+BEGIN
+  if not exists (
+    select 1 from order_delivery_items li
+      join order_deliveries d on d.id = li.delivery_id
+     where d.order_id in (select id from smoke_orders)
+       and li.quantity_delivered = 0 and li.quantity_missing = 0 and li.quantity_damaged = 0
+       and li.quantity_ordered = 10 and d.delivery_status = 'assigned'
+  ) then
+    raise exception 'SMOKE FAIL: dispatch-state 0/0/0 snapshot was not accepted (0046 pre-completion invariant broken)';
+  end if;
+  if exists (
+    select 1 from order_delivery_items li
+      join order_items oi on oi.id = li.order_item_id
+     where oi.quantity = 4
+  ) then
+    raise exception 'SMOKE FAIL: the qty-4 line must stay unattached for the §E split test';
+  end if;
+  raise notice 'PASS: §0 dispatch-state snapshot (0/0/0, non-terminal) accepted; qty-4 line unattached';
+END $$;
 
 grant select on smoke_personas, smoke_orders to authenticated;
 
@@ -136,6 +167,9 @@ values ('SMOKE-TRANSITION-' || right(gen_random_uuid()::text, 8),
 create temp table smoke_transition_order as
 select id from orders where order_number like 'SMOKE-TRANSITION-%';
 
+-- §B reads this table as the authenticated role (F5 unmasked RLS test).
+grant select on smoke_transition_order to authenticated;
+
 -- RLS-blocked UPDATEs fail SILENTLY (0 rows), they do not raise — so the
 -- negative UPDATE checks below compare row state before/after instead of
 -- watching for exceptions. INSERT violations DO raise (with check).
@@ -148,8 +182,8 @@ select id from orders where order_number like 'SMOKE-TRANSITION-%';
 -- §A ADMIN — full visibility, can manage collections
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select admin_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select admin_id::text from smoke_personas)), true);
 
 DO $$
 BEGIN
@@ -182,8 +216,8 @@ END $$;
 -- §B STAFF — assignee yes, out-of-scope staff no
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select staff_assignee_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select staff_assignee_id::text from smoke_personas)), true);
 
 DO $$
 BEGIN
@@ -218,8 +252,8 @@ BEGIN
 END $$;
 
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select staff_outsider_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select staff_outsider_id::text from smoke_personas)), true);
 
 DO $$
 DECLARE v_outsider uuid := (select staff_outsider_id from smoke_personas);
@@ -231,28 +265,32 @@ BEGIN
   raise notice 'PASS: §B out-of-scope staff sees nothing (cross-area access denied)';
 END $$;
 
--- Out-of-scope staff cannot insert a delivery task for this order.
+-- Out-of-scope staff cannot insert a delivery task. Targets the TRANSITION
+-- order, which has no task yet (§E creates one later), so a UNIQUE violation
+-- cannot mask a missing RLS denial (finding F5). The rejection must be an
+-- RLS denial (SQLSTATE 42501) specifically — an insert that succeeds, or any
+-- other error, fails loudly instead of passing for the wrong reason.
 DO $$
 DECLARE v_outsider uuid := (select staff_outsider_id from smoke_personas);
-DECLARE v_allowed boolean := false;
+DECLARE v_denied_by_rls boolean := false;
 BEGIN
   if v_outsider is null then raise notice 'SKIP: §B outsider insert not tested (no persona)'; return; end if;
   begin
     insert into order_deliveries (order_id, delivery_status)
-    values ((select id from smoke_orders limit 1), 'assigned');
-    v_allowed := true;
-  exception when others then null;
+    values ((select id from smoke_transition_order), 'assigned');
+  exception when insufficient_privilege then
+    v_denied_by_rls := true;
   end;
-  if v_allowed then raise exception 'SMOKE FAIL: out-of-scope staff inserted a delivery task'; end if;
-  raise notice 'PASS: §B out-of-scope staff cannot create delivery tasks';
+  if not v_denied_by_rls then raise exception 'SMOKE FAIL: out-of-scope staff was NOT denied by RLS (42501) when creating a delivery task'; end if;
+  raise notice 'PASS: §B out-of-scope staff cannot create delivery tasks (RLS denied, 42501)';
 END $$;
 
 -- ----------------------------------------------------------------------------
 -- §C SALESMAN — assigned retailer only
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select salesman_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select salesman_id::text from smoke_personas)), true);
 
 DO $$
 BEGIN
@@ -311,8 +349,8 @@ END $$;
 -- §D RETAILER — read own, write nothing
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select retailer_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select retailer_id::text from smoke_personas)), true);
 
 DO $$
 BEGIN
@@ -368,8 +406,8 @@ BEGIN
 END $$;
 
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select retailer_outsider_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select retailer_outsider_id::text from smoke_personas)), true);
 
 DO $$
 DECLARE v_outsider uuid := (select retailer_outsider_id from smoke_personas);
@@ -418,10 +456,16 @@ BEGIN
   raise notice 'PASS: §E order cancelled -> confirmed rejected (terminal)';
 END $$;
 
--- Delivery machine (fixture task starts 'assigned').
+-- Delivery machine (fixture task starts 'assigned' with an uncounted 0/0/0
+-- line). 0046 requires balanced lines for terminal entry, so the line is
+-- counted FIRST — exactly like completeDeliveryAction (lines before status).
 DO $$
 DECLARE v_allowed boolean;
 BEGIN
+  update order_delivery_items set quantity_delivered = 10
+   where delivery_id in (select d.id from order_deliveries d
+                          where d.order_id in (select id from smoke_orders));
+
   update order_deliveries set delivery_status = 'in_progress'
    where order_id in (select id from smoke_orders);
   update order_deliveries set delivery_status = 'delivered'
@@ -475,9 +519,10 @@ BEGIN
   raise notice 'PASS: §E exactly one delivery task per order';
 END $$;
 
--- Split invariant: delivered + missing + damaged = ordered. The insert
--- targets the second (un-snapshotted) order line, so only the SPLIT check
--- can reject it — the unique constraint would not apply.
+-- Split invariant (0046): the parent task is terminal (returned_to_warehouse),
+-- so the split must balance exactly. The insert targets the second
+-- (unattached — see the F3 fixture) order line, so only the terminal-state
+-- enforcement can reject it — the unique constraint would not apply.
 DO $$
 DECLARE v_allowed boolean := false;
 BEGIN
@@ -494,6 +539,87 @@ BEGIN
   end;
   if v_allowed then raise exception 'SMOKE FAIL: delivery quantities that do not sum to ordered were accepted'; end if;
   raise notice 'PASS: §E quantity split invariant (delivered+missing+damaged = ordered) enforced';
+END $$;
+
+-- While terminal, a corrected split that still balances is allowed, and a
+-- correction that breaks the balance is rejected (0046 line trigger).
+DO $$
+DECLARE v_allowed boolean := false;
+BEGIN
+  update order_delivery_items
+     set quantity_delivered = 8, quantity_missing = 1, quantity_damaged = 1
+   where delivery_id in (select d.id from order_deliveries d
+                          where d.order_id in (select id from smoke_orders));
+  raise notice 'PASS: §E balanced correction allowed while terminal';
+
+  begin
+    update order_delivery_items set quantity_missing = 0
+     where delivery_id in (select d.id from order_deliveries d
+                            where d.order_id in (select id from smoke_orders));
+    v_allowed := true;
+  exception when others then null;
+  end;
+  if v_allowed then raise exception 'SMOKE FAIL: unbalanced correction was accepted while terminal'; end if;
+  raise notice 'PASS: §E unbalanced correction rejected while terminal';
+END $$;
+
+-- Terminal entry requires balanced lines (0046 parent trigger). The
+-- transition order gets its own task with an uncounted (0/0/0) line —
+-- accepted while the task is non-terminal (the F1 dispatch-state proof again).
+DO $$
+DECLARE v_transition_order uuid;
+DECLARE v_allowed boolean;
+BEGIN
+  select id into v_transition_order from smoke_transition_order;
+
+  insert into order_items (order_id, product_id, quantity, unit_price, gst_percent, line_total, quantity_unit)
+  values (v_transition_order, (select product_id from smoke_personas), 4, 5.00, 0, 20.00, 'pieces');
+
+  insert into order_deliveries (order_id, delivery_status, assigned_staff_id, assigned_at, assigned_by,
+                                dispatched_at, otp_hash)
+  values (v_transition_order, 'assigned',
+          (select staff_assignee_id from smoke_personas), now(),
+          (select admin_id from smoke_personas), now(),
+          md5(v_transition_order::text || ':000000'));
+
+  insert into order_delivery_items (delivery_id, order_item_id, quantity_ordered)
+  select d.id, oi.id, oi.quantity
+    from order_deliveries d
+    join order_items oi on oi.order_id = d.order_id
+   where d.order_id = v_transition_order;
+  raise notice 'PASS: §E uncounted 0/0/0 line accepted for a non-terminal task (0046)';
+
+  -- assigned -> delivered is a LEGAL state jump, so rejection proves the
+  -- parent split trigger (not the state machine) fired.
+  v_allowed := false;
+  begin
+    update order_deliveries set delivery_status = 'delivered'
+     where order_id = v_transition_order;
+    v_allowed := true;
+  exception when others then null;
+  end;
+  if v_allowed then raise exception 'SMOKE FAIL: terminal entry with unbalanced lines was allowed'; end if;
+  raise notice 'PASS: §E terminal entry with unbalanced lines rejected (delivered)';
+
+  -- failed is terminal too: same rejection (assigned -> failed is legal).
+  v_allowed := false;
+  begin
+    update order_deliveries set delivery_status = 'failed'
+     where order_id = v_transition_order;
+    v_allowed := true;
+  exception when others then null;
+  end;
+  if v_allowed then raise exception 'SMOKE FAIL: failed entry with unbalanced lines was allowed'; end if;
+  raise notice 'PASS: §E terminal entry with unbalanced lines rejected (failed)';
+
+  -- Record the fail split exactly like recordFailedDeliveryAction
+  -- (missing = ordered); failing is then allowed.
+  update order_delivery_items set quantity_missing = 4
+   where delivery_id in (select d.id from order_deliveries d where d.order_id = v_transition_order);
+
+  update order_deliveries set delivery_status = 'failed'
+   where order_id = v_transition_order;
+  raise notice 'PASS: §E failed entry allowed once lines balance (missing = ordered)';
 END $$;
 
 -- OTP attempt ceiling.

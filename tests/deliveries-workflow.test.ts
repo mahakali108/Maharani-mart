@@ -18,6 +18,7 @@ const sql42 = read('supabase/migrations/0042_order_state_machine.sql');
 const sql43 = read('supabase/migrations/0043_deliveries_module.sql');
 const sql44 = read('supabase/migrations/0044_payment_collections.sql');
 const sql45 = read('supabase/migrations/0045_delivery_payment_proof_buckets.sql');
+const sql46 = read('supabase/migrations/0046_delivery_split_terminal_states.sql');
 const dispatchSrc = read('lib/staff/dispatch-actions.ts');
 const deliverySrc = read('lib/delivery/delivery-actions.ts');
 const retailerOrderSrc = read('lib/retailer/order-actions.ts');
@@ -118,10 +119,43 @@ describe('0043 delivery tasks', () => {
     expect(sql43).toContain('check (otp_attempts >= 0 and otp_attempts <= 10)');
   });
 
-  it('keeps the split invariant: delivered + missing + damaged = ordered', () => {
+  it('split invariant lives in 0046: partial pre-completion, exact in terminal states', () => {
+    // 0043's unconditional `=` row check made dispatch impossible (finding F1);
+    // 0046 drops it and installs the layered rule. 0043 itself is untouched
+    // history — the drop proves the supersession.
     expect(sql43).toContain(
       'check (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)'
     );
+    expect(sql46).toContain('drop constraint if exists order_delivery_items_split');
+    expect(sql46).toContain(
+      'check (quantity_delivered + quantity_missing + quantity_damaged <= quantity_ordered)'
+    );
+    expect(sql46).toContain('create or replace function enforce_delivery_split_for_terminal_states');
+    expect(sql46).toContain('create or replace function enforce_delivery_lines_complete_on_terminal');
+    expect(sql46).toContain('DELIVERY_SPLIT_INCOMPLETE');
+    expect(sql46).toContain('DELIVERY_LINES_INCOMPLETE');
+    expect(sql46).toContain('drop trigger if exists trg_enforce_delivery_split on order_delivery_items');
+    expect(sql46).toContain(
+      'drop trigger if exists trg_enforce_delivery_lines_complete on order_deliveries'
+    );
+  });
+
+  it('preserves non-negativity: 0046 never drops the quantity check', () => {
+    expect(sql43).toContain(
+      'check (quantity_ordered >= 0 and quantity_delivered >= 0 and quantity_missing >= 0 and quantity_damaged >= 0)'
+    );
+    expect(stripComments(sql46)).not.toContain('order_delivery_items_qty_check');
+  });
+
+  it('0046 is additive and re-runnable', () => {
+    const body = stripComments(sql46).toLowerCase();
+    expect(body).not.toMatch(/drop table\b/);
+    expect(body).not.toMatch(/drop column\b/);
+    expect(body).not.toMatch(/\btruncate\b/);
+    expect(body).not.toMatch(/\bdelete from\b/);
+    expect(body).not.toMatch(/\binsert into\b/);
+    expect(sql46).toContain('drop trigger if exists trg_enforce_delivery_split');
+    expect(sql46).toContain('drop trigger if exists trg_enforce_delivery_lines_complete');
   });
 
   it('validates receiver name and note lengths', () => {

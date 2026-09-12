@@ -14,8 +14,8 @@
 
 | Step | Status |
 |------|--------|
-| Migrations 0037–0045 applied to the live project | ⏳ **NOT DONE — owner action required** (probe + one-command apply: `scripts/production-validate.sh`) |
-| `supabase/smoke-test.sql` executed | ⏳ NOT DONE — runs as part of the script above, or standalone via `psql "$DATABASE_URL" -f supabase/smoke-test.sql` |
+| Migrations 0037–0046 applied to the live project | ⏳ **NOT DONE — owner action required** (probe + one-command apply: `scripts/production-validate.sh`) |
+| `supabase/smoke-test.sql` executed | ⏳ NOT DONE — runs as part of the script above, or standalone via `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/smoke-test.sql` |
 | Real-account role testing (§5) | ⏳ NOT DONE — requires the owner's accounts |
 | Dispatch→delivery→collection flow (§6) | ⏳ NOT DONE |
 | Private-URL cross-user denial (§3 HTTP checks) | ⏳ NOT DONE |
@@ -23,7 +23,7 @@
 | Real-device testing | ⏳ NOT DONE — physically requires the owner's devices |
 
 **Important sequencing:** the preview deployment shares the production Supabase
-project. Until migrations 0037–0045 are applied, the new pages
+project. Until migrations 0037–0046 are applied, the new pages
 (`/admin/delivered`, `/admin/collections`, `/staff/deliveries`,
 `/salesman/deliveries`, `/salesman/collections`) and the dispatch flow on the
 PREVIEW will error — apply migrations first, then test. The production
@@ -43,11 +43,16 @@ order) against the target project:
 | 2 | `supabase/migrations/0043_deliveries_module.sql` | 0001 (`current_user_role`, `is_admin_or_above`, `log_audit`), 0014 (`is_retailer_assigned_to_current_salesman`), 0037 (`is_order_assigned_to_current_staff`) | `order_deliveries`, `order_delivery_items`, `can_current_user_view_delivery()`, RLS policies, `enforce_delivery_status_transitions()` + trigger, audit triggers |
 | 3 | `supabase/migrations/0044_payment_collections.sql` | 0001 helpers, `retailers`, `orders` | `payment_collections`, RLS policies, audit trigger |
 | 4 | `supabase/migrations/0045_delivery_payment_proof_buckets.sql` | **0043 + 0044** (its storage policies query `order_deliveries` / `payment_collections`) | private buckets `delivery-proofs` + `payment-proofs` and their storage policies |
+| 5 | `supabase/migrations/0046_delivery_split_terminal_states.sql` | 0043 (relaxes its split CHECK; triggers query both delivery tables) | `<=` pre-completion split CHECK + `enforce_delivery_split_for_terminal_states()` / `enforce_delivery_lines_complete_on_terminal()` + `trg_enforce_delivery_split` / `trg_enforce_delivery_lines_complete` |
 
 Rules that MUST hold:
 
 - **0045 must run last** — its `storage.objects` policies reference the tables
   created by 0043/0044; applying it first fails with `relation "order_deliveries" does not exist`.
+- **0046 must run after 0043** — it drops 0043's unconditional split CHECK
+  and replaces it with the terminal-state enforcement (finding F1: without
+  0046, dispatch snapshots violate the 0043 CHECK and every dispatch fails).
+  Filename order guarantees this.
 - 0042–0044 have no dependency on each other, but keep the lexicographic
   order — the migration runner enforces it and the test-suite assertions
   assume it.
@@ -63,14 +68,16 @@ Rules that MUST hold:
 -- All four migrations landed:
 select proname from pg_proc where proname in
   ('enforce_order_status_transitions','enforce_delivery_status_transitions',
-   'can_current_user_view_delivery');
--- expect: 3 rows
+   'can_current_user_view_delivery','enforce_delivery_split_for_terminal_states',
+   'enforce_delivery_lines_complete_on_terminal');
+-- expect: 5 rows
 
 select tgname from pg_trigger where tgname in
   ('trg_enforce_order_status_transitions','trg_enforce_delivery_status_transitions',
-   'trg_audit_order_deliveries','trg_audit_order_delivery_items','trg_audit_payment_collections')
+   'trg_audit_order_deliveries','trg_audit_order_delivery_items','trg_audit_payment_collections',
+   'trg_enforce_delivery_split','trg_enforce_delivery_lines_complete')
   and not tgisinternal;
--- expect: 5 rows
+-- expect: 7 rows
 
 select id, public, file_size_limit from storage.buckets
   where id in ('delivery-proofs','payment-proofs');
@@ -78,7 +85,7 @@ select id, public, file_size_limit from storage.buckets
 
 select count(*) from pg_policies where schemaname='public'
   and tablename in ('order_deliveries','order_delivery_items','payment_collections');
--- expect: 10 policies (3 + 5 + 2)
+-- expect: 10 policies (3 + 4 + 3)
 
 select count(*) from pg_policies where schemaname='storage' and tablename='objects'
   and policyname like '%proof%';
@@ -94,8 +101,10 @@ The script `supabase/smoke-test.sql` automates every row of this matrix using
 with:
 
 ```
-psql "$DATABASE_URL" -f supabase/smoke-test.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/smoke-test.sql
 ```
+
+`ON_ERROR_STOP=1` is required — without it a failing run still exits 0 (finding F6).
 
 Expected output is a series of `PASS:` notices and a final `SMOKE TEST COMPLETE`
 with `ROLLBACK` (no data is left behind). What it asserts:
@@ -255,7 +264,7 @@ Run once with real accounts, checking DB state after each step with the SQL in
 
 ## 7. Sign-off
 
-- [ ] Migrations 0042–0045 applied in order; §1 verification SQL returns expected counts
+- [ ] Migrations 0042–0046 applied in order; §1 verification SQL returns expected counts
 - [ ] `supabase/smoke-test.sql` prints all `PASS:` lines and `SMOKE TEST COMPLETE`
 - [ ] §3 private-bucket HTTP checks behave as specified
 - [ ] Every box in §5 and §6 checked for all four roles
