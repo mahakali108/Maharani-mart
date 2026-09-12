@@ -1,9 +1,10 @@
 import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { NotificationComposer } from '@/components/admin/notification-composer';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface LogRow {
@@ -75,8 +76,15 @@ export default async function AdminNotificationsPage({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-ink-950">Notifications</h1>
-        <p className="mt-1 text-sm text-ink-500">Delivery log for WhatsApp, SMS, push, and in-app notifications.</p>
+        <p className="mt-1 text-sm text-ink-500">Send announcements and review the delivery log for WhatsApp, SMS, push, and in-app notifications.</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Send an announcement</CardTitle>
+        </CardHeader>
+        <NotificationComposer />
+      </Card>
 
       <form method="get" className="flex flex-wrap gap-2">
         <Select name="channel" defaultValue={searchParams.channel ?? ''} className="w-auto">

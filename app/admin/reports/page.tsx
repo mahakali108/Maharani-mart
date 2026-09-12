@@ -142,6 +142,24 @@ export default async function ReportsPage({
       </div>
 
       <Card>
+        <p className="mb-3 text-sm font-medium text-ink-800">Exports</p>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/admin/reports/barcodes"
+            className="rounded-xl bg-ink-50 px-3 py-1.5 text-sm font-medium text-ink-700 transition-colors hover:bg-primary-50 hover:text-primary-700"
+          >
+            Barcode / SKU label data (CSV)
+          </a>
+          <a
+            href="/admin/inventory/reports/export?kind=stock"
+            className="rounded-xl bg-ink-50 px-3 py-1.5 text-sm font-medium text-ink-700 transition-colors hover:bg-primary-50 hover:text-primary-700"
+          >
+            Inventory stock (CSV)
+          </a>
+        </div>
+      </Card>
+
+      <Card>
         <form method="get" className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-ink-800">From</label>

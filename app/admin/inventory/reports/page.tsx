@@ -268,6 +268,26 @@ export default async function InventoryReportsPage({
       <InventoryNav />
 
       <Card>
+        <p className="mb-3 text-sm font-medium text-ink-800">Download CSV</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { kind: 'stock', label: 'Stock by warehouse' },
+            { kind: 'movements', label: 'Stock movements' },
+            { kind: 'expiry', label: 'Expiry report' },
+            { kind: 'batches', label: 'Batches' },
+          ].map((item) => (
+            <a
+              key={item.kind}
+              href={`/admin/inventory/reports/export?kind=${item.kind}`}
+              className="rounded-xl bg-ink-50 px-3 py-1.5 text-sm font-medium text-ink-700 transition-colors hover:bg-primary-50 hover:text-primary-700"
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
         <form method="get" className="flex flex-wrap items-end gap-2">
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-500">Report</label>

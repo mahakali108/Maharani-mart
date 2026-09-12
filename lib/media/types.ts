@@ -17,6 +17,8 @@ export const MEDIA_KINDS = [
   'banner',
   'retailer-avatar',
   'retailer-document',
+  'delivery-proof',
+  'payment-proof',
 ] as const;
 
 export type MediaKind = (typeof MEDIA_KINDS)[number];
@@ -58,6 +60,8 @@ const DOC_MIME = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as
  *   banner           → banners/{bannerId}/{uuid}.{ext}     (`_draft` before the row exists)
  *   retailer-avatar  → avatars/{userId}/{uuid}.{ext}
  *   retailer-document→ retailers/{retailerId}/documents/{uuid}.{ext}
+ *   delivery-proof   → deliveries/{orderId}/{uuid}.{ext}       (private)
+ *   payment-proof    → payments/{retailerId}/{uuid}.{ext}      (private)
  *
  * The bucket ids themselves are unchanged from the original schema
  * (supabase/migrations/0003 + 0006), plus `category-images` added in 0016.
@@ -123,6 +127,27 @@ export const MEDIA_KIND_CONFIG: Record<MediaKind, MediaKindConfig> = {
     maxEdge: null,
     maxDimension: 20000,
     folder: (ownerId) => `retailers/${ownerId ?? '_draft'}/documents`,
+  },
+  'delivery-proof': {
+    label: 'Delivery proof',
+    bucket: 'delivery-proofs',
+    maxBytes: 5 * 1024 * 1024,
+    mimeTypes: IMAGE_MIME,
+    private: true,
+    // Signatures must stay readable — no aggressive downscaling.
+    maxEdge: 2000,
+    maxDimension: 10000,
+    folder: (ownerId) => `deliveries/${ownerId ?? '_draft'}`,
+  },
+  'payment-proof': {
+    label: 'Payment proof',
+    bucket: 'payment-proofs',
+    maxBytes: 5 * 1024 * 1024,
+    mimeTypes: IMAGE_MIME,
+    private: true,
+    maxEdge: 2000,
+    maxDimension: 10000,
+    folder: (ownerId) => `payments/${ownerId ?? '_draft'}`,
   },
 };
 

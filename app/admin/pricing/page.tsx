@@ -73,6 +73,11 @@ export default async function PricingPage() {
           Set base, area-specific, and retailer-specific prices. The pricing engine picks the highest-priority
           matching price automatically at order time.
         </p>
+        <p className="mt-2 text-sm">
+          <a href="/admin/pricing/schemes" className="font-medium text-primary-600 hover:text-primary-700">
+            Manage trade &amp; festival schemes →
+          </a>
+        </p>
       </div>
 
       {products.length === 0 ? (

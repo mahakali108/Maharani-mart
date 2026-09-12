@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ClipboardList, LayoutDashboard, PlusCircle, Sparkles, Store, UserCircle } from 'lucide-react';
+import { BellRing, ClipboardList, LayoutDashboard, PlusCircle, Sparkles, Store, Target, UserCircle, Wallet, Truck, BadgeIndianRupee } from 'lucide-react';
 import { Topbar } from '@/components/layout/topbar';
 import { MobileBottomNav, type NavItem } from '@/components/layout/mobile-bottom-nav';
 import type { UserRole } from '@/lib/auth/roles';
@@ -11,6 +11,11 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Retailers', href: '/salesman/retailers', icon: Store },
   { label: 'New Order', href: '/salesman/orders/new', icon: PlusCircle },
   { label: 'Orders', href: '/salesman/orders', icon: ClipboardList },
+  { label: 'Deliveries', href: '/salesman/deliveries', icon: Truck },
+  { label: 'Collections', href: '/salesman/collections', icon: BadgeIndianRupee },
+  { label: 'Reminders', href: '/salesman/follow-ups', icon: BellRing },
+  { label: 'Targets', href: '/salesman/targets', icon: Target },
+  { label: 'Commissions', href: '/salesman/commissions', icon: Wallet },
   { label: 'Profile', href: '/salesman/profile', icon: UserCircle },
 ];
 

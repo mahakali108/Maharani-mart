@@ -32,6 +32,11 @@ const REQUIRED_PERMISSION: Record<MediaKind, Permission> = {
   // a user editing their own avatar is handled by the self-service branch.
   'retailer-avatar': 'retailers.approve',
   'retailer-document': 'retailers.approve',
+  // Delivery proof is uploaded by the delivery staff/salesman executing the
+  // task (the action layer additionally verifies they are the assignee).
+  'delivery-proof': 'deliveries.execute',
+  // Payment proof is attached by the salesman recording the collection.
+  'payment-proof': 'collections.record',
 };
 
 /** Kinds a user may perform on their OWN record without any staff permission. */

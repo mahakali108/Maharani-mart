@@ -310,6 +310,14 @@ export default async function OrderDetailPage({
           {order.notes ? <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Delivery notes</p><p className="mt-2 text-xs leading-5 text-slate-600">{order.notes}</p></section> : null}
 
           <RetailerOrderActions orderId={order.id} status={order.status} />
+          {(order.status === 'dispatched' || order.status === 'delivered') ? (
+            <Link
+              href={`/retailer/orders/${order.id}/delivery`}
+              className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-sm hover:border-primary-200 hover:text-primary-600"
+            >
+              Delivery record &amp; OTP
+            </Link>
+          ) : null}
           <Link href={`/retailer/help?topic=order&order=${order.order_number}`} className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-sm hover:border-primary-200 hover:text-primary-600">
             Contact support about this order
           </Link>
