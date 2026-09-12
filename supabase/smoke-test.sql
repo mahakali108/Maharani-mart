@@ -3,9 +3,17 @@
 -- (RLS role matrix · delivery/order transition triggers · private buckets ·
 --  audit trail)
 --
--- HOW TO RUN (against the real project):
+-- HOW TO RUN (against the real project) — pick ONE:
 --
---   psql "$DATABASE_URL" -f supabase/smoke-test.sql
+--   A. Supabase SQL Editor (recommended — no local tooling needed):
+--        Open the SQL Editor, paste this ENTIRE file into ONE query tab,
+--        and run it as a single execution. The script opens one
+--        transaction, runs every check, then rolls everything back.
+--        Every statement is plain SQL — there are no psql meta-commands
+--        (no \echo, no \set), so the editor accepts the file as-is.
+--
+--   B. psql:
+--        psql "$DATABASE_URL" -f supabase/smoke-test.sql
 --
 --   $DATABASE_URL = the project's direct Postgres connection string
 --   (Supabase dashboard → Project Settings → Database → Connection string).
@@ -29,7 +37,10 @@
 -- that is fine as long as each block ends with a `PASS:` notice.
 -- ============================================================================
 
-\echo '== Phase 4 smoke test (everything rolls back at the end) =='
+-- (Banner as RAISE NOTICE, not \echo: \echo is psql-only and the SQL
+-- Editor rejects it with `syntax error at or near "\"`. NOTICE works in
+-- both the editor and psql.)
+DO $$ BEGIN RAISE NOTICE '== Phase 4 smoke test (everything rolls back at the end) =='; END $$;
 
 BEGIN;
 
@@ -81,7 +92,7 @@ BEGIN
     v_admin, v_staff, v_salesman, v_retailer;
 END $$;
 
-\echo '-- §0 fixture: two throwaway orders + one delivery task (rolled back)'
+DO $$ BEGIN RAISE NOTICE '-- §0 fixture: two throwaway orders + one delivery task (rolled back)'; END $$;
 
 update retailers
    set assigned_salesman_id = (select salesman_id from smoke_personas)
@@ -114,11 +125,14 @@ select o.id, 'assigned',
        md5(o.id::text || ':000000')
   from smoke_orders o;
 
+-- Snapshot ONLY the first line (qty 10): the qty-4 line stays
+-- un-snapshotted for the §E split tests below.
 insert into order_delivery_items (delivery_id, order_item_id, quantity_ordered)
-select d.id, oi.id, 10
+select d.id, oi.id, oi.quantity
   from order_deliveries d
   join order_items oi on oi.order_id = d.order_id
- where d.order_id in (select id from smoke_orders);
+ where d.order_id in (select id from smoke_orders)
+   and oi.quantity = 10;
 
 insert into payment_collections (retailer_id, collected_by, amount_paise, method, status)
 values ((select retailer_id from smoke_personas),
@@ -136,6 +150,9 @@ values ('SMOKE-TRANSITION-' || right(gen_random_uuid()::text, 8),
 create temp table smoke_transition_order as
 select id from orders where order_number like 'SMOKE-TRANSITION-%';
 
+-- Readable under every impersonated role, like the other temp tables.
+grant select on smoke_transition_order to authenticated;
+
 -- RLS-blocked UPDATEs fail SILENTLY (0 rows), they do not raise — so the
 -- negative UPDATE checks below compare row state before/after instead of
 -- watching for exceptions. INSERT violations DO raise (with check).
@@ -148,8 +165,12 @@ select id from orders where order_number like 'SMOKE-TRANSITION-%';
 -- §A ADMIN — full visibility, can manage collections
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select admin_id::text from smoke_personas))::jsonb;
+-- set_config(), not `set local ... = <expression>`: SET only accepts a
+-- literal, so the expression form is a syntax error in both the SQL
+-- Editor and psql. The `true` flag keeps the value transaction-local.
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select admin_id::text from smoke_personas)),
+  true);
 
 DO $$
 BEGIN
@@ -182,8 +203,9 @@ END $$;
 -- §B STAFF — assignee yes, out-of-scope staff no
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select staff_assignee_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select staff_assignee_id::text from smoke_personas)),
+  true);
 
 DO $$
 BEGIN
@@ -218,8 +240,9 @@ BEGIN
 END $$;
 
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select staff_outsider_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select staff_outsider_id::text from smoke_personas)),
+  true);
 
 DO $$
 DECLARE v_outsider uuid := (select staff_outsider_id from smoke_personas);
@@ -251,8 +274,9 @@ END $$;
 -- §C SALESMAN — assigned retailer only
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select salesman_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select salesman_id::text from smoke_personas)),
+  true);
 
 DO $$
 BEGIN
@@ -311,8 +335,9 @@ END $$;
 -- §D RETAILER — read own, write nothing
 -- ----------------------------------------------------------------------------
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select retailer_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select retailer_id::text from smoke_personas)),
+  true);
 
 DO $$
 BEGIN
@@ -368,8 +393,9 @@ BEGIN
 END $$;
 
 set local role authenticated;
-set local request.jwt.claims = format('{"sub":"%s","role":"authenticated"}',
-  (select retailer_outsider_id::text from smoke_personas))::jsonb;
+select set_config('request.jwt.claims',
+  format('{"sub":"%s","role":"authenticated"}', (select retailer_outsider_id::text from smoke_personas)),
+  true);
 
 DO $$
 DECLARE v_outsider uuid := (select retailer_outsider_id from smoke_personas);
@@ -475,9 +501,11 @@ BEGIN
   raise notice 'PASS: §E exactly one delivery task per order';
 END $$;
 
--- Split invariant: delivered + missing + damaged = ordered. The insert
--- targets the second (un-snapshotted) order line, so only the SPLIT check
--- can reject it — the unique constraint would not apply.
+-- Split invariant: a snapshot row is either FRESH (0/0/0 outcomes, as
+-- written by the dispatch action) or fully accounted
+-- (delivered + missing + damaged = ordered). The first insert targets the
+-- second (un-snapshotted) order line, so only the SPLIT check can reject
+-- it — the unique constraint would not apply.
 DO $$
 DECLARE v_allowed boolean := false;
 BEGIN
@@ -494,6 +522,52 @@ BEGIN
   end;
   if v_allowed then raise exception 'SMOKE FAIL: delivery quantities that do not sum to ordered were accepted'; end if;
   raise notice 'PASS: §E quantity split invariant (delivered+missing+damaged = ordered) enforced';
+END $$;
+
+-- Dispatch regression: a fresh snapshot (ordered only, outcomes 0/0/0)
+-- MUST be accepted — every real dispatch inserts exactly this shape.
+DO $$
+DECLARE v_allowed boolean := false;
+BEGIN
+  begin
+    insert into order_delivery_items (delivery_id, order_item_id, quantity_ordered)
+    select d.id, oi.id, oi.quantity
+      from order_deliveries d
+      join order_items oi on oi.order_id = d.order_id
+     where d.order_id in (select id from smoke_orders)
+       and oi.quantity = 4
+     limit 1;
+    v_allowed := true;
+  exception when others then null;
+  end;
+  if not v_allowed then raise exception 'SMOKE FAIL: a fresh 0/0/0 line snapshot was rejected (no dispatch could succeed)'; end if;
+  raise notice 'PASS: §E fresh 0/0/0 snapshots accepted (dispatch shape)';
+END $$;
+
+-- Partial accounting is rejected: once outcomes move off 0/0/0 they must
+-- sum to ordered.
+DO $$
+DECLARE v_allowed boolean := false;
+BEGIN
+  begin
+    update order_delivery_items set quantity_delivered = 1, quantity_missing = 1, quantity_damaged = 0
+     where delivery_id in (select d.id from order_deliveries d where d.order_id in (select id from smoke_orders))
+       and quantity_ordered = 4;
+    v_allowed := true;
+  exception when others then null;
+  end;
+  if v_allowed then raise exception 'SMOKE FAIL: partially-accounted outcomes (1+1+0 <> 4) were accepted'; end if;
+  raise notice 'PASS: §E partial outcome accounting rejected';
+END $$;
+
+-- Full accounting is accepted: the completion shape (2+1+1 = 4).
+DO $$
+BEGIN
+  update order_delivery_items set quantity_delivered = 2, quantity_missing = 1, quantity_damaged = 1
+   where delivery_id in (select d.id from order_deliveries d where d.order_id in (select id from smoke_orders))
+     and quantity_ordered = 4;
+  if not found then raise exception 'SMOKE FAIL: completion-shaped update touched 0 rows'; end if;
+  raise notice 'PASS: §E fully-accounted outcomes accepted (completion shape)';
 END $$;
 
 -- OTP attempt ceiling.
@@ -561,6 +635,12 @@ set local role postgres;
 
 ROLLBACK;
 
-\echo '== SMOKE TEST COMPLETE — all fixture data rolled back =='
-\echo 'If every section printed PASS (or documented SKIP for missing personas),'
-\echo 'the Phase 4 RLS / trigger / bucket checks are live-verified.'
+-- Completion marker as a plain SELECT (not \echo, which is psql-only):
+-- visible as a result grid in the SQL Editor and as rows in psql, even
+-- when NOTICE output is hidden. Reached only if no check raised.
+select notice_line as smoke_test_complete
+from (values
+  ('== SMOKE TEST COMPLETE — all fixture data rolled back =='),
+  ('If every section printed PASS (or documented SKIP for missing personas),'),
+  ('the Phase 4 RLS / trigger / bucket checks are live-verified.')
+) as t(notice_line);

@@ -24,7 +24,24 @@ describe('smoke-test.sql structure', () => {
       expect(sql).toContain(persona);
     }
     expect((sql.match(/set local role authenticated;/g) ?? []).length).toBeGreaterThanOrEqual(6);
-    expect((sql.match(/set local request\.jwt\.claims/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    // JWT impersonation goes through set_config(): `SET ... = <expression>`
+    // is a syntax error (SET only accepts a literal) in both the SQL
+    // Editor and psql.
+    expect((sql.match(/set_config\('request\.jwt\.claims'/g) ?? []).length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('is Supabase SQL Editor compatible: plain SQL only, no psql meta-commands', () => {
+    // \echo / \set / any backslash command is psql-only — the SQL Editor
+    // rejects it with `syntax error at or near "\"`. (Comments may NAME
+    // the forbidden commands; only executable lines are checked.)
+    const code = sql
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('--'))
+      .join('\n');
+    expect(code).not.toMatch(/^\\/m);
+    expect(code).not.toContain('\\echo');
+    expect(code).not.toMatch(/set\s+(local\s+)?request\.jwt\.claims\s*=/i);
+    expect(sql).toContain("select set_config('request.jwt.claims'");
   });
 
   it('exercises admin, staff (assignee + out-of-scope), salesman and retailer sections', () => {

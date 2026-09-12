@@ -118,9 +118,15 @@ describe('0043 delivery tasks', () => {
     expect(sql43).toContain('check (otp_attempts >= 0 and otp_attempts <= 10)');
   });
 
-  it('keeps the split invariant: delivered + missing + damaged = ordered', () => {
+  it('keeps the split invariant: fresh 0/0/0 snapshots or fully-accounted outcomes', () => {
+    // The dispatch action inserts quantity_ordered only (outcomes 0/0/0),
+    // so the fresh state must be legal — otherwise no dispatch could run.
     expect(sql43).toContain(
-      'check (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)'
+      '(quantity_delivered = 0 and quantity_missing = 0 and quantity_damaged = 0)'
+    );
+    // Once outcomes are recorded they must fully account for the line.
+    expect(sql43).toContain(
+      'or (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)'
     );
   });
 

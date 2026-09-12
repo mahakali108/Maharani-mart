@@ -29,7 +29,36 @@
 --
 -- SAFETY: additive & re-runnable (bucket insert on conflict, policies
 -- dropped + recreated). No existing bucket is touched.
+--
+-- ORDER: 0045 must run AFTER 0043 (order_deliveries) and 0044
+-- (payment_collections) — its storage policies query both tables. The
+-- pre-flight block below fails fast with an actionable message when a
+-- prerequisite is missing (e.g. 0043 was never applied, or was rolled
+-- back by an earlier error) instead of failing later with a bare
+-- `relation ... does not exist`.
 -- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- Pre-flight: prerequisite objects must already exist. Pure catalog checks
+-- (re-runnable, no exception swallowing — a missing object raises loudly).
+-- ----------------------------------------------------------------------------
+
+DO $$
+BEGIN
+  if to_regclass('public.order_deliveries') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0045 requires 0043 — order_deliveries does not exist. Apply supabase/migrations/0043_deliveries_module.sql first, then re-run 0045.'
+      using errcode = 'undefined_table';
+  end if;
+  if to_regclass('public.payment_collections') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0045 requires 0044 — payment_collections does not exist. Apply supabase/migrations/0044_payment_collections.sql first, then re-run 0045.'
+      using errcode = 'undefined_table';
+  end if;
+  if to_regprocedure('public.is_order_assigned_to_current_staff(uuid)') is null
+     or to_regprocedure('public.is_retailer_assigned_to_current_salesman(uuid)') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0045 requires the scoping helpers from 0037 and 0014. Apply those migrations first, then re-run 0045.'
+      using errcode = 'undefined_function';
+  end if;
+END $$;
 
 -- ----------------------------------------------------------------------------
 -- Buckets (private — no public flag)

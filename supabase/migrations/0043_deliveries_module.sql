@@ -22,8 +22,10 @@
 --   6 wrong attempts lock the task (otp_attempts check <= 10) so brute
 --   force is structurally bounded.
 -- * order_delivery_items snapshots each line's ordered quantity at dispatch
---   and records delivered/missing/damaged at completion; the split
---   constraint guarantees delivered + missing + damaged = ordered.
+--   (outcomes start 0/0/0 — the dispatch action writes quantity_ordered
+--   only) and records delivered/missing/damaged at completion; the split
+--   constraint allows the fresh 0/0/0 snapshot or requires
+--   delivered + missing + damaged = ordered once outcomes are recorded.
 -- * Delivery proofs live in the private `delivery-proofs` bucket
 --   (migration 0045); signature_url/photo_url store OBJECT PATHS, never
 --   public URLs.
@@ -38,7 +40,35 @@
 --
 -- SAFETY: additive & re-runnable; append-only (no DELETE policy); audit
 -- triggers on both tables via the existing log_audit() function.
+--
+-- ORDER: 0043 must run AFTER 0037 (it calls
+-- is_order_assigned_to_current_staff(uuid) in six RLS policies) and after
+-- the 0001/0014 core helpers. The pre-flight block below fails fast with
+-- an actionable message when a prerequisite is missing (e.g. 0037 was
+-- never applied, or was rolled back by an earlier error) instead of
+-- failing later with a bare `function ... does not exist`.
 -- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- Pre-flight: prerequisite objects must already exist. Pure catalog checks
+-- (re-runnable, no exception swallowing — a missing object raises loudly).
+-- ----------------------------------------------------------------------------
+
+DO $$
+BEGIN
+  if to_regprocedure('public.is_order_assigned_to_current_staff(uuid)') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0043 requires 0037 — is_order_assigned_to_current_staff(uuid) does not exist. Apply supabase/migrations/0037_staff_scope_policies.sql first, then re-run 0043.'
+      using errcode = 'undefined_function';
+  end if;
+  if to_regprocedure('public.is_retailer_assigned_to_current_salesman(uuid)') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0043 requires 0014 — is_retailer_assigned_to_current_salesman(uuid) does not exist. Apply supabase/migrations/0014_salesman_retailer_order_rls.sql first, then re-run 0043.'
+      using errcode = 'undefined_function';
+  end if;
+  if to_regclass('public.orders') is null or to_regclass('public.order_items') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0043 requires the 0001 core schema — orders / order_items do not exist. Apply the earlier migrations first, then re-run 0043.'
+      using errcode = 'undefined_table';
+  end if;
+END $$;
 
 create table if not exists order_deliveries (
   id uuid primary key default uuid_generate_v4(),
@@ -94,10 +124,39 @@ create table if not exists order_delivery_items (
   constraint order_delivery_items_qty_check
     check (quantity_ordered >= 0 and quantity_delivered >= 0 and quantity_missing >= 0 and quantity_damaged >= 0),
   constraint order_delivery_items_split
-    check (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)
+    check (
+      (quantity_delivered = 0 and quantity_missing = 0 and quantity_damaged = 0)
+      or (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)
+    )
 );
 
 create index if not exists idx_order_delivery_items_delivery on order_delivery_items(delivery_id);
+
+-- ----------------------------------------------------------------------------
+-- Partial-failure reconciliation: if an earlier revision of this migration
+-- created order_delivery_items with the old split definition (which
+-- rejected fresh 0/0/0 snapshots, so no dispatch could ever succeed),
+-- replace it with the dispatch-compatible definition below. Pure catalog
+-- check, re-runnable, no exception swallowing.
+-- ----------------------------------------------------------------------------
+
+DO $$
+DECLARE
+  v_split_def text;
+BEGIN
+  select pg_get_constraintdef(oid) into v_split_def
+    from pg_constraint
+   where conname = 'order_delivery_items_split';
+
+  if v_split_def is null or v_split_def not like '%quantity_delivered = 0%' then
+    alter table order_delivery_items drop constraint if exists order_delivery_items_split;
+    alter table order_delivery_items add constraint order_delivery_items_split
+      check (
+        (quantity_delivered = 0 and quantity_missing = 0 and quantity_damaged = 0)
+        or (quantity_delivered + quantity_missing + quantity_damaged = quantity_ordered)
+      );
+  end if;
+END $$;
 
 -- ----------------------------------------------------------------------------
 -- RLS

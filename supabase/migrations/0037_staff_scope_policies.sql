@@ -135,8 +135,8 @@ as $$
         from stock_transfers t
        where t.id = p_transfer_id
          and (
-           is_warehouse_assigned_to_current_staff(t.from_warehouse_id)
-           or is_warehouse_assigned_to_current_staff(t.to_warehouse_id)
+           is_warehouse_assigned_to_current_staff(t.source_warehouse_id)
+           or is_warehouse_assigned_to_current_staff(t.destination_warehouse_id)
          )
     );
 $$;
@@ -422,8 +422,8 @@ create policy "stock_transfers_staff_insert" on stock_transfers
     or (
       current_user_role() = 'staff'
       and (
-        is_warehouse_assigned_to_current_staff(from_warehouse_id)
-        or is_warehouse_assigned_to_current_staff(to_warehouse_id)
+        is_warehouse_assigned_to_current_staff(source_warehouse_id)
+        or is_warehouse_assigned_to_current_staff(destination_warehouse_id)
       )
     )
   );
