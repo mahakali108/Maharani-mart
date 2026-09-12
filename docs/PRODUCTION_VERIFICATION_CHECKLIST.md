@@ -8,7 +8,26 @@
 >
 > Everything statically verifiable in CI is already green:
 > `pnpm typecheck` ✓ · `pnpm lint` (0 errors) ✓ · `pnpm build` (103 pages) ✓ ·
-> `pnpm test` (882 tests / 47 files) ✓.
+> `pnpm test` (899 tests / 48 files) ✓.
+
+## 0. Live status (updated 2026-09-12)
+
+| Step | Status |
+|------|--------|
+| Migrations 0037–0045 applied to the live project | ⏳ **NOT DONE — owner action required** (probe + one-command apply: `scripts/production-validate.sh`) |
+| `supabase/smoke-test.sql` executed | ⏳ NOT DONE — runs as part of the script above, or standalone via `psql "$DATABASE_URL" -f supabase/smoke-test.sql` |
+| Real-account role testing (§5) | ⏳ NOT DONE — requires the owner's accounts |
+| Dispatch→delivery→collection flow (§6) | ⏳ NOT DONE |
+| Private-URL cross-user denial (§3 HTTP checks) | ⏳ NOT DONE |
+| Vercel deployment | ✅ **Preview deployed & Ready** for PR #54: `https://maharanitraders-git-arena-01a0914f-2c285b-mahakali108s-projects.vercel.app` (build `AoK6NK5XToA2UWskfxdLH3fqgyYF`). Vercel Deployment Protection (SSO) is ON — open it while logged into the team's Vercel account. **Production is untouched** (PR #54 is open, NOT merged; production still runs `main`). |
+| Real-device testing | ⏳ NOT DONE — physically requires the owner's devices |
+
+**Important sequencing:** the preview deployment shares the production Supabase
+project. Until migrations 0037–0045 are applied, the new pages
+(`/admin/delivered`, `/admin/collections`, `/staff/deliveries`,
+`/salesman/deliveries`, `/salesman/collections`) and the dispatch flow on the
+PREVIEW will error — apply migrations first, then test. The production
+deployment (main) is unaffected because it runs the old code.
 
 ---
 
