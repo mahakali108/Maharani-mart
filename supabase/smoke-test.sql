@@ -68,9 +68,18 @@ select
   (select r.id from retailers r
     join profiles p on p.id = r.id and p.is_active
     order by r.id limit 1) as retailer_id,
+  -- Prefer a retailer that is NOT assigned to the smoke salesman, so the
+  -- negative collection test genuinely uses an unassigned retailer. If no
+  -- such retailer exists, fall back to any second retailer — the fixture
+  -- below will forcibly unassign it.
   (select r2.id from retailers r2
     where r2.id <> (select r.id from retailers r order by r.id limit 1)
-    order by r2.id limit 1) as retailer_outsider_id,
+    order by
+      case when r2.assigned_salesman_id is null
+                or r2.assigned_salesman_id <> (select p.id from profiles p where p.role = 'salesman' and p.is_active order by p.id limit 1)
+           then 0 else 1 end,
+      r2.id
+    limit 1) as retailer_outsider_id,
   (select w.id from warehouses w where w.is_active order by w.id limit 1) as warehouse_id,
   (select pr.id from products pr where pr.is_active order by pr.id limit 1) as product_id;
 
@@ -94,9 +103,72 @@ END $$;
 
 DO $$ BEGIN RAISE NOTICE '-- §0 fixture: two throwaway orders + one delivery task (rolled back)'; END $$;
 
+-- Explicitly assign the primary retailer to the smoke salesman (positive path)
 update retailers
    set assigned_salesman_id = (select salesman_id from smoke_personas)
  where id = (select retailer_id from smoke_personas);
+
+-- Explicitly ensure the outsider retailer is NOT assigned to the smoke salesman.
+-- This is the core fix for the "UNASSIGNED retailer" negative test: previously
+-- retailer_outsider_id could already be assigned to the same salesman in prod
+-- data, causing the negative insert to succeed. We force it to NULL (unassigned)
+-- so the negative test genuinely uses an unassigned retailer.
+update retailers
+   set assigned_salesman_id = null
+ where id = (select retailer_outsider_id from smoke_personas)
+   and id is not null;
+
+-- If no second retailer exists that is naturally unassigned, try to find any
+-- retailer that is not the primary one and not assigned to the smoke salesman,
+-- and use that as outsider instead (update the temp table). This makes the
+-- test resilient even when prod has only 2 retailers both assigned to the same
+-- salesman.
+DO $$
+DECLARE
+  v_salesman uuid := (select salesman_id from smoke_personas);
+  v_primary uuid := (select retailer_id from smoke_personas);
+  v_outsider uuid := (select retailer_outsider_id from smoke_personas);
+  v_better uuid;
+BEGIN
+  if v_outsider is null then
+    select r.id into v_better
+      from retailers r
+      where r.id <> v_primary
+        and (r.assigned_salesman_id is null or r.assigned_salesman_id <> v_salesman)
+      order by r.id limit 1;
+    if v_better is not null then
+      update smoke_personas set retailer_outsider_id = v_better;
+      update retailers set assigned_salesman_id = null where id = v_better;
+      raise notice 'FIXTURE: retailer_outsider_id was null, promoted % as unassigned outsider', v_better;
+    end if;
+  else
+    -- Double-check outsider is truly unassigned after our NULL update
+    if exists (select 1 from retailers where id = v_outsider and assigned_salesman_id = v_salesman) then
+      select r.id into v_better
+        from retailers r
+        where r.id <> v_primary
+          and (r.assigned_salesman_id is null or r.assigned_salesman_id <> v_salesman)
+        order by r.id limit 1;
+      if v_better is not null then
+        update smoke_personas set retailer_outsider_id = v_better;
+        update retailers set assigned_salesman_id = null where id = v_better;
+        raise notice 'FIXTURE: corrected retailer_outsider_id to % (unassigned)', v_better;
+      end if;
+    end if;
+  end if;
+
+  -- Final verification of assignments before any RLS tests
+  if not exists (select 1 from retailers where id = v_primary and assigned_salesman_id = v_salesman) then
+    raise exception 'SMOKE ABORT: fixture failed to assign primary retailer % to salesman %', v_primary, v_salesman;
+  end if;
+
+  if exists (select 1 from retailers where id = (select retailer_outsider_id from smoke_personas) and assigned_salesman_id = v_salesman) then
+    raise exception 'SMOKE ABORT: fixture failed to unassign outsider retailer % from salesman %', (select retailer_outsider_id from smoke_personas), v_salesman;
+  end if;
+
+  raise notice 'PASS: §0 fixture assignments verified (primary=% assigned to salesman=%, outsider=% unassigned)',
+    v_primary, v_salesman, (select retailer_outsider_id from smoke_personas);
+END $$;
 
 insert into orders (order_number, retailer_id, warehouse_id, status, subtotal, gst_total, discount_total, grand_total)
 values ('SMOKE-DELIVERY-' || right(gen_random_uuid()::text, 8),
@@ -289,6 +361,15 @@ BEGIN
 END $$;
 
 -- Can record a collection ONLY for the assigned retailer.
+-- Fixture must explicitly verify the salesman-retailer assignment before the positive insert.
+DO $$
+BEGIN
+  if not exists (select 1 from retailers where id = (select retailer_id from smoke_personas) and assigned_salesman_id = (select salesman_id from smoke_personas)) then
+    raise exception 'SMOKE ABORT: salesman-retailer assignment missing for positive test — retailer % not assigned to salesman %', (select retailer_id from smoke_personas), (select salesman_id from smoke_personas);
+  end if;
+  raise notice 'PASS: §C fixture verified: retailer % is assigned to salesman % (positive path)', (select retailer_id from smoke_personas), (select salesman_id from smoke_personas);
+END $$;
+
 DO $$
 DECLARE v_allowed boolean := false;
 BEGIN
@@ -302,16 +383,29 @@ BEGIN
   raise notice 'PASS: §C salesman can record a collection for the assigned retailer';
 END $$;
 
+-- Negative test: uses a retailer genuinely unassigned to the salesman.
+-- Must fail with RLS error. Do NOT swallow or convert failure to PASS.
 DO $$
 DECLARE v_allowed boolean := false;
 DECLARE v_outsider uuid := (select retailer_outsider_id from smoke_personas);
+DECLARE v_salesman uuid := (select salesman_id from smoke_personas);
 BEGIN
   if v_outsider is null then raise notice 'SKIP: §C cross-retailer insert not tested (no second retailer)'; return; end if;
+
+  -- Explicitly verify outsider is genuinely unassigned before attempting insert
+  if exists (select 1 from retailers where id = v_outsider and assigned_salesman_id = v_salesman) then
+    raise exception 'SMOKE ABORT: negative test fixture invalid — outsider retailer % is still assigned to salesman %', v_outsider, v_salesman;
+  end if;
+  raise notice 'PASS: §C fixture verified: retailer_outsider_id=% is NOT assigned to salesman=% (negative path)', v_outsider, v_salesman;
+
   begin
     insert into payment_collections (retailer_id, collected_by, amount_paise, method, status)
     values (v_outsider, auth.uid(), 1000, 'cash', 'pending');
     v_allowed := true;
-  exception when others then null;
+  exception when others then
+    -- Expected RLS failure — keep v_allowed false and surface the SQLSTATE for debugging
+    raise notice 'EXPECTED RLS REJECTION for unassigned retailer %: %', v_outsider, SQLERRM;
+    v_allowed := false;
   end;
   if v_allowed then raise exception 'SMOKE FAIL: salesman recorded a collection for an UNASSIGNED retailer'; end if;
   raise notice 'PASS: §C salesman cannot record collections for unassigned retailers';
