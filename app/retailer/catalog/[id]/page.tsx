@@ -565,29 +565,26 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             </div>
 
             {/* Complete real product name — universal, brand + product + variant */}
-            <h1 className="mt-3 min-w-0 break-words text-[18px] font-extrabold leading-[1.25] tracking-tight text-slate-950 sm:text-xl lg:text-2xl">
+            <h1 className="mt-3 min-w-0 break-words text-xl font-extrabold leading-[1.25] tracking-tight text-slate-950 sm:text-2xl lg:text-[26px]">
               {canonicalProductName}
             </h1>
             {/* Secondary line: show canonical source for debugging / audit */}
-            <p className="mt-1.5 text-[10px] leading-4 text-slate-400">
+            <p className="mt-1.5 text-[11px] leading-4 text-slate-400">
               {product.brands?.name ? `${product.brands.name} · ` : ''}
               {product.name}
               {selectedPack?.pack_name ? ` · ${selectedPack.pack_name}` : ''}
             </p>
 
-            {/* Size/variant selector */}
-            <VariantSwitcher model={variantSwitcher} productName={canonicalProductName} />
-
-            {/* Pricing */}
+            {/* Pricing — clear hierarchy: price, MRP, discount, savings, tax */}
             {selectedPiecePrice !== null ? (
               <div className="mt-4 min-w-0 border-t border-slate-100 pt-4">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   {isViewingVariant ? `Piece price · ${selectedPack?.pack_name}` : 'Piece price from'}
                 </p>
-                <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-2">
-                  <p className="break-words text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                  <p className="break-words text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
                     {formatInr(selectedPiecePrice)}
-                    <span className="text-sm font-semibold text-slate-500 sm:text-base">/pc</span>
+                    <span className="text-sm font-bold text-slate-500 sm:text-base">/pc</span>
                   </p>
                   {selectedPack?.mrp && selectedPack.mrp > selectedPiecePrice ? (
                     <p className="text-sm font-medium text-slate-400 line-through sm:text-base">
@@ -595,8 +592,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                     </p>
                   ) : null}
                   {discount > 0 ? (
-                    <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                      {discount}% off MRP
+                    <span className="text-sm font-extrabold text-emerald-600 sm:text-base">
+                      {discount}% off
                     </span>
                   ) : null}
                 </div>
@@ -606,16 +603,16 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   </p>
                 ) : null}
                 {selectedTierLabel ? (
-                  <p className="mt-1 text-[10px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-slate-500">
                     Best rate of {formatInr(selectedPiecePrice)}/pc at {selectedTierLabel}
                   </p>
                 ) : null}
-                <p className="mt-1 text-[10px] leading-4 text-slate-500">
-                  GST {product.gst_percent}% included in every price above · buy more pieces to save more
+                <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
+                  Inclusive of all taxes · GST {product.gst_percent}% included · buy more pieces to save more
                 </p>
                 {selectedPack ? (
                   <RetailerPriceSchedule
-                    className="mt-2.5"
+                    className="mt-3"
                     unitsPerCase={selectedPack.units_per_case}
                     tiers={selectedTiers}
                     gstPercent={product.gst_percent}
@@ -629,6 +626,36 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 ) : null}
               </div>
             ) : null}
+
+            {/* Wholesale highlights — the specs a retailer scans before ordering */}
+            <div className="mt-4 min-w-0 border-t border-slate-100 pt-3.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Wholesale highlights
+              </p>
+              <ul className="mt-2 flex min-w-0 flex-wrap gap-1.5" aria-label="Order essentials">
+                {selectedPack ? (
+                  <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
+                    Min. order: {selectedPack.moq} pc{selectedPack.moq === 1 ? '' : 's'}
+                  </li>
+                ) : null}
+                {selectedPack?.pack_name ? (
+                  <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
+                    Pack: {selectedPack.pack_name}
+                  </li>
+                ) : null}
+                <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
+                  GST: {product.gst_percent}%
+                </li>
+                <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
+                  Sold by piece
+                </li>
+              </ul>
+            </div>
+
+            {/* Size/variant selector */}
+            <div className="mt-4 min-w-0 border-t border-slate-100 pt-4">
+              <VariantSwitcher model={variantSwitcher} productName={canonicalProductName} />
+            </div>
           </section>
 
           {/* 5. MULTI-PRICE / MULTI-PACK TIERS — Quantity selector per spec */}

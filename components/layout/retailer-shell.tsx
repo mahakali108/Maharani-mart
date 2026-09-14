@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BadgeCheck,
@@ -10,6 +11,7 @@ import {
   Home,
   LayoutGrid,
   LogOut,
+  Search,
   ShoppingCart,
   Sparkles,
   UserRound,
@@ -55,6 +57,24 @@ export function RetailerShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  // Mobile search bar visibility: the header keeps a dedicated search icon
+  // that toggles the field row and hands focus straight to the input, so the
+  // icon is a real control (never decorative) and the header stays compact.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // A navigation (including a search submit) always lands on a fresh page
+  // with the header row collapsed again.
+  useEffect(() => {
+    setSearchOpen(false);
+  }, [pathname]);
+  function handleSearchToggle() {
+    const next = !searchOpen;
+    setSearchOpen(next);
+    if (next) {
+      // Wait for the row to mount before focusing the freshly rendered input.
+      window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
+  }
   const initials = fullName
     .split(' ')
     .map((part) => part[0])
@@ -97,9 +117,9 @@ export function RetailerShell({
                 type="button"
                 onClick={handleBack}
                 aria-label="Go back"
-                className="-ml-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:-ml-1"
+                className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:-ml-1"
               >
-                <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+                <ArrowLeft className="h-6 w-6" aria-hidden="true" strokeWidth={2.25} />
               </button>
             ) : null}
             <Link
@@ -128,6 +148,15 @@ export function RetailerShell({
             </div>
 
             <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+              <button
+                type="button"
+                onClick={handleSearchToggle}
+                aria-label="Search"
+                aria-expanded={searchOpen}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:hidden"
+              >
+                <Search className="h-[18px] w-[18px]" aria-hidden="true" />
+              </button>
               <Link
                 href="/retailer/notifications"
                 className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
@@ -179,9 +208,11 @@ export function RetailerShell({
             </div>
           </div>
 
-          <div className="relative pb-3 pt-1 lg:hidden">
-            <SearchField />
-          </div>
+          {searchOpen ? (
+            <div className="relative pb-3 pt-1 lg:hidden">
+              <SearchField inputRef={searchInputRef} />
+            </div>
+          ) : null}
         </div>
 
         <div className="hidden border-t border-slate-100 bg-white lg:block">

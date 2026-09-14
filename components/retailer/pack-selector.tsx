@@ -181,13 +181,18 @@ export function PackSelector({
     return null;
   }
 
-  function handleAddSinglePack(pack: MultiPricePack) {
-    const qty = quantities[pack.id] ?? 0;
+  function handleAddSinglePack(pack: MultiPricePack, presetQty?: number) {
+    const qty = presetQty ?? (quantities[pack.id] ?? 0);
     const pricing = pricingFor(pack, qty);
     const guard = localGuard(pack, pricing);
     if (guard) {
       setPackErrors((prev) => ({ ...prev, [pack.id]: guard }));
       return;
+    }
+    // A direct add (e.g. "Add to cart" on the empty state) must keep the
+    // stepper in sync with what the server now holds.
+    if (presetQty !== undefined) {
+      setQuantities((prev) => ({ ...prev, [pack.id]: qty }));
     }
 
     setPendingPackId(pack.id);
@@ -593,7 +598,7 @@ export function PackSelector({
                             type="button"
                             onClick={() => handleIncrement(pack)}
                             disabled={isCurrentPending}
-                            className="flex h-11 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                            className="flex h-11 items-center gap-1 rounded-xl border border-action-200 bg-white px-3.5 text-xs font-bold text-action-700 transition hover:border-action-400 hover:bg-action-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                           >
                             <Plus className="h-3.5 w-3.5" />
                             Add pieces
@@ -608,7 +613,7 @@ export function PackSelector({
                             type="button"
                             onClick={() => handleUpdateSinglePack(pack)}
                             disabled={isCurrentPending}
-                            className="flex h-11 items-center gap-1.5 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                            className="flex h-11 items-center gap-1.5 rounded-xl bg-action-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-action-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                           >
                             {isCurrentPending ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -622,7 +627,7 @@ export function PackSelector({
                             type="button"
                             onClick={() => handleAddSinglePack(pack)}
                             disabled={isCurrentPending || !pricing.orderable}
-                            className="flex h-11 items-center gap-1.5 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                            className="flex h-11 items-center gap-1.5 rounded-xl bg-action-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-action-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                           >
                             {isCurrentPending ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -636,8 +641,8 @@ export function PackSelector({
                     ) : null}
                   </div>
 
-                  {/* Selected variant: premium action row — outlined
-                      Add/Update (secondary) + filled primary Buy Now. */}
+                  {/* Selected variant: marketplace action row — outlined
+                      Add/Update (secondary) + filled blue Buy Now (primary). */}
                   {isSelectedVariant ? (
                     <div className="mt-2.5 grid grid-cols-2 gap-2">
                       {qty === 0 && isItemInCart ? (
@@ -655,14 +660,20 @@ export function PackSelector({
                           Remove from cart
                         </button>
                       ) : qty === 0 ? (
+                        // One-tap add: drops the pack's MOQ (minimum order)
+                        // straight into the cart — the server re-validates.
                         <button
                           type="button"
-                          onClick={() => handleIncrement(pack)}
+                          onClick={() => handleAddSinglePack(pack, Math.max(1, pack.moq))}
                           disabled={isCurrentPending}
-                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl bg-action-600 text-xs font-bold text-white shadow-sm transition hover:bg-action-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                         >
-                          <Plus className="h-4 w-4" />
-                          Add pieces
+                          {isCurrentPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <ShoppingCart className="h-4 w-4" />
+                          )}
+                          Add to cart
                         </button>
                       ) : isItemInCart && !isModified ? (
                         <div className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700">
@@ -674,7 +685,7 @@ export function PackSelector({
                           type="button"
                           onClick={() => handleUpdateSinglePack(pack)}
                           disabled={isCurrentPending}
-                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-action-500 bg-white text-xs font-bold text-action-700 transition hover:bg-action-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                         >
                           {isCurrentPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -688,7 +699,7 @@ export function PackSelector({
                           type="button"
                           onClick={() => handleAddSinglePack(pack)}
                           disabled={isCurrentPending || !pricing.orderable}
-                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-primary-600 bg-white text-xs font-bold text-primary-700 transition hover:bg-primary-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                          className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl border border-action-500 bg-white text-xs font-bold text-action-700 transition hover:bg-action-50 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                         >
                           {isCurrentPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -702,7 +713,7 @@ export function PackSelector({
                         type="button"
                         onClick={() => handleBuyPack(pack)}
                         disabled={isPending}
-                        className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl bg-primary-600 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                        className="flex min-h-[2.75rem] items-center justify-center px-2 py-2 text-center leading-tight gap-1.5 rounded-xl bg-action-600 text-xs font-bold text-white shadow-sm transition hover:bg-action-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                       >
                         {isPending && pendingPackId === 'buynow' ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -747,6 +758,21 @@ export function PackSelector({
                       Enter any quantity — the per-piece rate above applies, and bulk quantities earn a better rate.
                     </p>
                   )}
+
+                  {/* Live MOQ validation — mirrors the rule the server enforces
+                      before anything is written to the cart. */}
+                  {qty > 0 && qty < pack.moq ? (
+                    <p
+                      role="alert"
+                      className="mt-2.5 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold leading-4 text-amber-800"
+                    >
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>
+                        Minimum order quantity is {pack.moq} pc{pack.moq === 1 ? '' : 's'} — increase the
+                        quantity to add this size to the cart.
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
 
                 {packError ? (
@@ -787,7 +813,7 @@ export function PackSelector({
                   type="button"
                   onClick={handleAddAllSelected}
                   disabled={isPending}
-                  className="flex h-11 items-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60"
+                  className="flex h-11 items-center gap-2 rounded-xl bg-action-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-action-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                 >
                   {isPending && pendingPackId === 'all' ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -814,7 +840,7 @@ export function PackSelector({
           type="button"
           onClick={handleBuyNow}
           disabled={isPending}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 text-sm font-bold text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-action-600 text-sm font-bold text-white shadow-sm transition hover:bg-action-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
         >
           {isPending && pendingPackId === 'buynow' ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -878,10 +904,10 @@ export function PackSelector({
                       : `Add ${pendingAdd.pack.pack_name} to cart, ${pendingAdd.qty} pieces`
                   }
                   className={cn(
-                    'inline-flex h-10 items-center gap-1 rounded-xl border px-3 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                    'inline-flex h-10 items-center gap-1 rounded-xl border px-3 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300',
                     hasCartItems
-                      ? 'border-primary-600 bg-white text-primary-700 hover:bg-primary-50'
-                      : 'border-primary-600 bg-primary-600 text-white hover:bg-primary-700'
+                      ? 'border-action-500 bg-white text-action-700 hover:bg-action-50'
+                      : 'border-action-600 bg-action-600 text-white hover:bg-action-700'
                   )}
                 >
                   {pendingPackId === pendingAdd.pack.id ? (
@@ -897,7 +923,7 @@ export function PackSelector({
               {hasCartItems ? (
                 <Link
                   href="/retailer/cart"
-                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-primary-600 px-4 text-[11px] font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-action-600 px-4 text-[11px] font-bold text-white shadow-sm transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-300"
                 >
                   View Cart <ChevronRight className="h-4 w-4" />
                 </Link>

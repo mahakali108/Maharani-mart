@@ -159,13 +159,15 @@ export function ProductGallery({
                 </span>
               ) : null}
 
-              {/* Zoom hint */}
-              <span
-                className="pointer-events-none absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-500 shadow-sm backdrop-blur sm:bottom-4 sm:right-4"
-                aria-hidden="true"
+              {/* Zoom — a real control: opens the same lightbox as tapping the image */}
+              <button
+                type="button"
+                onClick={openLightbox}
+                aria-label="Zoom image"
+                className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-600 shadow-sm backdrop-blur transition hover:border-primary-300 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:bottom-4 sm:right-4"
               >
                 <ZoomIn className="h-4 w-4" />
-              </span>
+              </button>
 
               {/* Prev / Next on main — thumb-friendly, visible when multi */}
               {multi ? (
