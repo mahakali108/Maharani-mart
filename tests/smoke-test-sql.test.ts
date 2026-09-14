@@ -10,6 +10,50 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const sql = readFileSync(join(__dirname, '..', 'supabase', 'smoke-test.sql'), 'utf8');
+const migration0046 = readFileSync(
+  join(__dirname, '..', 'supabase', 'migrations', '0046_smoke_fixture.sql'),
+  'utf8',
+);
+
+/**
+ * Strips SQL line comments, block comments and single-quoted string literals,
+ * leaving only executable SQL. Needed because the fixture table name
+ * legitimately appears inside comments and inside catalog string literals
+ * (`relname = 'smoke_personas'`), neither of which is a relation reference.
+ */
+function executableSql(src: string): string {
+  let out = '';
+  for (let i = 0; i < src.length; ) {
+    const two = src.slice(i, i + 2);
+    if (two === '--') {
+      while (i < src.length && src[i] !== '\n') i++;
+      continue;
+    }
+    if (two === '/*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end === -1 ? src.length : end + 2;
+      continue;
+    }
+    if (src[i] === "'") {
+      i++;
+      while (i < src.length) {
+        if (src[i] === "'") {
+          if (src[i + 1] === "'") {
+            i += 2;
+            continue;
+          }
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    out += src[i];
+    i++;
+  }
+  return out;
+}
 
 describe('smoke-test.sql structure', () => {
   it('runs everything inside a transaction and rolls back (no seed data persists)', () => {
@@ -116,5 +160,58 @@ describe('smoke-test.sql structure', () => {
   it('uses only core PostgreSQL crypto (no pgcrypto dependency)', () => {
     expect(sql).not.toContain('digest(');
     expect(sql).toContain('md5(');
+  });
+});
+
+describe('smoke fixture table name is standardized', () => {
+  // The fixture table has ONE canonical name, owned by migration 0046:
+  // `smoke_fixture.smoke_personas`. It is schema-qualified everywhere it is
+  // used, and no second fixture table exists. These checks keep that from
+  // drifting — a reference to a name 0046 never created fails at runtime with
+  // `42P01: relation "..." does not exist`, which is exactly the class of
+  // failure migration 0046 exists to prevent.
+
+  const canonical = 'smoke_fixture.smoke_personas';
+
+  it('migration 0046 creates exactly one fixture table, and it is the canonical one', () => {
+    const created = [
+      ...migration0046.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?([a-z_.]+)/gi),
+    ].map((m) => m[1]);
+    expect(created).toEqual([canonical]);
+    // Not in `public`: the schema is what keeps it out of the PostgREST API.
+    expect(canonical).toMatch(/^smoke_fixture\./);
+  });
+
+  it('every executable reference in the smoke test is schema-qualified', () => {
+    const code = executableSql(sql).split(canonical).join('<FIXTURE>');
+    // Anything still matching is an unqualified (or differently qualified)
+    // relation reference, i.e. a name 0046 never created.
+    expect(code).not.toContain('smoke_personas');
+    expect((executableSql(sql).match(/smoke_fixture\.smoke_personas/g) ?? []).length).toBeGreaterThan(30);
+  });
+
+  it('migration 0046 only mentions the bare name in its constraint/policy object names', () => {
+    const code = executableSql(migration0046).split(canonical).join('<FIXTURE>');
+    expect(code).not.toMatch(/smoke_personas(?!_single_row|_read)/);
+  });
+
+  it('no file references a fixture table 0046 does not create', () => {
+    const script = join(__dirname, '..', 'scripts', 'production-validate.sh');
+    const checklist = join(__dirname, '..', 'docs', 'PRODUCTION_VERIFICATION_CHECKLIST.md');
+    const paths = [
+      join(__dirname, '..', 'supabase', 'smoke-test.sql'),
+      join(__dirname, '..', 'supabase', 'migrations', '0046_smoke_fixture.sql'),
+      script,
+      join(__dirname, '..', 'README.md'),
+      checklist,
+      join(__dirname, '..', 'docs', 'PHASE1_AUDIT_FEATURE_MATRIX.md'),
+    ];
+    for (const p of paths) {
+      expect(readFileSync(p, 'utf8')).not.toContain('smoke_test_personas');
+    }
+    // The runner and the docs point at the same qualified table the migration
+    // creates, so they cannot drift onto a name that does not exist.
+    expect(readFileSync(script, 'utf8')).toContain(`to_regclass('${canonical}')`);
+    expect(readFileSync(checklist, 'utf8')).toContain(`select count(*) from ${canonical};`);
   });
 });
