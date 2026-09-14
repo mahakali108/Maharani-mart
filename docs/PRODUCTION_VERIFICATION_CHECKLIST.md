@@ -14,7 +14,7 @@
 
 | Step | Status |
 |------|--------|
-| Migrations 0037–0045 applied to the live project | ⏳ **NOT DONE — owner action required** (probe + one-command apply: `scripts/production-validate.sh`) |
+| Migrations 0037–0046 applied to the live project | ⏳ **NOT DONE — owner action required** (probe + one-command apply: `scripts/production-validate.sh`) |
 | `supabase/smoke-test.sql` executed | ⏳ NOT DONE — runs as part of the script above, or standalone via `psql "$DATABASE_URL" -f supabase/smoke-test.sql` |
 | Real-account role testing (§5) | ⏳ NOT DONE — requires the owner's accounts |
 | Dispatch→delivery→collection flow (§6) | ⏳ NOT DONE |
@@ -23,7 +23,7 @@
 | Real-device testing | ⏳ NOT DONE — physically requires the owner's devices |
 
 **Important sequencing:** the preview deployment shares the production Supabase
-project. Until migrations 0037–0045 are applied, the new pages
+project. Until migrations 0037–0046 are applied, the new pages
 (`/admin/delivered`, `/admin/collections`, `/staff/deliveries`,
 `/salesman/deliveries`, `/salesman/collections`) and the dispatch flow on the
 PREVIEW will error — apply migrations first, then test. The production
@@ -43,15 +43,19 @@ order) against the target project:
 | 2 | `supabase/migrations/0043_deliveries_module.sql` | 0001 (`current_user_role`, `is_admin_or_above`, `log_audit`), 0014 (`is_retailer_assigned_to_current_salesman`), 0037 (`is_order_assigned_to_current_staff`) | `order_deliveries`, `order_delivery_items`, `can_current_user_view_delivery()`, RLS policies, `enforce_delivery_status_transitions()` + trigger, audit triggers |
 | 3 | `supabase/migrations/0044_payment_collections.sql` | 0001 helpers, `retailers`, `orders` | `payment_collections`, RLS policies, audit trigger |
 | 4 | `supabase/migrations/0045_delivery_payment_proof_buckets.sql` | **0043 + 0044** (its storage policies query `order_deliveries` / `payment_collections`) | private buckets `delivery-proofs` + `payment-proofs` and their storage policies |
+| 5 | `supabase/migrations/0046_smoke_fixture.sql` | 0001 (`profiles`, `orders`) | private `smoke_fixture` schema + single-row `smoke_fixture.smoke_personas` fixture table (SELECT-granted to `authenticated`, RLS read policy) that `supabase/smoke-test.sql` writes and rolls back |
 
 Rules that MUST hold:
 
-- **0045 must run last** — its `storage.objects` policies reference the tables
-  created by 0043/0044; applying it first fails with `relation "order_deliveries" does not exist`.
+- **0045 must run after 0043/0044** — its `storage.objects` policies reference
+  the tables they create; applying it first fails with `relation "order_deliveries" does not exist`.
 - 0042–0044 have no dependency on each other, but keep the lexicographic
   order — the migration runner enforces it and the test-suite assertions
   assume it.
-- All four are **additive and re-runnable** (`create or replace`, `drop … if
+- 0046 must run after 0001 (it mirrors `profiles`/`orders`); it is additive and
+  re-runnable like the rest and inserts no data — the fixture table ships
+  empty and is only ever written (and rolled back) by the smoke test.
+- All five are **additive and re-runnable** (`create or replace`, `drop … if
   exists`, `insert … on conflict do update`). Zero `drop table` / `drop column`
   / `truncate` / `delete from` statements. No business data is inserted.
 - If 0037–0041 are not yet applied to the target, they must be applied first
@@ -83,6 +87,15 @@ select count(*) from pg_policies where schemaname='public'
 select count(*) from pg_policies where schemaname='storage' and tablename='objects'
   and policyname like '%proof%';
 -- expect: 4 policies
+
+-- Smoke-test fixture table (0046) exists, empty, and is readable by authenticated:
+select count(*) from smoke_fixture.smoke_personas;
+-- expect: 0
+select has_table_privilege('authenticated', 'smoke_fixture.smoke_personas', 'select');
+-- expect: true
+select count(*) from pg_policies
+ where schemaname = 'smoke_fixture' and tablename = 'smoke_personas';
+-- expect: 1
 ```
 
 ---
@@ -98,7 +111,12 @@ psql "$DATABASE_URL" -f supabase/smoke-test.sql
 ```
 
 Expected output is a series of `PASS:` notices and a final `SMOKE TEST COMPLETE`
-with `ROLLBACK` (no data is left behind). What it asserts:
+with `ROLLBACK` (no data is left behind). The fixture lives in the committed
+`smoke_fixture.smoke_personas` table created by migration 0046 — never in
+session-scoped temp tables — so the run cannot fail with
+`42P01: relation "smoke_personas" does not exist`; each section re-verifies the
+fixture row belongs to its own execution and aborts with an actionable
+`SMOKE ABORT` otherwise. What it asserts:
 
 | Role | Must be able to | Must NOT be able to |
 |------|-----------------|---------------------|
@@ -255,7 +273,7 @@ Run once with real accounts, checking DB state after each step with the SQL in
 
 ## 7. Sign-off
 
-- [ ] Migrations 0042–0045 applied in order; §1 verification SQL returns expected counts
+- [ ] Migrations 0042–0046 applied in order; §1 verification SQL returns expected counts
 - [ ] `supabase/smoke-test.sql` prints all `PASS:` lines and `SMOKE TEST COMPLETE`
 - [ ] §3 private-bucket HTTP checks behave as specified
 - [ ] Every box in §5 and §6 checked for all four roles
