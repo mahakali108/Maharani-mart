@@ -16,7 +16,35 @@ describe('smoke-test.sql structure', () => {
     expect(sql).toContain('BEGIN;');
     // Rollback must come after the last assertion block.
     expect(sql.lastIndexOf('ROLLBACK;')).toBeGreaterThan(sql.lastIndexOf('DO $$'));
-    expect(sql.indexOf('BEGIN;')).toBeLessThan(sql.indexOf('create temp table'));
+    // The one transaction opens before the fixture row is written.
+    expect(sql.indexOf('BEGIN;')).toBeLessThan(sql.indexOf('insert into smoke_fixture.smoke_personas'));
+    // The fixture row is deleted as well, so even an executor that commits per
+    // statement leaves the scratch table empty.
+    expect(sql).toContain('delete from smoke_fixture.smoke_personas;');
+  });
+
+  it('reads its fixture from the migration-created table, never from a session-scoped temp table', () => {
+    // Regression guard for `ERROR 42P01: relation "smoke_personas" does not
+    // exist`: a fixture kept in a TEMP table only exists inside the one session
+    // that created it, so a partial run, a pooled executor or a second SQL
+    // Editor tab loses it. The fixture must come from a committed table.
+    const code = sql
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('--'))
+      .join('\n');
+    expect(code).not.toMatch(/\bcreate\s+temp(orary)?\s+table\b/i);
+    expect(code).not.toContain('pg_temp');
+    expect(code).not.toMatch(/smoke_orders|smoke_transition_order/);
+
+    const migration = readFileSync(
+      join(__dirname, '..', 'supabase', 'migrations', '0046_smoke_fixture.sql'),
+      'utf8',
+    );
+    expect(migration).toContain('create table if not exists smoke_fixture.smoke_personas');
+    expect(migration).toContain('grant select on smoke_fixture.smoke_personas to authenticated');
+    expect(migration).toContain('enable row level security');
+    // Every fixture read goes through that one table.
+    expect((sql.match(/smoke_fixture\.smoke_personas/g) ?? []).length).toBeGreaterThan(30);
   });
 
   it('impersonates each of the four roles through real JWT claims', () => {
