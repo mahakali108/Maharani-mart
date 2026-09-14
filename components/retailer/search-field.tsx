@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type FormEvent, type Ref } from 'react';
 import { useRouter } from 'next/navigation';
 import { Clock3, LayoutGrid, Search, Tag, X } from 'lucide-react';
 import { searchSuggestionsAction, type SearchSuggestionResult } from '@/lib/retailer/search-actions';
@@ -29,10 +29,13 @@ export function SearchField({
   initialQuery = '',
   variant = 'header',
   autoFocus = false,
+  inputRef,
 }: {
   initialQuery?: string;
   variant?: 'header' | 'hero';
   autoFocus?: boolean;
+  /** Lets a parent (e.g. the header search icon) focus the input on demand. */
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const router = useRouter();
   const rootRef = useRef<HTMLFormElement>(null);
@@ -97,6 +100,7 @@ export function SearchField({
         )}
       />
       <input
+        ref={inputRef}
         name="q"
         type="search"
         value={value}

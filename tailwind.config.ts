@@ -23,6 +23,21 @@ const config: Config = {
           900: '#771023',
           950: '#41040f',
         },
+        // Marketplace blue — primary ACTION color for B2B buy flows
+        // (Add to cart / Buy now / view cart). The brand wordmark and
+        // chrome keep the premium red; CTAs use this blue.
+        action: {
+          50: '#f0f6ff',
+          100: '#dcebff',
+          200: '#b9d8ff',
+          300: '#8ac2ff',
+          400: '#4d9eff',
+          500: '#2874f0',
+          600: '#1e5fd8',
+          700: '#1a4db4',
+          800: '#1a4394',
+          900: '#1a3c78',
+        },
         // Near-black — used for text, sidebars, premium dark surfaces
         ink: {
           50: '#f6f6f6',
