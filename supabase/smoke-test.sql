@@ -6,14 +6,23 @@
 -- HOW TO RUN (against the real project) — pick ONE:
 --
 --   A. Supabase SQL Editor (recommended — no local tooling needed):
---        Open the SQL Editor, paste this ENTIRE file into ONE query tab,
---        and run it as a single execution. The script opens one
---        transaction, runs every check, then rolls everything back.
+--        1. Open ONE new query tab in the SQL Editor.
+--        2. Select-all + delete any existing text in that tab.
+--        3. Paste this ENTIRE file into that ONE tab.
+--        4. Make sure NO text is highlighted/selected (click once in the
+--           editor to clear any selection — the editor runs ONLY the
+--           selection when one exists, which breaks the fixture).
+--        5. Press Run ONCE and wait for the single execution to finish.
+--        Do NOT run the file in pieces, do NOT press Run a second time on
+--        a selection, and do NOT split it across tabs: the fixture temp
+--        tables live only inside this script's single transaction/session,
+--        so every statement from the leading ROLLBACK/BEGIN to the final
+--        ROLLBACK must run together as one execution.
 --        Every statement is plain SQL — there are no psql meta-commands
 --        (no \echo, no \set), so the editor accepts the file as-is.
 --
---   B. psql:
---        psql "$DATABASE_URL" -f supabase/smoke-test.sql
+--   B. psql (single execution, same single-transaction guarantee):
+--        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/smoke-test.sql
 --
 --   $DATABASE_URL = the project's direct Postgres connection string
 --   (Supabase dashboard → Project Settings → Database → Connection string).
@@ -29,25 +38,57 @@
 --     no fixture data is kept. Personas are REAL profiles already in the
 --     database; the only touched rows (one retailer's salesman assignment,
 --     two throwaway orders) are undone by the rollback.
---   * Prints `PASS:` / `SKIP:` notices. Any `SMOKE FAIL` aborts the script
---     (the transaction is still rolled back by psql on exit).
+--   * Prints `PASS:` / `SKIP:` notices. Any `SMOKE FAIL` / `SMOKE ABORT`
+--     aborts the run; the trailing ROLLBACK still undoes every fixture
+--     change (in psql the -v ON_ERROR_STOP=1 flag stops at the first error
+--     and the session exit rolls the open transaction back).
+--
+-- WHY THIS SCRIPT IS STRUCTURED THIS WAY (42P01 hardening)
+--   * Postgres temp tables are visible ONLY inside the session/transaction
+--     that created them. Running only part of this file (a highlighted
+--     selection, a second Run of one section, or another tab) therefore
+--     fails with `ERROR 42P01: relation ... does not exist`. That error
+--     always means "the fixture was not created in THIS execution" — never
+--     a missing migration — so this script now:
+--       - opens its transaction FIRST (a leading ROLLBACK clears any
+--         aborted transaction left by a previous partial run in the same
+--         tab, then BEGIN starts the one transaction everything shares);
+--       - creates the fixture temp table before any statement that uses it;
+--       - runs a pre-flight existence check that raises a clear SMOKE ABORT
+--         instead of letting later sections die with 42P01;
+--       - aborts the whole transaction on any fixture failure (fail-fast),
+--         so later sections cannot run on a broken/missing fixture.
 --
 -- NOTE: expected-error subtests deliberately raise Postgres errors that are
 -- caught inside DO blocks; psql may print them as ERROR lines mid-run —
 -- that is fine as long as each block ends with a `PASS:` notice.
+-- A leading `WARNING: there is no transaction in progress` from the very
+-- first ROLLBACK is also fine — it just means there was no leftover
+-- transaction to clear.
 -- ============================================================================
+
+-- The leading ROLLBACK clears any open/aborted transaction left behind by a
+-- previous partial run in this same tab/session (safe no-op warning when
+-- there is nothing to clear). The BEGIN right after it opens the ONE
+-- transaction shared by the fixture and every dependent statement below.
+ROLLBACK;
+
+BEGIN;
 
 -- (Banner as RAISE NOTICE, not \echo: \echo is psql-only and the SQL
 -- Editor rejects it with `syntax error at or near "\"`. NOTICE works in
--- both the editor and psql.)
+-- both the editor and psql. It runs INSIDE the transaction so the whole
+-- script, banner included, is one single execution.)
 DO $$ BEGIN RAISE NOTICE '== Phase 4 smoke test (everything rolls back at the end) =='; END $$;
-
-BEGIN;
 
 -- ----------------------------------------------------------------------------
 -- §0 Personas + fixture (created as the table owner, RLS-bypassed)
 -- ----------------------------------------------------------------------------
-create temp table smoke_personas as
+-- The fixture temp table is created here — before every statement that reads
+-- it — and ON COMMIT PRESERVE ROWS keeps its rows for the whole transaction.
+-- Everything from BEGIN (above) to the trailing ROLLBACK runs in this ONE
+-- transaction/session, so the fixture stays visible to every section below.
+CREATE TEMP TABLE smoke_personas ON COMMIT PRESERVE ROWS AS
 select
   (select p.id from profiles p
     where p.role in ('admin','super_admin') and p.is_active
@@ -82,6 +123,20 @@ select
     limit 1) as retailer_outsider_id,
   (select w.id from warehouses w where w.is_active order by w.id limit 1) as warehouse_id,
   (select pr.id from products pr where pr.is_active order by pr.id limit 1) as product_id;
+
+-- ----------------------------------------------------------------------------
+-- §0 pre-flight: the fixture MUST exist before anything reads it.
+-- Uses to_regclass() (NULL when missing — never 42P01) so a missing fixture
+-- raises a clear SMOKE ABORT instead. The exception aborts the transaction
+-- (fail-fast): no later section can run on a missing/broken fixture.
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+  RAISE NOTICE 'PASS: §0 pre-flight — smoke_personas fixture present (same transaction/session)';
+END $$;
 
 DO $$
 DECLARE
@@ -176,7 +231,7 @@ values ('SMOKE-DELIVERY-' || right(gen_random_uuid()::text, 8),
         (select warehouse_id from smoke_personas),
         'dispatched', 100, 0, 0, 100);
 
-create temp table smoke_orders as
+CREATE TEMP TABLE smoke_orders ON COMMIT PRESERVE ROWS AS
 select id, order_number from orders where order_number like 'SMOKE-DELIVERY-%';
 
 insert into order_items (order_id, product_id, quantity, unit_price, gst_percent, line_total, quantity_unit)
@@ -219,7 +274,7 @@ values ('SMOKE-TRANSITION-' || right(gen_random_uuid()::text, 8),
         (select warehouse_id from smoke_personas),
         'pending', 50, 0, 0, 50);
 
-create temp table smoke_transition_order as
+CREATE TEMP TABLE smoke_transition_order ON COMMIT PRESERVE ROWS AS
 select id from orders where order_number like 'SMOKE-TRANSITION-%';
 
 -- Readable under every impersonated role, like the other temp tables.
@@ -236,6 +291,14 @@ grant select on smoke_transition_order to authenticated;
 -- ----------------------------------------------------------------------------
 -- §A ADMIN — full visibility, can manage collections
 -- ----------------------------------------------------------------------------
+-- Fail-fast gate for §A: re-verify the fixture is still visible in THIS
+-- execution before touching it (a partial/tab-split run would miss it).
+DO $$ BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+END $$;
+
 set local role authenticated;
 -- set_config(), not `set local ... = <expression>`: SET only accepts a
 -- literal, so the expression form is a syntax error in both the SQL
@@ -274,6 +337,14 @@ END $$;
 -- ----------------------------------------------------------------------------
 -- §B STAFF — assignee yes, out-of-scope staff no
 -- ----------------------------------------------------------------------------
+-- Fail-fast gate for §B: re-verify the fixture is still visible in THIS
+-- execution before touching it (a partial/tab-split run would miss it).
+DO $$ BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+END $$;
+
 set local role authenticated;
 select set_config('request.jwt.claims',
   format('{"sub":"%s","role":"authenticated"}', (select staff_assignee_id::text from smoke_personas)),
@@ -345,6 +416,14 @@ END $$;
 -- ----------------------------------------------------------------------------
 -- §C SALESMAN — assigned retailer only
 -- ----------------------------------------------------------------------------
+-- Fail-fast gate for §C: re-verify the fixture is still visible in THIS
+-- execution before touching it (a partial/tab-split run would miss it).
+DO $$ BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+END $$;
+
 set local role authenticated;
 select set_config('request.jwt.claims',
   format('{"sub":"%s","role":"authenticated"}', (select salesman_id::text from smoke_personas)),
@@ -428,6 +507,14 @@ END $$;
 -- ----------------------------------------------------------------------------
 -- §D RETAILER — read own, write nothing
 -- ----------------------------------------------------------------------------
+-- Fail-fast gate for §D: re-verify the fixture is still visible in THIS
+-- execution before touching it (a partial/tab-split run would miss it).
+DO $$ BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+END $$;
+
 set local role authenticated;
 select set_config('request.jwt.claims',
   format('{"sub":"%s","role":"authenticated"}', (select retailer_id::text from smoke_personas)),
@@ -508,6 +595,14 @@ END $$;
 -- ----------------------------------------------------------------------------
 -- §E TRANSITION TRIGGERS + CONSTRAINTS (owner role: triggers still fire)
 -- ----------------------------------------------------------------------------
+-- Fail-fast gate for §E: re-verify the fixture is still visible in THIS
+-- execution before touching it (a partial/tab-split run would miss it).
+DO $$ BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+END $$;
+
 set local role postgres;
 
 -- Order machine (fixture order 2 starts 'pending').
@@ -681,6 +776,14 @@ END $$;
 -- ----------------------------------------------------------------------------
 -- §F PRIVATE BUCKETS
 -- ----------------------------------------------------------------------------
+-- Fail-fast gate for §F: re-verify the fixture is still visible in THIS
+-- execution before touching it (a partial/tab-split run would miss it).
+DO $$ BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+END $$;
+
 set local role postgres;
 
 DO $$
@@ -705,6 +808,14 @@ END $$;
 -- ----------------------------------------------------------------------------
 -- §G AUDIT TRAIL (0043/0044 triggers wrote rows for our fixture changes)
 -- ----------------------------------------------------------------------------
+-- Fail-fast gate for §G: re-verify the fixture is still visible in THIS
+-- execution before touching it (a partial/tab-split run would miss it).
+DO $$ BEGIN
+  IF to_regclass('pg_temp.smoke_personas') IS NULL THEN
+    RAISE EXCEPTION 'SMOKE ABORT: smoke_personas fixture was not created';
+  END IF;
+END $$;
+
 DO $$
 DECLARE v_deliveries int; v_items int; v_collections int;
 BEGIN
