@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
-  BadgeCheck,
+  ClipboardList,
   Bell,
   Heart,
   Home,
@@ -27,6 +27,7 @@ const DESKTOP_NAV = [
   { label: 'Categories', href: '/retailer/categories' },
   { label: 'Brands', href: '/retailer/brands' },
   { label: 'Cart', href: '/retailer/cart' },
+  { label: 'Orders', href: '/retailer/orders' },
   { label: 'Account', href: '/retailer/account' },
 ];
 
@@ -48,7 +49,7 @@ export function RetailerShell({
   children,
 }: {
   fullName: string;
-  /** Pre-resolved area label, when available. Falls back to a neutral label. */
+  /** Pre-resolved area label. Missing profile information is not invented. */
   areaName?: string | null;
   role: UserRole;
   cartCount?: number;
@@ -97,18 +98,18 @@ export function RetailerShell({
     else router.replace('/retailer/catalog');
   }
 
-  // Keep the primary retail IA reserved for shopping. Operational tools stay
-  // in Account and contextual links rather than taking a bottom-nav slot.
+  // Primary shopping routes. Brands remain in desktop navigation and on home.
   const mobileNav: NavItem[] = [
     { label: 'Home', href: '/retailer/home', icon: Home },
     { label: 'Categories', href: '/retailer/categories', icon: LayoutGrid },
-    { label: 'Brands', href: '/retailer/brands', icon: BadgeCheck },
     { label: 'Cart', href: '/retailer/cart', icon: ShoppingCart, badge: cartCount },
+    { label: 'Orders', href: '/retailer/orders', icon: ClipboardList },
     { label: 'Account', href: '/retailer/account', icon: UserRound },
   ];
 
   return (
-    <div className="retailer-theme min-h-screen bg-[#fafafa] pb-24 text-slate-900 lg:pb-0">
+    <div className="retailer-theme min-h-screen min-w-0 w-full bg-[#fafafa] pb-24 text-slate-900 lg:pb-0">
+      <a href="#retailer-main" className="sr-only z-50 rounded-lg bg-white p-3 text-action-700 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 pt-[env(safe-area-inset-top)] text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-3 sm:px-5">
           <div className="flex h-14 items-center gap-1.5 lg:h-16 lg:gap-5">
@@ -124,18 +125,20 @@ export function RetailerShell({
             ) : null}
             <Link
               href="/retailer/home"
-              className="group flex min-w-0 shrink items-center gap-2.5"
+              className="group flex min-w-0 shrink items-center gap-1.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 lg:gap-2.5"
               aria-label="Maharani Traders home"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white shadow-sm lg:h-10 lg:w-10 lg:text-base">
                 M
               </span>
               <span className="min-w-0 leading-none">
-                <span className="block truncate text-[14px] font-bold tracking-tight text-slate-900 lg:text-lg">
+                <span className="block truncate text-xs font-bold leading-4 text-slate-900 sm:hidden">Maharani</span>
+                <span className="block truncate text-[10px] font-medium leading-3 text-slate-600 sm:hidden">Traders</span>
+                <span className="hidden truncate text-[14px] font-bold tracking-tight text-slate-900 sm:block lg:text-lg">
                   Maharani Traders
                 </span>
                 {areaName ? (
-                  <span className="mt-0.5 hidden items-center gap-1 text-[10px] font-semibold text-slate-500 lg:flex">
+                  <span className="mt-0.5 hidden max-w-[240px] items-center gap-1 truncate text-[10px] font-semibold text-slate-500 lg:flex">
                     <span className="h-1 w-1 rounded-full bg-emerald-500" aria-hidden="true" />
                     Delivering to {areaName}
                   </span>
@@ -153,6 +156,7 @@ export function RetailerShell({
                 onClick={handleSearchToggle}
                 aria-label="Search"
                 aria-expanded={searchOpen}
+                aria-controls="retailer-mobile-search"
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:hidden"
               >
                 <Search className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -209,7 +213,7 @@ export function RetailerShell({
           </div>
 
           {searchOpen ? (
-            <div className="relative pb-3 pt-1 lg:hidden">
+            <div id="retailer-mobile-search" className="relative pb-3 pt-1 lg:hidden">
               <SearchField inputRef={searchInputRef} />
             </div>
           ) : null}
@@ -251,7 +255,7 @@ export function RetailerShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-7">{children}</main>
+      <main id="retailer-main" tabIndex={-1} className="mx-auto min-w-0 w-full scroll-mt-20 lg:scroll-mt-32 max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-7">{children}</main>
       <MobileBottomNav navItems={mobileNav} marketplace />
     </div>
   );

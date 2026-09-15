@@ -68,7 +68,8 @@ describe('product detail rendering', () => {
   it('keeps the real search behaviour (existing SearchField with suggestions action)', () => {
     const search = read('components/retailer/search-field.tsx');
     expect(search).toContain('searchSuggestionsAction(query)');
-    expect(search).toContain('placeholder="Search products, brands, categories"');
+    expect(search).toContain("'Search products, brands, categories'");
+    expect(search).toContain('aria-label="Search products, brands and categories"');
     // The header keeps the real cart / notification / account icon links.
     const shell = read('components/layout/retailer-shell.tsx');
     expect(shell).toContain('<SearchField />');
@@ -324,15 +325,20 @@ function makeCartSupabase(initial: FakeCartLine[]) {
           ) ?? null;
         return { data: match, error: null };
       },
-      update: (payload: Record<string, unknown>) => ({
-        eq: (col: string, val: unknown) => {
-          filters[col] = val;
-          const match = lines.find((line) => line.id === (filters.id as string));
-          if (match && typeof payload.quantity === 'number') match.quantity = payload.quantity;
-          calls.push({ op: 'update', payload });
-          return Promise.resolve({ error: null });
-        },
-      }),
+      update: (payload: Record<string, unknown>) => {
+        const mutation = {
+          eq: (col: string, val: unknown) => { filters[col] = val; return mutation; },
+          then: (resolve: (value: { error: null }) => unknown) => {
+            const match = lines.find((line) => Object.entries(filters).every(
+              ([key, value]) => (line as unknown as Record<string, unknown>)[key] === value
+            ));
+            if (match && typeof payload.quantity === 'number') match.quantity = payload.quantity;
+            calls.push({ op: 'update', payload });
+            return Promise.resolve(resolve({ error: null }));
+          },
+        };
+        return mutation;
+      },
       insert: (payload: Record<string, unknown>) => {
         lines.push({
           id: `new-${lines.length}`,
@@ -520,7 +526,7 @@ describe('mobile responsive layout', () => {
 
   it('bottom navigation is the real five-tab marketplace nav with the cart badge', () => {
     const shell = read('components/layout/retailer-shell.tsx');
-    for (const label of ['Home', 'Categories', 'Brands', 'Cart', 'Account']) {
+    for (const label of ['Home', 'Categories', 'Cart', 'Orders', 'Account']) {
       expect(shell).toContain(`{ label: '${label}'`);
     }
     expect(shell).toContain('href: \'/retailer/cart\'');

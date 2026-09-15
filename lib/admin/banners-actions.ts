@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { deleteMedia, isRenderableMediaRef } from '@/lib/media';
+import { resolveBannerTarget } from '@/lib/retailer/banner-target';
 import type { Database } from '@/types/database.types';
 
 export type BannerFormState = { error?: string } | null;
@@ -26,7 +27,9 @@ const mediaRefSchema = z
 const bannerSchema = z.object({
   title: z.string().min(2, 'Enter a title.'),
   imageUrl: mediaRefSchema,
-  linkUrl: z.string().url().optional().or(z.literal('')),
+  subtitle: z.string().trim().max(300, 'Keep the subtitle under 300 characters.').optional(),
+  ctaLabel: z.string().trim().max(60, 'Keep the button label under 60 characters.').optional(),
+  linkUrl: z.string().trim().refine((value) => !value || !!resolveBannerTarget(value), 'Use an app route or an http(s) URL.').optional(),
   areaId: z.string().uuid().optional().or(z.literal('')),
   startsAt: z.string().optional().or(z.literal('')),
   endsAt: z.string().optional().or(z.literal('')),
@@ -38,6 +41,8 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   const parsed = bannerSchema.safeParse({
     title: formData.get('title'),
     imageUrl: formData.get('imageUrl'),
+    subtitle: formData.get('subtitle') || undefined,
+    ctaLabel: formData.get('ctaLabel') || undefined,
     linkUrl: formData.get('linkUrl') || undefined,
     areaId: formData.get('areaId') || undefined,
     startsAt: formData.get('startsAt') || undefined,
@@ -46,7 +51,7 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const { title, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
+  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
 
   const supabase = createClient();
 
@@ -56,6 +61,8 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   const payload: BannerInsert = {
     title,
     image_url: imageUrl,
+    subtitle: subtitle || null,
+    cta_label: ctaLabel || null,
     link_url: linkUrl || null,
     area_id: areaId || null,
     sort_order: count ?? 0,
@@ -68,6 +75,7 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   if (error) return { error: error.message };
 
   revalidatePath('/admin/banners');
+  revalidatePath('/retailer/home');
   redirect('/admin/banners');
 }
 
@@ -81,6 +89,8 @@ export async function updateBannerAction(
   const parsed = bannerSchema.safeParse({
     title: formData.get('title'),
     imageUrl: formData.get('imageUrl'),
+    subtitle: formData.get('subtitle') || undefined,
+    ctaLabel: formData.get('ctaLabel') || undefined,
     linkUrl: formData.get('linkUrl') || undefined,
     areaId: formData.get('areaId') || undefined,
     startsAt: formData.get('startsAt') || undefined,
@@ -89,12 +99,14 @@ export async function updateBannerAction(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const { title, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
+  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
 
   const supabase = createClient();
   const payload: BannerUpdate = {
     title,
     image_url: imageUrl,
+    subtitle: subtitle || null,
+    cta_label: ctaLabel || null,
     link_url: linkUrl || null,
     area_id: areaId || null,
     starts_at: startsAt ? new Date(startsAt).toISOString() : null,
@@ -105,6 +117,7 @@ export async function updateBannerAction(
   if (error) return { error: error.message };
 
   revalidatePath('/admin/banners');
+  revalidatePath('/retailer/home');
   redirect('/admin/banners');
 }
 
@@ -115,6 +128,7 @@ export async function toggleBannerActiveAction(bannerId: string, isActive: boole
   const { error } = await supabase.from('banners').update(payload as unknown as never).eq('id', bannerId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/banners');
+  revalidatePath('/retailer/home');
 }
 
 export async function reorderBannerAction(bannerId: string, direction: 'up' | 'down') {
@@ -144,6 +158,7 @@ export async function reorderBannerAction(bannerId: string, direction: 'up' | 'd
   ]);
 
   revalidatePath('/admin/banners');
+  revalidatePath('/retailer/home');
 }
 
 export async function deleteBannerAction(bannerId: string) {
@@ -166,4 +181,5 @@ export async function deleteBannerAction(bannerId: string) {
   }
 
   revalidatePath('/admin/banners');
+  revalidatePath('/retailer/home');
 }

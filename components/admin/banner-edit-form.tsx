@@ -22,6 +22,8 @@ export function BannerEditForm({
   title,
   imageUrl: initialImageUrl,
   linkUrl,
+  subtitle,
+  ctaLabel,
   areaId,
   startsAt,
   endsAt,
@@ -31,6 +33,8 @@ export function BannerEditForm({
   title: string;
   imageUrl: string;
   linkUrl: string | null;
+  subtitle?: string | null;
+  ctaLabel?: string | null;
   areaId: string | null;
   startsAt: string | null;
   endsAt: string | null;
@@ -70,8 +74,16 @@ export function BannerEditForm({
           <Input id="title" name="title" defaultValue={title} required />
         </div>
         <div>
-          <Label htmlFor="linkUrl">Link URL</Label>
-          <Input id="linkUrl" name="linkUrl" defaultValue={linkUrl ?? ''} placeholder="Optional" />
+          <Label htmlFor="subtitle">Subtitle (optional)</Label>
+          <Input id="subtitle" name="subtitle" maxLength={300} defaultValue={subtitle ?? ''} />
+        </div>
+        <div>
+          <Label htmlFor="ctaLabel">Button label (optional)</Label>
+          <Input id="ctaLabel" name="ctaLabel" maxLength={60} defaultValue={ctaLabel ?? ''} />
+        </div>
+        <div>
+          <Label htmlFor="linkUrl">Target route or URL (optional)</Label>
+          <Input id="linkUrl" name="linkUrl" defaultValue={linkUrl ?? ''} placeholder="/retailer/catalog or https://…" />
         </div>
         <div>
           <Label htmlFor="areaId">Area</Label>

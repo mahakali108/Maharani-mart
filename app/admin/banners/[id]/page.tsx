@@ -7,6 +7,8 @@ import { BannerEditForm } from '@/components/admin/banner-edit-form';
 interface BannerDetail {
   id: string;
   title: string;
+  subtitle?: string | null;
+  cta_label?: string | null;
   image_url: string;
   link_url: string | null;
   area_id: string | null;
@@ -21,7 +23,7 @@ export default async function EditBannerPage({ params }: { params: { id: string 
   const [{ data: banner }, { data: areas }] = await Promise.all([
     supabase
       .from('banners')
-      .select('id, title, image_url, link_url, area_id, starts_at, ends_at')
+      .select('*')
       .eq('id', params.id)
       .maybeSingle<BannerDetail>(),
     supabase.from('areas').select('id, name').eq('is_active', true).order('name'),
@@ -42,6 +44,8 @@ export default async function EditBannerPage({ params }: { params: { id: string 
         <BannerEditForm
           bannerId={banner.id}
           title={banner.title}
+          subtitle={banner.subtitle}
+          ctaLabel={banner.cta_label}
           imageUrl={banner.image_url}
           linkUrl={banner.link_url}
           areaId={banner.area_id}

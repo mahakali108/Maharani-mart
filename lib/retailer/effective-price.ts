@@ -66,7 +66,8 @@ async function loadScopedOverrides(
       .lte('valid_from', nowIso);
     if (scope === 'retailer' && match.retailerId) query = query.eq('retailer_id', match.retailerId);
     if (scope === 'area' && match.areaId) query = query.eq('area_id', match.areaId);
-    const { data } = await query.returns<ScopedPriceRow[]>();
+    const { data, error } = await query.returns<ScopedPriceRow[]>();
+    if (error) throw new Error('Retailer prices could not be loaded. Please try again.');
     if (data) rows.push(...data);
   }
   return rows;

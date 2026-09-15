@@ -2,7 +2,7 @@
 # ============================================================================
 # scripts/production-validate.sh — Phase 4 production validation (ONE COMMAND)
 #
-# Applies every unapplied migration (0037–0046) in order, then runs the live
+# Applies every unapplied migration (0037–0047) in order, then runs the live
 # RLS/trigger/bucket smoke test. Safe to re-run: every migration is additive
 # and idempotent, and the smoke test rolls its fixture back completely.
 #
@@ -86,6 +86,10 @@ apply_if_needed "0045_delivery_payment_proof_buckets.sql" "0045 proof buckets" \
   "select case when exists (select 1 from storage.buckets where id = 'delivery-proofs') then 1 else 0 end"
 apply_if_needed "0046_smoke_fixture.sql" "0046 smoke fixture" \
   "select case when to_regclass('smoke_fixture.smoke_personas') is not null then 1 else 0 end"
+
+# Retailer homepage: no business content is seeded and banner RLS is unchanged.
+apply_if_needed "0047_banner_content.sql" "0047 banner content" \
+  "select case when (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'banners' and column_name in ('subtitle', 'cta_label')) = 2 then 1 else 0 end"
 
 echo "== 2/4 Post-application sanity checks =="
 "${PSQL[@]}" -tAc "

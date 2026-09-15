@@ -24,7 +24,7 @@ Full system design lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 1. Create a new project at [supabase.com](https://supabase.com).
 2. In the SQL Editor, run the migrations **in order** — every file in
-   `supabase/migrations/` (currently `0001`–`0046`), not just the first few.
+   `supabase/migrations/` (currently `0001`–`0047`), not just the first few.
    Migrations `0037`–`0046` (staff scope, targets/commissions, follow-ups,
    schemes audit, area stock view, order state machine, deliveries module,
    payment collections, private proof buckets, smoke-test fixture table)
@@ -40,6 +40,8 @@ Full system design lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
    - `supabase/migrations/0021_ensure_category_images_bucket.sql` — idempotent ensure-safe re-check of `category-images`; applies cleanly whether or not 0016 ran
    - `supabase/migrations/0042`–`0045` — order-status state-machine trigger, deliveries module (`order_deliveries`), payment collections, private `delivery-proofs`/`payment-proofs` buckets. **0045 must run after 0043/0044** (its storage policies reference their tables).
    - `supabase/migrations/0046_smoke_fixture.sql` — private, API-invisible `smoke_fixture` schema + the single-row `smoke_fixture.smoke_personas` fixture table that `supabase/smoke-test.sql` writes and rolls back. Without it the live smoke test aborts with an actionable message (never `relation "smoke_personas" does not exist`).
+
+   - `supabase/migrations/0047_banner_content.sql` — optional, nullable banner subtitle and CTA label for the retailer homepage. Existing banner records and RLS are unchanged. Apply before editing the new fields; see `docs/retailer-homepage-audit.md` for service configuration and verification.
 
    Skipping any of these leaves the deployed schema behind the code — e.g.
    applying only 0001–0003 is exactly why a category image upload can fail with
