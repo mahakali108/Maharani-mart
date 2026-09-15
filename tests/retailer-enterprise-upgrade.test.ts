@@ -571,28 +571,32 @@ describe('cart mutations stay owner-scoped', () => {
 
 describe('home renders only real retailer history', () => {
   const home = read('app/retailer/home/page.tsx');
-  const personalization = read('lib/retailer/personalization.ts');
+  const personalization = read('lib/retailer/home-data.ts');
+  const view = read('components/retailer/home-content.tsx');
 
   it('offers Buy again from the retailer’s own last order, priced today', () => {
-    expect(home).toContain('getBuyAgainCards(');
-    expect(home).toContain('buyAgainCards.length > 0');
-    expect(home).toContain('Buy again');
+    expect(home).toContain('loadRetailerHome(supabase, user.id');
+    expect(view).toContain('data.reorders.length');
+    expect(view).toContain('Buy again');
+    expect(personalization).toContain('priceCatalogPack(pack, product, pricingData, quantity)');
     expect(personalization).toContain("eq('retailer_id', retailerId)");
   });
 
   it('never invents a sales figure or a popularity count', () => {
     expect(home).not.toMatch(/soldCount|unitsSold|fakeSales|Math\.random/);
     expect(personalization).not.toMatch(/Math\.random/);
-    // "Best selling" comes from this retailer's own order frequency, or from a
-    // deterministic catalog ordering when they have no history yet.
-    expect(home).toContain('frequentCards.length > 0 ? frequentCards : discovery.bestPrices');
+    // No catalog-price fallback is mislabeled as a sales ranking.
+    expect(view).toContain('Frequently ordered by you');
+    expect(personalization).toContain('history.frequency.entries()');
   });
 
   it('keeps banners scoped to the retailer’s area and active window', () => {
-    expect(home).toContain("eq('is_active', true)");
-    expect(home).toContain('banner.area_id === retailer?.area_id');
-    expect(home).toContain('hasStarted');
-    expect(home).toContain('hasNotEnded');
+    expect(personalization).toContain("eq('is_active', true)");
+    expect(personalization).toContain('isBannerVisible(banner, areaId');
+    const schedule = read('lib/retailer/banner-target.ts');
+    expect(schedule).toContain('banner.area_id === areaId');
+    expect(schedule).toContain('hasStarted');
+    expect(schedule).toContain('hasNotEnded');
   });
 });
 

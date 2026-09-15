@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
+import { validatePackForCart } from '@/lib/retailer/cart-service';
 import { isReturnWindowOpen } from '@/lib/delivery/return-window';
 import type { Database } from '@/types/database.types';
 import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
@@ -134,6 +135,10 @@ export async function addReorderLinesToCartAction(
       skippedCount += 1;
       continue;
     }
+    // Reuse the full canonical cart validation, including today's selling
+    // tiers, rather than copying a historical price or bypassing the engine.
+    const validationError = await validatePackForCart(supabase, packId, quantity);
+    if (validationError) { skippedCount += 1; continue; }
     validLines.push({ packId, quantity });
   }
 
@@ -143,9 +148,14 @@ export async function addReorderLinesToCartAction(
 
   // Same merge path as manual catalog adds — one implementation,
   // one semantic (increment existing cart lines, insert new ones).
-  await mergeLinesIntoCart(supabase, user.id, validLines);
+  try {
+    await mergeLinesIntoCart(supabase, user.id, validLines);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The cart could not be updated.' };
+  }
 
   revalidatePath('/retailer/cart');
+  revalidatePath('/retailer', 'layout');
   return { success: true, skippedCount };
 }
 

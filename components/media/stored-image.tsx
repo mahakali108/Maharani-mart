@@ -59,10 +59,10 @@ export function StoredImage({
   fill,
   ...rest
 }: StoredImageProps) {
-  const [errored, setErrored] = useState(false);
+  const [erroredSrc, setErroredSrc] = useState<string | null>(null);
   const resolved = resolveMediaUrl(src);
 
-  if (!resolved || errored) {
+  if (!resolved || erroredSrc === resolved) {
     if (fallback !== undefined) return <>{fallback}</>;
     return (
       <div
@@ -85,8 +85,21 @@ export function StoredImage({
       src={resolved}
       alt={alt}
       className={className}
-      sizes={fill ? SIZES[size] : rest.sizes}
-      onError={() => setErrored(true)}
+      sizes={rest.sizes ?? (fill ? SIZES[size] : undefined)}
+      // Legacy external URLs are supported without widening the optimizer's
+      // server-side host allowlist. Public Supabase images stay optimized.
+      unoptimized={rest.unoptimized ?? !isOptimizableImage(resolved)}
+      onError={() => setErroredSrc(resolved)}
     />
   );
+}
+
+function isOptimizableImage(src: string): boolean {
+  if (src.startsWith('/') && !src.startsWith('//')) return true;
+  try {
+    const url = new URL(src);
+    return url.protocol === 'https:' && url.hostname.endsWith('.supabase.co') && url.pathname.startsWith('/storage/v1/object/public/');
+  } catch {
+    return false;
+  }
 }

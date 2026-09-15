@@ -40,7 +40,7 @@ async function quantityError(supabase: ReturnType<typeof createClient>, pack: Pa
     tiers: tiers.get(pack.id) ?? [],
     moq: pack.moq,
   });
-  if (pricing.orderable) return null;
+  if (pricing.orderable && Number.isFinite(pricing.unitPrice) && Number.isFinite(pricing.lineTotal)) return null;
   return pricing.message ?? 'That quantity is not available for this pack.';
 }
 
@@ -67,7 +67,11 @@ export async function validatePackForCart(
   // the engine below (single implementation of the rule) for the case/loose
   // rules: a whole-case-only pack and an unpriced loose remainder.
   if (quantity < pack.moq) return `Minimum order quantity for this pack is ${pack.moq}.`;
-  return quantityError(supabase, pack, quantity);
+  try {
+    return await quantityError(supabase, pack, quantity);
+  } catch {
+    return 'Current pricing could not be verified. Please try again.';
+  }
 }
 
 export async function addCartLines(
@@ -80,7 +84,11 @@ export async function addCartLines(
     const error = await validatePackForCart(supabase, line.packId, line.quantity);
     if (error) return { error };
   }
-  await mergeLinesIntoCart(supabase, retailerId, lines);
+  try {
+    await mergeLinesIntoCart(supabase, retailerId, lines);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The cart could not be updated.' };
+  }
   return { success: true };
 }
 

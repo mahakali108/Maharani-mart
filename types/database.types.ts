@@ -472,6 +472,8 @@ export interface Database {
         Row: {
           id: string;
           title: string;
+          subtitle?: string | null;
+          cta_label?: string | null;
           image_url: string;
           link_url: string | null;
           area_id: string | null;
@@ -485,6 +487,8 @@ export interface Database {
         Insert: {
           id?: string;
           title: string;
+          subtitle?: string | null;
+          cta_label?: string | null;
           image_url: string;
           link_url?: string | null;
           area_id?: string | null;

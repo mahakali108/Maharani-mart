@@ -6,14 +6,12 @@ import {
   getProductPriceOverrides,
   resolvePackPrice,
 } from '@/lib/retailer/effective-price';
-import {
-  piecePriceFromCase,
-  resolveLooseTierSet,
-  type PricingTier,
-} from '@/lib/retailer/case-pricing';
+import { piecePriceFromCase, resolveLooseTierSet, type PricingTier } from '@/lib/retailer/case-pricing';
+import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
+import { normalizeAvailabilityState, type AvailabilityState } from '@/lib/retailer/availability';
 import { calcDiscountPercent } from '@/lib/retailer/format';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
-import type { ProductCardProps } from '@/components/retailer/product-card';
+import type { ProductCardProps, SlabOffer } from '@/components/retailer/product-card';
 import { buildProductCardName } from '@/lib/retailer/product-name';
 
 export const PRODUCT_CARD_SELECT =
@@ -44,6 +42,8 @@ export interface CatalogProductRow {
   }[];
 }
 
+export type CatalogPack = CatalogProductRow['product_packs'][number];
+
 export interface PricedCatalogCard extends ProductCardProps {
   categoryId: string | null;
   brandId: string | null;
@@ -51,52 +51,100 @@ export interface PricedCatalogCard extends ProductCardProps {
   timesOrdered: number;
 }
 
-function bestPricedPack(product: CatalogProductRow, override: number | null) {
+/** One batched read is shared by home discovery, reorder and cart previews. */
+export interface CatalogPricingData {
+  overrides: Map<string, number | null>;
+  offerIds: Set<string>;
+  packTiers: Map<string, PricingTier[]>;
+  availability: Map<string, AvailabilityState>;
+}
+
+export function priceCatalogPack(pack: CatalogPack, product: CatalogProductRow, data: CatalogPricingData, quantity: number) {
+  return calculateRetailerPiecePrice({
+    quantity,
+    unitsPerCase: pack.units_per_case,
+    casePrice: resolvePackPrice(pack, data.overrides.get(product.id) ?? null),
+    tiers: data.packTiers.get(pack.id) ?? [],
+    gstPercent: product.gst_percent,
+    moq: pack.moq,
+  });
+}
+
+function bestPricedPack(product: CatalogProductRow, override: number | null, packTiers: Map<string, PricingTier[]>) {
   const activePacks = [...product.product_packs]
     .filter((pack) => pack.is_active)
     .sort((a, b) => a.sort_order - b.sort_order);
   const priced = activePacks.map((pack) => {
-    // Internal GST-inclusive case price — NEVER shown to the retailer.
     const price = resolvePackPrice(pack, override);
+    const tiers = packTiers.get(pack.id) ?? [];
+    const pricing = calculateRetailerPiecePrice({
+      quantity: pack.moq,
+      unitsPerCase: pack.units_per_case,
+      casePrice: price,
+      tiers,
+      gstPercent: product.gst_percent,
+      moq: pack.moq,
+    });
     return {
       pack,
-      price,
-      // Reference per-piece rate (internal case price ÷ units per case). The
-      // card shows this as the "from ₹/pc" figure; the case total is internal.
-      piecePrice: piecePriceFromCase(price, pack.units_per_case),
+      // Only this GST-inclusive piece fallback crosses the client boundary.
+      derivedPiecePrice: piecePriceFromCase(price, pack.units_per_case),
+      pricing,
+      tiers,
+      piecePrice: pricing.orderable && Number.isFinite(pricing.unitPrice) ? pricing.unitPrice : null,
     };
   });
-  return priced.sort((a, b) => a.piecePrice - b.piecePrice)[0] ?? null;
+  return priced.sort((a, b) => (a.piecePrice ?? Infinity) - (b.piecePrice ?? Infinity))[0] ?? null;
 }
 
-/**
- * Builds a one-line "buy more, save more" hint for a product card from the
- * variant's selling tiers. Example: "7+ pcs se ₹80/pc". Only ever shown when
- * the admin has configured at least one deeper selling tier — the value comes
- * from the SAME tier rows the server uses to price the cart / order, so the
- * card can never advertise a rate the checkout will not honour.
- */
+/** Real next slab, priced through the same engine as checkout. */
 export function nextTierHint(
   tiers: PricingTier[] | null | undefined,
   unitsPerCase: number,
-  currentFromPrice: number | null
+  currentFromPrice: number | null,
+  currentQuantity = 1
 ): { minQuantity: number; pricePerPiece: number; label: string } | null {
   if (currentFromPrice === null) return null;
   const loose = resolveLooseTierSet(tiers ?? [], unitsPerCase).tiers;
   if (loose.length < 2) return null;
-  // Find the next tier the retailer can reach — strictly better rate than the
-  // displayed "from" price, and with a min quantity above 1.
-  const sorted = [...loose].sort((a, b) => a.min_quantity - b.min_quantity);
-  const next = sorted.find(
-    (tier) => tier.min_quantity > 1 && tier.price_per_piece < currentFromPrice
-  );
-  if (!next) return null;
-  const rate = next.price_per_piece;
-  return {
-    minQuantity: next.min_quantity,
-    pricePerPiece: rate,
-    label: `${next.min_quantity}+ pcs se ₹${rate.toFixed(0)}/pc`,
-  };
+  for (const tier of loose) {
+    if (tier.min_quantity <= currentQuantity) continue;
+    const pricing = calculateRetailerPiecePrice({
+      quantity: tier.min_quantity, unitsPerCase, casePrice: 0, tiers,
+    });
+    if (pricing.orderable && pricing.unitPrice < currentFromPrice) {
+      return {
+        minQuantity: tier.min_quantity,
+        pricePerPiece: pricing.unitPrice,
+        label: `${tier.min_quantity}+ pcs se ₹${Number(pricing.unitPrice.toFixed(2))}/pc`,
+      };
+    }
+  }
+  return null;
+}
+
+/** Best reachable slab, not a misleading case-derived or below-MOQ rate.
+ * The quantity range is retained: non-monotonic rates must not say “N+”. */
+export function bestSlabOffer(
+  tiers: PricingTier[], unitsPerCase: number, moq: number, currentPrice: number | null
+): SlabOffer | null {
+  if (currentPrice === null) return null;
+  const loose = resolveLooseTierSet(tiers, unitsPerCase).tiers;
+  let best: SlabOffer | null = null;
+  for (const [index, tier] of loose.entries()) {
+    const quantity = Math.max(moq, tier.min_quantity);
+    if (quantity > 100_000 || quantity <= moq) continue;
+    const pricing = calculateRetailerPiecePrice({ quantity, unitsPerCase, casePrice: 0, tiers, moq });
+    if (!pricing.orderable || !Number.isFinite(pricing.unitPrice) || pricing.unitPrice >= currentPrice) continue;
+    if (!best || pricing.unitPrice < best.pricePerPiece) {
+      best = {
+        minQuantity: quantity,
+        maxQuantity: index === loose.length - 1 ? null : (pricing.tier?.max_quantity ?? null),
+        pricePerPiece: pricing.unitPrice,
+      };
+    }
+  }
+  return best;
 }
 
 export function toPricedCard(
@@ -107,34 +155,36 @@ export function toPricedCard(
     hasOffer?: boolean;
     timesOrdered?: number;
     tierHint?: { minQuantity: number; pricePerPiece: number; label: string } | null;
+    packTiers?: Map<string, PricingTier[]>;
+    availability?: AvailabilityState;
+    pricingUnavailable?: boolean;
   } = {}
 ): PricedCatalogCard {
-  const best = bestPricedPack(product, override);
+  const best = bestPricedPack(product, override, extras.packTiers ?? new Map());
   const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
-  // Universal product name: use canonical product name, not category.
-  // Product card shows brand separately, so we build name as product + pack (size)
-  // without duplicating size if already in product name.
-  const cardName = buildProductCardName({
-    productName: product.name,
-    packName: best?.pack.pack_name ?? null,
-  });
+  const fromPrice = extras.pricingUnavailable ? null : best?.piecePrice ?? null;
   return {
     id: product.id,
-    name: cardName,
+    name: buildProductCardName({ productName: product.name, packName: best?.pack.pack_name ?? null }),
     brandName: product.brands?.name,
-    // Prefer the shown variant's own image (Phase 3), falling back to the
-    // parent product's gallery exactly as before when it has none.
-    imageUrl: best?.pack.image_url ?? images[0]?.image_url,
+    imageUrl: best?.pack.image_url || images[0]?.image_url,
     isNewLaunch: product.is_new_launch,
-    fromPrice: best?.piecePrice ?? null,
+    fromPrice,
     mrp: best?.pack.mrp,
     packName: best?.pack.pack_name,
-    moq: best?.pack.moq ?? 1,
+    moq: best?.pack.moq,
     defaultPackId: best?.pack.id ?? null,
     gstPercent: product.gst_percent,
+    availability: extras.availability ?? 'unknown',
     isFavorite: extras.isFavorite ?? false,
     hasOffer: extras.hasOffer ?? false,
-    nextTierHint: extras.tierHint ?? null,
+    nextTierHint: fromPrice === null || !best ? null : extras.tierHint ?? nextTierHint(best.tiers, best.pack.units_per_case, fromPrice, best.pack.moq),
+    bestSlab: fromPrice === null || !best ? null : bestSlabOffer(best.tiers, best.pack.units_per_case, best.pack.moq, fromPrice),
+    piecePricing: best && fromPrice !== null ? {
+      unitsPerCase: best.pack.units_per_case,
+      derivedPiecePrice: best.derivedPiecePrice,
+      tiers: best.pricing.tiers,
+    } : undefined,
     categoryId: product.category_id,
     brandId: product.brand_id,
     createdAt: product.created_at,
@@ -142,60 +192,66 @@ export function toPricedCard(
   };
 }
 
-export async function priceCatalogProducts(
-  supabase: ReturnType<typeof createClient>,
-  products: CatalogProductRow[],
-  retailerId: string,
-  areaId: string | null,
-  favoriteIds: Set<string> = new Set(),
-  frequency: Map<string, number> = new Map()
-): Promise<PricedCatalogCard[]> {
-  const ids = products.map((product) => product.id);
-  const [overrides, offerIds, packTiers] = await Promise.all([
-    getProductPriceOverrides(supabase, ids, retailerId, areaId),
-    getActiveOfferProductIds(supabase, ids),
-    // Pull pricing tiers for every variant we are about to render so we can
-    // surface a "buy more, save more" hint on the card. RLS already keeps
-    // inactive tiers out of the retailer's view; we still filter on
-    // is_active=true above. One query covers every pack of every product in
-    // the working set.
-    loadPackTiers(
-      supabase,
-      products.flatMap((product) => product.product_packs.map((pack) => pack.id))
-    ),
-  ]);
-
-  return products.map((product) => {
-    const override = overrides.get(product.id) ?? null;
-    const offerIdsHas = offerIds.has(product.id);
-    const best = bestPricedPack(product, override);
-    const hint = best
-      ? nextTierHint(packTiers.get(best.pack.id) ?? [], best.pack.units_per_case, best.piecePrice)
-      : null;
-    return toPricedCard(product, override, {
-      isFavorite: favoriteIds.has(product.id),
-      hasOffer: offerIdsHas,
-      timesOrdered: frequency.get(product.id) ?? 0,
-      tierHint: hint,
-    });
-  });
+/** Sanctioned retailer RPC only. No warehouse/batch data or invented stock.
+ * A missing RPC/failed read stays unknown, never “in stock”. */
+export async function loadCatalogAvailability(supabase: ReturnType<typeof createClient>, productIds: string[]) {
+  const ids = [...new Set(productIds)];
+  const states = new Map<string, AvailabilityState>();
+  for (let i = 0; i < ids.length; i += 100) {
+    try {
+      const { data, error } = await supabase.rpc('get_retailer_product_availability' as never, { p_product_ids: ids.slice(i, i + 100) } as never) as unknown as {
+        data: { product_id: string; stock_status: string }[] | null; error: unknown;
+      };
+      if (!error) for (const row of data ?? []) states.set(row.product_id, normalizeAvailabilityState(row.stock_status));
+    } catch {
+      // Discovery remains usable when availability cannot be checked.
+    }
+  }
+  return states;
 }
 
-export async function loadProductsByIds(
-  supabase: ReturnType<typeof createClient>,
-  productIds: string[]
-): Promise<CatalogProductRow[]> {
+export async function loadCatalogPricing(
+  supabase: ReturnType<typeof createClient>, products: CatalogProductRow[], retailerId: string, areaId: string | null
+): Promise<CatalogPricingData> {
+  const ids = products.map((product) => product.id);
+  const [overrides, offerIds, packTiers, availability] = await Promise.all([
+    getProductPriceOverrides(supabase, ids, retailerId, areaId),
+    getActiveOfferProductIds(supabase, ids),
+    loadPackTiers(supabase, products.flatMap((product) => product.product_packs.map((pack) => pack.id))),
+    loadCatalogAvailability(supabase, ids),
+  ]);
+  return { overrides, offerIds, packTiers, availability };
+}
+
+export function priceCatalogRows(
+  products: CatalogProductRow[], data: CatalogPricingData, favoriteIds: Set<string> = new Set(), frequency: Map<string, number> = new Map()
+): PricedCatalogCard[] {
+  return products.map((product) => toPricedCard(product, data.overrides.get(product.id) ?? null, {
+    isFavorite: favoriteIds.has(product.id),
+    hasOffer: data.offerIds.has(product.id),
+    timesOrdered: frequency.get(product.id) ?? 0,
+    packTiers: data.packTiers,
+    availability: data.availability.get(product.id),
+  }));
+}
+
+export async function priceCatalogProducts(
+  supabase: ReturnType<typeof createClient>, products: CatalogProductRow[], retailerId: string, areaId: string | null,
+  favoriteIds: Set<string> = new Set(), frequency: Map<string, number> = new Map()
+): Promise<PricedCatalogCard[]> {
+  return priceCatalogRows(products, await loadCatalogPricing(supabase, products, retailerId, areaId), favoriteIds, frequency);
+}
+
+export async function loadProductsByIds(supabase: ReturnType<typeof createClient>, productIds: string[]): Promise<CatalogProductRow[]> {
   const unique = [...new Set(productIds.filter(Boolean))];
-  if (unique.length === 0) return [];
-
-  const { data } = await supabase
-    .from('products')
-    .select(PRODUCT_CARD_SELECT)
-    .in('id', unique)
-    .eq('is_active', true)
-    .returns<CatalogProductRow[]>();
-
-  const byId = new Map((data ?? []).map((product) => [product.id, product]));
+  const products: CatalogProductRow[] = [];
+  for (let i = 0; i < unique.length; i += 80) {
+    const { data, error } = await supabase.from('products').select(PRODUCT_CARD_SELECT)
+      .in('id', unique.slice(i, i + 80)).eq('is_active', true).returns<CatalogProductRow[]>();
+    if (error) throw new Error('Products could not be loaded. Please try again.');
+    products.push(...data ?? []);
+  }
+  const byId = new Map(products.map((product) => [product.id, product]));
   return unique.map((id) => byId.get(id)).filter((product): product is CatalogProductRow => !!product);
 }
 
@@ -203,14 +259,7 @@ export function discountForCard(card: Pick<PricedCatalogCard, 'mrp' | 'fromPrice
   return calcDiscountPercent(card.mrp, card.fromPrice);
 }
 
-export async function loadFavoriteIds(
-  supabase: ReturnType<typeof createClient>,
-  retailerId: string
-): Promise<Set<string>> {
-  const { data } = await supabase
-    .from('retailer_favorites')
-    .select('product_id')
-    .eq('retailer_id', retailerId)
-    .returns<{ product_id: string }[]>();
+export async function loadFavoriteIds(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<Set<string>> {
+  const { data } = await supabase.from('retailer_favorites').select('product_id').eq('retailer_id', retailerId).returns<{ product_id: string }[]>();
   return new Set((data ?? []).map((row) => row.product_id));
 }

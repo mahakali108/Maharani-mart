@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import Image from 'next/image';
+import { StoredImage } from '@/components/media/stored-image';
 import { ArrowUpRight, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -44,13 +44,13 @@ export function BrandCard({
         )}
       >
         {brand.logo_url ? (
-          <Image
+          <StoredImage
             src={brand.logo_url}
             alt={`${brand.name} logo`}
             fill
             sizes={compact ? '44px' : '64px'}
+            fallback={<BrandMonogram name={brand.name} />}
             className="object-contain p-1.5"
-            unoptimized
           />
         ) : (
           <BrandMonogram name={brand.name} />
@@ -65,10 +65,10 @@ export function BrandCard({
         >
           {brand.name}
         </span>
-        {!compact ? (
+        {!compact && brand.productCount != null ? (
           <span className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500">
             <Tag className="h-3 w-3" aria-hidden="true" />
-            {brand.productCount ?? 0} product{brand.productCount === 1 ? '' : 's'}
+            {brand.productCount} product{brand.productCount === 1 ? '' : 's'}
           </span>
         ) : null}
       </span>

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import Image from 'next/image';
+import { StoredImage } from '@/components/media/stored-image';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -32,13 +32,13 @@ export function CategoryCard({
         )}
       >
         {category.image_url ? (
-          <Image
+          <StoredImage
             src={category.image_url}
             alt={category.name}
             fill
             sizes={compact ? '(max-width: 640px) 108px, 16vw' : '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px'}
+            fallback={<div className="flex h-full items-center justify-center text-action-600"><LayoutGrid className="h-6 w-6" aria-hidden="true" /></div>}
             className="object-cover transition duration-300 group-hover:scale-105"
-            unoptimized
           />
         ) : (
           <div className="flex h-full items-center justify-center text-primary-500">
@@ -58,9 +58,9 @@ export function CategoryCard({
           >
             {category.name}
           </h3>
-          {!compact ? (
+          {category.productCount != null ? (
             <p className="mt-0.5 text-[10px] text-slate-500">
-              {category.productCount ?? 0} product{category.productCount === 1 ? '' : 's'}
+              {category.productCount} product{category.productCount === 1 ? '' : 's'}
             </p>
           ) : null}
         </div>

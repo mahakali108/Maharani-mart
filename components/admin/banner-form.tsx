@@ -53,8 +53,16 @@ export function BannerForm({ areas }: { areas: Option[] }) {
           <Input id="title" name="title" placeholder="e.g. Diwali Offer" required />
         </div>
         <div>
-          <Label htmlFor="linkUrl">Link URL</Label>
-          <Input id="linkUrl" name="linkUrl" placeholder="Optional" />
+          <Label htmlFor="subtitle">Subtitle (optional)</Label>
+          <Input id="subtitle" name="subtitle" maxLength={300} />
+        </div>
+        <div>
+          <Label htmlFor="ctaLabel">Button label (optional)</Label>
+          <Input id="ctaLabel" name="ctaLabel" maxLength={60} />
+        </div>
+        <div>
+          <Label htmlFor="linkUrl">Target route or URL (optional)</Label>
+          <Input id="linkUrl" name="linkUrl" placeholder="/retailer/catalog or https://…" />
         </div>
         <div>
           <Label htmlFor="areaId">Area</Label>

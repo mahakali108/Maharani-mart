@@ -1,70 +1,39 @@
-import Image from 'next/image';
-import { ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
+import { StoredImage } from '@/components/media/stored-image';
+import { resolveBannerTarget } from '@/lib/retailer/banner-target';
 
-/**
- * One banner slide. The image is the real Supabase image. We overlay a soft
- * light/scrim so the title remains readable on the brightest product photo,
- * but we deliberately do not paint a heavy dark gradient on top — the
- * retailer-facing experience stays light, not "cinema".
- */
+/** Merchant-authored content only. A banner without a target has no fake CTA. */
 export function PromoBanner({
-  title,
-  imageUrl,
-  linkUrl,
-  carousel = false,
+  title, subtitle, imageUrl, linkUrl, ctaLabel, priority = false,
 }: {
   title: string;
+  subtitle?: string | null;
   imageUrl: string;
   linkUrl?: string | null;
-  /** Makes the banner occupy one full slide inside PromoCarousel. */
-  carousel?: boolean;
+  ctaLabel?: string | null;
+  priority?: boolean;
 }) {
-  const content = (
-    <>
-      <Image
-        src={imageUrl}
-        alt={title}
-        fill
-        className="object-cover transition duration-500 group-hover:scale-105"
-        unoptimized
-        sizes={carousel ? '100vw' : '(max-width: 640px) 92vw, 720px'}
-      />
-      {/* Soft scrim that is bright enough to keep the slide airy, dark enough to
-         make the title readable on any product photograph. */}
-      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/55 via-slate-950/20 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/30 via-transparent to-transparent" />
-      <div className="absolute inset-y-0 left-0 flex max-w-[80%] flex-col justify-end p-4 text-white sm:max-w-[70%] sm:p-6">
-        <span className="mb-2 w-fit rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-primary-700 shadow-sm">
-          Featured
-        </span>
-        <h2 className="text-base font-bold leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)] sm:text-2xl">
-          {title}
-        </h2>
-        <span className="mt-2.5 inline-flex w-fit items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-[11px] font-bold text-slate-950 shadow-sm sm:text-xs">
-          Explore offer <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-      </div>
-    </>
-  );
-
-  if (linkUrl) {
-    return (
-      <a
-        href={linkUrl}
-        target="_blank"
-        rel="noreferrer"
-        className={`group relative aspect-[16/9] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-100 shadow-sm ${carousel ? 'w-full min-w-full' : 'w-[92%] sm:w-full'}`}
-      >
-        {content}
-      </a>
-    );
-  }
+  const target = resolveBannerTarget(linkUrl);
+  const cta = <>{ctaLabel?.trim() || 'Explore'}{target?.external ? <ArrowUpRight className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}</>;
+  const ctaClass = 'mt-4 inline-flex min-h-11 max-w-full items-center justify-center gap-2 self-start rounded-xl bg-action-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2';
 
   return (
-    <div
-      className={`group relative aspect-[16/9] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-100 shadow-sm ${carousel ? 'w-full min-w-full' : 'w-[92%] sm:w-full'}`}
-    >
-      {content}
+    <div className="grid h-full min-w-0 bg-action-50/60 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <div className="order-2 flex min-w-0 flex-col justify-center p-5 sm:order-1 sm:p-7 lg:p-9">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-action-700">Maharani Traders</p>
+        <h2 className="mt-2 break-words text-xl font-bold leading-tight tracking-tight text-slate-950 sm:text-2xl lg:text-3xl">{title}</h2>
+        {subtitle?.trim() ? <p className="mt-2 break-words text-xs leading-6 text-slate-600 sm:text-sm">{subtitle}</p> : null}
+        {target ? target.external ? (
+          <a href={target.href} target="_blank" rel="noopener noreferrer" className={ctaClass}>
+            {cta}<span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        ) : <Link href={target.href} className={ctaClass}>{cta}</Link> : null}
+      </div>
+      <div className="relative order-1 aspect-[2.4/1] min-w-0 bg-slate-100 sm:order-2 sm:aspect-auto sm:min-h-64 lg:min-h-72">
+        <StoredImage src={imageUrl} alt={title} fill size="banner" priority={priority}
+          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 55vw, 670px" className="object-cover" />
+      </div>
     </div>
   );
 }

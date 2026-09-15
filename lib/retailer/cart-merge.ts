@@ -23,21 +23,26 @@ export async function mergeLinesIntoCart(
   lines: { packId: string; quantity: number }[]
 ): Promise<void> {
   for (const line of lines) {
-    const { data: existing } = await supabase
+    const { data: existing, error: readError } = await supabase
       .from('cart_items')
       .select('id, quantity')
       .eq('retailer_id', retailerId)
       .eq('pack_id', line.packId)
       .maybeSingle<{ id: string; quantity: number }>();
 
+    if (readError) throw new Error('The cart could not be read. Please try again.');
     if (existing) {
-      await supabase
+      if (existing.quantity + line.quantity > 100000) throw new Error('The combined quantity is too large. Review your cart.');
+      const { error } = await supabase
         .from('cart_items')
         .update({ quantity: existing.quantity + line.quantity } as unknown as never)
-        .eq('id', existing.id);
+        .eq('id', existing.id)
+        .eq('retailer_id', retailerId);
+      if (error) throw new Error('The cart could not be updated. Review your cart and try again.');
     } else {
       const payload: CartItemInsert = { retailer_id: retailerId, pack_id: line.packId, quantity: line.quantity };
-      await supabase.from('cart_items').insert(payload as unknown as never);
+      const { error } = await supabase.from('cart_items').insert(payload as unknown as never);
+      if (error) throw new Error('The cart could not be updated. Review your cart and try again.');
     }
   }
 }

@@ -9,7 +9,7 @@ interface TierRow {
   min_quantity: number;
   max_quantity: number | null;
   price_per_piece: number;
-  rule_type: 'default' | 'case' | 'bulk';
+  rule_type: 'default' | 'case' | 'bulk' | 'loose';
   label: string | null;
   is_active: boolean;
 }
@@ -27,13 +27,14 @@ export async function loadPackTiers(
 
   for (let index = 0; index < unique.length; index += TIER_CHUNK) {
     const chunk = unique.slice(index, index + TIER_CHUNK);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('product_pricing_tiers')
       .select('id, product_pack_id, min_quantity, max_quantity, price_per_piece, rule_type, label, is_active')
       .in('product_pack_id', chunk)
       .eq('is_active', true)
       .order('min_quantity', { ascending: true })
       .returns<TierRow[]>();
+    if (error) throw new Error('Selling tiers could not be loaded. Please try again.');
     for (const row of data ?? []) {
       const tiers = result.get(row.product_pack_id) ?? [];
       tiers.push({
