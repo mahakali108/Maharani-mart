@@ -31,6 +31,10 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | View all reports | ✅ | ✅ | area-scoped | own-area | own orders |
 | Manage routes (all) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Manage own route/visits | — | — | — | ✅ | — |
+| View support tickets (all) | ✅ | ✅ | ❌ | ❌ | — |
+| Raise own support ticket + reply | — | — | — | — | ✅ |
+| Answer tickets / change status | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Set credit payment terms (Net-N) | ✅ | ✅ | ❌ | ❌ | ❌ |
 
 ## Notes
 

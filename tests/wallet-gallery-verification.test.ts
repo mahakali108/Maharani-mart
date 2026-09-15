@@ -165,11 +165,16 @@ describe('real product name verification', () => {
   it('cart, checkout, order detail, invoice use canonical name', () => {
     const cartRow = read('components/retailer/cart-item-row.tsx');
     const orderDetail = read('app/retailer/orders/[id]/page.tsx');
-    const invoice = read('app/retailer/orders/[id]/invoice/page.tsx');
+    // The invoice page renders lines through the shared display mapper, which
+    // is where the canonical-name call now lives (single source for both the
+    // on-screen and the downloaded invoice).
+    const invoice = read('lib/retailer/invoice-display.ts');
     const checkout = read('app/retailer/checkout/page.tsx');
     expect(cartRow).toContain('buildCanonicalProductName');
     expect(orderDetail).toContain('buildCanonicalProductName');
     expect(invoice).toContain('buildCanonicalProductName');
+    // The invoice page actually consumes that mapper.
+    expect(read('app/retailer/orders/[id]/invoice/page.tsx')).toContain('toInvoiceDisplayLines');
     // Checkout uses canonical for lines
     expect(checkout).toContain('canonicalName');
   });

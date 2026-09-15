@@ -23,6 +23,7 @@ import {
   Wallet,
   Target,
   IndianRupee,
+  Headset,
 } from 'lucide-react';
 
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
@@ -49,6 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Targets', href: '/admin/targets', icon: Target },
   { label: 'Commissions', href: '/admin/commissions', icon: IndianRupee },
   { label: 'Follow-ups', href: '/admin/follow-ups', icon: BellRing },
+  { label: 'Support', href: '/admin/support', icon: Headset },
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },

@@ -1,5 +1,5 @@
 import { Check, Clock3, PackageCheck, Truck, XCircle } from 'lucide-react';
-import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
+import { formatIndiaDateTime, formatIndiaRelativeDateTime, type TimestampInput } from '@/lib/datetime/india';
 
 export type TrackedStatus =
   | 'pending'
@@ -19,10 +19,10 @@ export interface StatusHistoryEntry {
 }
 
 const STAGES = [
-  { key: 'pending', label: 'Placed', reachesRank: 0, icon: Clock3 },
-  { key: 'confirmed', label: 'Confirmed', reachesRank: 1, icon: Check },
-  { key: 'packed', label: 'Packed', reachesRank: 3, icon: PackageCheck },
-  { key: 'dispatched', label: 'Shipped', reachesRank: 4, icon: Truck },
+  { key: 'pending', label: 'Order placed', reachesRank: 0, icon: Clock3 },
+  { key: 'confirmed', label: 'Admin confirmed', reachesRank: 1, icon: Check },
+  { key: 'packed', label: 'Warehouse packed', reachesRank: 3, icon: PackageCheck },
+  { key: 'dispatched', label: 'Dispatched', reachesRank: 4, icon: Truck },
   { key: 'delivered', label: 'Delivered', reachesRank: 5, icon: Check },
 ];
 
@@ -37,7 +37,23 @@ const RANK: Record<TrackedStatus, number | null> = {
   returned: null,
 };
 
-export function OrderStatusTimeline({ status, history }: { status: TrackedStatus; history: StatusHistoryEntry[] }) {
+export function OrderStatusTimeline({
+  status,
+  history,
+  estimate,
+  actuals,
+}: {
+  status: TrackedStatus;
+  history: StatusHistoryEntry[];
+  /**
+   * Estimated delivery date/estimate, shown ONLY when real data is
+   * available: the company's configured delivery estimate (e.g. "2–3 days
+   * from dispatch"). Never invented per order.
+   */
+  estimate?: { label: string; value: string } | null;
+  /** Actual stamped dates from the order record, when present. */
+  actuals?: { dispatchedAt: TimestampInput; deliveredAt: TimestampInput } | null;
+}) {
   const currentRank = RANK[status];
 
   if (currentRank === null) {
@@ -67,13 +83,13 @@ export function OrderStatusTimeline({ status, history }: { status: TrackedStatus
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3.5 sm:px-5">
         <div><h2 className="text-sm font-bold text-slate-900">Order tracking</h2><p className="mt-0.5 text-[10px] text-slate-500">Live progress from confirmed order events</p></div>
         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-bold capitalize text-emerald-700">{status === 'processing' ? 'Processing' : status}</span>
       </div>
 
       <div className="scrollbar-none overflow-x-auto p-4 sm:p-6">
-        <ol className="relative grid min-w-[500px] grid-cols-5">
+        <ol className="relative grid min-w-[560px] grid-cols-5">
           <span className="absolute left-[10%] right-[10%] top-5 h-0.5 bg-slate-100" />
           <span className="absolute left-[10%] top-5 h-0.5 bg-emerald-500 transition-all" style={{ width: `${Math.min(80, (currentRank / 5) * 80)}%` }} />
           {STAGES.map((stage, index) => {
@@ -93,6 +109,27 @@ export function OrderStatusTimeline({ status, history }: { status: TrackedStatus
           })}
         </ol>
       </div>
+
+      {(estimate || (actuals?.dispatchedAt || actuals?.deliveredAt)) ? (
+        <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-[10px] text-slate-500 sm:px-5">
+          {estimate ? (
+            <span>
+              <span className="font-bold text-slate-600">Estimated delivery:</span> {estimate.value}{' '}
+              <span className="text-slate-400">({estimate.label})</span>
+            </span>
+          ) : null}
+          {actuals?.dispatchedAt ? (
+            <span>
+              <span className="font-bold text-slate-600">Dispatched:</span> {formatIndiaDateTime(actuals.dispatchedAt)}
+            </span>
+          ) : null}
+          {actuals?.deliveredAt ? (
+            <span>
+              <span className="font-bold text-slate-600">Delivered:</span> {formatIndiaDateTime(actuals.deliveredAt)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

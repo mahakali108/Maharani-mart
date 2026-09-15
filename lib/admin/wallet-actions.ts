@@ -347,3 +347,77 @@ export async function reverseTransactionAction(
   revalidatePath(`/admin/wallets/${retailerId}`);
   return { success: true, message: 'Transaction reversed.' };
 }
+
+const paymentTermsSchema = z.object({
+  retailerId: z.string().uuid(),
+  /** Net-N days; null clears the terms (returns to "not set"). */
+  paymentTermsDays: z.number().int().min(0).max(365).nullable(),
+  reason: z.string().min(5).max(500),
+});
+
+/**
+ * Sets (or clears) a retailer's credit payment terms — Net-15 / Net-30 / …
+ * Terms are metadata on the credit account (migration 0049); the due date is
+ * derived in the app from the oldest still-outstanding ledger debit, so no
+ * ledger row is ever rewritten. Admin-only (RLS 0029 + this guard).
+ */
+export async function setPaymentTermsAction(
+  retailerId: string,
+  paymentTermsDays: number | null,
+  reason: string
+): Promise<WalletActionResult> {
+  // Same permission as setCreditLimitAction — the RLS write policy on the
+  // credit account is is_admin_or_above(), so the app-level guard matches it
+  // (staff cannot write credit terms, exactly like they cannot write limits).
+  await requirePermission('retailers.edit');
+  const parsed = paymentTermsSchema.safeParse({ retailerId, paymentTermsDays, reason });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+
+  const supabase = createClient();
+  const { data: authData } = await supabase.auth.getUser();
+  const userId = authData?.user?.id;
+  if (!userId) return { error: 'Not authenticated.' };
+
+  const { data: existing } = await supabase
+    .from('retailer_credit_accounts')
+    .select('id')
+    .eq('retailer_id', retailerId)
+    .maybeSingle<{ id: string }>();
+
+  if (existing) {
+    const { error } = await supabase
+      .from('retailer_credit_accounts')
+      .update({
+        payment_terms_days: paymentTermsDays,
+        updated_by: userId,
+        notes: reason,
+      } as never)
+      .eq('id', existing.id);
+    if (error) return { error: error.message };
+  } else {
+    // No credit account row yet (limit never set) — create a minimal one so
+    // the terms still persist; the limit stays 0 until an admin sets it.
+    const { error } = await supabase
+      .from('retailer_credit_accounts')
+      .insert({
+        retailer_id: retailerId,
+        credit_limit_paise: 0,
+        payment_terms_days: paymentTermsDays,
+        created_by: userId,
+        updated_by: userId,
+        notes: reason,
+      } as never);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(`/admin/wallets/${retailerId}`);
+  revalidatePath(`/admin/retailers/${retailerId}`);
+  revalidatePath(`/retailer/account/ledger`);
+  return {
+    success: true,
+    message:
+      paymentTermsDays === null
+        ? 'Payment terms cleared.'
+        : `Payment terms set to Net ${paymentTermsDays} days.`,
+  };
+}

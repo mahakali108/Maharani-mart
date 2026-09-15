@@ -56,7 +56,8 @@ export type Permission =
   | 'banners.manage'
   | 'routes.manage.own'
   | 'routes.manage.all'
-  | 'command_center.view';
+  | 'command_center.view'
+  | 'support.manage';
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
@@ -68,7 +69,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet',
     'team.manage', 'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all',
-    'command_center.view',
+    'command_center.view', 'support.manage',
   ],
   admin: [
     'products.view', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
@@ -78,7 +79,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'deliveries.view.all', 'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record', 'collections.verify',
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet',
     'targets.manage', 'commissions.manage', 'notifications.broadcast',
-    'reports.view.all', 'banners.manage', 'routes.manage.all',
+    'reports.view.all', 'banners.manage', 'routes.manage.all', 'support.manage',
   ],
   staff: [
     'products.view', 'products.create', 'products.edit', 'master_data.manage',

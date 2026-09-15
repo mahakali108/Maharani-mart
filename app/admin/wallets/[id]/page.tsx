@@ -7,9 +7,11 @@ import { WalletLedgerTable } from '@/components/admin/wallet-ledger-table';
 import { WalletPaymentForm } from '@/components/admin/wallet-payment-form';
 import { WalletAdjustmentForm } from '@/components/admin/wallet-adjustment-form';
 import { WalletLimitForm } from '@/components/admin/wallet-limit-form';
-import { rupeesToPaise, paiseToRupees } from '@/lib/retailer/wallet';
+import { WalletTermsForm } from '@/components/admin/wallet-terms-form';
+import { rupeesToPaise, paiseToRupees, formatPaise } from '@/lib/retailer/wallet';
 import { computeAvailablePaise, computeOutstandingPaise, computeOverduePaise } from '@/lib/retailer/wallet-math';
-import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { computeCreditDueDate } from '@/lib/retailer/credit-terms';
+import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 
 interface RetailerDetail {
   id: string;
@@ -27,6 +29,7 @@ interface CreditAccountDetail {
   opening_outstanding_paise: number;
   allow_overdue: boolean;
   overdue_limit_paise: number;
+  payment_terms_days: number | null;
   created_at: string;
   updated_at: string;
   notes: string | null;
@@ -69,7 +72,7 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
         .maybeSingle<RetailerDetail>(),
       supabase
         .from('retailer_credit_accounts')
-        .select('id, retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue, overdue_limit_paise, created_at, updated_at, notes')
+        .select('id, retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue, overdue_limit_paise, payment_terms_days, created_at, updated_at, notes')
         .eq('retailer_id', params.id)
         .maybeSingle<CreditAccountDetail>(),
       supabase
@@ -117,6 +120,25 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
   const totalPaidBack = paiseToRupees(ledgerCredit);
   const overduePaise = computeOverduePaise(limitPaise, outstandingPaise);
 
+  // Derived due date (same rule as the retailer ledger): oldest still-outstanding
+  // debit + Net-N terms. Null fields mean "not set / nothing due" — never a guess.
+  const termsDueDate = creditAccount
+    ? computeCreditDueDate({
+        entries: ledger.map((l) => ({
+          created_at: l.created_at,
+          amount_paise: l.amount_paise,
+          direction: l.direction as 'debit' | 'credit',
+          transaction_type: l.transaction_type,
+          is_reversed: l.is_reversed,
+        })),
+        outstandingPaise,
+        openingOutstandingPaise,
+        accountCreatedAt: creditAccount.created_at,
+        termsDays: creditAccount.payment_terms_days,
+        now: new Date(),
+      })
+    : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm text-ink-500">
@@ -162,6 +184,46 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
               Last updated: {formatIndiaDateTime(creditAccount.updated_at)} · Notes: {creditAccount.notes ?? '—'}
             </p>
           ) : null}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment Terms (Net-N)</CardTitle>
+          </CardHeader>
+          <WalletTermsForm
+            retailerId={retailer.id}
+            currentTermsDays={creditAccount?.payment_terms_days ?? null}
+          />
+          <div className="mt-3 space-y-1 rounded-xl bg-ink-50 p-3 text-xs text-ink-600">
+            <p>
+              <strong>Terms:</strong>{' '}
+              {termsDueDate?.termsLabel ?? 'Not set'}
+            </p>
+            <p>
+              <strong>Outstanding:</strong> {formatPaise(outstandingPaise)}
+            </p>
+            <p>
+              <strong>Payment due:</strong>{' '}
+              {termsDueDate === null || termsDueDate.status === 'no_terms'
+                ? 'Set terms to derive due dates'
+                : termsDueDate.dueDateKey
+                  ? formatIndiaDate(termsDueDate.dueDateKey)
+                  : 'Nothing due right now'}
+            </p>
+            {termsDueDate && termsDueDate.daysUntilDue !== null && termsDueDate.status !== 'no_terms' ? (
+              <p>
+                <strong>Status:</strong>{' '}
+                {termsDueDate.daysUntilDue < 0
+                  ? `Overdue by ${Math.abs(termsDueDate.daysUntilDue)} day(s)`
+                  : termsDueDate.daysUntilDue === 0
+                    ? 'Due today'
+                    : `${termsDueDate.daysUntilDue} day(s) remaining`}
+              </p>
+            ) : null}
+            <p className="text-[11px] text-ink-400">
+              Due date = oldest unpaid ledger entry + terms. Changing terms never rewrites ledger history.
+            </p>
+          </div>
         </Card>
 
         <Card>

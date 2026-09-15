@@ -4,6 +4,7 @@ import {
   CircleHelp,
   CreditCard,
   Headset,
+  ListPlus,
   PackageSearch,
   Phone,
   Truck,
@@ -64,6 +65,27 @@ export default function HelpPage({
           Support request for order <span className="font-mono font-bold">{orderNumber}</span>. Share this number when you contact your distributor.
         </div>
       ) : null}
+
+      <section className="flex flex-col gap-4 rounded-2xl border border-primary-200 bg-primary-50/60 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+            <ListPlus className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-sm font-bold text-primary-900">Create a support ticket</h2>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-primary-700">
+              Raise an issue — order, payment, product, delivery or credit — and track every reply in one
+              place. Your distributor is notified automatically and the ticket keeps the full conversation.
+            </p>
+          </div>
+        </div>
+        <Link
+          href={orderNumber ? `/retailer/support/new?order=${orderNumber}` : '/retailer/support/new'}
+          className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white transition hover:bg-primary-700"
+        >
+          <ListPlus className="h-4 w-4" aria-hidden="true" /> New ticket{orderNumber ? ' for this order' : ''}
+        </Link>
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {[

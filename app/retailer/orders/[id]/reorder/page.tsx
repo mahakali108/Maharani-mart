@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
+import { loadCatalogAvailability } from '@/lib/retailer/catalog';
 import { groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { ReorderForm, type ReorderLineInput } from '@/components/retailer/reorder-form';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
@@ -25,6 +26,9 @@ interface ReorderItemRow {
   quantity_unit: OrderItemUnit | null;
   quantity_pieces: number | null;
   units_per_case: number | null;
+  /** Billed unit price / line total — used ONLY to show what the last order cost. */
+  unit_price: number;
+  line_total: number;
   products: {
     id: string;
     name: string;
@@ -62,7 +66,7 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     supabase
       .from('order_items')
       .select(
-        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active )'
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, line_total, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active )'
       )
       .eq('order_id', order.id),
   ]);
@@ -90,9 +94,20 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     previousLines.map((line) => line.first.pack_id!).filter(Boolean)
   );
 
+  /*
+   * CURRENT stock for each product, from the sanctioned retailer availability
+   * RPC (area-scoped, never a warehouse number). This re-validates stock for
+   * the reorder screen; the cart action re-checks price/MOQ/active again on
+   * submit, and checkout re-validates once more.
+   */
+  const availabilityMap = await loadCatalogAvailability(
+    supabase,
+    previousLines.map((line) => line.first.product_id).filter(Boolean) as string[]
+  );
+
   const lines: ReorderLineInput[] = previousLines
     .filter((line) => line.first.product_packs)
-    .map(({ key, first, quantity }) => {
+    .map(({ key, first, quantity, total }) => {
       const pack = first.product_packs!;
       const product = first.products;
       // Server-resolved per-piece fallback (never the internal case price).
@@ -101,6 +116,9 @@ export default async function ReorderPage({ params }: { params: { id: string } }
         pack.units_per_case
       );
       const unavailable = !pack.is_active || !product?.is_active;
+      // What the piece LAST cost on this order (stored totals only) so a
+      // changed price is visible at a glance.
+      const previousPiecePrice = quantity.pieces > 0 ? Math.round((total / quantity.pieces) * 100) / 100 : null;
       return {
         packId: first.pack_id ?? key,
         productName: product?.name ?? 'Unknown product',
@@ -115,7 +133,9 @@ export default async function ReorderPage({ params }: { params: { id: string } }
         tiers: tierMap.get(pack.id) ?? [],
         allowLoosePieces: pack.allow_loose_pieces !== false,
         unavailable,
-      };
+        availability: (product?.id ? availabilityMap.get(product.id) : undefined) ?? 'unknown',
+        previousPiecePrice,
+      } satisfies ReorderLineInput;
     });
 
   return (

@@ -9,18 +9,22 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Clock,
+  CalendarClock,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { formatInr } from '@/lib/retailer/format';
 import { parseCatalogPage } from '@/lib/retailer/catalog-params';
-import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 import {
+  getRetailerCreditAccount,
   getRetailerWalletSummary,
+  getRetailerLedger,
   getRetailerLedgerPaginated,
   paiseToRupees,
   formatPaise,
 } from '@/lib/retailer/wallet';
+import { computeCreditDueDate, type CreditPaymentStatus } from '@/lib/retailer/credit-terms';
 import { loadRetailerLedger } from '@/lib/retailer/ledger';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -48,6 +52,17 @@ function ledgerHref(page: number): string {
   return page > 1 ? `/retailer/account/ledger?page=${page}` : '/retailer/account/ledger';
 }
 
+const PAYMENT_STATUS_META: Record<
+  CreditPaymentStatus,
+  { label: string; className: string }
+> = {
+  no_terms: { label: 'Terms not set', className: 'bg-slate-100 text-slate-600' },
+  no_due: { label: 'No payment due', className: 'bg-emerald-50 text-emerald-700' },
+  on_track: { label: 'On track', className: 'bg-emerald-50 text-emerald-700' },
+  due_soon: { label: 'Due soon', className: 'bg-amber-50 text-amber-700' },
+  overdue: { label: 'Overdue', className: 'bg-primary-50 text-primary-700' },
+};
+
 export default async function RetailerLedgerPage({
   searchParams,
 }: {
@@ -58,14 +73,29 @@ export default async function RetailerLedgerPage({
   const page = parseCatalogPage(searchParams.page);
 
   // New wallet system: authoritative summary from ledger + legacy
-  const [walletSummary, walletLedger, legacyLedger] = await Promise.all([
+  const [walletSummary, walletLedger, legacyLedger, creditAccount, fullLedger] = await Promise.all([
     getRetailerWalletSummary(supabase, user.id),
     getRetailerLedgerPaginated(supabase, user.id, page, 25),
     loadRetailerLedger(supabase, user.id, page),
+    getRetailerCreditAccount(supabase, user.id),
+    getRetailerLedger(supabase, user.id, 1000),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(walletLedger.total / 25));
   const hasConfiguredLimit = walletSummary.hasConfiguredLimit;
+
+  // Credit terms + due date (real data only): the due date is derived from
+  // the oldest still-outstanding ledger debit + the configured Net-N terms.
+  const dueDate = creditAccount
+    ? computeCreditDueDate({
+        entries: fullLedger,
+        outstandingPaise: walletSummary.outstandingPaise,
+        openingOutstandingPaise: creditAccount.opening_outstanding_paise,
+        accountCreatedAt: creditAccount.created_at,
+        termsDays: creditAccount.payment_terms_days,
+        now: new Date(),
+      })
+    : null;
 
   // For retailer view, hide internal details: no cost, no SKU, no admin notes, no other customers
   // Show only own transactions, with clear cards
@@ -125,6 +155,65 @@ export default async function RetailerLedgerPage({
           </p>
         </div>
       </div>
+
+      {/* Credit terms & payment status — derived from real ledger data only */}
+      {creditAccount ? (
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3.5 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2">
+              <CalendarClock className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <div className="min-w-0">
+                <h2 className="break-words text-sm font-bold text-slate-900">Credit terms &amp; payment status</h2>
+                <p className="mt-0.5 break-words text-[10px] text-slate-500">
+                  Due date = oldest unpaid order + your terms
+                </p>
+              </div>
+            </div>
+            <span
+              className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${PAYMENT_STATUS_META[
+                dueDate ? dueDate.status : 'no_terms'
+              ].className}`}
+            >
+              {PAYMENT_STATUS_META[dueDate ? dueDate.status : 'no_terms'].label}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:p-5">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Terms</p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-900">
+                {dueDate?.termsLabel ?? 'Not set'}
+              </p>
+              <p className="mt-0.5 text-[10px] text-slate-500">Set by your distributor</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Outstanding</p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-900">
+                {formatPaise(walletSummary.outstandingPaise)}
+              </p>
+              <p className="mt-0.5 text-[10px] text-slate-500">Unpaid balance on your account</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Payment due</p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-900">
+                {dueDate?.dueDateKey ? formatIndiaDate(dueDate.dueDateKey) : '—'}
+              </p>
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                {dueDate === null || dueDate.status === 'no_terms'
+                  ? 'No terms configured'
+                  : dueDate.status === 'no_due'
+                    ? 'Nothing due right now'
+                    : dueDate.daysUntilDue !== null
+                      ? dueDate.daysUntilDue < 0
+                        ? `Overdue by ${Math.abs(dueDate.daysUntilDue)} day${Math.abs(dueDate.daysUntilDue) === 1 ? '' : 's'}`
+                        : dueDate.daysUntilDue === 0
+                          ? 'Due today'
+                          : `${dueDate.daysUntilDue} day${dueDate.daysUntilDue === 1 ? '' : 's'} remaining`
+                      : 'Date not available'}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {hasConfiguredLimit ? null : (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
