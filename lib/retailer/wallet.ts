@@ -28,6 +28,8 @@ export interface CreditAccount {
   opening_outstanding_paise: number;
   allow_overdue: boolean;
   overdue_limit_paise: number;
+  /** Net-N payment terms in days; null when the distributor has not set them (0049). */
+  payment_terms_days: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -63,7 +65,7 @@ export async function getRetailerCreditAccount(
 ): Promise<CreditAccount | null> {
   const { data } = await supabase
     .from('retailer_credit_accounts')
-    .select('id, retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue, overdue_limit_paise, created_at, updated_at')
+    .select('id, retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue, overdue_limit_paise, payment_terms_days, created_at, updated_at')
     .eq('retailer_id', retailerId)
     .maybeSingle<CreditAccount>();
   return data ?? null;

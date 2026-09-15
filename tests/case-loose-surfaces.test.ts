@@ -154,21 +154,29 @@ describe('retailer surfaces price through the canonical piece engine only', () =
   });
 
   it('order detail, invoice and picking list read quantity_pieces', () => {
+    // The invoice page folds lines through the shared display mapper
+    // (lib/retailer/invoice-display.ts) which reads quantity_pieces via
+    // item-display — so the invoice file is checked as the page + mapper pair.
+    const invoiceFiles = ['app/retailer/orders/[id]/invoice/page.tsx', 'lib/retailer/invoice-display.ts'];
     for (const file of [
       'app/retailer/orders/[id]/page.tsx',
-      'app/retailer/orders/[id]/invoice/page.tsx',
+      ...invoiceFiles,
       'app/admin/orders/[id]/page.tsx',
       'app/salesman/orders/[id]/page.tsx',
       'app/staff/orders/[id]/page.tsx',
     ]) {
       const source = read(file);
       expect(source, file).toContain('quantity_pieces');
-      expect(source, file).toContain("from '@/lib/orders/item-display'");
+      if (invoiceFiles.includes(file)) {
+        expect(source, file).toMatch(/from '@\/lib\/orders\/item-display'|toInvoiceDisplayLines/);
+      } else {
+        expect(source, file).toContain("from '@/lib/orders/item-display'");
+      }
       // The old `quantity × units_per_case` guess is gone from every view.
       expect(source, file).not.toMatch(/quantity\s*\*\s*(units|unitsPerCase)/);
     }
     expect(read('app/retailer/orders/[id]/page.tsx')).toContain('groupOrderLines(items)');
-    expect(read('app/retailer/orders/[id]/invoice/page.tsx')).toContain('formatQuantitySummary(line.quantity)');
+    expect(read('lib/retailer/invoice-display.ts')).toContain('formatQuantitySummary(line.quantity)');
   });
 
   it('reorder re-orders pieces, not a case count', () => {

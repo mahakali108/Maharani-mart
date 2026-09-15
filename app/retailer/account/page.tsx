@@ -55,7 +55,8 @@ const ACCOUNT_LINKS = [
   { href: '/retailer/notifications', label: 'Notifications', body: 'Order and account updates', icon: Bell, tone: 'bg-violet-50 text-violet-700' },
   { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-indigo-50 text-indigo-700' },
   { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, credit and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
-  { href: '/retailer/help', label: 'Help & support', body: 'FAQs and distributor support', icon: CircleHelp, tone: 'bg-emerald-50 text-emerald-700' },
+  { href: '/retailer/support', label: 'Support tickets', body: 'Raise an issue and track every reply', icon: MessageCircle, tone: 'bg-emerald-50 text-emerald-700' },
+  { href: '/retailer/help', label: 'Help centre', body: 'FAQs and distributor support', icon: CircleHelp, tone: 'bg-teal-50 text-teal-700' },
 ];
 
 export default async function RetailerAccountPage() {

@@ -1,10 +1,12 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { formatQuantitySummary, groupOrderLines, rowUnit, type OrderItemUnit} from '@/lib/orders/item-display';
+import { Download } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { PrintButton } from '@/components/retailer/print-button';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
-import { buildCanonicalProductName } from '@/lib/retailer/product-name';
+import { classifyTaxSplit, computeInvoiceTaxLines } from '@/lib/retailer/invoice-tax';
+import { toInvoiceDisplayLines, type InvoiceOrderItemRow } from '@/lib/retailer/invoice-display';
 
 interface OrderInvoiceRow {
   id: string;
@@ -22,22 +24,6 @@ interface RetailerRow {
   gstin: string | null;
   address: string | null;
   areas: { name: string } | null;
-}
-
-interface OrderItemRow {
-  id: string;
-  product_id: string;
-  pack_id: string | null;
-  quantity: number;
-  /** 'cases' | 'pieces'; null on lines billed before the case/loose split. */
-  quantity_unit: OrderItemUnit | null;
-  quantity_pieces: number | null;
-  units_per_case: number | null;
-  unit_price: number;
-  gst_percent: number;
-  line_total: number;
-  products: { name: string; brands: { name: string } | null } | null;
-  product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
 function companyDetail(value: string | undefined, label: string): string {
@@ -63,24 +49,23 @@ export default async function InvoicePage({ params }: { params: { id: string } }
     supabase
       .from('order_items')
       .select(
-        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, brands ( name ) ), product_packs ( pack_name, units_per_case )'
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, hsn_code, brands ( name ) ), product_packs ( pack_name, units_per_case )'
       )
       .eq('order_id', params.id),
   ]);
 
   if (!order) notFound();
 
-  const items = (itemData ?? []) as unknown as OrderItemRow[];
+  const items = (itemData ?? []) as unknown as InvoiceOrderItemRow[];
+  const lines = toInvoiceDisplayLines(items);
 
   /*
    * One invoice line per ordered pack. A mixed purchase (full cases plus a
    * loose remainder) is stored as two `order_items` rows so each row's
-   * unit_price × quantity matches its line_total exactly; `groupOrderLines`
+   * unit_price × quantity matches its line_total exactly; `toInvoiceDisplayLines`
    * folds them back into a single invoice line whose amount is the sum of those
    * rows, so the invoice still adds up to the order grand total to the paisa.
    */
-  const invoiceLines = groupOrderLines(items);
-
   const company = {
     name: companyDetail(process.env.COMPANY_NAME, 'COMPANY_NAME'),
     gstin: companyDetail(process.env.COMPANY_GSTIN, 'COMPANY_GSTIN'),
@@ -88,9 +73,28 @@ export default async function InvoicePage({ params }: { params: { id: string } }
     phone: companyDetail(process.env.COMPANY_PHONE, 'COMPANY_PHONE'),
   };
 
+  /*
+   * CGST/SGST vs IGST is decided ONLY from real GSTIN state codes (company
+   * GSTIN from env, retailer GSTIN from the account). When either is missing
+   * or invalid the tax prints as one GST line — never guessed.
+   */
+  const taxMode = classifyTaxSplit(company.gstin, retailer?.gstin ?? null);
+  const tax = computeInvoiceTaxLines(
+    taxMode,
+    lines.map((line) => ({ lineKey: line.key, lineTotal: line.total, gstPercent: line.gstPercent }))
+  );
+  const taxByLine = new Map(tax.lines.map((line) => [line.lineKey, line]));
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 print:max-w-none">
-      <div className="flex justify-end print:hidden">
+      <div className="flex justify-end gap-2 print:hidden">
+        <Link
+          href={`/retailer/orders/${order.id}/invoice/download`}
+          className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-ink-700 transition hover:border-primary-300 hover:text-primary-700"
+        >
+          <Download className="h-4 w-4" />
+          Download
+        </Link>
         <PrintButton />
       </div>
 
@@ -126,40 +130,58 @@ export default async function InvoicePage({ params }: { params: { id: string } }
           <thead>
             <tr className="border-b border-ink-100 text-left text-xs uppercase tracking-wide text-ink-400">
               <th className="py-2 pr-3 font-medium">Item</th>
+              <th className="py-2 pr-3 font-medium">HSN</th>
               <th className="py-2 pr-3 font-medium">Qty</th>
               <th className="py-2 pl-3 text-right font-medium">Unit Price</th>
               <th className="py-2 pl-3 text-right font-medium">GST %</th>
+              {taxMode === 'intra' ? (
+                <>
+                  <th className="py-2 pl-3 text-right font-medium">CGST</th>
+                  <th className="py-2 pl-3 text-right font-medium">SGST</th>
+                </>
+              ) : taxMode === 'inter' ? (
+                <th className="py-2 pl-3 text-right font-medium">IGST</th>
+              ) : (
+                <th className="py-2 pl-3 text-right font-medium">GST</th>
+              )}
               <th className="py-2 pl-3 text-right font-medium">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-50">
-            {invoiceLines.map((line) => {
-              const canonical = buildCanonicalProductName({
-                brandName: line.first.products?.brands?.name ?? null,
-                productName: line.first.products?.name ?? null,
-                packName: line.first.product_packs?.pack_name ?? null,
-              });
+            {lines.map((line) => {
+              const lineTax = taxByLine.get(line.key);
               return (
               <tr key={line.key}>
                 <td className="py-2">
-                  <p className="font-medium text-ink-900">{canonical}</p>
-                  <p className="font-mono text-xs text-ink-400">{line.first.product_packs?.pack_name}</p>
+                  <p className="font-medium text-ink-900">{line.displayName}</p>
+                  <p className="font-mono text-xs text-ink-400">{line.packName}</p>
                 </td>
-                <td className="py-2 text-ink-600">{formatQuantitySummary(line.quantity)}</td>
+                <td className="py-2 font-mono text-xs text-ink-500">{line.hsn ?? '—'}</td>
+                <td className="py-2 text-ink-600">{line.quantityLabel}</td>
                 <td className="py-2 text-right text-ink-600">
                   {/* Each row is printed with the unit it was billed in. New
                       orders bill one pieces row per line; only pre-piece
                       historical rows can carry a 'cases' unit. */}
                   <ul className="space-y-0.5">
-                    {line.rows.map((row) => (
-                      <li key={row.id}>
-                        ₹{row.unit_price.toFixed(2)}
-                        <span className="text-ink-400"> / {rowUnit(row) === 'pieces' ? 'pc' : 'case'}</span>
+                    {line.unitPrices.map((unitPrice) => (
+                      <li key={`${unitPrice.unit}-${unitPrice.price}`}>
+                        ₹{unitPrice.price.toFixed(2)}
+                        <span className="text-ink-400"> / {unitPrice.unit}</span>
                       </li>
                     ))}
                   </ul>
                 </td>
-                <td className="py-2 text-right text-ink-600">{line.first.gst_percent}%</td>
+                <td className="py-2 text-right text-ink-600">{line.gstPercent}%</td>
+                {taxMode === 'intra' ? (
+                  <>
+                    <td className="py-2 text-right text-ink-600">₹{(lineTax?.cgst ?? 0).toFixed(2)}</td>
+                    <td className="py-2 text-right text-ink-600">₹{(lineTax?.sgst ?? 0).toFixed(2)}</td>
+                  </>
+                ) : taxMode === 'inter' ? (
+                  <td className="py-2 text-right text-ink-600">₹{(lineTax?.igst ?? 0).toFixed(2)}</td>
+                ) : (
+                  <td className="py-2 text-right text-ink-600">₹{(lineTax?.tax ?? 0).toFixed(2)}</td>
+                )}
                 <td className="py-2 text-right font-medium text-ink-900">₹{line.total.toFixed(2)}</td>
               </tr>
             );
@@ -169,8 +191,8 @@ export default async function InvoicePage({ params }: { params: { id: string } }
         </div>
 
         <p className="mt-2 text-[10px] leading-4 text-ink-400">
-          Each line is billed per piece at the retail piece rate shown. Rates are GST-inclusive, and each line
-          amount above already includes the applicable GST.
+          Each line is billed per piece at the retail piece rate shown. Rates are GST-inclusive, and the tax
+          column{taxMode === 'intra' ? 's (CGST + SGST)' : ''} above is already contained in the line total.
         </p>
 
         <div className="ml-auto mt-4 w-full max-w-xs space-y-1.5 border-t border-ink-100 pt-4">
@@ -178,10 +200,28 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             <span>Subtotal</span>
             <span>₹{order.subtotal.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-sm text-ink-600">
-            <span>GST</span>
-            <span>₹{order.gst_total.toFixed(2)}</span>
-          </div>
+          {taxMode === 'intra' ? (
+            <>
+              <div className="flex justify-between text-sm text-ink-600">
+                <span>CGST</span>
+                <span>₹{tax.totals.cgst.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-ink-600">
+                <span>SGST</span>
+                <span>₹{tax.totals.sgst.toFixed(2)}</span>
+              </div>
+            </>
+          ) : taxMode === 'inter' ? (
+            <div className="flex justify-between text-sm text-ink-600">
+              <span>IGST</span>
+              <span>₹{tax.totals.igst.toFixed(2)}</span>
+            </div>
+          ) : (
+            <div className="flex justify-between text-sm text-ink-600">
+              <span>GST</span>
+              <span>₹{order.gst_total.toFixed(2)}</span>
+            </div>
+          )}
           {order.discount_total > 0 ? (
             <div className="flex justify-between text-sm text-ink-600">
               <span>Discount</span>
@@ -193,7 +233,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
             <span>₹{order.grand_total.toFixed(2)}</span>
           </div>
           <p className="pt-1 text-right text-[10px] text-ink-400">
-            All prices are GST-inclusive — the GST component above is already contained in the Grand Total.
+            All prices are GST-inclusive — the tax components above are already contained in the Grand Total.
           </p>
         </div>
 
@@ -203,4 +243,4 @@ export default async function InvoicePage({ params }: { params: { id: string } }
       </div>
     </div>
   );
-      }
+}

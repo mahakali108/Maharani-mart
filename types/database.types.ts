@@ -1906,6 +1906,61 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['payment_collections']['Insert']>;
         Relationships: [];
       };
+
+      // Added by 0048_support_tickets.sql
+      support_tickets: {
+        Row: {
+          id: string;
+          ticket_number: string;
+          retailer_id: string;
+          subject: string;
+          topic: string;
+          priority: string;
+          order_id: string | null;
+          status: string;
+          created_at: string;
+          updated_at: string;
+          resolved_at: string | null;
+          closed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          ticket_number: string;
+          retailer_id: string;
+          subject: string;
+          topic: string;
+          priority?: string;
+          order_id?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+          resolved_at?: string | null;
+          closed_at?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['support_tickets']['Insert']>;
+        Relationships: [];
+      };
+
+      support_ticket_messages: {
+        Row: {
+          id: string;
+          ticket_id: string;
+          author_id: string;
+          author_role: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          ticket_id: string;
+          author_id: string;
+          author_role: string;
+          body: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['support_ticket_messages']['Insert']>;
+        Relationships: [];
+      };
     };
 
     Views: {

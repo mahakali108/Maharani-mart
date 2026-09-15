@@ -49,6 +49,8 @@ interface OrderDetailRow {
   grand_total: number;
   notes: string | null;
   placed_at: string;
+  dispatched_at: string | null;
+  delivered_at: string | null;
   shipping_address: { line: string; label?: string; receiverName?: string; phone?: string } | null;
 }
 
@@ -100,10 +102,15 @@ export default async function OrderDetailPage({
   const user = await requireUser();
   const supabase = createClient();
 
+  // Estimated delivery: the company's CONFIGURED delivery estimate (env), shown
+  // only when it exists — there is no per-order ETA column, and nothing is
+  // invented. Actual dispatch/delivery stamps come from the order record.
+  const deliveryEstimate = process.env.COMPANY_DELIVERY_ESTIMATE?.trim() || null;
+
   const [{ data: order }, { data: itemData }, { data: historyData }, { data: retailer }, { data: profile }] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, order_number, status, subtotal, gst_total, discount_total, grand_total, notes, placed_at, shipping_address')
+      .select('id, order_number, status, subtotal, gst_total, discount_total, grand_total, notes, placed_at, dispatched_at, delivered_at, shipping_address')
       .eq('id', params.id)
       .eq('retailer_id', user.id)
       .maybeSingle<OrderDetailRow>(),
@@ -182,7 +189,14 @@ export default async function OrderDetailPage({
         </div>
       </section>
 
-      {history.length > 0 ? <OrderStatusTimeline status={order.status as TrackedStatus} history={history as StatusHistoryEntry[]} /> : null}
+      {history.length > 0 ? (
+        <OrderStatusTimeline
+          status={order.status as TrackedStatus}
+          history={history as StatusHistoryEntry[]}
+          estimate={deliveryEstimate ? { label: 'company service estimate', value: deliveryEstimate } : null}
+          actuals={{ dispatchedAt: order.dispatched_at, deliveredAt: order.delivered_at }}
+        />
+      ) : null}
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_350px] lg:gap-7">
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -318,7 +332,7 @@ export default async function OrderDetailPage({
               Delivery record &amp; OTP
             </Link>
           ) : null}
-          <Link href={`/retailer/help?topic=order&order=${order.order_number}`} className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-sm hover:border-primary-200 hover:text-primary-600">
+          <Link href={`/retailer/support/new?order=${order.id}`} className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-sm hover:border-primary-200 hover:text-primary-600">
             Contact support about this order
           </Link>
         </aside>

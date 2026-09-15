@@ -2,7 +2,7 @@
 # ============================================================================
 # scripts/production-validate.sh — Phase 4 production validation (ONE COMMAND)
 #
-# Applies every unapplied migration (0037–0047) in order, then runs the live
+# Applies every unapplied migration (0037–0049) in order, then runs the live
 # RLS/trigger/bucket smoke test. Safe to re-run: every migration is additive
 # and idempotent, and the smoke test rolls its fixture back completely.
 #
@@ -90,6 +90,10 @@ apply_if_needed "0046_smoke_fixture.sql" "0046 smoke fixture" \
 # Retailer homepage: no business content is seeded and banner RLS is unchanged.
 apply_if_needed "0047_banner_content.sql" "0047 banner content" \
   "select case when (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'banners' and column_name in ('subtitle', 'cta_label')) = 2 then 1 else 0 end"
+apply_if_needed "0048_support_tickets.sql" "0048 support tickets" \
+  "select case when to_regclass('public.support_tickets') is not null and to_regclass('public.support_ticket_messages') is not null then 1 else 0 end"
+apply_if_needed "0049_credit_payment_terms.sql" "0049 credit payment terms" \
+  "select case when exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'retailer_credit_accounts' and column_name = 'payment_terms_days') then 1 else 0 end"
 
 echo "== 2/4 Post-application sanity checks =="
 "${PSQL[@]}" -tAc "
@@ -102,8 +106,13 @@ select 'proof buckets private: ' || count(*) from storage.buckets
 select 'smoke fixture table: ' || count(*) from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
  where n.nspname = 'smoke_fixture' and c.relname = 'smoke_personas';
+select 'support ticket tables: ' || count(*) from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = 'public' and c.relname in ('support_tickets','support_ticket_messages');
+select 'credit terms column: ' || count(*) from information_schema.columns
+ where table_schema = 'public' and table_name = 'retailer_credit_accounts' and column_name = 'payment_terms_days';
 "
-echo "  (expect: triggers: 5 · proof buckets private: 2 · smoke fixture table: 1)"
+echo "  (expect: triggers: 5 · proof buckets private: 2 · smoke fixture table: 1 · support ticket tables: 2 · credit terms column: 1)"
 
 echo "== 3/4 Live RLS / transition / bucket smoke test =="
 psql "$DATABASE_URL" -f "$SMOKE"

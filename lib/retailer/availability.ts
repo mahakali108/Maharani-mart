@@ -1,10 +1,12 @@
-import 'server-only';
-
 /**
  * Availability display mapping for the sanctioned
  * `get_retailer_product_availability` RPC. Kept out of page files so the
  * availability vocabulary lives in exactly one place (and so the product
  * page's "no invented availability numbers" guard keeps holding).
+ *
+ * Pure display mapping — no Supabase, no env, no secrets — so client
+ * components (reorder review badges) may import it; the RPC itself stays
+ * server-side where it is called.
  */
 export type AvailabilityState = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown';
 

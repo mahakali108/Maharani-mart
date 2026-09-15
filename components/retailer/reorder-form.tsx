@@ -7,10 +7,12 @@ import { ImageOff, Loader2, ShoppingCart } from 'lucide-react';
 import { addReorderLinesToCartAction } from '@/lib/retailer/order-actions';
 import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
+import { availabilityBadge, isOutOfStock, type AvailabilityState } from '@/lib/retailer/availability';
 import { formatQuantitySummary, summarizeQuantityRows } from '@/lib/orders/item-display';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TrendingDown, TrendingUp } from 'lucide-react';
 
 export interface ReorderLineInput {
   packId: string;
@@ -31,6 +33,10 @@ export interface ReorderLineInput {
   tiers: PricingTier[];
   allowLoosePieces: boolean;
   unavailable: boolean;
+  /** CURRENT stock state from the sanctioned availability RPC. */
+  availability: AvailabilityState;
+  /** The per-piece price on the PREVIOUS order (stored), for change display. */
+  previousPiecePrice: number | null;
 }
 
 interface LineState {
@@ -137,6 +143,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
           const quantity = Math.max(line.moq, lineState?.quantity ?? line.moq);
           const pricing = priceLine(line, quantity);
           const lineTotal = pricing.lineTotal;
+          const stockBadge = line.unavailable ? null : availabilityBadge(line.availability);
           return (
             <Card
               key={line.packId}
@@ -160,7 +167,12 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-ink-900">{line.productName}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="truncate text-sm font-medium text-ink-900">{line.productName}</p>
+                  {stockBadge ? (
+                    <span className={`shrink-0 ${stockBadge.className}`}>{stockBadge.label}</span>
+                  ) : null}
+                </div>
                 <p className="text-xs text-ink-400">
                   {line.packName} · ₹{pricing.unitPrice.toFixed(2)}/pc ·{' '}
                   {line.gstPercent}% GST included
@@ -169,6 +181,23 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                   Previously {formatQuantitySummary({ ...summarizeQuantityRows([]), pieces: line.previousQuantity })} · MOQ
                   now {line.moq} pcs
                 </p>
+                {line.previousPiecePrice !== null && line.previousPiecePrice > 0 &&
+                Math.abs(line.previousPiecePrice - pricing.unitPrice) >= 0.005 ? (
+                  <p
+                    className={`mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      pricing.unitPrice > line.previousPiecePrice
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    {pricing.unitPrice > line.previousPiecePrice ? (
+                      <TrendingUp className="h-3 w-3" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3" />
+                    )}
+                    Price changed: was ₹{line.previousPiecePrice.toFixed(2)}, now ₹{pricing.unitPrice.toFixed(2)}/pc
+                  </p>
+                ) : null}
                 {pricing.orderable ? (
                   <p className="text-[11px] text-ink-500">
                     Now priced as {quantity} pc{quantity === 1 ? '' : 's'} × ₹{pricing.unitPrice.toFixed(2)} = ₹
@@ -177,6 +206,11 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                 ) : null}
                 {line.unavailable ? (
                   <p className="text-xs font-medium text-primary-600">No longer available</p>
+                ) : null}
+                {!line.unavailable && isOutOfStock(line.availability) ? (
+                  <p className="text-[11px] font-medium text-rose-600">
+                    Out of stock right now — you can still add it; stock is confirmed when the order is processed.
+                  </p>
                 ) : null}
               </div>
               <div className="flex w-20 flex-col items-end gap-1.5">
