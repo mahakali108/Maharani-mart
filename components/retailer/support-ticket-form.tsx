@@ -5,7 +5,14 @@ import { useRouter } from 'next/navigation';
 import { Loader2, Send } from 'lucide-react';
 import { createSupportTicketAction } from '@/lib/retailer/support-actions';
 import { formatIndiaDate } from '@/lib/datetime/india';
-import { SUPPORT_TOPICS, SUPPORT_TOPIC_LABELS, type SupportTopic } from '@/lib/retailer/support';
+import {
+  SUPPORT_PRIORITIES,
+  SUPPORT_PRIORITY_LABELS,
+  SUPPORT_TOPICS,
+  SUPPORT_TOPIC_LABELS,
+  type SupportPriority,
+  type SupportTopic,
+} from '@/lib/retailer/support';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,6 +39,7 @@ export function SupportTicketForm({
     setError(null);
     const subject = String(formData.get('subject') ?? '').trim();
     const topic = String(formData.get('topic') ?? '');
+    const priority = String(formData.get('priority') ?? '');
     const orderId = String(formData.get('orderId') ?? '');
     const description = String(formData.get('description') ?? '').trim();
 
@@ -39,6 +47,7 @@ export function SupportTicketForm({
       const result = await createSupportTicketAction({
         subject,
         topic: topic as SupportTopic,
+        priority: (priority || 'normal') as SupportPriority,
         orderId: orderId || null,
         description,
       });
@@ -70,7 +79,7 @@ export function SupportTicketForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="topic">Topic</Label>
+            <Label htmlFor="topic">Category</Label>
             <select
               id="topic"
               name="topic"
@@ -85,6 +94,26 @@ export function SupportTicketForm({
               ))}
             </select>
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="priority">Priority</Label>
+            <select
+              id="priority"
+              name="priority"
+              required
+              defaultValue="normal"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+            >
+              {SUPPORT_PRIORITIES.map((priority) => (
+                <option key={priority} value={priority}>
+                  {SUPPORT_PRIORITY_LABELS[priority]}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-500">How urgent is this for your shop?</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-1">
           <div className="space-y-1.5">
             <Label htmlFor="orderId">Related order (optional)</Label>
             <select

@@ -8,8 +8,10 @@ import { TicketActionsForm } from '@/components/admin/ticket-actions-form';
 import { formatIndiaDateTime, formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 import { formatInr } from '@/lib/retailer/format';
 import {
+  SUPPORT_PRIORITY_LABELS,
   SUPPORT_STATUS_LABELS,
   SUPPORT_TOPIC_LABELS,
+  type SupportPriority,
   type SupportStatus,
   type SupportTopic,
 } from '@/lib/retailer/support';
@@ -21,11 +23,19 @@ const STATUS_STYLES: Record<SupportStatus, string> = {
   closed: 'bg-ink-100 text-ink-500',
 };
 
+const PRIORITY_STYLES: Record<SupportPriority, string> = {
+  low: 'bg-ink-50 text-ink-500',
+  normal: 'bg-sky-50 text-sky-700',
+  high: 'bg-orange-50 text-orange-700',
+  urgent: 'bg-primary-50 text-primary-700',
+};
+
 interface TicketRow {
   id: string;
   ticket_number: string;
   subject: string;
   topic: SupportTopic;
+  priority: SupportPriority;
   status: SupportStatus;
   created_at: string;
   updated_at: string;
@@ -49,7 +59,7 @@ export default async function AdminSupportTicketPage({ params }: { params: { id:
   const { data: ticket } = await supabase
     .from('support_tickets')
     .select(
-      'id, ticket_number, subject, topic, status, created_at, updated_at, resolved_at, closed_at, ' +
+      'id, ticket_number, subject, topic, priority, status, created_at, updated_at, resolved_at, closed_at, ' +
         'retailers ( shop_name, gstin, address, profiles ( phone ) ), ' +
         'orders ( id, order_number, status, grand_total, placed_at )'
     )
@@ -94,6 +104,9 @@ export default async function AdminSupportTicketPage({ params }: { params: { id:
         </span>
         <span className="rounded-full bg-ink-100 px-2.5 py-1 text-[10px] font-bold text-ink-500">
           {SUPPORT_TOPIC_LABELS[ticket.topic] ?? ticket.topic}
+        </span>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.normal}`}>
+          {SUPPORT_PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
         </span>
         <span className="font-mono text-xs font-semibold text-ink-400">{ticket.ticket_number}</span>
       </div>

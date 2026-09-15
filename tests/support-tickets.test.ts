@@ -16,6 +16,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  SUPPORT_PRIORITIES,
+  SUPPORT_PRIORITY_LABELS,
   SUPPORT_STATUS_TRANSITIONS,
   SUPPORT_STATUSES,
   SUPPORT_TOPICS,
@@ -36,6 +38,8 @@ const newPage = read('app/retailer/support/new/page.tsx');
 const detailPage = read('app/retailer/support/[id]/page.tsx');
 const adminListPage = read('app/admin/support/page.tsx');
 const adminDetailPage = read('app/admin/support/[id]/page.tsx');
+const adminFilters = read('components/admin/support-filters.tsx');
+const ticketForm = read('components/retailer/support-ticket-form.tsx');
 const permissions = read('lib/permissions/permissions.ts');
 const adminShell = read('components/layout/admin-shell.tsx');
 const helpPage = read('app/retailer/help/page.tsx');
@@ -94,6 +98,14 @@ describe('topics', () => {
   });
 });
 
+describe('priorities', () => {
+  it('offers low / normal / high / urgent with stable labels', () => {
+    expect([...SUPPORT_PRIORITIES].sort()).toEqual(['high', 'low', 'normal', 'urgent']);
+    expect(SUPPORT_PRIORITY_LABELS.normal).toBe('Normal');
+    expect(SUPPORT_PRIORITY_LABELS.urgent).toBe('Urgent');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // RLS guards (migration 0048)
 // ---------------------------------------------------------------------------
@@ -139,9 +151,12 @@ describe('migration RLS', () => {
     expect(migration).toContain('trg_audit_support_ticket_messages');
   });
 
-  it('validates topic and status values at the DB level', () => {
+  it('validates topic, priority and status values at the DB level', () => {
     expect(migration).toContain("check (topic in ('order', 'payment', 'product', 'delivery', 'credit', 'other'))");
+    expect(migration).toContain("check (priority in ('low', 'normal', 'high', 'urgent'))");
     expect(migration).toContain("check (status in ('open', 'in_progress', 'resolved', 'closed'))");
+    // Priority defaults to normal so the column is never null.
+    expect(migration).toMatch(/priority text not null default 'normal'/);
   });
 });
 
@@ -243,6 +258,36 @@ describe('admin pages', () => {
 // ---------------------------------------------------------------------------
 // Wiring
 // ---------------------------------------------------------------------------
+describe('priority end-to-end wiring', () => {
+  it('the create form collects a priority (default normal) and submits it', () => {
+    expect(ticketForm).toContain('name="priority"');
+    expect(ticketForm).toContain('defaultValue="normal"');
+    expect(ticketForm).toContain('SUPPORT_PRIORITIES.map');
+    expect(ticketForm).toMatch(/priority: \(priority \|\| 'normal'\)/);
+  });
+
+  it('the action validates and persists the priority', () => {
+    expect(retailerActions).toMatch(/SUPPORT_PRIORITIES\.includes\(input\.priority\)/);
+    expect(retailerActions).toMatch(/priority,\n\s+order_id:/);
+  });
+
+  it('retailer list + detail show a priority badge from the stored value', () => {
+    expect(listPage).toContain("select('id, ticket_number, subject, topic, priority, status");
+    expect(listPage).toContain('SUPPORT_PRIORITY_LABELS[ticket.priority]');
+    expect(detailPage).toContain('PRIORITY_STYLES[ticket.priority]');
+  });
+
+  it('admin queue filters by status, category AND priority', () => {
+    expect(adminFilters).toContain('Filter by category');
+    expect(adminFilters).toContain('Filter by priority');
+    expect(adminFilters).toContain("router.push(");
+    // The page applies all three filters server-side.
+    expect(adminListPage).toMatch(/if \(topic\) query = query\.eq\('topic', topic\);/);
+    expect(adminListPage).toMatch(/if \(priority\) query = query\.eq\('priority', priority\);/);
+    expect(adminListPage).toContain('priority');
+  });
+});
+
 describe('permission + nav wiring', () => {
   it('adds support.manage to the permission type and to admin roles only', () => {
     expect(permissions).toContain("'support.manage'");

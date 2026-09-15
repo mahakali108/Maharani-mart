@@ -6,10 +6,12 @@ import { requireUser } from '@/lib/auth/session';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { indiaTodayDateKey } from '@/lib/datetime/india';
 import {
+  SUPPORT_PRIORITIES,
   SUPPORT_STATUSES,
   SUPPORT_TOPICS,
   generateTicketNumber,
   isTicketOpen,
+  type SupportPriority,
   type SupportStatus,
   type SupportTopic,
 } from '@/lib/retailer/support';
@@ -64,6 +66,7 @@ async function notifyAdmins(supabase: ReturnType<typeof createClient>, ticket: {
 export async function createSupportTicketAction(input: {
   subject: string;
   topic: SupportTopic;
+  priority: SupportPriority;
   orderId: string | null;
   description: string;
 }): Promise<SupportActionResult> {
@@ -73,6 +76,7 @@ export async function createSupportTicketAction(input: {
   const subject = input.subject?.trim() ?? '';
   const description = input.description?.trim() ?? '';
   const topic = SUPPORT_TOPICS.includes(input.topic) ? input.topic : null;
+  const priority = SUPPORT_PRIORITIES.includes(input.priority) ? input.priority : null;
 
   if (subject.length < 10 || subject.length > 120) {
     return { error: 'Subject must be 10–120 characters.' };
@@ -80,7 +84,8 @@ export async function createSupportTicketAction(input: {
   if (!SUBJECT_RE.test(subject)) {
     return { error: 'Subject contains unsupported characters.' };
   }
-  if (!topic) return { error: 'Choose a topic.' };
+  if (!topic) return { error: 'Choose a category.' };
+  if (!priority) return { error: 'Choose a priority.' };
   if (description.length < 10 || description.length > 3000) {
     return { error: 'Describe the issue in 10–3,000 characters.' };
   }
@@ -109,6 +114,7 @@ export async function createSupportTicketAction(input: {
         retailer_id: user.id,
         subject,
         topic,
+        priority,
         order_id: input.orderId || null,
         status: 'open',
       } as unknown as never)

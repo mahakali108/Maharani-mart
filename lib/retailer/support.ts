@@ -9,11 +9,22 @@
 
 export type SupportTopic = 'order' | 'payment' | 'product' | 'delivery' | 'credit' | 'other';
 
+export type SupportPriority = 'low' | 'normal' | 'high' | 'urgent';
+
 export type SupportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 
 export const SUPPORT_TOPICS: SupportTopic[] = ['order', 'payment', 'product', 'delivery', 'credit', 'other'];
 
 export const SUPPORT_STATUSES: SupportStatus[] = ['open', 'in_progress', 'resolved', 'closed'];
+
+export const SUPPORT_PRIORITIES: SupportPriority[] = ['low', 'normal', 'high', 'urgent'];
+
+export const SUPPORT_PRIORITY_LABELS: Record<SupportPriority, string> = {
+  low: 'Low',
+  normal: 'Normal',
+  high: 'High',
+  urgent: 'Urgent',
+};
 
 export const SUPPORT_TOPIC_LABELS: Record<SupportTopic, string> = {
   order: 'Order issue',

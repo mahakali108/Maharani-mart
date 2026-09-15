@@ -7,9 +7,11 @@ import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 import { formatInr } from '@/lib/retailer/format';
 import { SupportReplyForm } from '@/components/retailer/support-reply-form';
 import {
+  SUPPORT_PRIORITY_LABELS,
   SUPPORT_STATUS_LABELS,
   SUPPORT_TOPIC_LABELS,
   isTicketOpen,
+  type SupportPriority,
   type SupportStatus,
   type SupportTopic,
 } from '@/lib/retailer/support';
@@ -19,6 +21,13 @@ const STATUS_STYLES: Record<SupportStatus, string> = {
   in_progress: 'bg-blue-50 text-blue-700 ring-blue-200',
   resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   closed: 'bg-slate-100 text-slate-600 ring-slate-200',
+};
+
+const PRIORITY_STYLES: Record<SupportPriority, string> = {
+  low: 'bg-slate-100 text-slate-600 ring-slate-200',
+  normal: 'bg-sky-50 text-sky-700 ring-sky-200',
+  high: 'bg-orange-50 text-orange-700 ring-orange-200',
+  urgent: 'bg-primary-50 text-primary-700 ring-primary-200',
 };
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
@@ -37,6 +46,7 @@ interface TicketRow {
   ticket_number: string;
   subject: string;
   topic: SupportTopic;
+  priority: SupportPriority;
   status: SupportStatus;
   created_at: string;
   updated_at: string;
@@ -66,7 +76,7 @@ export default async function SupportTicketDetailPage({ params }: { params: { id
   // RLS (0048) — a ticket id from another retailer resolves to notFound().
   const { data: ticket } = await supabase
     .from('support_tickets')
-    .select('id, ticket_number, subject, topic, status, created_at, updated_at')
+    .select('id, ticket_number, subject, topic, priority, status, created_at, updated_at')
     .eq('id', params.id)
     .eq('retailer_id', user.id)
     .maybeSingle<TicketRow>();
@@ -116,6 +126,11 @@ export default async function SupportTicketDetailPage({ params }: { params: { id
             </span>
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-bold text-slate-500">
               {SUPPORT_TOPIC_LABELS[ticket.topic] ?? ticket.topic}
+            </span>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[9px] font-bold ring-1 ring-inset ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.normal}`}
+            >
+              {SUPPORT_PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
             </span>
             <span className="font-mono text-[10px] font-bold text-slate-400">{ticket.ticket_number}</span>
           </div>

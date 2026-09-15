@@ -4,9 +4,11 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 import {
+  SUPPORT_PRIORITY_LABELS,
   SUPPORT_STATUSES,
   SUPPORT_STATUS_LABELS,
   SUPPORT_TOPIC_LABELS,
+  type SupportPriority,
   type SupportStatus,
   type SupportTopic,
 } from '@/lib/retailer/support';
@@ -20,11 +22,19 @@ const STATUS_STYLES: Record<SupportStatus, string> = {
   closed: 'bg-slate-100 text-slate-600 ring-slate-200',
 };
 
+const PRIORITY_STYLES: Record<SupportPriority, string> = {
+  low: 'bg-slate-100 text-slate-600 ring-slate-200',
+  normal: 'bg-sky-50 text-sky-700 ring-sky-200',
+  high: 'bg-orange-50 text-orange-700 ring-orange-200',
+  urgent: 'bg-primary-50 text-primary-700 ring-primary-200',
+};
+
 interface TicketRow {
   id: string;
   ticket_number: string;
   subject: string;
   topic: SupportTopic;
+  priority: SupportPriority;
   status: SupportStatus;
   created_at: string;
   updated_at: string;
@@ -54,7 +64,7 @@ export default async function RetailerSupportPage({
 
   let query = supabase
     .from('support_tickets')
-    .select('id, ticket_number, subject, topic, status, created_at, updated_at, orders ( order_number, status )', {
+    .select('id, ticket_number, subject, topic, priority, status, created_at, updated_at, orders ( order_number, status )', {
       count: 'exact',
     })
     .eq('retailer_id', user.id)
@@ -161,6 +171,11 @@ export default async function RetailerSupportPage({
                       </span>
                       <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold text-slate-500">
                         {TopicLabel}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold ring-1 ring-inset ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.normal}`}
+                      >
+                        {SUPPORT_PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
                       </span>
                     </div>
                     <Link

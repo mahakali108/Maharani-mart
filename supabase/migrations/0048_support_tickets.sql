@@ -43,6 +43,7 @@ create table if not exists support_tickets (
   retailer_id uuid not null references profiles(id) on delete cascade,
   subject text not null,
   topic text not null,
+  priority text not null default 'normal',
   order_id uuid references orders(id) on delete set null,
   status text not null default 'open',
   created_at timestamptz not null default now(),
@@ -53,6 +54,8 @@ create table if not exists support_tickets (
     check (char_length(btrim(subject)) between 10 and 120),
   constraint support_tickets_topic_check
     check (topic in ('order', 'payment', 'product', 'delivery', 'credit', 'other')),
+  constraint support_tickets_priority_check
+    check (priority in ('low', 'normal', 'high', 'urgent')),
   constraint support_tickets_status_check
     check (status in ('open', 'in_progress', 'resolved', 'closed')),
   constraint support_tickets_resolution_consistency
@@ -70,10 +73,11 @@ create table if not exists support_tickets (
 comment on table support_tickets is 'Retailer support tickets. ticket_number is app-generated and unique. Retailers create + reply (open/in_progress only); admin+ manages status. No deletes.';
 comment on column support_tickets.ticket_number is 'Human-readable unique ticket number (e.g. MT-TKT-20260915-A1B2), generated server-side.';
 comment on column support_tickets.order_id is 'Optional link to the retailer''s own order the ticket is about.';
+comment on column support_tickets.priority is 'Retailer-selected urgency: low / normal / high / urgent. Display + triage only — never gates data access.';
 comment on column support_tickets.status is 'Workflow: open → in_progress → resolved → closed. Only admin+ updates it.';
 
 create index if not exists idx_support_tickets_retailer on support_tickets(retailer_id, status, created_at desc);
-create index if not exists idx_support_tickets_status on support_tickets(status, created_at desc);
+create index if not exists idx_support_tickets_status on support_tickets(status, priority, created_at desc);
 create index if not exists idx_support_tickets_order on support_tickets(order_id);
 
 create or replace function update_support_ticket_updated_at()

@@ -1915,6 +1915,7 @@ export interface Database {
           retailer_id: string;
           subject: string;
           topic: string;
+          priority: string;
           order_id: string | null;
           status: string;
           created_at: string;
@@ -1928,6 +1929,7 @@ export interface Database {
           retailer_id: string;
           subject: string;
           topic: string;
+          priority?: string;
           order_id?: string | null;
           status?: string;
           created_at?: string;

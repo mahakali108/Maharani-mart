@@ -3,11 +3,16 @@ import { Headset } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { SupportFilters } from '@/components/admin/support-filters';
 import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 import {
+  SUPPORT_PRIORITIES,
+  SUPPORT_PRIORITY_LABELS,
   SUPPORT_STATUSES,
   SUPPORT_STATUS_LABELS,
+  SUPPORT_TOPICS,
   SUPPORT_TOPIC_LABELS,
+  type SupportPriority,
   type SupportStatus,
   type SupportTopic,
 } from '@/lib/retailer/support';
@@ -19,11 +24,19 @@ const STATUS_STYLES: Record<SupportStatus, string> = {
   closed: 'bg-ink-100 text-ink-500',
 };
 
+const PRIORITY_STYLES: Record<SupportPriority, string> = {
+  low: 'bg-ink-50 text-ink-500',
+  normal: 'bg-sky-50 text-sky-700',
+  high: 'bg-orange-50 text-orange-700',
+  urgent: 'bg-primary-50 text-primary-700',
+};
+
 interface TicketRow {
   id: string;
   ticket_number: string;
   subject: string;
   topic: SupportTopic;
+  priority: SupportPriority;
   status: SupportStatus;
   created_at: string;
   updated_at: string;
@@ -34,24 +47,32 @@ interface TicketRow {
 export default async function AdminSupportPage({
   searchParams,
 }: {
-  searchParams: { status?: string };
+  searchParams: { status?: string; topic?: string; priority?: string };
 }) {
   const supabase = createClient();
   const status: SupportStatus | 'all' =
     SUPPORT_STATUSES.includes(searchParams.status as SupportStatus) || searchParams.status === 'all'
       ? (searchParams.status as SupportStatus | 'all')
       : 'open';
+  const topic: SupportTopic | '' =
+    SUPPORT_TOPICS.includes(searchParams.topic as SupportTopic) ? (searchParams.topic as SupportTopic) : '';
+  const priority: SupportPriority | '' =
+    SUPPORT_PRIORITIES.includes(searchParams.priority as SupportPriority)
+      ? (searchParams.priority as SupportPriority)
+      : '';
 
   const [{ data }, { count: openCount }] = await Promise.all([
     (async () => {
       let query = supabase
         .from('support_tickets')
-        .select('id, ticket_number, subject, topic, status, created_at, updated_at, retailers ( shop_name ), orders ( order_number )', {
+        .select('id, ticket_number, subject, topic, priority, status, created_at, updated_at, retailers ( shop_name ), orders ( order_number )', {
           count: 'exact',
         })
         .order('updated_at', { ascending: false })
         .limit(100);
       if (status !== 'all') query = query.eq('status', status);
+      if (topic) query = query.eq('topic', topic);
+      if (priority) query = query.eq('priority', priority);
       return query;
     })(),
     supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'open'),
@@ -80,39 +101,27 @@ export default async function AdminSupportPage({
       </div>
 
       <Card>
-        <div className="flex flex-wrap gap-2">
-          {[{ value: 'all', label: 'All' }, { value: 'open', label: 'Open' }, ...SUPPORT_STATUSES.slice(1).map((s) => ({ value: s, label: SUPPORT_STATUS_LABELS[s] }))].map(
-            (tab) => (
-              <Link
-                key={tab.value}
-                href={tab.value === 'open' ? '/admin/support' : `/admin/support?status=${tab.value}`}
-                aria-current={status === tab.value ? 'page' : undefined}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  status === tab.value
-                    ? 'bg-ink-950 text-white'
-                    : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
-                }`}
-              >
-                {tab.label}
-              </Link>
-            )
-          )}
-        </div>
+        <SupportFilters status={status} topic={topic} priority={priority} />
 
         {tickets.length === 0 ? (
           <AdminEmptyState
             icon={Headset}
             title="No tickets here"
-            body={status === 'all' ? 'Retailer support tickets will appear as soon as they are raised.' : 'No tickets in this state right now.'}
+            body={
+              status === 'all' && !topic && !priority
+                ? 'Retailer support tickets will appear as soon as they are raised.'
+                : 'No tickets match these filters right now.'
+            }
           />
         ) : (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[860px] text-left text-sm">
               <thead>
                 <tr className="border-b border-ink-100 text-[10px] font-bold uppercase tracking-wider text-ink-400">
                   <th className="px-3 py-2.5">Ticket</th>
                   <th className="px-3 py-2.5">Retailer</th>
                   <th className="px-3 py-2.5">Subject</th>
+                  <th className="px-3 py-2.5">Priority</th>
                   <th className="px-3 py-2.5">Order</th>
                   <th className="px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Updated</th>
@@ -129,9 +138,14 @@ export default async function AdminSupportPage({
                     <td className="max-w-[180px] truncate px-3 py-3 text-ink-600">
                       {ticket.retailers?.shop_name ?? '—'}
                     </td>
-                    <td className="max-w-[260px] px-3 py-3">
+                    <td className="max-w-[240px] px-3 py-3">
                       <p className="truncate font-medium text-ink-900">{ticket.subject}</p>
                       <p className="text-[10px] text-ink-400">{SUPPORT_TOPIC_LABELS[ticket.topic] ?? ticket.topic}</p>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3">
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.normal}`}>
+                        {SUPPORT_PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-ink-600">
                       {ticket.orders?.order_number ?? '—'}
