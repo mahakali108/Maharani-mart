@@ -292,9 +292,9 @@ describe('permission + nav wiring', () => {
   it('adds support.manage to the permission type and to admin roles only', () => {
     expect(permissions).toContain("'support.manage'");
     // super_admin list line ends with command_center.view, support.manage
-    expect(permissions).toMatch(/'command_center\.view', 'support\.manage',/);
+    expect(permissions).toMatch(/'command_center\.view', 'dashboard\.view', 'support\.manage',/);
     // admin list
-    expect(permissions).toMatch(/'routes\.manage\.all', 'support\.manage',/);
+    expect(permissions).toMatch(/'routes\.manage\.all', 'dashboard\.view', 'support\.manage',/);
   });
 
   it('admin sidebar exposes a Support item', () => {
