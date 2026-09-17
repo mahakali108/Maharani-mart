@@ -28,6 +28,8 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | Assign / reassign retailer to salesman | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Manage staff / salesman accounts | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Manage banners | ✅ | ✅ | ✅ | ❌ | ❌ |
+| View admin dashboard | ✅ | ✅ | ❌ | ❌ | ❌ |
+| View Command Center | ✅ | ❌ | ❌ | ❌ | ❌ |
 | View all reports | ✅ | ✅ | area-scoped | own-area | own orders |
 | Manage routes (all) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Manage own route/visits | — | — | — | ✅ | — |
@@ -41,4 +43,5 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 - **Staff** can create/edit products but not delete them — deletion is reserved for Admin/Super Admin to prevent accidental catalog loss during day-to-day operations.
 - **Salesman** never sees another salesman's orders or retailers outside their assigned beat — enforced via `orders.collected_by` and `retailers.assigned_salesman_id` in RLS.
 - **Retailer** RLS scopes every query to `retailer_id = auth.uid()` — there is no code path, buggy or otherwise, that returns another retailer's data.
+- **Admin Dashboard** (`dashboard.view`) is the operational home for Admin and Super Admin. Individual cards still hide behind existing permissions (`orders.view.all`, `inventory.view`, `retailers.manage_wallet`, `collections.verify`, `support.manage`). The Super Admin Command Center stays `command_center.view` only.
 - Only **Super Admin** can create Staff or Salesman accounts (Phase 2 Admin Panel) — Admin cannot create accounts with equal or greater privilege than itself.
