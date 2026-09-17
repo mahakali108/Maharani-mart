@@ -10,6 +10,11 @@ import { loadPackCost } from '@/lib/admin/cost-access';
 import { deleteMedia } from '@/lib/media';
 import { isRenderableMediaRef } from '@/lib/media/refs';
 import {
+  validateProductDraft,
+  firstError,
+  type FieldErrors,
+} from '@/lib/admin/catalog-validation';
+import {
   findLooseCoverageGaps,
   piecePriceFromCase,
   looseTierDraftToRow,
@@ -19,43 +24,33 @@ import {
 } from '@/lib/retailer/case-pricing';
 import type { Database } from '@/types/database.types';
 
-export type ProductFormState = { error?: string } | null;
+export type ProductFormState = { error?: string; errors?: FieldErrors } | null;
 
 type ProductInsert = Database['public']['Tables']['products']['Insert'];
 type ProductUpdate = Database['public']['Tables']['products']['Update'];
 type ProductImageInsert = Database['public']['Tables']['product_images']['Insert'];
 type ProductPackInsert = Database['public']['Tables']['product_packs']['Insert'];
 
-const productSchema = z.object({
-  name: z.string().min(2, 'Enter a product name.'),
-  brandId: z.string().uuid().optional().or(z.literal('')),
-  categoryId: z.string().uuid().optional().or(z.literal('')),
-  unit: z.string().min(1, 'Enter a unit (e.g. carton, box, pcs).'),
-  unitsPerCase: z.coerce.number().int().min(1, 'Units per case must be at least 1.').default(1),
-  basePrice: z.coerce.number().min(0, 'Enter a valid MRP.'),
-  costPrice: z.coerce.number().min(0).optional().or(z.literal('')),
-  casePrice: z.coerce.number().min(0, 'Enter a valid case selling price.'),
-  gstPercent: z.coerce.number().min(0).max(100).default(0),
-  barcode: z.string().optional(),
-  leadTimeDays: z.coerce.number().int().min(0).default(2),
-  isNewLaunch: z.coerce.boolean().default(false),
-});
-
-function parseProductForm(formData: FormData) {
-  return productSchema.safeParse({
+/**
+ * Product form validation now lives in `lib/admin/catalog-validation.ts` so the
+ * product form and the CSV importer apply exactly the same rules — one
+ * implementation, no drift. Field-level errors are returned to the form so it
+ * can point at the offending input instead of showing one generic line.
+ */
+function readProductDraft(formData: FormData) {
+  return {
     name: formData.get('name'),
-    brandId: formData.get('brandId'),
-    categoryId: formData.get('categoryId'),
     unit: formData.get('unit'),
     unitsPerCase: formData.get('unitsPerCase') || 1,
-    basePrice: formData.get('basePrice'),
-    costPrice: formData.get('costPrice') || '',
+    mrp: formData.get('basePrice'),
     casePrice: formData.get('casePrice'),
+    costPrice: formData.get('costPrice') || '',
     gstPercent: formData.get('gstPercent') || 0,
-    barcode: formData.get('barcode'),
+    hsnCode: formData.get('hsnCode') || '',
+    barcode: formData.get('barcode') || '',
     leadTimeDays: formData.get('leadTimeDays') || 2,
-    isNewLaunch: formData.get('isNewLaunch') === 'on',
-  });
+    moq: formData.get('moq') || 1,
+  };
 }
 
 /**
@@ -107,8 +102,13 @@ async function findDefaultPackId(supabase: ReturnType<typeof createClient>, prod
  * Seeds a default case-priced pack for a product, together with its default
  * and case quantity tiers, so a product created through the Add Product form
  * is immediately orderable at the configured case price.
+ *
+ * EXPORTED because the CSV importer (lib/admin/product-import-actions.ts) must
+ * produce exactly the same shape as the form: an imported product that had no
+ * default pack and no quantity tiers would appear in the catalog and then be
+ * unorderable, which is worse than rejecting the row.
  */
-async function seedDefaultPackForProduct(
+export async function seedDefaultPackForProduct(
   supabase: ReturnType<typeof createClient>,
   productId: string,
   user: { id: string },
@@ -119,6 +119,7 @@ async function seedDefaultPackForProduct(
     costPrice: number | null;
     casePrice: number;
     barcode: string | null;
+    moq: number;
   }
 ) {
   // Reference per-piece rate from the engine, so a seeded default slab prices
@@ -136,7 +137,7 @@ async function seedDefaultPackForProduct(
       cost_price: d.costPrice,
       case_price: d.casePrice,
       barcode: d.barcode,
-      moq: 1,
+      moq: d.moq,
       created_by: user.id,
     } as unknown as never)
     .select('id')
@@ -189,31 +190,39 @@ export async function createProductAction(
 ): Promise<ProductFormState> {
   const user = await requirePermission('products.create');
 
-  const parsed = parseProductForm(formData);
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+  const validated = validateProductDraft(readProductDraft(formData));
+  if (!validated.ok) {
+    return { error: firstError(validated.errors), errors: validated.errors };
   }
-  const d = parsed.data;
+  const d = validated.value;
 
-  if (!d.brandId) return { error: 'Select a brand.' };
-  if (!d.categoryId) return { error: 'Select a category.' };
+  const brandId = String(formData.get('brandId') ?? '').trim();
+  const categoryId = String(formData.get('categoryId') ?? '').trim();
+  const isNewLaunch = formData.get('isNewLaunch') === 'on';
+  const errors: FieldErrors = {};
+  if (!brandId) errors.brandId = 'Select a brand.';
+  if (!categoryId) errors.categoryId = 'Select a category.';
+  if (Object.keys(errors).length > 0) {
+    return { error: firstError(errors), errors };
+  }
 
   const supabase = createClient();
-  const cost = d.costPrice === '' ? null : Number(d.costPrice);
-  // `sku_code` is intentionally omitted — it was removed from the product
+  const cost = d.costPrice;
+  // The product `sku_code` is intentionally omitted — it was removed from the
   // workflow and the database fills in a generated default (migration 0023).
   const payload: ProductInsert = {
     name: d.name,
-    brand_id: d.brandId || null,
-    category_id: d.categoryId || null,
+    brand_id: brandId,
+    category_id: categoryId,
     unit: d.unit,
     units_per_case: d.unitsPerCase,
-    base_price: d.basePrice,
+    base_price: d.mrp,
     cost_price: cost,
     gst_percent: d.gstPercent,
-    barcode: d.barcode || null,
+    hsn_code: d.hsnCode,
+    barcode: d.barcode,
     lead_time_days: d.leadTimeDays,
-    is_new_launch: d.isNewLaunch,
+    is_new_launch: isNewLaunch,
     created_by: user.id,
   };
 
@@ -228,6 +237,7 @@ export async function createProductAction(
       error: error.message.includes('duplicate')
         ? 'A product with this barcode already exists.'
         : error.message,
+      errors: error.message.includes('duplicate') ? { barcode: 'That barcode is already used by another product.' } : undefined,
     };
   }
 
@@ -236,10 +246,11 @@ export async function createProductAction(
   await seedDefaultPackForProduct(supabase, data.id, user, {
     unit: d.unit,
     unitsPerCase: d.unitsPerCase,
-    basePrice: d.basePrice,
+    basePrice: d.mrp,
     costPrice: cost,
     casePrice: d.casePrice,
-    barcode: d.barcode || null,
+    barcode: d.barcode,
+    moq: d.moq,
   });
 
   revalidatePath('/admin/products');
@@ -253,27 +264,33 @@ export async function updateProductAction(
 ): Promise<ProductFormState> {
   await requirePermission('products.edit');
 
-  const parsed = parseProductForm(formData);
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+  const validated = validateProductDraft(readProductDraft(formData));
+  if (!validated.ok) {
+    return { error: firstError(validated.errors), errors: validated.errors };
   }
-  const d = parsed.data;
+  const d = validated.value;
+
+  const brandId = String(formData.get('brandId') ?? '').trim();
+  const categoryId = String(formData.get('categoryId') ?? '').trim();
+  const isNewLaunch = formData.get('isNewLaunch') === 'on';
 
   const supabase = createClient();
-  const cost = d.costPrice === '' ? null : Number(d.costPrice);
-  // `sku_code` is left untouched so historical values survive an edit.
+  const cost = d.costPrice;
+  // The legacy internal product code is left untouched so historical values
+  // survive an edit; it is never read from the form.
   const payload: ProductUpdate = {
     name: d.name,
-    brand_id: d.brandId || null,
-    category_id: d.categoryId || null,
+    brand_id: brandId || null,
+    category_id: categoryId || null,
     unit: d.unit,
     units_per_case: d.unitsPerCase,
-    base_price: d.basePrice,
+    base_price: d.mrp,
     cost_price: cost,
     gst_percent: d.gstPercent,
-    barcode: d.barcode || null,
+    hsn_code: d.hsnCode,
+    barcode: d.barcode,
     lead_time_days: d.leadTimeDays,
-    is_new_launch: d.isNewLaunch,
+    is_new_launch: isNewLaunch,
   };
 
   const { error } = await supabase
@@ -281,7 +298,16 @@ export async function updateProductAction(
     .update(payload as unknown as never)
     .eq('id', productId);
 
-  if (error) return { error: error.message };
+  if (error) {
+    return {
+      error: error.message.includes('duplicate')
+        ? 'A product with this barcode already exists.'
+        : error.message,
+      errors: error.message.includes('duplicate')
+        ? { barcode: 'That barcode is already used by another product.' }
+        : undefined,
+    };
+  }
 
   // Keep the auto-seeded default pack (the first pack by sort order) in sync
   // with the case-based pricing fields so editing the product updates the
@@ -296,11 +322,12 @@ export async function updateProductAction(
       .from('product_packs')
       .update({
         units_per_case: d.unitsPerCase,
-        base_price: d.basePrice,
-        mrp: d.basePrice,
+        base_price: d.mrp,
+        mrp: d.mrp,
         cost_price: cost,
         case_price: d.casePrice,
-        barcode: d.barcode || null,
+        barcode: d.barcode,
+        moq: d.moq,
       } as unknown as never)
       .eq('id', defaultPackId);
     // Refresh the default/case tier prices to stay anchored to the case price.
