@@ -13,6 +13,7 @@ import type { UserRole } from '@/lib/auth/roles';
 
 export type Permission =
   | 'products.view'
+  | 'products.view_cost'
   | 'products.create'
   | 'products.edit'
   | 'products.delete'
@@ -62,7 +63,7 @@ export type Permission =
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
-    'products.view', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
+    'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
@@ -73,7 +74,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'command_center.view', 'dashboard.view', 'support.manage',
   ],
   admin: [
-    'products.view', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
+    'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
@@ -103,6 +104,14 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 };
 
+/**
+ * `products.view_cost` gates purchase cost and margin. It is deliberately NOT
+ * held by staff or salesman even though they can create and edit products:
+ * migration 0025 revokes `SELECT (cost_price)` from anon/authenticated at the
+ * database level, so the admin-only cost accessors return NULL for them
+ * anyway. The permission exists so the UI hides the column rather than
+ * rendering an empty one.
+ */
 export function can(role: UserRole, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
 }

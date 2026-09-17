@@ -20,6 +20,7 @@ interface ProductDetail {
   base_price: number;
   cost_price: number | null;
   gst_percent: number;
+  hsn_code: string | null;
   barcode: string | null;
   lead_time_days: number;
   is_new_launch: boolean;
@@ -114,7 +115,7 @@ export default async function EditProductPage({ params }: { params: { id: string
       // never read purchase cost via PostgREST. Admin reads it through the
       // SECURITY DEFINER accessor below (loadProductCost / loadPackCosts).
       .select(
-        'id, name, brand_id, category_id, unit, units_per_case, base_price, gst_percent, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
+        'id, name, brand_id, category_id, unit, units_per_case, base_price, gst_percent, hsn_code, barcode, lead_time_days, is_new_launch, min_stock, reorder_level, max_stock'
       )
       .eq('id', params.id)
       .single<Omit<ProductDetail, 'cost_price'>>(),
@@ -216,6 +217,9 @@ export default async function EditProductPage({ params }: { params: { id: string
   // updateProductAction resolves it server-side.
   const defaultPack = packs[0];
   const productCasePrice = defaultPack?.case_price ?? null;
+  // MOQ lives on product_packs (0007), so the form seeds from the same default
+  // pack updateProductAction keeps in sync — never from an invented default.
+  const productMoq = defaultPack?.moq ?? null;
 
   const boundUpdateAction = updateProductAction.bind(null, params.id);
 
@@ -240,7 +244,7 @@ export default async function EditProductPage({ params }: { params: { id: string
           action={boundUpdateAction}
           brands={(brandData ?? []) as Option[]}
           categories={(categoryData ?? []) as Option[]}
-          defaults={{ ...product!, case_price: productCasePrice }}
+          defaults={{ ...product!, case_price: productCasePrice, moq: productMoq }}
           submitLabel="Save changes"
         />
       </Card>
