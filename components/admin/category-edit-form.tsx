@@ -23,6 +23,7 @@ export function CategoryEditForm({
   parentId,
   categories,
   imageUrl = null,
+  sortOrder = 0,
 }: {
   categoryId: string;
   name: string;
@@ -30,6 +31,8 @@ export function CategoryEditForm({
   categories: CategoryOption[];
   /** Existing `categories.image_url` — a Supabase public URL (or a legacy absolute URL). */
   imageUrl?: string | null;
+  /** Existing `categories.sort_order` — lower numbers appear first. */
+  sortOrder?: number;
 }) {
   const boundAction = updateCategoryAction.bind(null, categoryId);
   const [state, formAction] = useFormState(boundAction, initialState);
@@ -58,6 +61,20 @@ export function CategoryEditForm({
             </option>
           ))}
         </Select>
+      </div>
+      <div className="sm:max-w-[10rem]">
+        <Label htmlFor="categorySortOrder">Sort order</Label>
+        <Input
+          id="categorySortOrder"
+          name="sortOrder"
+          type="number"
+          min={0}
+          max={9999}
+          step={1}
+          inputMode="numeric"
+          defaultValue={sortOrder}
+        />
+        <p className="mt-1 text-xs text-ink-400">Lower numbers appear first in the retailer catalog.</p>
       </div>
 
       <div className="space-y-2">

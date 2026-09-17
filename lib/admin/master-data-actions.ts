@@ -6,6 +6,15 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { deleteMedia, isRenderableMediaRef } from '@/lib/media';
+import {
+  BRANDS_LIST_PATH,
+  CATEGORIES_LIST_PATH,
+  duplicateNameError,
+  normalizeMasterName,
+  parseSortOrder,
+  validateBrandName,
+  validateCategoryName,
+} from '@/lib/admin/master-data-query';
 import type { Database } from '@/types/database.types';
 
 export type MasterDataFormState = { error?: string } | null;
@@ -23,6 +32,84 @@ const optionalMediaRefSchema = z
     if (!value) return true;
     return isRenderableMediaRef(value);
   }, 'That image could not be attached. Upload it again.');
+
+// ----------------------------------------------------------------------------
+// Shared brand/category helpers (Phase 7)
+// ----------------------------------------------------------------------------
+
+type MasterSupabaseClient = ReturnType<typeof createClient>;
+
+/** Escape LIKE wildcards so an `ilike` pre-check matches the literal name only. */
+function escapeLikePattern(value: string): string {
+  return value.replace(/([%_\\])/g, '\\$1');
+}
+
+/**
+ * Case-insensitive "does this name already exist" pre-flight for brands and
+ * categories.
+ *
+ * The database is the real guarantee — `categories` via the case-insensitive
+ * index `categories_name_parent_ci_uq` (0027), `brands` via the exact
+ * `unique(name)` constraint — so a race here is still caught on write. The
+ * pre-flight exists to catch "tata" beside "Tata" for brands (where the DB
+ * constraint is case-sensitive) and to return the operator a sentence instead
+ * of a raw Postgres error.
+ */
+async function masterNameExists(
+  supabase: MasterSupabaseClient,
+  table: 'brands' | 'categories',
+  name: string,
+  options: { parentId?: string | null; excludeId?: string } = {}
+): Promise<boolean> {
+  const pattern = escapeLikePattern(name);
+  // count=exact is computed over the filtered set regardless of limit, and
+  // limit(1) keeps the payload at one id row — the boolean comes from `count`.
+  // `.eq()` cannot express `parent_id IS NULL` in the PostgREST typed API, so
+  // the null case goes through `.is()`.
+  let query =
+    table === 'brands'
+      ? supabase.from('brands').select('id', { count: 'exact' }).ilike('name', pattern)
+      : supabase.from('categories').select('id', { count: 'exact' }).ilike('name', pattern);
+  if (table === 'categories') {
+    const parentId = options.parentId ?? null;
+    query = parentId === null ? query.is('parent_id', null) : query.eq('parent_id', parentId);
+  }
+  if (options.excludeId) {
+    query = query.neq('id', options.excludeId);
+  }
+  const { count } = await query.limit(1);
+  return (count ?? 0) > 0;
+}
+
+/** Ancestor hops checked before deciding a chain is deeper than any real tree. */
+const CATEGORY_MAX_DEPTH = 20;
+
+/**
+ * Would moving `categoryId` under `newParentId` create a parent cycle
+ * (A → B → A)? The direct self-parent case is rejected before this runs;
+ * this walks up from the proposed parent looking for the category itself.
+ * Real category trees are a few levels deep, so more than CATEGORY_MAX_DEPTH
+ * hops means the existing chain is corrupt — the walk gives up and allows the
+ * write rather than bricking edits on data that needs manual repair anyway.
+ */
+async function categoryWouldCreateCycle(
+  supabase: MasterSupabaseClient,
+  categoryId: string,
+  newParentId: string
+): Promise<boolean> {
+  let cursor: string | null = newParentId;
+  for (let depth = 0; depth < CATEGORY_MAX_DEPTH && cursor; depth += 1) {
+    if (cursor === categoryId) return true;
+    const { data }: { data: { parent_id: string | null } | null } = await supabase
+      .from('categories')
+      .select('parent_id')
+      .eq('id', cursor)
+      .maybeSingle<{ parent_id: string | null }>();
+    if (!data) return false; // Dangling parent id — the FK rejects the write.
+    cursor = data.parent_id;
+  }
+  return false;
+}
 
 // ----------------------------------------------------------------------------
 // Areas
@@ -203,11 +290,22 @@ export async function deleteWarehouseAction(warehouseId: string) {
 // ----------------------------------------------------------------------------
 
 const brandSchema = z.object({
-  name: z.string().min(2, 'Enter a brand name.'),
   logoUrl: optionalMediaRefSchema,
 });
 
 type BrandInsert = Database['public']['Tables']['brands']['Insert'];
+
+/** Parse the brand form fields the shared zod schema does not cover. */
+function parseBrandForm(formData: FormData) {
+  const parsed = brandSchema.safeParse({ logoUrl: formData.get('logoUrl') ?? '' });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+  }
+  const name = normalizeMasterName(formData.get('name'));
+  const nameError = validateBrandName(name);
+  if (nameError) return { error: nameError };
+  return { name, logoUrl: parsed.data.logoUrl || null };
+}
 
 export async function createBrandAction(
   _prevState: MasterDataFormState,
@@ -215,20 +313,19 @@ export async function createBrandAction(
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
 
-  const parsed = brandSchema.safeParse({
-    name: formData.get('name'),
-    logoUrl: formData.get('logoUrl') ?? '',
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
-  }
+  const form = parseBrandForm(formData);
+  if ('error' in form) return { error: form.error };
 
   const supabase = createClient();
-  const payload: BrandInsert = { name: parsed.data.name, logo_url: parsed.data.logoUrl || null };
+  const exists = await masterNameExists(supabase, 'brands', form.name);
+  const duplicate = duplicateNameError(exists, 'brand');
+  if (duplicate) return { error: duplicate };
+
+  const payload: BrandInsert = { name: form.name, logo_url: form.logoUrl };
   const { error } = await supabase.from('brands').insert(payload as unknown as never);
   if (error) return { error: error.message.includes('duplicate') ? 'A brand with this name already exists.' : error.message };
 
-  revalidatePath('/admin/catalog');
+  revalidatePath(BRANDS_LIST_PATH);
   return null;
 }
 
@@ -237,7 +334,7 @@ export async function toggleBrandActiveAction(brandId: string, isActive: boolean
   const supabase = createClient();
   const { error } = await supabase.from('brands').update({ is_active: isActive } as unknown as never).eq('id', brandId);
   if (error) throw new Error(error.message);
-  revalidatePath('/admin/catalog');
+  revalidatePath(BRANDS_LIST_PATH);
 }
 
 export async function updateBrandAction(
@@ -247,15 +344,14 @@ export async function updateBrandAction(
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
 
-  const parsed = brandSchema.safeParse({
-    name: formData.get('name'),
-    logoUrl: formData.get('logoUrl') ?? '',
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
-  }
+  const form = parseBrandForm(formData);
+  if ('error' in form) return { error: form.error };
 
   const supabase = createClient();
+
+  const exists = await masterNameExists(supabase, 'brands', form.name, { excludeId: brandId });
+  const duplicate = duplicateNameError(exists, 'brand');
+  if (duplicate) return { error: duplicate };
 
   // If the logo was replaced, remember the previous reference so the old
   // file can be cleaned up after the row update succeeds.
@@ -266,8 +362,8 @@ export async function updateBrandAction(
     .maybeSingle<{ logo_url: string | null }>();
 
   const payload: Partial<BrandInsert> = {
-    name: parsed.data.name,
-    logo_url: parsed.data.logoUrl || null,
+    name: form.name,
+    logo_url: form.logoUrl,
   };
   const { error } = await supabase.from('brands').update(payload as unknown as never).eq('id', brandId);
   if (error) {
@@ -278,12 +374,15 @@ export async function updateBrandAction(
     await deleteMedia(existing.logo_url);
   }
 
-  revalidatePath('/admin/catalog');
-  redirect('/admin/catalog');
+  revalidatePath(BRANDS_LIST_PATH);
+  redirect(BRANDS_LIST_PATH);
 }
 
 export async function deleteBrandAction(brandId: string) {
-  await requirePermission('master_data.manage');
+  // RLS (0005) already restricts brand/category DELETE to admin and above;
+  // this permission mirrors that boundary at the app layer, exactly like
+  // products.delete does for products.
+  await requirePermission('master_data.delete');
   const supabase = createClient();
 
   const { data, error } = await supabase
@@ -301,7 +400,7 @@ export async function deleteBrandAction(brandId: string) {
 
   if (data?.logo_url) await deleteMedia(data.logo_url);
 
-  revalidatePath('/admin/catalog');
+  revalidatePath(BRANDS_LIST_PATH);
 }
 
 // ----------------------------------------------------------------------------
@@ -309,12 +408,33 @@ export async function deleteBrandAction(brandId: string) {
 // ----------------------------------------------------------------------------
 
 const categorySchema = z.object({
-  name: z.string().min(2, 'Enter a category name.'),
   parentId: z.string().uuid().optional().or(z.literal('')),
   imageUrl: optionalMediaRefSchema,
 });
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
+
+/** Parse the category form fields the shared zod schema does not cover. */
+function parseCategoryForm(formData: FormData) {
+  const parsed = categorySchema.safeParse({
+    parentId: formData.get('parentId'),
+    imageUrl: formData.get('imageUrl') ?? '',
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+  }
+  const name = normalizeMasterName(formData.get('name'));
+  const nameError = validateCategoryName(name);
+  if (nameError) return { error: nameError };
+  const sort = parseSortOrder(formData.get('sortOrder'));
+  if (sort.error) return { error: sort.error };
+  return {
+    name,
+    parentId: parsed.data.parentId || null,
+    imageUrl: parsed.data.imageUrl || null,
+    sortOrder: sort.value ?? 0,
+  };
+}
 
 export async function createCategoryAction(
   _prevState: MasterDataFormState,
@@ -322,25 +442,24 @@ export async function createCategoryAction(
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
 
-  const parsed = categorySchema.safeParse({
-    name: formData.get('name'),
-    parentId: formData.get('parentId'),
-    imageUrl: formData.get('imageUrl') ?? '',
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
-  }
+  const form = parseCategoryForm(formData);
+  if ('error' in form) return { error: form.error };
 
   const supabase = createClient();
+  const exists = await masterNameExists(supabase, 'categories', form.name, { parentId: form.parentId });
+  const duplicate = duplicateNameError(exists, 'category');
+  if (duplicate) return { error: duplicate };
+
   const payload: CategoryInsert = {
-    name: parsed.data.name,
-    parent_id: parsed.data.parentId || null,
-    image_url: parsed.data.imageUrl || null,
+    name: form.name,
+    parent_id: form.parentId,
+    image_url: form.imageUrl,
+    sort_order: form.sortOrder,
   };
   const { error } = await supabase.from('categories').insert(payload as unknown as never);
   if (error) return { error: error.message.includes('duplicate') ? 'This category already exists under the selected parent.' : error.message };
 
-  revalidatePath('/admin/catalog');
+  revalidatePath(CATEGORIES_LIST_PATH);
   return null;
 }
 
@@ -352,7 +471,7 @@ export async function toggleCategoryActiveAction(categoryId: string, isActive: b
     .update({ is_active: isActive } as unknown as never)
     .eq('id', categoryId);
   if (error) throw new Error(error.message);
-  revalidatePath('/admin/catalog');
+  revalidatePath(CATEGORIES_LIST_PATH);
 }
 
 export async function updateCategoryAction(
@@ -362,20 +481,27 @@ export async function updateCategoryAction(
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
 
-  const parsed = categorySchema.safeParse({
-    name: formData.get('name'),
-    parentId: formData.get('parentId'),
-    imageUrl: formData.get('imageUrl') ?? '',
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
-  }
-  if (parsed.data.parentId === categoryId) {
+  const form = parseCategoryForm(formData);
+  if ('error' in form) return { error: form.error };
+  if (form.parentId === categoryId) {
     return { error: 'A category cannot be its own parent.' };
   }
 
   const supabase = createClient();
 
+  if (form.parentId && (await categoryWouldCreateCycle(supabase, categoryId, form.parentId))) {
+    return { error: 'That parent would create a category cycle. Pick a category higher up the tree.' };
+  }
+
+  const exists = await masterNameExists(supabase, 'categories', form.name, {
+    parentId: form.parentId,
+    excludeId: categoryId,
+  });
+  const duplicate = duplicateNameError(exists, 'category');
+  if (duplicate) return { error: duplicate };
+
+  // If the image was replaced, remember the previous reference so the old
+  // file can be cleaned up after the row update succeeds.
   const { data: existing } = await supabase
     .from('categories')
     .select('image_url')
@@ -383,9 +509,10 @@ export async function updateCategoryAction(
     .maybeSingle<{ image_url: string | null }>();
 
   const payload: Partial<CategoryInsert> = {
-    name: parsed.data.name,
-    parent_id: parsed.data.parentId || null,
-    image_url: parsed.data.imageUrl || null,
+    name: form.name,
+    parent_id: form.parentId,
+    image_url: form.imageUrl,
+    sort_order: form.sortOrder,
   };
   const { error } = await supabase.from('categories').update(payload as unknown as never).eq('id', categoryId);
   if (error) {
@@ -398,12 +525,15 @@ export async function updateCategoryAction(
     await deleteMedia(existing.image_url);
   }
 
-  revalidatePath('/admin/catalog');
-  redirect('/admin/catalog');
+  revalidatePath(CATEGORIES_LIST_PATH);
+  redirect(CATEGORIES_LIST_PATH);
 }
 
 export async function deleteCategoryAction(categoryId: string) {
-  await requirePermission('master_data.manage');
+  // RLS (0005) already restricts brand/category DELETE to admin and above;
+  // this permission mirrors that boundary at the app layer, exactly like
+  // products.delete does for products.
+  await requirePermission('master_data.delete');
   const supabase = createClient();
 
   const { data, error } = await supabase
@@ -421,5 +551,5 @@ export async function deleteCategoryAction(categoryId: string) {
 
   if (data?.image_url) await deleteMedia(data.image_url);
 
-  revalidatePath('/admin/catalog');
+  revalidatePath(CATEGORIES_LIST_PATH);
 }

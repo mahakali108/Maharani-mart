@@ -12,6 +12,8 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | View products | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Create / edit products | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Delete products | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Manage categories & brands (create / edit / activate / deactivate) | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Delete categories & brands | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Manage pricing & schemes | ✅ | ✅ | ❌ | ❌ | ❌ |
 | View inventory | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Manage inventory (stock movements) | ✅ | ✅ | ✅ | ❌ | ❌ |
@@ -41,6 +43,7 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 ## Notes
 
 - **Staff** can create/edit products but not delete them — deletion is reserved for Admin/Super Admin to prevent accidental catalog loss during day-to-day operations.
+- **Categories & brands** follow the same split: `master_data.manage` (create/edit/deactivate) is also held by Staff, while `master_data.delete` is Admin/Super Admin only — mirroring the RLS `brands_admin_delete` / `categories_admin_delete` policies (0005) exactly. A brand or category still linked to products cannot be deleted (FK-protected); deactivate it instead.
 - **Salesman** never sees another salesman's orders or retailers outside their assigned beat — enforced via `orders.collected_by` and `retailers.assigned_salesman_id` in RLS.
 - **Retailer** RLS scopes every query to `retailer_id = auth.uid()` — there is no code path, buggy or otherwise, that returns another retailer's data.
 - **Admin Dashboard** (`dashboard.view`) is the operational home for Admin and Super Admin. Individual cards still hide behind existing permissions (`orders.view.all`, `inventory.view`, `retailers.manage_wallet`, `collections.verify`, `support.manage`). The Super Admin Command Center stays `command_center.view` only.

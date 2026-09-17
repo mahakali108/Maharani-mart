@@ -18,6 +18,7 @@ export type Permission =
   | 'products.edit'
   | 'products.delete'
   | 'master_data.manage'
+  | 'master_data.delete'
   | 'pricing.manage'
   | 'inventory.view'
   | 'inventory.manage'
@@ -63,7 +64,7 @@ export type Permission =
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
-    'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
+    'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage', 'master_data.delete',
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
@@ -74,7 +75,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'command_center.view', 'dashboard.view', 'support.manage',
   ],
   admin: [
-    'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
+    'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage', 'master_data.delete',
     'pricing.manage', 'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',

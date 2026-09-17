@@ -18,12 +18,12 @@ export function CategoryForm({ categories }: { categories: CategoryOption[] }) {
   const [state, formAction] = useFormState(createCategoryAction, initialState);
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <div className="flex-1">
+    <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="min-w-[180px] flex-1">
         <Label htmlFor="categoryName">Category name</Label>
         <Input id="categoryName" name="name" placeholder="e.g. Beverages, Snacks" required />
       </div>
-      <div className="flex-1">
+      <div className="min-w-[180px] flex-1">
         <Label htmlFor="parentId">Parent category</Label>
         <Select id="parentId" name="parentId" defaultValue="">
           <option value="">— Top level —</option>
@@ -33,6 +33,19 @@ export function CategoryForm({ categories }: { categories: CategoryOption[] }) {
             </option>
           ))}
         </Select>
+      </div>
+      <div className="sm:w-28">
+        <Label htmlFor="categorySortOrder">Sort order</Label>
+        <Input
+          id="categorySortOrder"
+          name="sortOrder"
+          type="number"
+          min={0}
+          max={9999}
+          step={1}
+          inputMode="numeric"
+          placeholder="0"
+        />
       </div>
       <SubmitButton pendingLabel="Adding…" className="w-full sm:w-auto">
         Add category
