@@ -122,15 +122,36 @@ export interface AdminCatalogParams {
   page: number;
 }
 
-export const ADMIN_SEARCH_FIELDS = ['all', 'name', 'barcode', 'hsn'] as const;
+/**
+ * Fields the search box can be narrowed to.
+ *
+ * `sku` searches `product_packs.pack_sku_code` — the internal variant code that
+ * stock, GRN and the salesman order builder still work with. The PRODUCT-level
+ * `products.sku_code` is deliberately NOT searchable: migration 0023 removed it
+ * from the workflow, made it nullable with a generated default, and it is never
+ * shown to a user, so searching it would surface a value nobody can act on.
+ */
+export const ADMIN_SEARCH_FIELDS = ['all', 'name', 'sku', 'barcode', 'hsn'] as const;
 export type AdminSearchField = (typeof ADMIN_SEARCH_FIELDS)[number];
 
 export const ADMIN_SEARCH_FIELD_LABELS: Record<AdminSearchField, string> = {
   all: 'Everything',
   name: 'Product name',
+  sku: 'Variant SKU',
   barcode: 'Barcode / EAN',
   hsn: 'HSN code',
 };
+
+/**
+ * True when the selected search field can only be answered by first resolving
+ * matching product ids from another table (currently: the variant SKU, which
+ * lives on `product_packs`). The page uses this to decide whether to issue the
+ * related-ids lookup, and to short-circuit to an empty set when it matches
+ * nothing — an empty id list must mean "no results", never "no filter".
+ */
+export function needsRelatedIdLookup(field: AdminSearchField): boolean {
+  return field === 'all' || field === 'sku';
+}
 
 /**
  * Strip LIKE wildcards and collapse whitespace.

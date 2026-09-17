@@ -23,8 +23,8 @@ import {
   countAdminFilters,
   hasAdminFilters,
   needsDerivedLookup,
+  needsRelatedIdLookup,
   parseAdminCatalogParams,
-  type AdminCatalogParams,
 } from '@/lib/admin/catalog-query';
 import {
   ADMIN_PRODUCT_SELECT,
@@ -34,6 +34,7 @@ import {
   loadSearchRelatedIds,
   loadStockMap,
   matchesDerivedFilters,
+  searchMatchesNothing,
   resolveAdminProducts,
   sortResolvedProducts,
   type AdminProductRow,
@@ -72,10 +73,14 @@ export default async function ProductsPage({
   const canViewCost = can(user.role, 'products.view_cost');
 
   const derived = needsDerivedLookup(params);
-  const relatedIds = params.q && params.field === 'all'
-    ? await loadSearchRelatedIds(supabase, params.q)
+  // The variant-SKU field resolves product ids from product_packs first; `all`
+  // resolves brand / category / variant names. Every other field is a direct
+  // column on `products`, so no extra lookup is issued for them.
+  const relatedIds = params.q && needsRelatedIdLookup(params.field)
+    ? await loadSearchRelatedIds(supabase, params.q, params.field === 'sku' ? 'sku' : 'all')
     : { brandIds: [], categoryIds: [], packProductIds: [] };
   const searchClause = buildSearchClause(params, relatedIds);
+  const noPossibleResults = searchMatchesNothing(params, relatedIds);
 
   // Derived lookups are only issued when something actually needs them, so the
   // default browse path stays a single paginated query.
@@ -115,7 +120,11 @@ export default async function ProductsPage({
   let salesMap2 = salesMap;
   let costMap2 = costMap;
 
-  if (derived) {
+  if (noPossibleResults) {
+    // Nothing to query: report an empty set rather than an unfiltered one.
+    rows = [];
+    total = 0;
+  } else if (derived) {
     // MODE 2 — bounded working set. Ordered by name so the cap, when it binds,
     // drops a deterministic tail rather than an arbitrary one.
     const { data, count, error } = await baseQuery()
@@ -228,8 +237,8 @@ export default async function ProductsPage({
       </div>
 
       <Card>
-        <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-6">
-          <div className="relative sm:col-span-2">
+        <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="relative sm:col-span-2 lg:col-span-2">
             <Input name="q" defaultValue={params.q} placeholder="Search products…" className="pl-3" />
           </div>
           <Select name="field" defaultValue={params.field}>
@@ -320,7 +329,7 @@ export default async function ProductsPage({
               </option>
             ))}
           </Select>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-6">
             <Button type="submit" variant="secondary" size="sm">
               Apply
             </Button>

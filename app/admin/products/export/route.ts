@@ -11,6 +11,7 @@ import {
   loadSearchRelatedIds,
   loadStockMap,
   matchesDerivedFilters,
+  searchMatchesNothing,
   productCasePrice,
   productMoq,
   resolveAdminProducts,
@@ -19,6 +20,7 @@ import {
 import {
   ADMIN_DERIVED_LOOKUP_LIMIT,
   needsDerivedLookup,
+  needsRelatedIdLookup,
   parseAdminCatalogParams,
 } from '@/lib/admin/catalog-query';
 import { PRODUCT_EXPORT_HEADER, productExportCells } from '@/lib/admin/product-csv';
@@ -82,10 +84,16 @@ async function loadRows(
   const includeCost = can(user.role, 'products.view_cost');
   const supabase = createClient();
 
-  const relatedIds = params.q && params.field === 'all'
-    ? await loadSearchRelatedIds(supabase, params.q)
+  const relatedIds = params.q && needsRelatedIdLookup(params.field)
+    ? await loadSearchRelatedIds(supabase, params.q, params.field === 'sku' ? 'sku' : 'all')
     : { brandIds: [], categoryIds: [], packProductIds: [] };
   const searchClause = buildSearchClause(params, relatedIds);
+
+  // Mirror the list page exactly: a SKU search that resolves to no variant
+  // exports a header-only file, never the whole catalog.
+  if (searchMatchesNothing(params, relatedIds)) {
+    return { resolved: [], includeCost };
+  }
 
   let query = supabase.from('products').select(ADMIN_PRODUCT_SELECT);
   if (explicitIds) {

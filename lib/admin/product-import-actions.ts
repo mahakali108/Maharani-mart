@@ -240,7 +240,7 @@ export async function importProductsAction(formData: FormData): Promise<ImportRe
 
   const failed: { rowNumber: number; message: string }[] = [];
   let imported = 0;
-  let skipped = prepared.length - validRows.length;
+  const skipped = prepared.length - validRows.length;
 
   for (const row of validRows) {
     const value = row.value;

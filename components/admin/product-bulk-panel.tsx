@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useFormState } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Download } from 'lucide-react';
-import { bulkCatalogAction, type BulkResult } from '@/lib/admin/products-bulk-actions';
+import { bulkCatalogAction } from '@/lib/admin/products-bulk-actions';
+import type { BulkResult } from '@/lib/admin/products-bulk-shared';
 import { toggleProductActiveAction, deleteProductAction } from '@/lib/admin/products-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -278,20 +279,36 @@ export function ProductBulkPanel({
           </span>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-ink-100 bg-white">
+        {/*
+          The selection is carried by hidden inputs rather than by the visible
+          checkboxes, so the SAME set of ids is submitted whichever layout is on
+          screen. Rendering a `name="productIds"` checkbox in both the table and
+          the cards would submit every id twice on a narrow viewport.
+        */}
+        {ids.map((id) => (
+          <input key={id} type="hidden" name="productIds" value={id} />
+        ))}
+
+        <div className="flex items-center gap-3 px-1 lg:px-0">
+          <label className="flex items-center gap-2 text-xs font-semibold text-ink-500">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleAll}
+              aria-label="Select all products on this page"
+              className="h-4 w-4 rounded border-ink-300 text-primary-600 focus:ring-primary-600"
+            />
+            Select all ({rows.length})
+          </label>
+        </div>
+
+        {/* ==================== DESKTOP: TABLE (lg and up) ==================== */}
+        <div className="hidden overflow-hidden rounded-xl border border-ink-100 bg-white lg:block">
           <div className="table-scroll">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                 <tr>
-                  <th className="px-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleAll}
-                      aria-label="Select all products on this page"
-                      className="h-4 w-4 rounded border-ink-300 text-primary-600 focus:ring-primary-600"
-                    />
-                  </th>
+                  <th className="px-3 py-3 font-medium">Sel.</th>
                   <th className="px-4 py-3 font-medium">Product</th>
                   <th className="px-4 py-3 font-medium">Brand</th>
                   <th className="px-4 py-3 font-medium">Category</th>
@@ -313,8 +330,6 @@ export function ProductBulkPanel({
                       <td className="px-3 py-3">
                         <input
                           type="checkbox"
-                          name="productIds"
-                          value={row.id}
                           checked={selected.has(row.id)}
                           onChange={() => toggle(row.id)}
                           aria-label={`Select ${row.name}`}
@@ -330,9 +345,7 @@ export function ProductBulkPanel({
                             New
                           </span>
                         ) : null}
-                        {row.barcode ? (
-                          <p className="mt-0.5 font-mono text-[11px] text-ink-400">{row.barcode}</p>
-                        ) : null}
+                        {row.barcode ? <p className="mt-0.5 font-mono text-[11px] text-ink-400">{row.barcode}</p> : null}
                       </td>
                       <td className="px-4 py-3 text-ink-600">{row.brands?.name ?? '—'}</td>
                       <td className="px-4 py-3 text-ink-600">{row.categories?.name ?? '—'}</td>
@@ -379,9 +392,7 @@ export function ProductBulkPanel({
                           <button
                             type="button"
                             disabled={rowPending}
-                            onClick={() =>
-                              startRowTransition(() => toggleProductActiveAction(row.id, !row.is_active))
-                            }
+                            onClick={() => startRowTransition(() => toggleProductActiveAction(row.id, !row.is_active))}
                             className="mr-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-50"
                           >
                             {row.is_active ? 'Deactivate' : 'Activate'}
@@ -415,6 +426,135 @@ export function ProductBulkPanel({
             </table>
           </div>
         </div>
+
+        {/*
+          ==================== MOBILE / TABLET: CARDS (below lg) ====================
+          A 900px table on a phone is a horizontal scrollbar, not a layout. Below
+          `lg` the same rows render as cards carrying the same real values and
+          the same actions — no data is dropped to make it fit.
+        */}
+        <ul className="space-y-2.5 lg:hidden">
+          {rows.map((row) => {
+            const badge = row.stockStatus ? STOCK_BADGE[row.stockStatus] : null;
+            const isSelected = selected.has(row.id);
+            return (
+              <li
+                key={row.id}
+                className={cn(
+                  'rounded-xl border bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
+                  isSelected ? 'border-primary-300 bg-primary-50/40' : 'border-ink-100'
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggle(row.id)}
+                    aria-label={`Select ${row.name}`}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-ink-300 text-primary-600 focus:ring-primary-600"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/admin/products/${row.id}`}
+                      className="block truncate text-sm font-semibold text-ink-900 hover:text-primary-600"
+                    >
+                      {row.name}
+                    </Link>
+                    <p className="mt-0.5 truncate text-xs text-ink-500">
+                      {row.brands?.name ?? 'No brand'} · {row.categories?.name ?? 'No category'}
+                    </p>
+                    {row.barcode ? <p className="mt-0.5 font-mono text-[11px] text-ink-400">{row.barcode}</p> : null}
+                  </div>
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
+                      row.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'
+                    )}
+                  >
+                    {row.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs sm:grid-cols-3">
+                  <div>
+                    <dt className="text-ink-400">MRP / pc</dt>
+                    <dd className="font-semibold text-ink-800">₹{row.base_price.toFixed(2)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-400">GST</dt>
+                    <dd className="font-semibold text-ink-800">{row.gst_percent}%</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-400">MOQ</dt>
+                    <dd className="font-semibold text-ink-800">{row.moq ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-400">HSN</dt>
+                    <dd className="font-mono font-semibold text-ink-800">{row.hsn_code ?? '—'}</dd>
+                  </div>
+                  {canViewCost ? (
+                    <div>
+                      <dt className="text-ink-400">Margin</dt>
+                      <dd className={cn('font-semibold', row.margin !== null && row.margin < 0 ? 'text-rose-600' : 'text-ink-800')}>
+                        {row.margin === null ? '—' : `${row.margin.toFixed(2)}%`}
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt className="text-ink-400">Stock</dt>
+                    <dd>
+                      {badge ? (
+                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', badge.className)}>
+                          {badge.label}
+                          {row.available !== null ? ` · ${row.available}` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-ink-300">Unknown</span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+
+                {row.units30d !== null ? (
+                  <p className="mt-2 text-[10px] text-ink-400">{row.units30d} sold in the last 30 days</p>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-2.5">
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      disabled={rowPending}
+                      onClick={() => startRowTransition(() => toggleProductActiveAction(row.id, !row.is_active))}
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-50"
+                    >
+                      {row.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  ) : null}
+                  {canDelete ? (
+                    <button
+                      type="button"
+                      disabled={rowPending}
+                      onClick={() => {
+                        if (confirm(`Delete “${row.name}” permanently? This cannot be undone.`)) {
+                          startRowTransition(() => deleteProductAction(row.id));
+                        }
+                      }}
+                      className="text-xs font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                  <Link
+                    href={`/admin/products/${row.id}`}
+                    className="ml-auto text-xs font-medium text-ink-500 hover:text-ink-800"
+                  >
+                    Edit →
+                  </Link>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </form>
     </div>
   );

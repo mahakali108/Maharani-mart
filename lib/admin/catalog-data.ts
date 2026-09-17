@@ -196,6 +196,11 @@ export function buildSearchClause(params: AdminCatalogParams, relatedIds: {
   if (params.field === 'barcode') return `barcode.ilike.${like}`;
   if (params.field === 'hsn') return `hsn_code.ilike.${like}`;
   if (params.field === 'name') return `name.ilike.${like}`;
+  // `sku` lives on product_packs, so it can only be expressed as the id set the
+  // caller resolved with loadSearchRelatedIds(supabase, q, 'sku').
+  if (params.field === 'sku') {
+    return relatedIds.packProductIds.length > 0 ? `id.in.(${relatedIds.packProductIds.join(',')})` : null;
+  }
 
   const clauses = [`name.ilike.${like}`, `barcode.ilike.${like}`, `hsn_code.ilike.${like}`];
   if (relatedIds.brandIds.length > 0) clauses.push(`brand_id.in.(${relatedIds.brandIds.join(',')})`);
@@ -204,29 +209,62 @@ export function buildSearchClause(params: AdminCatalogParams, relatedIds: {
   return clauses.join(',');
 }
 
+/**
+ * True when the active search provably matches nothing.
+ *
+ * This matters for `field='sku'`: the variant SKU lives on `product_packs`, so
+ * it can only be applied as `id.in.(<resolved ids>)`. When that resolution comes
+ * back empty, `buildSearchClause` returns null — which every caller reads as
+ * "no filter". Without this predicate a SKU search for a code that does not
+ * exist would return the ENTIRE catalog, which is the opposite of what was
+ * asked. Same idea as the retailer catalog's `noPossibleResults` short-circuit.
+ */
+export function searchMatchesNothing(
+  params: { q: string; field: string },
+  relatedIds: { packProductIds: string[] }
+): boolean {
+  return Boolean(params.q) && params.field === 'sku' && relatedIds.packProductIds.length === 0;
+}
+
 /** Bound on how many variant/barcode matches are folded into the disjunction. */
 export const ADMIN_RELATED_MATCH_LIMIT = 200;
+
+/** Which product_packs columns a search term should be matched against. */
+export type PackSearchScope = 'all' | 'sku';
 
 /**
  * Resolve brand names, category names and variant labels that match the search
  * term, so "Tata" finds products whose BRAND is Tata and "500g" finds products
- * that have a 500g variant. Internal pack SKU codes are deliberately not a
- * search field — migration 0023 removed SKU codes from the workflow.
+ * that have a 500g variant.
+ *
+ * `scope='sku'` narrows the pack lookup to `pack_sku_code` alone and skips the
+ * brand/category lookups, which is what the "Variant SKU" search field needs.
+ * The PRODUCT-level `products.sku_code` is never searched: migration 0023
+ * removed it from the workflow and no surface displays it.
  */
 export async function loadSearchRelatedIds(
   supabase: SupabaseClient,
-  term: string
+  term: string,
+  scope: PackSearchScope = 'all'
 ): Promise<{ brandIds: string[]; categoryIds: string[]; packProductIds: string[] }> {
   const empty = { brandIds: [], categoryIds: [], packProductIds: [] };
   if (!term) return empty;
   const like = `%${term}%`;
+  const packClause =
+    scope === 'sku'
+      ? `pack_sku_code.ilike.${like}`
+      : `pack_name.ilike.${like},barcode.ilike.${like},pack_sku_code.ilike.${like}`;
   const [{ data: brandMatches }, { data: categoryMatches }, { data: packMatches }] = await Promise.all([
-    supabase.from('brands').select('id').ilike('name', like).limit(ADMIN_RELATED_MATCH_LIMIT).returns<{ id: string }[]>(),
-    supabase.from('categories').select('id').ilike('name', like).limit(ADMIN_RELATED_MATCH_LIMIT).returns<{ id: string }[]>(),
+    scope === 'sku'
+      ? Promise.resolve({ data: [] as { id: string }[] })
+      : supabase.from('brands').select('id').ilike('name', like).limit(ADMIN_RELATED_MATCH_LIMIT).returns<{ id: string }[]>(),
+    scope === 'sku'
+      ? Promise.resolve({ data: [] as { id: string }[] })
+      : supabase.from('categories').select('id').ilike('name', like).limit(ADMIN_RELATED_MATCH_LIMIT).returns<{ id: string }[]>(),
     supabase
       .from('product_packs')
       .select('product_id')
-      .or(`pack_name.ilike.${like},barcode.ilike.${like}`)
+      .or(packClause)
       .limit(ADMIN_RELATED_MATCH_LIMIT)
       .returns<{ product_id: string }[]>(),
   ]);

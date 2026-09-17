@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { parseGstRate, derivedPiecePrice } from '@/lib/admin/catalog-validation';
+import { normalizeBulkIds, type BulkResult, type BulkSkip } from '@/lib/admin/products-bulk-shared';
 
 /**
  * Bulk catalog operations.
@@ -14,7 +15,8 @@ import { parseGstRate, derivedPiecePrice } from '@/lib/admin/catalog-validation'
  *   what a role cannot do, but hiding is not enforcement — RLS plus
  *   `requirePermission` are.
  * * The product ids come from checkboxes in the page, so they are untrusted.
- *   Every write is additionally bounded by `MAX_BULK_IDS` and by the fact that
+ *   Every write is additionally bounded by `MAX_BULK_IDS` (see
+ *   lib/admin/products-bulk-shared.ts) and by the fact that
  *   an update `.in('id', ids)` can only touch rows RLS already lets the caller
  *   see.
  * * Every mutation lands in `audit_logs` through the existing triggers
@@ -24,41 +26,6 @@ import { parseGstRate, derivedPiecePrice } from '@/lib/admin/catalog-validation'
  * * Results are reported per row: a caller always learns how many rows changed
  *   and why any were skipped. Nothing fails silently.
  */
-
-/** Hard ceiling on one bulk operation, so a select-all cannot become a DoS. */
-export const MAX_BULK_IDS = 200;
-
-export interface BulkSkip {
-  id: string;
-  name: string;
-  reason: string;
-}
-
-export type BulkResult =
-  | { ok: true; message: string; updated: number; skipped: BulkSkip[] }
-  | { ok: false; error: string };
-
-export type BulkActionKind =
-  | 'activate'
-  | 'deactivate'
-  | 'category'
-  | 'brand'
-  | 'gst'
-  | 'moq'
-  | 'price';
-
-function normalizeIds(raw: FormData): { ids: string[] } | { error: string } {
-  const values = raw.getAll('productIds').map((value) => String(value).trim()).filter(Boolean);
-  const ids = [...new Set(values)];
-  if (ids.length === 0) return { error: 'Select at least one product first.' };
-  if (ids.length > MAX_BULK_IDS) {
-    return { error: `A bulk action can cover at most ${MAX_BULK_IDS} products at a time.` };
-  }
-  if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) {
-    return { error: 'The selection contained an invalid product reference. Reload and try again.' };
-  }
-  return { ids };
-}
 
 function revalidate() {
   revalidatePath('/admin/products');
@@ -77,7 +44,7 @@ function revalidate() {
 async function bulkSetActive(formData: FormData): Promise<BulkResult> {
   await requirePermission('products.edit');
 
-  const selected = normalizeIds(formData);
+  const selected = normalizeBulkIds(formData.getAll('productIds'));
   if ('error' in selected) return { ok: false, error: selected.error };
   const isActive = formData.get('isActive') === 'true';
 
@@ -103,7 +70,7 @@ async function bulkSetActive(formData: FormData): Promise<BulkResult> {
 async function bulkAssignTaxonomy(formData: FormData): Promise<BulkResult> {
   await requirePermission('products.edit');
 
-  const selected = normalizeIds(formData);
+  const selected = normalizeBulkIds(formData.getAll('productIds'));
   if ('error' in selected) return { ok: false, error: selected.error };
 
   const kind = formData.get('taxonomy');
@@ -159,7 +126,7 @@ async function bulkAssignTaxonomy(formData: FormData): Promise<BulkResult> {
 async function bulkSetGst(formData: FormData): Promise<BulkResult> {
   await requirePermission('products.edit');
 
-  const selected = normalizeIds(formData);
+  const selected = normalizeBulkIds(formData.getAll('productIds'));
   if ('error' in selected) return { ok: false, error: selected.error };
 
   const gst = parseGstRate(formData.get('gstPercent'));
@@ -195,7 +162,7 @@ async function bulkSetGst(formData: FormData): Promise<BulkResult> {
 async function bulkSetMoq(formData: FormData): Promise<BulkResult> {
   await requirePermission('products.edit');
 
-  const selected = normalizeIds(formData);
+  const selected = normalizeBulkIds(formData.getAll('productIds'));
   if ('error' in selected) return { ok: false, error: selected.error };
 
   const moq = Number(formData.get('moq'));
@@ -245,7 +212,7 @@ async function bulkSetMoq(formData: FormData): Promise<BulkResult> {
 async function bulkAdjustPrice(formData: FormData): Promise<BulkResult> {
   await requirePermission('pricing.manage');
 
-  const selected = normalizeIds(formData);
+  const selected = normalizeBulkIds(formData.getAll('productIds'));
   if ('error' in selected) return { ok: false, error: selected.error };
 
   const mode = formData.get('mode') === 'flat' ? 'flat' : 'percent';
