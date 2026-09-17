@@ -6,6 +6,11 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { deleteMedia, isRenderableMediaRef } from '@/lib/media';
+import {
+  categoryParentChainHits,
+  findBrandNameDuplicate,
+  findCategoryNameDuplicate,
+} from '@/lib/admin/taxonomy-data';
 import type { Database } from '@/types/database.types';
 
 export type MasterDataFormState = { error?: string } | null;
@@ -203,7 +208,7 @@ export async function deleteWarehouseAction(warehouseId: string) {
 // ----------------------------------------------------------------------------
 
 const brandSchema = z.object({
-  name: z.string().min(2, 'Enter a brand name.'),
+  name: z.string().trim().min(2, 'Enter a brand name.'),
   logoUrl: optionalMediaRefSchema,
 });
 
@@ -224,11 +229,21 @@ export async function createBrandAction(
   }
 
   const supabase = createClient();
+
+  // Case-insensitive duplicate pre-check. `brands.name` has only a
+  // case-sensitive unique constraint (0001), so "Tata" and "tata" would
+  // otherwise coexist. The constraint remains the backstop for races.
+  const duplicate = await findBrandNameDuplicate(supabase, parsed.data.name);
+  if (duplicate) {
+    return { error: `A brand with this name already exists (“${duplicate.name}”).` };
+  }
+
   const payload: BrandInsert = { name: parsed.data.name, logo_url: parsed.data.logoUrl || null };
   const { error } = await supabase.from('brands').insert(payload as unknown as never);
   if (error) return { error: error.message.includes('duplicate') ? 'A brand with this name already exists.' : error.message };
 
   revalidatePath('/admin/catalog');
+  revalidatePath('/admin/catalog/brands');
   return null;
 }
 
@@ -238,6 +253,7 @@ export async function toggleBrandActiveAction(brandId: string, isActive: boolean
   const { error } = await supabase.from('brands').update({ is_active: isActive } as unknown as never).eq('id', brandId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/catalog');
+  revalidatePath('/admin/catalog/brands');
 }
 
 export async function updateBrandAction(
@@ -256,6 +272,12 @@ export async function updateBrandAction(
   }
 
   const supabase = createClient();
+
+  // Same duplicate rule as create, ignoring the brand's own current name.
+  const duplicate = await findBrandNameDuplicate(supabase, parsed.data.name, brandId);
+  if (duplicate) {
+    return { error: `A brand with this name already exists (“${duplicate.name}”).` };
+  }
 
   // If the logo was replaced, remember the previous reference so the old
   // file can be cleaned up after the row update succeeds.
@@ -279,7 +301,8 @@ export async function updateBrandAction(
   }
 
   revalidatePath('/admin/catalog');
-  redirect('/admin/catalog');
+  revalidatePath('/admin/catalog/brands');
+  redirect('/admin/catalog/brands');
 }
 
 export async function deleteBrandAction(brandId: string) {
@@ -302,6 +325,7 @@ export async function deleteBrandAction(brandId: string) {
   if (data?.logo_url) await deleteMedia(data.logo_url);
 
   revalidatePath('/admin/catalog');
+  revalidatePath('/admin/catalog/brands');
 }
 
 // ----------------------------------------------------------------------------
@@ -309,12 +333,23 @@ export async function deleteBrandAction(brandId: string) {
 // ----------------------------------------------------------------------------
 
 const categorySchema = z.object({
-  name: z.string().min(2, 'Enter a category name.'),
+  name: z.string().trim().min(2, 'Enter a category name.'),
   parentId: z.string().uuid().optional().or(z.literal('')),
   imageUrl: optionalMediaRefSchema,
 });
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
+
+/** Postgres unique/FK violation text → an operator-readable message. */
+function categoryWriteError(error: { message: string }): string {
+  if (error.message.includes('duplicate')) {
+    return 'This category already exists under the selected parent.';
+  }
+  if (error.message.includes('foreign key') || error.message.includes('violates')) {
+    return 'The selected parent category no longer exists.';
+  }
+  return error.message;
+}
 
 export async function createCategoryAction(
   _prevState: MasterDataFormState,
@@ -332,15 +367,25 @@ export async function createCategoryAction(
   }
 
   const supabase = createClient();
+  const parentId = parsed.data.parentId || null;
+
+  // Pre-check mirrors categories_name_parent_ci_uq (0027): same parent,
+  // case-insensitive name. The index remains the backstop for races.
+  const duplicate = await findCategoryNameDuplicate(supabase, parsed.data.name, parentId);
+  if (duplicate) {
+    return { error: `This category already exists under the selected parent (“${duplicate.name}”).` };
+  }
+
   const payload: CategoryInsert = {
     name: parsed.data.name,
-    parent_id: parsed.data.parentId || null,
+    parent_id: parentId,
     image_url: parsed.data.imageUrl || null,
   };
   const { error } = await supabase.from('categories').insert(payload as unknown as never);
-  if (error) return { error: error.message.includes('duplicate') ? 'This category already exists under the selected parent.' : error.message };
+  if (error) return { error: categoryWriteError(error) };
 
   revalidatePath('/admin/catalog');
+  revalidatePath('/admin/catalog/categories');
   return null;
 }
 
@@ -353,6 +398,7 @@ export async function toggleCategoryActiveAction(categoryId: string, isActive: b
     .eq('id', categoryId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/catalog');
+  revalidatePath('/admin/catalog/categories');
 }
 
 export async function updateCategoryAction(
@@ -375,6 +421,20 @@ export async function updateCategoryAction(
   }
 
   const supabase = createClient();
+  const parentId = parsed.data.parentId || null;
+
+  // Same duplicate rule as create, ignoring the category's own current name.
+  const duplicate = await findCategoryNameDuplicate(supabase, parsed.data.name, parentId, categoryId);
+  if (duplicate) {
+    return { error: `This category already exists under the selected parent (“${duplicate.name}”).` };
+  }
+
+  // A parent must not be the category itself or any of its descendants,
+  // otherwise A → B → A silently disappears from the retailer directory
+  // (which renders top-level categories and their children).
+  if (parentId && (await categoryParentChainHits(supabase, categoryId, parentId))) {
+    return { error: 'That parent would create a circular category chain. Pick a top-level category instead.' };
+  }
 
   const { data: existing } = await supabase
     .from('categories')
@@ -384,14 +444,12 @@ export async function updateCategoryAction(
 
   const payload: Partial<CategoryInsert> = {
     name: parsed.data.name,
-    parent_id: parsed.data.parentId || null,
+    parent_id: parentId,
     image_url: parsed.data.imageUrl || null,
   };
   const { error } = await supabase.from('categories').update(payload as unknown as never).eq('id', categoryId);
   if (error) {
-    return {
-      error: error.message.includes('duplicate') ? 'This category already exists under the selected parent.' : error.message,
-    };
+    return { error: categoryWriteError(error) };
   }
 
   if (existing?.image_url && existing.image_url !== payload.image_url) {
@@ -399,7 +457,8 @@ export async function updateCategoryAction(
   }
 
   revalidatePath('/admin/catalog');
-  redirect('/admin/catalog');
+  revalidatePath('/admin/catalog/categories');
+  redirect('/admin/catalog/categories');
 }
 
 export async function deleteCategoryAction(categoryId: string) {
@@ -422,4 +481,5 @@ export async function deleteCategoryAction(categoryId: string) {
   if (data?.image_url) await deleteMedia(data.image_url);
 
   revalidatePath('/admin/catalog');
+  revalidatePath('/admin/catalog/categories');
 }
