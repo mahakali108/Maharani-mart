@@ -110,14 +110,22 @@ export function ProductCard({
             <StoredImage
               src={imageUrl} alt={name} fill size="card"
               sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 280px"
-              className="object-contain p-3 transition duration-300 motion-safe:group-hover:scale-105"
-              fallback={<div className="flex h-full flex-col items-center justify-center gap-1.5 px-2 text-center text-slate-500"><ImageOff className="h-7 w-7" aria-hidden="true" /><span className="text-[10px]">Image unavailable</span></div>}
+              className="object-contain p-2 transition duration-300 motion-safe:group-hover:scale-105 sm:p-3"
+              // Compact, neutral placeholder: same box as a real image, never a
+              // tall empty panel and never a broken-image icon.
+              fallback={<div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-slate-400"><ImageOff className="h-6 w-6" aria-hidden="true" /><span className="text-[9px]">Image unavailable</span></div>}
             />
             <div className="absolute left-1.5 top-1.5 flex max-w-[65%] flex-col items-start gap-1">
               {discount > 0 ? <span className="rounded-md bg-emerald-700 px-1.5 py-1 text-[10px] font-bold text-white">{discount}% off</span> : null}
               {hasOffer ? <span className="rounded-md bg-amber-100 px-1.5 py-1 text-[10px] font-semibold text-amber-900">Offer</span> : null}
               {isNewLaunch ? <span className="rounded-md bg-action-600 px-1.5 py-1 text-[10px] font-semibold text-white">New</span> : null}
             </div>
+            {/* Stock rides on the image edge instead of costing its own row —
+                the same information, ~30px shorter per card on a phone. */}
+            <span className={cn('absolute bottom-1.5 left-1.5 max-w-[calc(100%-0.75rem)] truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold shadow-sm',
+              availability === 'in_stock' && defaultPackId ? 'bg-emerald-50/95 text-emerald-800' : availability === 'low_stock' ? 'bg-amber-50/95 text-amber-800' : 'bg-slate-100/95 text-slate-600')}>
+              {availabilityLabel}
+            </span>
           </div>
         </Link>
         {/* A sibling of the link, never an interactive element nested in it. */}
@@ -128,7 +136,7 @@ export function ProductCard({
         </button>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col px-2.5 pb-2.5 pt-3 sm:px-3 sm:pb-3">
+      <div className="flex min-w-0 flex-1 flex-col px-2.5 pb-2.5 pt-2 sm:px-3 sm:pb-3 sm:pt-3">
         {brandName ? <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">{brandName}</p> : null}
         <Link href={detailsHref} className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500">
           <h3 className="mt-0.5 line-clamp-2 min-h-[2.5rem] break-words text-xs font-semibold leading-5 text-slate-900 group-hover:text-action-700 sm:text-sm">{name}</h3>
@@ -136,32 +144,38 @@ export function ProductCard({
         <p className="mt-1 min-h-4 break-words text-[10px] text-slate-500 sm:text-[11px]">
           {packName ? <span>{packName} · </span> : null}{defaultPackId ? <>MOQ {moq} pc{moq === 1 ? '' : 's'}</> : 'No active pack'}
         </p>
-        <span className={cn('mt-2 w-fit rounded-md px-1.5 py-1 text-[10px] font-semibold',
-          availability === 'in_stock' && defaultPackId ? 'bg-emerald-50 text-emerald-800' : availability === 'low_stock' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600')}>
-          {availabilityLabel}
-        </span>
 
-        <div className="mt-3 border-t border-slate-100 pt-2.5">
+        <div className="mt-2 border-t border-slate-100 pt-2 sm:mt-3 sm:pt-2.5">
           <p className="text-[9px] font-medium text-slate-500 sm:text-[10px]">Piece price · GST inclusive</p>
           <p className="mt-0.5 break-words text-lg font-bold tracking-tight text-slate-950 sm:text-xl">
             {piecePrice !== null && piecePrice > 0 ? <>{formatInr(piecePrice)}<span className="text-[10px] font-normal text-slate-500"> /pc</span></> : <span className="text-xs font-semibold text-slate-600">Price unavailable</span>}
           </p>
-          {mrp != null && mrp > 0 ? <p className="mt-1 text-[10px] text-slate-500">MRP <span className={cn(piecePrice !== null && mrp > piecePrice && 'line-through')}>{formatInr(mrp)}</span></p> : null}
-          {savings > 0 ? <p className="mt-1 text-[10px] font-semibold text-emerald-700">Save {formatInr(savings)} /pc</p> : null}
-          {gstPercent != null && piecePrice !== null ? <p className="mt-1 text-[9px] text-slate-500">Includes {gstPercent}% GST</p> : null}
-          {nextTierHint ? <p aria-hidden={quantity >= nextTierHint.minQuantity} className={cn("mt-2 flex min-h-4 items-start gap-1 text-[10px] font-medium text-action-700", quantity >= nextTierHint.minQuantity && "invisible")}><Tag className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>{nextTierHint.minQuantity} pcs: {formatInr(nextTierHint.pricePerPiece)}/pc</span></p> : null}
+          {/* MRP and the saving share one line: both stay readable, the card
+              keeps ~14px of height. */}
+          {mrp != null && mrp > 0 || savings > 0 ? <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-[10px]">
+            {mrp != null && mrp > 0 ? <span className="text-slate-500">MRP <span className={cn(piecePrice !== null && mrp > piecePrice && 'line-through')}>{formatInr(mrp)}</span></span> : null}
+            {savings > 0 ? <span className="font-semibold text-emerald-700">Save {formatInr(savings)} /pc</span> : null}
+          </div> : null}
+          {gstPercent != null && piecePrice !== null ? <p className="mt-0.5 text-[9px] text-slate-500">Includes {gstPercent}% GST</p> : null}
+          {nextTierHint ? <p aria-hidden={quantity >= nextTierHint.minQuantity} className={cn("mt-1.5 flex min-h-4 items-start gap-1 text-[10px] font-medium text-action-700 sm:mt-2", quantity >= nextTierHint.minQuantity && "invisible")}><Tag className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>{nextTierHint.minQuantity} pcs: {formatInr(nextTierHint.pricePerPiece)}/pc</span></p> : null}
         </div>
 
-        <div className="mt-auto space-y-2 pt-3">
+        <div className="mt-auto space-y-2 pt-2.5 sm:pt-3">
           {!unavailable ? <>
-            <QtyStepper value={quantity} min={moq} compact disabled={isPending}
-              onChange={(next) => { setQuantity(next); setAdded(false); setError(null); }} label={`${name} quantity in pieces`} />
-            <button type="button" onClick={handleQuickAdd} disabled={isPending || pricing?.orderable === false}
-              aria-label={`Add ${quantity} ${name} pieces to cart`}
-              className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-action-600 px-1 text-[11px] font-semibold text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs">
-              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : added ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />}
-              {isPending ? 'Adding…' : added ? 'Add again' : 'Add to Cart'}
-            </button>
+            {/* Quantity and Add share one row on phones — the card loses a
+                whole 44px step while both controls keep usable targets. */}
+            <div className="flex items-center gap-1.5">
+              <div className="w-[7rem] shrink-0">
+                <QtyStepper value={quantity} min={moq} compact disabled={isPending}
+                  onChange={(next) => { setQuantity(next); setAdded(false); setError(null); }} label={`${name} quantity in pieces`} />
+              </div>
+              <button type="button" onClick={handleQuickAdd} disabled={isPending || pricing?.orderable === false}
+                aria-label={`Add ${quantity} ${name} pieces to cart`}
+                className="flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-action-600 px-1 text-[11px] font-semibold text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs">
+                {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : added ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />}
+                {isPending ? 'Adding…' : added ? 'Add again' : 'Add to Cart'}
+              </button>
+            </div>
           </> : <p className="py-1 text-[10px] text-slate-500">{availability === 'out_of_stock' ? 'Check details for stock updates.' : 'Check details for current terms.'}</p>}
           <Link href={detailsHref} aria-label={`View details for ${name}`} className="flex min-h-10 w-full items-center justify-center rounded-lg border border-slate-200 px-1 text-[11px] font-semibold text-action-700 transition hover:border-action-300 hover:bg-action-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:text-xs">View Details</Link>
           {added ? <p role="status" className="text-[10px] font-medium text-emerald-700">Added to your cart.</p> : null}

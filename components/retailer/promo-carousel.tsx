@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { PromoBanner } from '@/components/retailer/promo-banner';
 import { cn } from '@/lib/utils/cn';
@@ -26,6 +26,10 @@ export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
   const activeIndex = index < banners.length ? index : 0;
   const hasMultiple = banners.length > 1;
   const rotating = hasMultiple && !paused && !hovered && !reducedMotion && !hidden;
+  // Horizontal swipe on touch devices. `touch-pan-y` on the track keeps
+  // vertical page scrolling native while we only consume the sideways drag.
+  const swipeStartX = useRef<number | null>(null);
+  const SWIPE_THRESHOLD_PX = 40;
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -47,6 +51,8 @@ export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
     return () => window.clearInterval(timer);
   }, [rotating, banners.length]);
 
+  // No active/visible banner => the section is not rendered at all: no empty
+  // frame, no placeholder image, no reserved height.
   if (banners.length === 0) return null;
   const controlClass = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500';
   function show(next: number) { setPaused(true); setIndex((next + banners.length) % banners.length); }
@@ -56,7 +62,22 @@ export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       onFocusCapture={(event) => { if (!(event.target as HTMLElement).closest('[data-rotation-control]')) setPaused(true); }}
       className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="grid" aria-live={rotating ? 'off' : 'polite'}>
+      <div
+        className="grid touch-pan-y"
+        aria-live={rotating ? 'off' : 'polite'}
+        onTouchStart={(event) => { swipeStartX.current = event.touches[0]?.clientX ?? null; }}
+        onTouchEnd={(event) => {
+          const start = swipeStartX.current;
+          swipeStartX.current = null;
+          const end = event.changedTouches[0]?.clientX;
+          if (start === null || typeof end !== 'number') return;
+          const delta = end - start;
+          // A deliberate sideways drag only: a tap or a vertical scroll (which
+          // can end with a small horizontal drift) must not change the slide.
+          if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
+          show(delta < 0 ? activeIndex + 1 : activeIndex - 1);
+        }}
+      >
         {banners.map((banner, slideIndex) => (
           <div key={banner.id} role="group" aria-roledescription="slide" aria-label={`${slideIndex + 1} of ${banners.length}`}
             aria-hidden={slideIndex !== activeIndex}

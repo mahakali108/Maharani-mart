@@ -72,10 +72,10 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
 
       <PromoCarousel banners={data.banners} />
 
-      <section aria-label="Shop by category" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <section aria-label="Shop by category" className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:space-y-4 sm:p-5">
         <SectionHeading eyebrow="Find your aisle" title="Shop by category" href="/retailer/categories" linkLabel="View all categories" />
-        {data.categories.length ? <ul className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 lg:grid-cols-10">
-          {data.categories.map((category) => <li className="min-w-0" key={category.id}><CategoryCard category={category} compact /></li>)}
+        {data.categories.length ? <ul className="scrollbar-none -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-5 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-10">
+          {data.categories.map((category) => <li className="w-[5.5rem] min-w-0 shrink-0 snap-start sm:w-auto" key={category.id}><CategoryCard category={category} compact href={`/retailer/categories?category=${category.id}`} /></li>)}
         </ul> : <HomeEmptyState icon={LayoutGrid} title={data.errors.categories ? 'Categories are temporarily unavailable' : 'No categories available yet'} body="You can still open the catalog to look for products." href="/retailer/catalog" linkLabel="Browse catalog" />}
       </section>
 

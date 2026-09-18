@@ -143,36 +143,54 @@ describe('catalog pagination math', () => {
 
 describe('catalog page wiring', () => {
   const page = read('app/retailer/catalog/page.tsx');
+  // The query itself lives in the shared loader so the page and the JSON feed
+  // can never disagree about what "the next batch" means.
+  const feed = read('lib/retailer/catalog-feed.ts');
 
   it('paginates in the database when it safely can', () => {
-    expect(page).toContain('.range(from, to)');
-    expect(page).toContain("count: 'exact'");
-    expect(page).toContain('catalogPageRange(');
-    expect(page).toContain('catalogTotalPages(');
+    expect(feed).toContain('.range(window.from, window.to)');
+    expect(feed).toContain("count: 'exact'");
+    expect(feed).toContain('catalogFeedWindow(');
+    // Every ordering ends in `id`, so a batch cursor is deterministic.
+    expect(feed).toContain(".order('id', { ascending: true })");
   });
 
   it('bounds the in-memory working set instead of fetching the whole catalog', () => {
-    expect(page).toContain('.limit(CATALOG_MAX_ROWS)');
-    expect(page).toContain('resultCapped');
+    expect(feed).toContain('.limit(CATALOG_MAX_ROWS)');
+    expect(feed).toContain('workingSetCapped');
   });
 
-  it('renders pagination controls and tells the truth when the cap binds', () => {
-    expect(page).toContain('catalogPageHref(filterValues, page - 1)');
-    expect(page).toContain('catalogPageHref(filterValues, page + 1)');
-    expect(page).toContain('Page {page} of {totalPages}');
+  it('loads continuously on the page instead of showing page numbers', () => {
+    // No "Page 1 of 2", no page links, no Next button — the list appends.
+    expect(page).not.toContain('Page {page} of {totalPages}');
+    expect(page).not.toContain('catalogPageHref(');
+    expect(page).not.toContain('aria-label="Catalog pages"');
+    expect(page).toContain('<CatalogFeed');
+    expect(page).toContain('loadCatalogFeed(');
+    // Changing a filter remounts the feed onto the new first batch.
+    expect(page).toContain('key={feedKey}');
+    // …and the honest cap message survives.
     expect(page).toContain('Narrow the search or pick a category to see the rest');
   });
 
+  it('bounds how much one continuous session can pull into the browser', () => {
+    expect(feed).toContain('CATALOG_FEED_MAX_ROWS');
+    expect(feed).toContain('feedCapped');
+    // The server stops handing out batches at the cap instead of streaming the
+    // whole catalog into the phone.
+    expect(feed).toContain('nextOffset: hasMore ? consumed : null');
+  });
+
   it('searches variant/size and barcode but never an internal SKU', () => {
-    expect(page).toContain('pack_name.ilike');
-    expect(page).toContain('barcode.ilike');
-    expect(page).not.toContain('sku_code');
-    expect(page).not.toContain('pack_sku_code');
+    expect(feed).toContain('pack_name.ilike');
+    expect(feed).toContain('barcode.ilike');
+    expect(feed).not.toContain('sku_code');
+    expect(feed).not.toContain('pack_sku_code');
   });
 
   it('only pays for the order-frequency ranking when that sort is requested', () => {
-    expect(page).toContain("sort === 'frequent'");
-    expect(page).toContain('getOrderFrequencyMap');
+    expect(feed).toContain("sort === 'frequent'");
+    expect(feed).toContain('getOrderFrequencyMap');
   });
 
   /**
@@ -184,7 +202,7 @@ describe('catalog page wiring', () => {
    * "Frequent" tab even though the retailer buys it every week.
    */
   it('restricts the frequent sort to the retailer\'s real order history, not the fetch window', () => {
-    const frequentBlock = page.match(
+    const frequentBlock = feed.match(
       /if \(sort === 'frequent' && frequency\.size > 0\) \{[\s\S]*?\n  \}/
     );
     expect(frequentBlock, 'frequent sort must restrict the query to the history ids').not.toBeNull();
@@ -195,26 +213,28 @@ describe('catalog page wiring', () => {
     // Bounded by the same cap as the working set, so the fetched set always fits
     // in one window and the `.in()` list stays small.
     expect(block).toContain('.slice(0, CATALOG_MAX_ROWS)');
-    expect(block).toContain("query = query.in('id', frequentIds)");
+    expect(block).toContain("productsQuery = productsQuery.in('id', frequentIds)");
     // No history => nothing to restrict to, and the existing plain-catalog
     // fallback is preserved rather than showing an empty tab.
     expect(block).toContain('frequency.size > 0');
   });
 
   it('ranks the frequent sort by real times-ordered, never an invented popularity score', () => {
-    expect(page).toContain(
+    expect(feed).toContain(
       "if (sort === 'frequent') return b.timesOrdered - a.timesOrdered || Number(b.isNewLaunch) - Number(a.isNewLaunch);"
     );
     // `timesOrdered` is derived from this retailer's own order_items, so the
     // ranking is real history. There is no popularity/bestseller/trending
     // column in the schema and none is fabricated here: every SQL ORDER BY on
     // this page must name a column that genuinely exists.
-    const orderByColumns = [...page.matchAll(/\.order\('([a-z_]+)'/g)].map((match) => match[1]);
+    // `id` is the deterministic tie-breaker appended to every ordering (it makes
+    // the batch cursor stable); every other column is a real sortable column.
+    const orderByColumns = [...feed.matchAll(/\.order\('([a-z_]+)'/g)].map((match) => match[1]);
     expect(orderByColumns.length).toBeGreaterThan(0);
     for (const column of orderByColumns) {
-      expect(['name', 'created_at', 'is_new_launch', 'sort_order']).toContain(column);
+      expect(['name', 'created_at', 'is_new_launch', 'sort_order', 'id']).toContain(column);
     }
-    expect(page).not.toMatch(/\.order\('(popularity|sales_rank|bestseller|trending_score)'/);
+    expect(feed).not.toMatch(/\.order\('(popularity|sales_rank|bestseller|trending_score)'/);
   });
 });
 

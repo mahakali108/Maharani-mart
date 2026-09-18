@@ -33,6 +33,24 @@ export const CATALOG_MAX_ROWS = 240;
 /** Upper bound on accepted `?page=` so a huge value cannot request a deep range. */
 export const CATALOG_MAX_PAGE = 500;
 
+/**
+ * CONTINUOUS (infinite-scroll) FEED BOUNDS.
+ *
+ * The mobile catalog now appends batches instead of paging, so the browser
+ * would otherwise keep pulling rows forever on a long scroll. `offset` is the
+ * cursor: a server-clamped, non-negative row index. The server never hands out
+ * more than `CATALOG_FEED_MAX_ROWS` rows for one feed session and says so
+ * (`capped`) instead of silently truncating — the retailer can then narrow the
+ * search or pick a category. This is still BOUNDED pagination, not keyset:
+ * `products` has no client-visible ordering key suitable for a safe keyset
+ * predicate on every supported sort, so the offset is clamped server-side and
+ * every batch is de-duplicated by product id in the client.
+ */
+export const CATALOG_FEED_MAX_ROWS = 480;
+
+/** Rows per feed batch (the server's fixed limit; a client cannot raise it). */
+export const CATALOG_FEED_PAGE_SIZE = CATALOG_PAGE_SIZE;
+
 export interface CatalogQuery {
   q?: string;
   category?: string;
@@ -120,7 +138,7 @@ export function catalogTotalPages(count: number, pageSize: number = CATALOG_PAGE
  * filter or a sort must land on page 1 of the new result set, not on page 5 of
  * a set that may not have one. Pagination links use catalogPageHref instead.
  */
-export function catalogHref(query: CatalogQuery): string {
+export function catalogQueryString(query: CatalogQuery): string {
   const params = new URLSearchParams();
   if (query.q) params.set('q', query.q);
   if (query.category) params.set('category', query.category);
@@ -133,8 +151,22 @@ export function catalogHref(query: CatalogQuery): string {
   if (query.fav === '1') params.set('fav', '1');
   if (query.new === '1') params.set('new', '1');
   if (query.offers === '1') params.set('offers', '1');
-  const qs = params.toString();
+  return params.toString();
+}
+
+export function catalogHref(query: CatalogQuery): string {
+  const qs = catalogQueryString(query);
   return `/retailer/catalog${qs ? `?${qs}` : ''}`;
+}
+
+/**
+ * One batch of the JSON feed: the same filters/sort as `catalogHref` plus the
+ * cursor. Only `offset` is added — `page` is never part of a feed request.
+ */
+export function catalogFeedHref(query: CatalogQuery, offset: number): string {
+  const params = new URLSearchParams(catalogQueryString(query));
+  params.set('offset', String(Math.max(0, Math.floor(offset))));
+  return `/api/retailer/catalog?${params.toString()}`;
 }
 
 /** Pagination link: the current filter/sort state plus an explicit page. */
@@ -142,6 +174,45 @@ export function catalogPageHref(query: CatalogQuery, page: number): string {
   const base = catalogHref(query);
   if (page <= 1) return base;
   return `${base}${base.includes('?') ? '&' : '?'}page=${page}`;
+}
+
+/**
+ * Feed cursor from `?offset=`. Non-numeric or negative values mean "start at
+ * the top" — a bad cursor must never skip or duplicate a batch.
+ */
+export function parseCatalogOffset(value: string | undefined): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(parsed, CATALOG_FEED_MAX_ROWS);
+}
+
+/**
+ * Clamp a requested window into the feed's hard bounds. Returns the window the
+ * server will actually read, so the caller can tell the truth about the cap.
+ */
+export function catalogFeedWindow(
+  offset: number,
+  limit: number = CATALOG_FEED_PAGE_SIZE,
+  maxRows: number = CATALOG_FEED_MAX_ROWS
+): { offset: number; limit: number; maxRows: number; from: number; to: number } {
+  const safeLimit = Math.min(Math.max(1, Math.floor(limit)), CATALOG_FEED_PAGE_SIZE);
+  const safeMax = Math.max(safeLimit, Math.floor(maxRows));
+  const safeOffset = Math.min(Math.max(0, Math.floor(offset)), safeMax - safeLimit);
+  return { offset: safeOffset, limit: safeLimit, maxRows: safeMax, from: safeOffset, to: safeOffset + safeLimit - 1 };
+}
+
+/** Legacy `?page=` deep links keep working: page N is the Nth batch. */
+export function catalogOffsetFromPage(page: number, pageSize: number = CATALOG_PAGE_SIZE): number {
+  return Math.max(0, (Math.max(1, Math.floor(page)) - 1) * Math.max(1, Math.floor(pageSize)));
+}
+
+/**
+ * Stable identity of one feed: the same filters/sort always produce the same
+ * batches. `page` is deliberately excluded (a page is just an offset into the
+ * same result set), which is what lets the client resume a feed it already had.
+ */
+export function catalogFeedKey(query: CatalogQuery): string {
+  return catalogHref(query);
 }
 
 export function parseOptionalNumber(value: string | undefined): number | null {

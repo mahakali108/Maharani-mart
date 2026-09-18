@@ -14,8 +14,13 @@ import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import type { ProductCardProps, SlabOffer } from '@/components/retailer/product-card';
 import { buildProductCardName } from '@/lib/retailer/product-name';
 
+/**
+ * Shared catalog/card read. `product_pack_images` (migration 0028, the
+ * per-variant gallery) is included so every card surface resolves its image in
+ * the SAME order the product-detail page does — see `catalogCardImage`.
+ */
 export const PRODUCT_CARD_SELECT =
-  'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, image_url, is_active, sort_order )';
+  'id, name, category_id, brand_id, gst_percent, is_new_launch, created_at, brands ( id, name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, ptr, base_price, case_price, units_per_case, mrp, moq, image_url, is_active, sort_order ), product_pack_images ( product_pack_id, image_url, sort_order )';
 
 export interface CatalogProductRow {
   id: string;
@@ -27,6 +32,8 @@ export interface CatalogProductRow {
   created_at: string;
   brands: { id: string; name: string } | null;
   product_images: { image_url: string; sort_order: number }[];
+  /** Optional: present for every row read through `PRODUCT_CARD_SELECT`. */
+  product_pack_images?: { product_pack_id: string; image_url: string; sort_order: number }[] | null;
   product_packs: {
     id: string;
     pack_name: string;
@@ -147,6 +154,47 @@ export function bestSlabOffer(
   return best;
 }
 
+/**
+ * Card image for a product, resolved in the SAME precedence the
+ * product-detail page uses (`variantGalleryImages` in lib/retailer/variants.ts):
+ *
+ *   1. the priced variant's own gallery — `product_pack_images` (migration 0028)
+ *   2. that variant's legacy single column — `product_packs.image_url`
+ *   3. the parent product's gallery — `product_images`
+ *   4. `null` — the card renders its compact placeholder
+ *
+ * Before this, cards only looked at (2) and (3), so a product whose images live
+ * in the variant gallery but whose denormalised `product_packs.image_url` is
+ * empty showed "Image unavailable" on the home page, catalog, rails and
+ * quick-order while the detail page showed the photo. An empty/whitespace value
+ * is never treated as an image, and no wrong-variant image is ever used: when
+ * the priced pack has no image we fall back to the parent gallery only.
+ *
+ * Pure — safe to unit test and to call from any surface.
+ */
+export function catalogCardImage(
+  product: Pick<CatalogProductRow, 'product_images' | 'product_pack_images'>,
+  pack: { id: string; image_url?: string | null } | null | undefined
+): string | null {
+  if (pack) {
+    const gallery = [...(product.product_pack_images ?? [])]
+      .filter((row) => row.product_pack_id === pack.id)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    for (const row of gallery) {
+      const url = row.image_url?.trim();
+      if (url) return url;
+    }
+    const legacy = pack.image_url?.trim();
+    if (legacy) return legacy;
+  }
+  const images = [...(product.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+  for (const image of images) {
+    const url = image.image_url?.trim();
+    if (url) return url;
+  }
+  return null;
+}
+
 export function toPricedCard(
   product: CatalogProductRow,
   override: number | null,
@@ -161,13 +209,12 @@ export function toPricedCard(
   } = {}
 ): PricedCatalogCard {
   const best = bestPricedPack(product, override, extras.packTiers ?? new Map());
-  const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
   const fromPrice = extras.pricingUnavailable ? null : best?.piecePrice ?? null;
   return {
     id: product.id,
     name: buildProductCardName({ productName: product.name, packName: best?.pack.pack_name ?? null }),
     brandName: product.brands?.name,
-    imageUrl: best?.pack.image_url || images[0]?.image_url,
+    imageUrl: catalogCardImage(product, best?.pack) ?? undefined,
     isNewLaunch: product.is_new_launch,
     fromPrice,
     mrp: best?.pack.mrp,
