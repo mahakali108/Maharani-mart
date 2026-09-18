@@ -7,8 +7,13 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { loadPackCost } from '@/lib/admin/cost-access';
-import { deleteMedia } from '@/lib/media';
 import { isRenderableMediaRef } from '@/lib/media/refs';
+import {
+  cleanupMediaRefsBestEffort,
+  collectPackMediaRefs,
+  collectProductMediaRefs,
+  deleteMediaIfUnreferenced,
+} from '@/lib/admin/product-media';
 import {
   validateProductDraft,
   firstError,
@@ -357,8 +362,16 @@ export async function toggleProductActiveAction(productId: string, isActive: boo
 export async function deleteProductAction(productId: string) {
   await requirePermission('products.delete');
   const supabase = createClient();
+  // The FKs (0001/0004/0028) cascade the gallery rows away, but Postgres
+  // cannot delete Storage objects — collect the refs first so the files can
+  // be cleaned up afterwards instead of orphaning them forever.
+  const refs = await collectProductMediaRefs(supabase, productId);
   const { error } = await supabase.from('products').delete().eq('id', productId);
   if (error) throw new Error(error.message);
+  // Best-effort, after the DB change succeeded: a Storage outage must not
+  // make a successful delete look like a failure. The cascaded row deletes
+  // are all captured in audit_logs by the 0050 triggers.
+  await cleanupMediaRefsBestEffort(supabase, refs);
   revalidatePath('/admin/products');
   redirect('/admin/products');
 }
@@ -369,8 +382,24 @@ export async function deleteProductAction(productId: string) {
 
 export async function addProductImageAction(productId: string, imageUrl: string, sortOrder: number) {
   await requirePermission('products.edit');
+  // Same acceptance rule as the pack gallery (addPackImageAction): only refs
+  // the upload flow actually produces — a Supabase public URL or a legacy
+  // absolute URL. Anything else (blob:, data:, appwrite://, garbage) is
+  // rejected before it can reach the column.
+  if (!isRenderableMediaRef(imageUrl)) throw new Error('Invalid image reference.');
   const supabase = createClient();
-  const payload: ProductImageInsert = { product_id: productId, image_url: imageUrl, sort_order: sortOrder };
+  // The product must exist — a stale admin tab or a wrong id would otherwise
+  // surface as a raw FK violation.
+  const { data: product } = await supabase
+    .from('products')
+    .select('id')
+    .eq('id', productId)
+    .maybeSingle<{ id: string }>();
+  if (!product) throw new Error('Product not found.');
+  // Sort order only drives display; clamp it so a crafted value cannot stuff
+  // an absurd integer into the column.
+  const safeSortOrder = Number.isFinite(sortOrder) ? Math.max(0, Math.trunc(sortOrder)) : 0;
+  const payload: ProductImageInsert = { product_id: productId, image_url: imageUrl, sort_order: safeSortOrder };
   const { error } = await supabase.from('product_images').insert(payload as unknown as never);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/products/${productId}`);
@@ -380,19 +409,22 @@ export async function removeProductImageAction(imageId: string, productId: strin
   await requirePermission('products.edit');
   const supabase = createClient();
 
+  // Scoped to the product, exactly like the pack-gallery delete: a mismatched
+  // imageId/productId pair must remove nothing, not "the image anyway".
   const { data, error } = await supabase
     .from('product_images')
     .delete()
     .eq('id', imageId)
+    .eq('product_id', productId)
     .select('image_url')
     .maybeSingle<{ image_url: string }>();
   if (error) throw new Error(error.message);
 
-  // Clean up the stored file too, so removing an image doesn't orphan it.
-  // deleteMedia() is best-effort and only removes Supabase objects it can
-  // confidently identify; legacy files are never auto-deleted en masse.
+  // Clean up the stored file too, so removing an image doesn't orphan it —
+  // but only when no other row still references it (a duplicated pack can
+  // share the object). deleteMedia() itself is best-effort.
   if (data) {
-    await deleteMedia(data.image_url);
+    await deleteMediaIfUnreferenced(supabase, data.image_url);
   }
 
   revalidatePath(`/admin/products/${productId}`);
@@ -473,7 +505,9 @@ export async function removePackImageAction(imageId: string, packId: string, pro
     .select('image_url')
     .maybeSingle<{ image_url: string }>();
   if (error) throw new Error(error.message);
-  if (data) await deleteMedia(data.image_url);
+  // Guarded cleanup: a duplicated pack shares gallery objects, so the file is
+  // only removed when no other product-media row still references it.
+  if (data) await deleteMediaIfUnreferenced(supabase, data.image_url);
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath(`/retailer/catalog/${packId}`);
 }
@@ -673,8 +707,12 @@ export async function togglePackActiveAction(packId: string, productId: string, 
 export async function deleteProductPackAction(packId: string, productId: string) {
   await requirePermission('products.delete');
   const supabase = createClient();
+  // Collect the pack's gallery refs before the FK cascade removes the rows
+  // (0028), so the files can be cleaned up afterwards.
+  const refs = await collectPackMediaRefs(supabase, packId);
   const { error } = await supabase.from('product_packs').delete().eq('id', packId);
   if (error) throw new Error(error.message);
+  await cleanupMediaRefsBestEffort(supabase, refs);
   revalidatePath(`/admin/products/${productId}`);
 }
 
@@ -712,9 +750,11 @@ export async function setPackImageAction(packId: string, productId: string, imag
     .eq('product_id', productId);
   if (error) throw new Error(error.message);
 
-  // Best-effort cleanup of the replaced/removed stored file.
+  // Best-effort cleanup of the replaced/removed stored file — guarded so a
+  // file still shown by this pack's own gallery (or a duplicated pack) is
+  // not deleted out from under it.
   if (pack.image_url && pack.image_url !== imageUrl) {
-    await deleteMedia(pack.image_url);
+    await deleteMediaIfUnreferenced(supabase, pack.image_url);
   }
 
   revalidatePath(`/admin/products/${productId}`);
