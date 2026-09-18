@@ -25,16 +25,19 @@ function BrandMonogram({ name }: { name: string }) {
 export function BrandCard({
   brand,
   compact = false,
+  href,
 }: {
   brand: BrandCardData;
   compact?: boolean;
+  /** Override the destination. Defaults to the catalog filtered by brand. */
+  href?: string;
 }) {
   return (
     <Link
-      href={`/retailer/catalog?brand=${brand.id}`}
+      href={href ?? `/retailer/catalog?brand=${brand.id}`}
       className={cn(
         'group flex h-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
-        compact && 'min-h-[4.5rem] rounded-xl p-2.5'
+        compact && 'min-h-[4.75rem] rounded-xl p-2.5'
       )}
     >
       <span
@@ -65,7 +68,7 @@ export function BrandCard({
         >
           {brand.name}
         </span>
-        {!compact && brand.productCount != null ? (
+        {brand.productCount != null ? (
           <span className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500">
             <Tag className="h-3 w-3" aria-hidden="true" />
             {brand.productCount} product{brand.productCount === 1 ? '' : 's'}

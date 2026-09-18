@@ -1,8 +1,6 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import {
   Boxes,
-  ChevronLeft,
   ChevronRight,
   Coffee,
   Cookie,
@@ -10,54 +8,30 @@ import {
   Package,
   Soup,
   Sparkles,
+  Tag,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { AdminEmptyState } from '@/components/admin/empty-state';
-import { CompareGrid } from '@/components/retailer/compare-grid';
+import { CatalogFeed } from '@/components/retailer/catalog-feed';
 import { CatalogFilters } from '@/components/retailer/catalog-filters';
 import { SearchField } from '@/components/retailer/search-field';
+import { StoredImage } from '@/components/media/stored-image';
 import { cn } from '@/lib/utils/cn';
-import {
-  loadFavoriteIds,
-  priceCatalogProducts,
-  PRODUCT_CARD_SELECT,
-  type CatalogProductRow,
-  type PricedCatalogCard,
-} from '@/lib/retailer/catalog';
+import { loadCatalogFeed } from '@/lib/retailer/catalog-feed';
 import {
   CATALOG_MAX_ROWS,
-  CATALOG_PAGE_SIZE,
+  catalogFeedKey,
   catalogHref,
-  catalogPageHref,
-  catalogPageRange,
-  catalogTotalPages,
-  hasDerivedPriceConstraints,
+  catalogOffsetFromPage,
   parseCatalogPage,
   parseCatalogSort,
-  parseOptionalNumber,
   sanitizeSearchTerm,
   type CatalogQuery,
 } from '@/lib/retailer/catalog-params';
-import { calcDiscountPercent } from '@/lib/retailer/format';
-import { getOrderFrequencyMap } from '@/lib/retailer/personalization';
-
-interface CategoryRow {
-  id: string;
-  name: string;
-  image_url: string | null;
-  parent_id: string | null;
-}
-
-interface BrandRow {
-  id: string;
-  name: string;
-}
+import { categoryScopeIds, loadCategoryBrandCounts, orderBrandsByCount } from '@/lib/retailer/catalog-taxonomy';
 
 const CATEGORY_ICONS = [Boxes, Cookie, Coffee, Milk, Soup, Package];
-
-/** Bound on how many variant/barcode matches are folded into the search disjunction. */
-const PACK_MATCH_LIMIT = 150;
 
 export default async function RetailerCatalogPage({
   searchParams,
@@ -67,226 +41,54 @@ export default async function RetailerCatalogPage({
   const user = await requireUser();
   const supabase = createClient();
   const q = sanitizeSearchTerm(searchParams.q ?? '');
-  const categoryId = searchParams.category?.trim() ?? '';
-  const brandId = searchParams.brand?.trim() ?? '';
   const sort = parseCatalogSort(searchParams.sort);
-  const minPrice = parseOptionalNumber(searchParams.minPrice);
-  const maxPrice = parseOptionalNumber(searchParams.maxPrice);
-  const minDiscount = parseOptionalNumber(searchParams.discount);
-  const maxMoq = parseOptionalNumber(searchParams.maxMoq);
   const onlyFavorites = searchParams.fav === '1';
   const onlyNew = searchParams.new === '1';
   const onlyOffers = searchParams.offers === '1';
-  const page = parseCatalogPage(searchParams.page);
 
-  // A price/discount/MOQ/offer filter or a price/frequency sort compares
-  // against the price resolved for THIS retailer, which SQL cannot know — so
-  // those paths page over a bounded in-memory working set instead of asking the
-  // database for a range. Everything else is paginated by the database.
-  const needsDerivedPricing = hasDerivedPriceConstraints({
-    sort,
-    minPrice,
-    maxPrice,
-    minDiscount,
-    maxMoq,
-    onlyOffers,
+  // Legacy `?page=` deep links (nothing emits them any more — the list is
+  // continuous now) are honoured as the batch they always meant.
+  const legacyOffset = searchParams.page ? catalogOffsetFromPage(parseCatalogPage(searchParams.page)) : 0;
+
+  /**
+   * One authoritative read powers the first batch. Every later batch is
+   * produced by the SAME loader through /api/retailer/catalog, so filters,
+   * sort, retailer pricing, availability, MOQ and RLS cannot drift between
+   * what the server rendered and what gets appended.
+   */
+  const feed = await loadCatalogFeed({
+    supabase,
+    retailerId: user.id,
+    query: searchParams,
+    offset: legacyOffset,
   });
 
-  const [
-    { data: retailer },
-    { data: categoryData },
-    { data: brandData },
-    favoriteIds,
-    frequency,
-  ] = await Promise.all([
-    supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<{ area_id: string }>(),
-    supabase.from('categories').select('id, name, image_url, parent_id').eq('is_active', true).order('sort_order').returns<CategoryRow[]>(),
-    supabase.from('brands').select('id, name').eq('is_active', true).order('name').returns<BrandRow[]>(),
-    loadFavoriteIds(supabase, user.id),
-    // Order-frequency ranking costs two extra queries and is only ever read by
-    // the `frequent` sort, so it is skipped on every other catalog request.
-    sort === 'frequent'
-      ? getOrderFrequencyMap(supabase, user.id)
-      : Promise.resolve(new Map<string, number>()),
-  ]);
-
-  const categories = categoryData ?? [];
-  const brands = brandData ?? [];
-  const selectedCategory = categories.find((category) => category.id === categoryId) ?? null;
-  const selectedBrand = brands.find((brand) => brand.id === brandId) ?? null;
+  const categories = feed.categories;
+  const selectedCategory = categories.find((category) => category.id === searchParams.category?.trim()) ?? null;
+  const selectedBrand = feed.brands.find((brand) => brand.id === searchParams.brand?.trim()) ?? null;
   const childCategories = selectedCategory
     ? categories.filter((category) => category.parent_id === selectedCategory.id)
     : categories.filter((category) => category.parent_id);
   const parentCategories = categories.filter((category) => !category.parent_id);
   const categoryTiles = (parentCategories.length > 0 ? parentCategories : categories).slice(0, 8);
 
-  let matchingBrandIds: string[] = [];
-  let matchingCategoryIds: string[] = [];
-  let matchingPackProductIds: string[] = [];
-  if (q) {
-    const like = `%${q}%`;
-    // Search covers every real, retailer-visible field: product name, brand,
-    // category, product barcode (EAN/UPC) and the VARIANT/SIZE itself —
-    // product_packs.pack_name is the size ("50g", "100g", "5L Jar") and packs
-    // carry their own barcode. RLS already hides inactive packs from a
-    // retailer, and the explicit is_active filter keeps staff sessions honest
-    // too. Internal SKU codes are deliberately NOT a search field.
-    const [{ data: brandMatches }, { data: categoryMatches }, { data: packMatches }] = await Promise.all([
-      supabase.from('brands').select('id').eq('is_active', true).ilike('name', like).returns<{ id: string }[]>(),
-      supabase.from('categories').select('id').eq('is_active', true).ilike('name', like).returns<{ id: string }[]>(),
-      supabase
-        .from('product_packs')
-        .select('product_id')
-        .eq('is_active', true)
-        .or(`pack_name.ilike."%${q}%",barcode.ilike."%${q}%"`)
-        .limit(PACK_MATCH_LIMIT)
-        .returns<{ product_id: string }[]>(),
-    ]);
-    matchingBrandIds = (brandMatches ?? []).map((row) => row.id);
-    matchingCategoryIds = (categoryMatches ?? []).map((row) => row.id);
-    // De-duplicated and bounded so the disjunction below stays a sane URL/query
-    // even for a broad term like "500g" that matches many variants.
-    matchingPackProductIds = [...new Set((packMatches ?? []).map((row) => row.product_id))].slice(0, PACK_MATCH_LIMIT);
-  }
-
-  // `count: 'exact'` gives the true total for pagination in both modes.
-  let query = supabase
-    .from('products')
-    .select(PRODUCT_CARD_SELECT, { count: 'exact' })
-    .eq('is_active', true);
-
-  // In derived-pricing mode the working set is fetched in a stable, useful
-  // order (name) and ranked in memory below. Otherwise the database performs
-  // the exact ordering the retailer asked for, so the paginated range is the
-  // real page rather than an approximation of one.
-  if (needsDerivedPricing) {
-    query = query.order('name');
-  } else if (sort === 'name') {
-    query = query.order('name', { ascending: true });
-  } else if (sort === 'newest') {
-    query = query.order('created_at', { ascending: false });
-  } else {
-    // 'recommended' — the existing deterministic catalog ordering: new launches
-    // first, then name. No invented popularity or sales figures.
-    query = query.order('is_new_launch', { ascending: false }).order('name', { ascending: true });
-  }
-
-  if (q) {
-    const like = `"%${q}%"`;
-    const clauses = [`name.ilike.${like}`, `barcode.ilike.${like}`];
-    if (matchingBrandIds.length > 0) clauses.push(`brand_id.in.(${matchingBrandIds.join(',')})`);
-    if (matchingCategoryIds.length > 0) clauses.push(`category_id.in.(${matchingCategoryIds.join(',')})`);
-    if (matchingPackProductIds.length > 0) clauses.push(`id.in.(${matchingPackProductIds.join(',')})`);
-    query = query.or(clauses.join(','));
-  }
+  /**
+   * Brand options follow the selected category, so the retailer is never shown
+   * brands that have nothing in the aisle they are browsing. The selected brand
+   * is always kept: hiding the active filter would be worse than showing it.
+   */
+  let brandOptions = feed.brands;
+  let brandCounts = new Map<string, number>();
   if (selectedCategory) {
-    const scopedIds = [
-      selectedCategory.id,
-      ...categories.filter((category) => category.parent_id === selectedCategory.id).map((category) => category.id),
-    ];
-    query = query.in('category_id', scopedIds);
-  }
-  if (selectedBrand) query = query.eq('brand_id', selectedBrand.id);
-  if (onlyNew) query = query.eq('is_new_launch', true);
-  if (onlyFavorites && favoriteIds.size > 0) query = query.in('id', [...favoriteIds]);
-
-  /**
-   * `frequent` ranks by this retailer's own order history, which is not a
-   * column on `products`, so the ranking itself has to happen in memory
-   * (Mode 2). Left unrestricted, Mode 2 would fetch an *alphabetical* window
-   * of CATALOG_MAX_ROWS and rank only that — silently dropping any
-   * frequently-ordered product whose name happens to sort past the cap.
-   * Restricting the query to the ids in the history makes "Frequent" exactly
-   * the products this retailer has actually ordered, ranked correctly and
-   * completely. The list is ordered most-frequent-first and bounded by the
-   * same cap as the working set, so the `.in()` stays small and the fetched
-   * set still fits in one Mode 2 window. With no order history yet there is
-   * nothing to restrict to, and the existing plain-catalog fallback is
-   * preserved unchanged.
-   */
-  if (sort === 'frequent' && frequency.size > 0) {
-    const frequentIds = [...frequency.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, CATALOG_MAX_ROWS)
-      .map(([productId]) => productId);
-    query = query.in('id', frequentIds);
+    const scoped = categoryScopeIds(categories, selectedCategory.id);
+    brandCounts = (await loadCategoryBrandCounts(supabase, scoped)).counts;
+    const scopedBrands = feed.brands.filter((brand) => brandCounts.has(brand.id));
+    brandOptions = selectedBrand && !brandCounts.has(selectedBrand.id)
+      ? [...scopedBrands, selectedBrand]
+      : scopedBrands;
   }
 
-  // `fav=1` with nothing favourited can never match, so it short-circuits to an
-  // empty set without touching the database (unchanged behaviour).
-  const noPossibleResults = onlyFavorites && favoriteIds.size === 0;
-  const { from, to } = catalogPageRange(page, CATALOG_PAGE_SIZE);
-
-  /**
-   * Mode 1 — DB pagination. Every active constraint is already expressed in
-   * SQL and the sort is a real ORDER BY, so `.range()` returns exactly the
-   * requested page and `count: 'exact'` returns the true total. This is the
-   * default browse path and it no longer grows with the catalog.
-   *
-   * Mode 2 — bounded working set. A derived-price constraint is active, so the
-   * full (capped) set is priced, filtered and ranked in memory exactly as
-   * before, then sliced to the page. `resultCapped` tells the UI to say so.
-   */
-  let cards: PricedCatalogCard[] = [];
-  let resultCount = 0;
-  let resultCapped = false;
-
-  if (noPossibleResults) {
-    cards = [];
-    resultCount = 0;
-  } else if (!needsDerivedPricing) {
-    const { data: productRows, count } = await query
-      .returns<CatalogProductRow[]>()
-      .range(from, to);
-    cards = await priceCatalogProducts(
-      supabase,
-      productRows ?? [],
-      user.id,
-      retailer?.area_id ?? null,
-      favoriteIds,
-      frequency
-    );
-    resultCount = count ?? cards.length;
-  } else {
-    const { data: productRows, count } = await query
-      .returns<CatalogProductRow[]>()
-      .limit(CATALOG_MAX_ROWS);
-    resultCapped = (count ?? 0) > CATALOG_MAX_ROWS;
-
-    const priced = await priceCatalogProducts(
-      supabase,
-      productRows ?? [],
-      user.id,
-      retailer?.area_id ?? null,
-      favoriteIds,
-      frequency
-    );
-
-    const filtered = priced.filter((card) => {
-      if (minPrice !== null && (card.fromPrice === null || card.fromPrice < minPrice)) return false;
-      if (maxPrice !== null && (card.fromPrice === null || card.fromPrice > maxPrice)) return false;
-      if (minDiscount !== null && calcDiscountPercent(card.mrp, card.fromPrice) < minDiscount) return false;
-      if (maxMoq !== null && (card.moq ?? 1) > maxMoq) return false;
-      if (onlyOffers && !card.hasOffer && calcDiscountPercent(card.mrp, card.fromPrice) <= 0) return false;
-      return true;
-    });
-
-    const ranked = [...filtered].sort((a, b) => {
-      if (sort === 'name') return a.name.localeCompare(b.name);
-      if (sort === 'price-low') return (a.fromPrice ?? Number.MAX_SAFE_INTEGER) - (b.fromPrice ?? Number.MAX_SAFE_INTEGER);
-      if (sort === 'price-high') return (b.fromPrice ?? -1) - (a.fromPrice ?? -1);
-      if (sort === 'discount') return calcDiscountPercent(b.mrp, b.fromPrice) - calcDiscountPercent(a.mrp, a.fromPrice);
-      if (sort === 'newest') return +new Date(b.createdAt) - +new Date(a.createdAt);
-      if (sort === 'frequent') return b.timesOrdered - a.timesOrdered || Number(b.isNewLaunch) - Number(a.isNewLaunch);
-      return Number(b.isNewLaunch) - Number(a.isNewLaunch) || a.name.localeCompare(b.name);
-    });
-
-    resultCount = ranked.length;
-    cards = ranked.slice(from, to + 1);
-  }
-
-  const totalPages = catalogTotalPages(resultCount, CATALOG_PAGE_SIZE);
-
+  const resultCount = feed.total;
   const filterValues: CatalogQuery = {
     q: q || undefined,
     category: selectedCategory?.id,
@@ -300,6 +102,10 @@ export default async function RetailerCatalogPage({
     new: onlyNew ? '1' : undefined,
     offers: onlyOffers ? '1' : undefined,
   };
+
+  // Identity of this result set: the client remounts onto a new first batch
+  // whenever the filters/sort change, and resumes the same feed otherwise.
+  const feedKey = catalogFeedKey(filterValues);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -317,10 +123,16 @@ export default async function RetailerCatalogPage({
             <span className="text-slate-800">{selectedCategory.name}</span>
           </>
         ) : null}
+        {selectedBrand ? (
+          <>
+            <ChevronRight className="h-3 w-3" />
+            <span className="text-slate-800">{selectedBrand.name}</span>
+          </>
+        ) : null}
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <div className="flex flex-col gap-4 p-4 sm:p-6">
+        <div className="flex flex-col gap-3 p-4 sm:gap-4 sm:p-6">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
               <Sparkles className="h-5 w-5" aria-hidden="true" />
@@ -359,7 +171,9 @@ export default async function RetailerCatalogPage({
           </Link>
         </div>
         {categoryTiles.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:grid-cols-8">
+          // Phones: one compact horizontal rail (no stacking, no page growth).
+          // Tablet/desktop: the existing grid.
+          <div className="scrollbar-none -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-8">
             {categoryTiles.map((category, index) => {
               const Icon = CATEGORY_ICONS[index % CATEGORY_ICONS.length] ?? Boxes;
               const active = selectedCategory?.id === category.id;
@@ -368,34 +182,32 @@ export default async function RetailerCatalogPage({
                   key={category.id}
                   href={catalogHref({ ...filterValues, category: category.id })}
                   className={cn(
-                    'group overflow-hidden rounded-xl border bg-slate-50 transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md sm:rounded-2xl',
+                    'group w-[5.75rem] shrink-0 snap-start overflow-hidden rounded-xl border bg-slate-50 transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md sm:w-auto sm:rounded-2xl',
                     active
                       ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-100'
                       : 'border-slate-200'
                   )}
                 >
                   <div className="relative aspect-[1.25/1] overflow-hidden bg-slate-50">
-                    {category.image_url ? (
-                      <Image
-                        src={category.image_url}
-                        alt=""
-                        fill
-                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 140px"
-                        className="object-cover transition duration-300 group-hover:scale-105"
-                        unoptimized
-                      />
-                    ) : (
-                      <span className="flex h-full items-center justify-center text-primary-500">
-                        <Icon className="h-8 w-8 transition group-hover:scale-110" aria-hidden="true" />
-                      </span>
-                    )}
+                    <StoredImage
+                      src={category.image_url}
+                      alt=""
+                      fill
+                      sizes="(max-width: 640px) 92px, (max-width: 1024px) 22vw, 140px"
+                      fallback={
+                        <span className="flex h-full items-center justify-center text-primary-500">
+                          <Icon className="h-8 w-8 transition group-hover:scale-110" aria-hidden="true" />
+                        </span>
+                      }
+                      className="object-cover transition duration-300 group-hover:scale-105"
+                    />
                     {active ? (
                       <span className="absolute right-2 top-2 rounded-full bg-primary-600 px-2 py-1 text-[8px] font-bold text-white">
                         Selected
                       </span>
                     ) : null}
                   </div>
-                  <div className="p-2.5 sm:p-3">
+                  <div className="p-2 sm:p-3">
                     <p className="truncate text-[11px] font-bold text-slate-800 sm:text-xs">{category.name}</p>
                     <p className="mt-0.5 text-[9px] text-slate-500">
                       Browse products <ChevronRight className="inline h-3 w-3" aria-hidden="true" />
@@ -411,7 +223,15 @@ export default async function RetailerCatalogPage({
           </p>
         )}
 
-        <div className="scrollbar-none flex gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+        {/* Sub-categories and root categories as chips. On phones the rail above
+            already lists the root categories, so this row only appears once a
+            category is selected (where it earns its height). */}
+        <div
+          className={cn(
+            'scrollbar-none gap-2 overflow-x-auto border-t border-slate-100 pt-3',
+            selectedCategory ? 'flex' : 'hidden sm:flex'
+          )}
+        >
           <Link
             href={catalogHref({ ...filterValues, category: undefined })}
             className={cn(
@@ -456,9 +276,45 @@ export default async function RetailerCatalogPage({
             );
           })}
         </div>
+
+        {/* Brands that actually exist in the selected category — the same
+            category → brand drill-down the categories page offers. */}
+        {selectedCategory && brandOptions.length > 0 ? (
+          <div className="scrollbar-none flex gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+            <Link
+              href={catalogHref({ ...filterValues, brand: undefined })}
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                !selectedBrand
+                  ? 'border-primary-600 bg-primary-50 text-primary-700'
+                  : 'border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
+              )}
+            >
+              <Tag className="h-3.5 w-3.5" aria-hidden="true" /> All brands
+            </Link>
+            {orderBrandsByCount(brandOptions, brandCounts).map(({ brand, count }) => {
+              const active = selectedBrand?.id === brand.id;
+              return (
+                <Link
+                  key={brand.id}
+                  href={catalogHref({ ...filterValues, brand: brand.id })}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                    active
+                      ? 'border-primary-600 bg-primary-50 text-primary-700'
+                      : 'border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
+                  )}
+                >
+                  {brand.name}
+                  <span className="text-[10px] font-medium text-slate-400">{count}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
       </section>
 
-      <CatalogFilters values={filterValues} categories={categories} brands={brands} resultCount={resultCount} />
+      <CatalogFilters values={filterValues} categories={categories} brands={brandOptions} resultCount={resultCount} />
 
       <div className="flex items-end justify-between gap-3 px-0.5">
         <div>
@@ -472,14 +328,14 @@ export default async function RetailerCatalogPage({
         </div>
       </div>
 
-      {resultCapped ? (
+      {feed.workingSetCapped ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] leading-4 text-amber-800">
           Showing the first <span className="font-bold">{CATALOG_MAX_ROWS}</span> products that match, ranked by your
           price filter. Narrow the search or pick a category to see the rest.
         </p>
       ) : null}
 
-      {cards.length === 0 ? (
+      {feed.cards.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white">
           <AdminEmptyState
             icon={Package}
@@ -497,37 +353,22 @@ export default async function RetailerCatalogPage({
           </div>
         </div>
       ) : (
-        <>
-          <CompareGrid cards={cards} />
-
-          {totalPages > 1 ? (
-            <nav className="flex items-center justify-center gap-3 pt-1" aria-label="Catalog pages">
-              {page > 1 ? (
-                <Link
-                  href={catalogPageHref(filterValues, page - 1)}
-                  className="flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Previous
-                </Link>
-              ) : (
-                <span className="hidden sm:inline" />
-              )}
-              <span className="text-[11px] font-semibold text-slate-500">
-                Page {page} of {totalPages}
-              </span>
-              {page < totalPages ? (
-                <Link
-                  href={catalogPageHref(filterValues, page + 1)}
-                  className="flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                >
-                  Next <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Link>
-              ) : (
-                <span className="hidden sm:inline" />
-              )}
-            </nav>
-          ) : null}
-        </>
+        // Continuous browsing: the first batch below is what the server already
+        // rendered; scrolling appends more. No page numbers, no Next button.
+        <CatalogFeed
+          key={feedKey}
+          query={filterValues}
+          initial={{
+            cards: feed.cards,
+            total: feed.total,
+            offset: feed.offset,
+            limit: feed.limit,
+            nextOffset: feed.nextOffset,
+            hasMore: feed.hasMore,
+            workingSetCapped: feed.workingSetCapped,
+            feedCapped: feed.feedCapped,
+          }}
+        />
       )}
     </div>
   );

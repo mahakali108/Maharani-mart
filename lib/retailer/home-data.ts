@@ -6,6 +6,8 @@ import type { CategoryCardData } from '@/components/retailer/category-card';
 import type { BrandCardData } from '@/components/retailer/brand-card';
 import { groupOrderLines, type OrderItemQuantityRow } from '@/lib/orders/item-display';
 import { isBannerVisible, resolveBannerTarget, type ScheduledBanner } from '@/lib/retailer/banner-target';
+// Pure, secret-free URL inspection (no SDK, no env) — safe on the server.
+import { resolveMediaUrl } from '@/lib/media/refs';
 import {
   loadCatalogPricing, loadFavoriteIds, loadProductsByIds, priceCatalogPack, priceCatalogRows,
   PRODUCT_CARD_SELECT, toPricedCard, type CatalogProductRow, type CatalogPricingData, type PricedCatalogCard,
@@ -15,6 +17,9 @@ import { calcSavings } from '@/lib/retailer/format';
 import type { AvailabilityState } from '@/lib/retailer/availability';
 
 interface BannerRow extends PromoBannerData, ScheduledBanner {}
+
+/** Bound on the active-banner read; ordered by the admin's `sort_order`. */
+export const BANNER_READ_LIMIT = 12;
 export interface HomeCategoryRow extends CategoryCardData {
   parent_id: string | null;
   products: { count: number }[] | null;
@@ -81,6 +86,45 @@ export function homeCategories(rows: HomeCategoryRow[]): CategoryCardData[] {
   });
 }
 
+/**
+ * The promotion carousel's content: real, currently-visible banners only.
+ *
+ * Scheduling, area targeting and activation are decided by the existing
+ * `isBannerVisible` rule (the same one the page has always used), so a banner
+ * that is inactive, not started, expired, or scoped to another area never
+ * reaches the carousel.
+ *
+ * Two presentation guards keep the carousel honest on a phone:
+ *  - a banner whose `image_url` is not a renderable URL (empty, a bare object
+ *    path, a legacy `appwrite://` ref, …) is dropped instead of being drawn as
+ *    a broken-image box;
+ *  - a banner with no title is dropped — the carousel is merchant content, and
+ *    an empty heading is not.
+ *
+ * Order is the admin's `sort_order`, already applied by the read.
+ *
+ * Pure — unit tested without a database.
+ */
+export function homeBanners(
+  rows: BannerRow[],
+  areaId: string | null,
+  now: number,
+  siteUrl?: string
+): PromoBannerData[] {
+  return rows
+    .filter((banner) => isBannerVisible(banner, areaId, now))
+    .filter((banner) => !!resolveMediaUrl(banner.image_url))
+    .filter((banner) => !!banner.title?.trim())
+    .map((banner) => ({
+      id: banner.id,
+      title: banner.title,
+      subtitle: banner.subtitle ?? null,
+      image_url: banner.image_url,
+      cta_label: banner.cta_label ?? null,
+      link_url: resolveBannerTarget(banner.link_url, siteUrl)?.href ?? null,
+    }));
+}
+
 /** One owner-scoped history read powers both frequency and exact-pack reorders.
  * Historical case/piece rows are folded by the established snapshot helper. */
 export function homeHistory(orders: HomeOrder[]) {
@@ -140,15 +184,18 @@ export async function loadRetailerHome(
   siteUrl?: string, canResolvePrices = true
 ): Promise<RetailerHomeData> {
   const now = new Date();
-  const nowIso = now.toISOString();
+  // Banners are read with ONE simple predicate — `is_active` (which is also the
+  // RLS read rule for non-staff) — and the schedule/area rules are then applied
+  // by the shared `isBannerVisible` helper. The previous query stacked three
+  // PostgREST `.or()` filters for `starts_at`, `ends_at` and `area_id`; those
+  // only worked because this version's postgrest-js *appends* repeated `or`
+  // parameters (older releases replace them, silently dropping conditions), and
+  // it duplicated logic `isBannerVisible` already owns.
   // `*` is intentional for this small public-content table: existing banners
   // keep rendering before the optional subtitle/CTA migration is applied.
-  let bannerQuery = supabase.from('banners').select('*').eq('is_active', true)
-    .or(`starts_at.is.null,starts_at.lte.${nowIso}`).or(`ends_at.is.null,ends_at.gte.${nowIso}`);
-  bannerQuery = areaId ? bannerQuery.or(`area_id.is.null,area_id.eq.${areaId}`) : bannerQuery.is('area_id', null);
-
   const [bannerResult, categoryResult, brandResult, productResult, historyResult, cartResult, favoriteIds] = await Promise.all([
-    bannerQuery.order('sort_order').limit(12).returns<BannerRow[]>(),
+    supabase.from('banners').select('*').eq('is_active', true)
+      .order('sort_order').limit(BANNER_READ_LIMIT).returns<BannerRow[]>(),
     supabase.from('categories').select('id, name, image_url, parent_id, products(count)')
       .eq('is_active', true).eq('products.is_active', true).order('sort_order').returns<HomeCategoryRow[]>(),
     supabase.from('brands').select('id, name, logo_url, products(count)')
@@ -210,11 +257,7 @@ export async function loadRetailerHome(
     };
   });
   return {
-    banners: (bannerResult.error ? [] : bannerResult.data ?? [])
-      .filter((banner) => isBannerVisible(banner, areaId, now.getTime()))
-      .map((banner) => ({ id: banner.id, title: banner.title, subtitle: banner.subtitle,
-        image_url: banner.image_url, cta_label: banner.cta_label,
-        link_url: resolveBannerTarget(banner.link_url, siteUrl)?.href ?? null })),
+    banners: homeBanners(bannerResult.error ? [] : bannerResult.data ?? [], areaId, now.getTime(), siteUrl),
     categories: homeCategories(categoryResult.error ? [] : categoryResult.data ?? []),
     brands: (brandResult.error ? [] : brandResult.data ?? []).map((brand) => ({
       id: brand.id, name: brand.name, logo_url: brand.logo_url, productCount: brand.products?.[0]?.count,

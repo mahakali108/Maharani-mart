@@ -95,7 +95,8 @@ describe('homepage navigation and profile', () => {
     data.categories = [{ id: CATEGORY, name: 'Fixture category', image_url: null, productCount: 3 }];
     data.brands = [{ id: BRAND, name: 'Fixture brand', logo_url: null }];
     render(<HomeContent data={data} wallet={null} services={[]} />);
-    expect(screen.getByRole('link', { name: /Fixture category/ }).getAttribute('href')).toBe(`/retailer/catalog?category=${CATEGORY}`);
+    // Home categories drill down into the brands available in that category.
+    expect(screen.getByRole('link', { name: /Fixture category/ }).getAttribute('href')).toBe(`/retailer/categories?category=${CATEGORY}`);
     expect(screen.getByRole('link', { name: /Fixture brand/ }).getAttribute('href')).toBe(`/retailer/catalog?brand=${BRAND}`);
     expect(screen.getByRole('link', { name: 'View all categories' }).getAttribute('href')).toBe('/retailer/categories');
     expect(screen.getByRole('link', { name: 'View all brands' }).getAttribute('href')).toBe('/retailer/brands');
