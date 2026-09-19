@@ -7,6 +7,7 @@ import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { createOrderForRetailer } from '@/lib/orders/create-order';
 import { formatAddressLine } from '@/lib/retailer/address-shared';
+import { loadActiveCouponForRetailer } from '@/lib/coupons/validate';
 
 export type CheckoutResult = { error?: string } | { success: true; orderId: string };
 
@@ -76,17 +77,29 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
     if (retailer?.address) shippingAddress = { line: retailer.address, label: 'Shop' };
   }
 
+  // The applied coupon is read from the retailer's OWN active-coupon row via
+  // the RLS-scoped session — the client only ever submits notes/address. The
+  // quote inside createOrderForRetailer revalidates it against fresh database
+  // state before anything is billed (0051).
+  const activeCoupon = await loadActiveCouponForRetailer(supabase, user.id);
+  if (activeCoupon.error) return { error: 'The applied coupon could not be verified. Please open your cart and try again.' };
+
   const result = await createOrderForRetailer({
     retailerId: user.id,
     collectedBy: null,
     lines: items.map((item) => ({ packId: item.pack_id, quantity: item.quantity })),
     notes,
     shippingAddress,
+    couponCode: activeCoupon.coupon?.code ?? null,
   });
 
   if ('error' in result) return { error: result.error };
 
   await supabase.from('cart_items').delete().eq('retailer_id', user.id);
+  // The coupon was consumed by this order: clear the cart pointer so it is
+  // not silently re-applied to the next cart.
+  await supabase.from('retailer_active_coupons').delete().eq('retailer_id', user.id);
+  revalidatePath('/retailer/coupons');
 
   // Notifications are ancillary to the completed, persisted order. A
   // delivery failure must not tell the retailer their order failed and

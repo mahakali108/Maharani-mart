@@ -32,6 +32,7 @@ export async function createOrderForRetailer({
   lines,
   notes,
   shippingAddress,
+  couponCode,
 }: {
   retailerId: string;
   collectedBy: string | null;
@@ -39,9 +40,16 @@ export async function createOrderForRetailer({
   notes: string;
   /** Server-verified delivery-address snapshot (0036); optional for legacy callers. */
   shippingAddress?: { line: string; label?: string; receiverName?: string; phone?: string } | null;
+  /**
+   * Raw coupon code applied to the cart (read server-side from the
+   * retailer's active-coupon row — never client-supplied). Revalidated
+   * inside the quote; the redemption is claimed atomically by the database
+   * before the order is kept.
+   */
+  couponCode?: string | null;
 }): Promise<CreateOrderResult> {
   const supabase = createClient();
-  const quoted = await quoteOrderForRetailer({ retailerId, lines, supabase });
+  const quoted = await quoteOrderForRetailer({ retailerId, lines, supabase, couponCode });
   if ('error' in quoted) return quoted;
   const { quote } = quoted;
 
@@ -62,6 +70,10 @@ export async function createOrderForRetailer({
     notes: notes.trim() || null,
     // 0036: the address that was true AT ORDER TIME, frozen onto the order.
     shipping_address: shippingAddress ?? null,
+    // 0051: the coupon snapshot that was revalidated in the quote.
+    coupon_id: quote.coupon?.id ?? null,
+    coupon_code: quote.coupon?.code ?? null,
+    coupon_discount: quote.coupon?.discount ?? 0,
   };
 
   const { data: order, error: orderError } = await supabase
@@ -101,6 +113,37 @@ export async function createOrderForRetailer({
       .eq('id', order.id)
       .eq('status', 'pending');
     return { error: itemsError.message };
+  }
+
+  // Coupon redemption (0051): claim the redemption ATOMICALLY in the database
+  // (row-locked limit checks) BEFORE the wallet is debited. A concurrent
+  // checkout that exhausted the coupon between the quote and this claim
+  // fails here and the order is cancelled — the retailer never pays a
+  // discount the database refused.
+  if (quote.coupon) {
+    const { error: redeemError, data: redeemed } = await (
+      supabase as unknown as {
+        rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+      }
+    ).rpc('redeem_coupon', {
+      p_coupon_id: quote.coupon.id,
+      p_retailer_id: retailerId,
+      p_order_id: order.id,
+      p_discount: quote.coupon.discount,
+    });
+    if (redeemError || redeemed === false) {
+      await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancelled_reason: redeemError ? `Coupon redemption failed: ${redeemError.message}` : 'Coupon usage limit reached at order time',
+        } as unknown as never)
+        .eq('id', order.id)
+        .eq('status', 'pending');
+      return redeemError
+        ? { error: redeemError.message }
+        : { error: 'This coupon could not be redeemed (limit reached or no longer eligible). Please remove it and try again.' };
+    }
   }
 
   // Wallet integration: create ORDER_DEBIT atomically with credit check

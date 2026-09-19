@@ -29,6 +29,8 @@ export type VisitStatusEnum = 'planned' | 'checked_in' | 'checked_out' | 'skippe
 export type AccessStatusEnum = 'active' | 'expiring_soon' | 'expired' | 'suspended' | 'unlimited';
 export type FeatureTargetTypeEnum = 'global' | 'role' | 'user';
 export type MaintenanceScopeEnum = 'entire_platform' | 'retailer' | 'salesman' | 'admin' | 'staff' | 'warehouse';
+// Added by 0051_coupon_system.sql:
+export type CouponDiscountTypeEnum = 'percentage' | 'fixed';
 
 export interface Database {
   public: {
@@ -1036,6 +1038,10 @@ export interface Database {
           updated_at: string;
           /** 0036: server-side snapshot of the delivery address chosen at checkout. */
           shipping_address: { line: string; label?: string; receiverName?: string; phone?: string } | null;
+          /** 0051: coupon snapshot frozen onto the order at placement. */
+          coupon_id: string | null;
+          coupon_code: string | null;
+          coupon_discount: number;
         };
         Insert: {
           id?: string;
@@ -1054,6 +1060,9 @@ export interface Database {
           dispatched_at?: string | null;
           delivered_at?: string | null;
           shipping_address?: { line: string; label?: string; receiverName?: string; phone?: string } | null;
+          coupon_id?: string | null;
+          coupon_code?: string | null;
+          coupon_discount?: number;
         };
         Update: Partial<Database['public']['Tables']['orders']['Insert']>;
         Relationships: [
@@ -1961,6 +1970,106 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['support_ticket_messages']['Insert']>;
         Relationships: [];
       };
+
+      // Added by 0051_coupon_system.sql — B2B coupon / promo code system.
+      coupons: {
+        Row: {
+          id: string;
+          code: string;
+          title: string;
+          description: string | null;
+          discount_type: CouponDiscountTypeEnum;
+          discount_value: number;
+          minimum_order_value: number;
+          maximum_discount: number | null;
+          usage_limit: number | null;
+          per_retailer_limit: number;
+          used_count: number;
+          starts_at: string;
+          expires_at: string;
+          is_active: boolean;
+          first_order_only: boolean;
+          retailer_id: string | null;
+          category_id: string | null;
+          brand_id: string | null;
+          product_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          title: string;
+          description?: string | null;
+          discount_type: CouponDiscountTypeEnum;
+          discount_value: number;
+          minimum_order_value?: number;
+          maximum_discount?: number | null;
+          usage_limit?: number | null;
+          per_retailer_limit?: number;
+          used_count?: number;
+          starts_at?: string;
+          expires_at: string;
+          is_active?: boolean;
+          first_order_only?: boolean;
+          retailer_id?: string | null;
+          category_id?: string | null;
+          brand_id?: string | null;
+          product_id?: string | null;
+          created_by?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['coupons']['Insert']>;
+        Relationships: [
+          { foreignKeyName: 'coupons_retailer_id_fkey'; columns: ['retailer_id']; isOneToOne: false; referencedRelation: 'retailers'; referencedColumns: ['id'] },
+          { foreignKeyName: 'coupons_category_id_fkey'; columns: ['category_id']; isOneToOne: false; referencedRelation: 'categories'; referencedColumns: ['id'] },
+          { foreignKeyName: 'coupons_brand_id_fkey'; columns: ['brand_id']; isOneToOne: false; referencedRelation: 'brands'; referencedColumns: ['id'] },
+          { foreignKeyName: 'coupons_product_id_fkey'; columns: ['product_id']; isOneToOne: false; referencedRelation: 'products'; referencedColumns: ['id'] },
+        ];
+      };
+      coupon_redemptions: {
+        Row: {
+          id: string;
+          coupon_id: string;
+          retailer_id: string;
+          order_id: string;
+          discount_amount: number;
+          redeemed_at: string;
+        };
+        Insert: {
+          id?: string;
+          coupon_id: string;
+          retailer_id: string;
+          order_id: string;
+          discount_amount: number;
+          redeemed_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['coupon_redemptions']['Insert']>;
+        Relationships: [
+          { foreignKeyName: 'coupon_redemptions_coupon_id_fkey'; columns: ['coupon_id']; isOneToOne: false; referencedRelation: 'coupons'; referencedColumns: ['id'] },
+          { foreignKeyName: 'coupon_redemptions_retailer_id_fkey'; columns: ['retailer_id']; isOneToOne: false; referencedRelation: 'retailers'; referencedColumns: ['id'] },
+          { foreignKeyName: 'coupon_redemptions_order_id_fkey'; columns: ['order_id']; isOneToOne: false; referencedRelation: 'orders'; referencedColumns: ['id'] },
+        ];
+      };
+      retailer_active_coupons: {
+        Row: {
+          id: string;
+          retailer_id: string;
+          coupon_id: string;
+          applied_at: string;
+        };
+        Insert: {
+          id?: string;
+          retailer_id: string;
+          coupon_id: string;
+          applied_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['retailer_active_coupons']['Insert']>;
+        Relationships: [
+          { foreignKeyName: 'retailer_active_coupons_retailer_id_fkey'; columns: ['retailer_id']; isOneToOne: false; referencedRelation: 'retailers'; referencedColumns: ['id'] },
+          { foreignKeyName: 'retailer_active_coupons_coupon_id_fkey'; columns: ['coupon_id']; isOneToOne: false; referencedRelation: 'coupons'; referencedColumns: ['id'] },
+        ];
+      };
     };
 
     Views: {
@@ -2028,7 +2137,6 @@ export interface Database {
         };
         Relationships: [];
       };
-
     };
     Functions: {
       // 0035: retailer self-service shop profile update (name + address only).
@@ -2135,6 +2243,21 @@ export interface Database {
         Args: { p_user_id: string; p_feature_key: string };
         Returns: boolean;
       };
+      // Added by 0051_coupon_system.sql — atomic coupon redemption / release
+      // (security definer, auth-checked; the only writers of coupon_redemptions).
+      redeem_coupon: {
+        Args: {
+          p_coupon_id: string;
+          p_retailer_id: string;
+          p_order_id: string;
+          p_discount: number;
+        };
+        Returns: boolean;
+      };
+      release_coupon: {
+        Args: { p_order_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       user_role: UserRoleEnum;
@@ -2150,6 +2273,8 @@ export interface Database {
       access_status: AccessStatusEnum;
       feature_target_type: FeatureTargetTypeEnum;
       maintenance_scope: MaintenanceScopeEnum;
+      // Added by 0051_coupon_system.sql
+      coupon_discount_type: CouponDiscountTypeEnum;
     };
     CompositeTypes: {
       [_ in never]: never;
