@@ -20,6 +20,7 @@ import { CartItemRow } from '@/components/retailer/cart-item-row';
 import { CartSaveControls } from '@/components/retailer/cart-save-controls';
 import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
 import { CartCheckoutBar } from '@/components/retailer/cart-checkout-bar';
+import { CouponApplyForm } from '@/components/retailer/coupon-apply-form';
 import { ClearCartButton } from '@/components/retailer/clear-cart-button';
 import { CreditSummary } from '@/components/retailer/credit-summary';
 import { ProductRail } from '@/components/retailer/product-rail';
@@ -28,6 +29,8 @@ import { loadFavoriteIds } from '@/lib/retailer/catalog';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
 import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { getFrequentlyOrderedCards } from '@/lib/retailer/personalization';
+import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
+import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
 
 interface CartItemDetail {
   id: string;
@@ -191,7 +194,30 @@ export default async function CartPage() {
     };
   });
 
-  const grandTotal = subtotal + gstTotal;
+  // COUPON (0051): the stored code is REVALIDATED server-side against the
+  // current cart before any discount is shown. A code that no longer applies
+  // (window closed, minimum order dropped, no eligible items, limits reached)
+  // is displayed as a warning and NOT subtracted — the same validator runs
+  // again inside the quote when the order is actually created.
+  const cartCoupon = await loadActiveCouponForRetailer(supabase, user.id);
+  let appliedCoupon: { code: string; discount: number } | null = null;
+  let couponWarning: string | null = null;
+  if (cartCoupon.coupon && !cartCoupon.error) {
+    const { lines: couponLines } = await loadCartCouponLines(supabase, user.id, retailer?.area_id ?? null);
+    const validation = await validateCouponForOrder(supabase, {
+      retailerId: user.id,
+      code: cartCoupon.coupon.code,
+      lines: couponLines,
+    });
+    if (validation.valid) {
+      appliedCoupon = { code: validation.coupon.code, discount: validation.discount };
+    } else {
+      couponWarning = `Coupon ${cartCoupon.coupon.code} no longer applies: ${validation.message}`;
+    }
+  }
+
+  const discountTotal = appliedCoupon?.discount ?? 0;
+  const grandTotal = subtotal + gstTotal - discountTotal;
   const hasUnavailable = lines.some((line) => line.isUnavailable);
   // A line is only orderable when the engine could price it at a valid retail
   // piece rate (whole quantity, at or above MOQ). Unpriced requests are blocked
@@ -275,12 +301,15 @@ export default async function CartPage() {
         </section>
 
         <aside className="space-y-3 lg:sticky lg:top-36">
+          <CouponApplyForm applied={appliedCoupon} warning={couponWarning} />
+
           <CartOrderSummary
             subtotal={subtotal}
             gstByRate={[...gstByRate.entries()].map(([rate, amount]) => ({ rate, amount }))}
             savings={savings}
             grandTotal={grandTotal}
             orderableCount={availableCount}
+            coupon={appliedCoupon}
           />
 
           <CreditSummary

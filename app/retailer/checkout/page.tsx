@@ -26,6 +26,8 @@ import type { SavedAddress } from '@/components/retailer/address-form';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
 import { buildCanonicalProductName } from '@/lib/retailer/product-name';
 import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
+import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
+import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
 
 interface CartItemDetail {
   id: string;
@@ -165,7 +167,29 @@ export default async function CheckoutPage() {
       lineTotal: pricing.lineTotal,
     };
   });
-  const grandTotal = subtotal + gstTotal;
+  // COUPON (0051): revalidated server-side against the current cart before any
+  // discount is displayed. The final gate is the quote inside
+  // placeOrderAction, which re-runs the same validator and refuses to bill a
+  // discount the database no longer supports.
+  const cartCoupon = await loadActiveCouponForRetailer(supabase, user.id);
+  let appliedCoupon: { code: string; discount: number } | null = null;
+  let couponWarning: string | null = null;
+  if (cartCoupon.coupon && !cartCoupon.error) {
+    const { lines: couponLines } = await loadCartCouponLines(supabase, user.id, retailer?.area_id ?? null);
+    const validation = await validateCouponForOrder(supabase, {
+      retailerId: user.id,
+      code: cartCoupon.coupon.code,
+      lines: couponLines,
+    });
+    if (validation.valid) {
+      appliedCoupon = { code: validation.coupon.code, discount: validation.discount };
+    } else {
+      couponWarning = `Coupon ${cartCoupon.coupon.code} no longer applies: ${validation.message}. The order will be placed without it.`;
+    }
+  }
+
+  const discountTotal = appliedCoupon?.discount ?? 0;
+  const grandTotal = subtotal + gstTotal - discountTotal;
   const totalPieces = lines.reduce((sum, line) => sum + line.pieces, 0);
 
   return (
@@ -389,6 +413,12 @@ export default async function CheckoutPage() {
                 <span>Subtotal</span>
                 <span className="font-semibold text-slate-800">{formatInr(subtotal)}</span>
               </div>
+              {appliedCoupon ? (
+                <div className="flex justify-between text-xs font-semibold text-emerald-700">
+                  <span>Coupon · {appliedCoupon.code}</span>
+                  <span>−{formatInr(appliedCoupon.discount)}</span>
+                </div>
+              ) : null}
               {[...gstByRate.entries()].map(([rate, amount]) => (
                 <div key={rate} className="flex justify-between text-xs text-slate-600">
                   <span>GST {rate}%</span>
@@ -420,10 +450,20 @@ export default async function CheckoutPage() {
                 'One of the quantities in your cart is not available. Adjust it in the cart to continue.'}
             </p>
           ) : null}
+          {couponWarning ? (
+            <p
+              role="status"
+              className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] font-semibold text-amber-800"
+            >
+              {couponWarning}
+            </p>
+          ) : null}
           <CheckoutForm
             grandTotal={grandTotal}
             subtotal={subtotal}
             gstTotal={gstTotal}
+            couponDiscount={discountTotal}
+            couponCode={appliedCoupon?.code ?? null}
             itemCount={lines.length}
             disabled={lines.some((line) => !line.orderable)}
           />

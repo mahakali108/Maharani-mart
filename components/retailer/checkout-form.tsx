@@ -9,6 +9,9 @@ export interface CheckoutFormProps {
   grandTotal: number;
   subtotal?: number;
   gstTotal?: number;
+  /** Server-validated coupon discount (0051); 0 when none applies. */
+  couponDiscount?: number;
+  couponCode?: string | null;
   itemCount?: number;
   /** True when a cart line cannot be priced (e.g. an unpriced loose remainder). */
   disabled?: boolean;
@@ -18,6 +21,8 @@ export function CheckoutForm({
   grandTotal,
   subtotal,
   gstTotal,
+  couponDiscount = 0,
+  couponCode = null,
   itemCount,
   disabled = false,
 }: CheckoutFormProps) {
@@ -84,6 +89,12 @@ export function CheckoutForm({
               <div className="flex justify-between">
                 <span>GST component</span>
                 <span className="font-semibold text-slate-700">₹{gstTotal.toFixed(2)}</span>
+              </div>
+            ) : null}
+            {couponDiscount > 0 ? (
+              <div className="flex justify-between">
+                <span>Coupon {couponCode ? `· ${couponCode}` : ''}</span>
+                <span className="font-semibold text-emerald-700">−₹{couponDiscount.toFixed(2)}</span>
               </div>
             ) : null}
           </div>

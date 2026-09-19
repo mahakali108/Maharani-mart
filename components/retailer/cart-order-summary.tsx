@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, ShieldCheck } from 'lucide-react';
+import { ArrowRight, BadgePercent, ShieldCheck } from 'lucide-react';
 import { formatInr } from '@/lib/retailer/format';
 
 export interface GstBreakdownRow {
@@ -12,9 +12,10 @@ export interface GstBreakdownRow {
  * the same effective-price / GST / savings helpers the checkout uses — this
  * card renders totals only and never recalculates anything itself.
  *
- * The retailer sees PIECE totals, never case totals. The summary below has
- * been trimmed to "Subtotal → GST → Grand total" so a single number rolls
- * through cart → checkout → order history.
+ * The retailer sees PIECE totals, never case totals. The summary rolls through
+ * cart → checkout → order history as Subtotal → (coupon) → GST → Total. The
+ * `coupon` row is only present when the server revalidated the applied code
+ * against the current cart — it is never trusted from the client.
  */
 export function CartOrderSummary({
   subtotal,
@@ -22,12 +23,15 @@ export function CartOrderSummary({
   savings,
   grandTotal,
   orderableCount,
+  coupon = null,
 }: {
   subtotal: number;
   gstByRate: GstBreakdownRow[];
   savings: number;
   grandTotal: number;
   orderableCount: number;
+  /** Server-validated applied coupon (0051); null when none applies. */
+  coupon?: { code: string; discount: number } | null;
 }) {
   return (
     <section
@@ -48,6 +52,16 @@ export function CartOrderSummary({
           <span>Subtotal</span>
           <span className="text-right font-semibold text-slate-800">{formatInr(subtotal)}</span>
         </div>
+
+        {coupon ? (
+          <div className="flex items-baseline justify-between gap-3 text-xs font-semibold text-emerald-700">
+            <span className="flex items-center gap-1.5">
+              <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" />
+              Coupon · {coupon.code}
+            </span>
+            <span className="text-right">−{formatInr(coupon.discount)}</span>
+          </div>
+        ) : null}
 
         {gstByRate.map(({ rate, amount }) => (
           <div
