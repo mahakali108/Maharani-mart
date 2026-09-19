@@ -62,7 +62,7 @@ export function computeCouponDiscount(coupon: CouponRow, eligibleSubtotal: numbe
 }
 
 /** Human label for the discount value, e.g. "10% off" / "₹500 off". */
-export function describeDiscountValue(coupon: CouponRow): string {
+export function describeDiscountValue(coupon: Pick<CouponRow, 'discount_type' | 'discount_value'>): string {
   return coupon.discount_type === 'percentage'
     ? `${coupon.discount_value}% off`
     : `₹${coupon.discount_value.toFixed(2)} off`;
