@@ -4,9 +4,7 @@ import { useState, useTransition } from 'react';
 import { BadgePercent, CalendarClock, Check, Copy, Loader2, Ticket } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { applyCouponAction } from '@/lib/coupons/actions';
-import { describeDiscountValue } from '@/lib/coupons/engine';
 import { formatInr } from '@/lib/retailer/format';
-import { formatIndiaDate } from '@/lib/datetime/india';
 
 export interface CouponCardProps {
   code: string;
