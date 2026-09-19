@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { BadgeCheck, ChevronRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { BrowseTabs } from '@/components/retailer/browse-tabs';
 import { BrandDirectory } from '@/components/retailer/brand-directory';
 import type { BrandCardData } from '@/components/retailer/brand-card';
 import { loadBrandDirectory } from '@/lib/retailer/brand-detail';
@@ -48,6 +49,9 @@ export default async function RetailerBrandsPage({
           </div>
         </div>
       </section>
+
+      {/* Categories and Brands are separate, independent catalog dimensions. */}
+      <BrowseTabs active="brands" />
 
       {directory.categories.length > 0 ? (
         <form action="/retailer/brands" method="get" className="flex flex-col gap-2 sm:flex-row sm:items-center">

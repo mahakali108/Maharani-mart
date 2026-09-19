@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import {
+  BadgeCheck,
   Boxes,
   ChevronLeft,
   ChevronRight,
   Coffee,
   Cookie,
+  LayoutGrid,
   Milk,
   Package,
   Soup,
@@ -55,6 +57,19 @@ interface BrandRow {
 }
 
 const CATEGORY_ICONS = [Boxes, Cookie, Coffee, Milk, Soup, Package];
+
+/** Two-letter monogram for brand chips, mirroring the brand card treatment. */
+function brandMonogram(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .map((word) => word[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'B'
+  );
+}
 
 /** Bound on how many variant/barcode matches are folded into the search disjunction. */
 const PACK_MATCH_LIMIT = 150;
@@ -343,14 +358,58 @@ export default async function RetailerCatalogPage({
         </div>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5">
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">
+            Browse the catalog
+          </p>
+          <h2 className="mt-0.5 text-sm font-bold text-slate-900 sm:text-base">Shop by category or brand</h2>
+        </div>
+
+        {/* Categories and Brands are independent catalog dimensions — two separate
+            entry points. Neither is reached through the other. */}
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          <Link
+            href="/retailer/categories"
+            className="group flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+              <LayoutGrid className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="flex items-center gap-1 text-xs font-bold text-slate-900 sm:text-sm">
+                Categories
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition group-hover:text-primary-600" aria-hidden="true" />
+              </span>
+              <span className="mt-0.5 block truncate text-[10px] text-slate-500 sm:text-[11px]">
+                Browse all product aisles
+              </span>
+            </span>
+          </Link>
+          <Link
+            href="/retailer/brands"
+            className="group flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+              <BadgeCheck className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="flex items-center gap-1 text-xs font-bold text-slate-900 sm:text-sm">
+                Brands
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition group-hover:text-primary-600" aria-hidden="true" />
+              </span>
+              <span className="mt-0.5 block truncate text-[10px] text-slate-500 sm:text-[11px]">
+                Browse all brands
+              </span>
+            </span>
+          </Link>
+        </div>
+
+        <div className="space-y-3">
         <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-600">
-              Browse the catalog
-            </p>
-            <h2 className="mt-0.5 text-sm font-bold text-slate-900 sm:text-base">Shop by category</h2>
-          </div>
+          <h3 className="text-xs font-bold text-slate-900 sm:text-sm">
+            Shop by category
+          </h3>
           <Link
             href={catalogHref({ ...filterValues, category: undefined })}
             className="flex items-center gap-1 text-[10px] font-bold text-primary-600 sm:text-[11px]"
@@ -455,6 +514,54 @@ export default async function RetailerCatalogPage({
               </Link>
             );
           })}
+        </div>
+        </div>
+
+        <div className="border-t border-slate-100 pt-4">
+          <div className="flex items-end justify-between gap-3">
+            <h3 className="text-xs font-bold text-slate-900 sm:text-sm">
+              Shop by brand
+            </h3>
+            <Link
+              href="/retailer/brands"
+              className="flex items-center gap-1 text-[10px] font-bold text-primary-600 sm:text-[11px]"
+            >
+              View all brands <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </div>
+          {brands.length > 0 ? (
+            <div className="scrollbar-none mt-3 flex gap-2 overflow-x-auto">
+              {brands.map((brand) => {
+                const active = selectedBrand?.id === brand.id;
+                return (
+                  <Link
+                    key={brand.id}
+                    href={`/retailer/brands/${brand.id}`}
+                    className={cn(
+                      'flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                      active
+                        ? 'border-primary-600 bg-primary-50 text-primary-700'
+                        : 'border-slate-200 text-slate-600 hover:border-primary-200 hover:text-primary-600'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-lg text-[9px] font-black',
+                        active ? 'bg-white text-primary-700' : 'bg-slate-100 text-slate-500'
+                      )}
+                    >
+                      {brandMonogram(brand.name)}
+                    </span>
+                    {brand.name}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-500">
+              Brands will appear here as the catalog is updated.
+            </p>
+          )}
         </div>
       </section>
 

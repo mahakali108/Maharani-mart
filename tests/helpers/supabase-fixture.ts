@@ -7,6 +7,7 @@ export interface FixtureQuery {
   operation: 'select' | 'insert' | 'update' | 'delete';
   payload?: Record<string, unknown>;
   limit?: number;
+  range?: { from: number; to: number };
 }
 type Row = Record<string, unknown>;
 type Result = { data: Row[] | null; error: { message: string } | null; count: number | null };
@@ -55,7 +56,11 @@ export function supabaseFixture(
         return 0;
       });
       const count = rows.length;
-      return { data: query.limit == null ? rows : rows.slice(0, query.limit), error: null, count };
+      // `.range(from, to)` pages `data` while `count` stays the full match
+      // total (Supabase semantics with `count: 'exact'`).
+      let paged = rows;
+      if (query.range) paged = paged.slice(query.range.from, query.range.to + 1);
+      return { data: query.limit == null ? paged : paged.slice(0, query.limit), error: null, count };
     }
     const chain = {
       select: (select: string) => { query.select = select; return chain; },
@@ -68,6 +73,7 @@ export function supabaseFixture(
       or: (value: string) => { query.filters.push({ op: 'or', column: '', value }); return chain; },
       order: (column: string, options?: { ascending?: boolean }) => { sorts.push({ column, asc: options?.ascending !== false }); return chain; },
       limit: (limit: number) => { query.limit = limit; return chain; },
+      range: (from: number, to: number) => { query.range = { from, to }; return chain; },
       returns: () => chain,
       maybeSingle: async () => { const result = run(); return { ...result, data: result.data?.[0] ?? null }; },
       single: async () => { const result = run(); return { ...result, data: result.data?.[0] ?? null }; },

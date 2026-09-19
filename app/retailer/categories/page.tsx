@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { BrowseTabs } from '@/components/retailer/browse-tabs';
 import { CategoryDirectory, type DirectoryCategory } from '@/components/retailer/category-directory';
 
 interface CategoryRow {
@@ -67,6 +68,9 @@ export default async function CategoriesPage() {
           </div>
         </div>
       </section>
+
+      {/* Categories and Brands are separate, independent catalog dimensions. */}
+      <BrowseTabs active="categories" />
 
       {directoryCategories.length > 0 ? (
         <CategoryDirectory categories={directoryCategories} />
