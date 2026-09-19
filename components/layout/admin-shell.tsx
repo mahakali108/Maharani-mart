@@ -24,6 +24,7 @@ import {
   Target,
   IndianRupee,
   Headset,
+  Ticket,
 } from 'lucide-react';
 
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Areas', href: '/admin/areas', icon: MapPin },
   { label: 'Warehouses', href: '/admin/warehouses', icon: Warehouse },
   { label: 'Pricing & Schemes', href: '/admin/pricing', icon: Tag },
+  { label: 'Coupons', href: '/admin/coupons', icon: Ticket },
   { label: 'Inventory', href: '/admin/inventory', icon: Warehouse },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
   { label: 'Delivered Orders', href: '/admin/delivered', icon: PackageCheck },

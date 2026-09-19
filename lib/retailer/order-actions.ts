@@ -9,6 +9,7 @@ import { validatePackForCart } from '@/lib/retailer/cart-service';
 import { isReturnWindowOpen } from '@/lib/delivery/return-window';
 import type { Database } from '@/types/database.types';
 import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
+import { releaseOrderCoupon } from '@/lib/coupons/validate';
 
 type ReturnRequestInsert = Database['public']['Tables']['return_requests']['Insert'];
 
@@ -40,9 +41,14 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
     console.warn('Wallet reversal failed (non-blocking):', err);
   }
 
+  // A cancelled order no longer consumes its coupon (0051): the redemption is
+  // released so the retailer can reuse it within its own limits.
+  await releaseOrderCoupon(supabase, orderId);
+
   revalidatePath(`/retailer/orders/${orderId}`);
   revalidatePath('/retailer/orders');
   revalidatePath('/retailer/account/ledger');
+  revalidatePath('/retailer/coupons');
   return { success: true };
 }
 

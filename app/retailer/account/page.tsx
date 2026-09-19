@@ -4,6 +4,7 @@ import {
   BadgePercent,
   Bell,
   ChevronRight,
+  CircleAlert,
   CircleHelp,
   ClipboardList,
   Heart,
@@ -11,10 +12,12 @@ import {
   MapPin,
   MessageCircle,
   Phone,
+  RotateCcw,
   Scale,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Ticket,
   UserRound,
   WalletCards,
 } from 'lucide-react';
@@ -50,8 +53,10 @@ const ACCOUNT_LINKS = [
   { href: '#wallet-credit', label: 'Wallet & credit', body: 'Available credit and outstanding balance', icon: WalletCards, tone: 'bg-emerald-50 text-emerald-700' },
   { href: '/retailer/account/ledger', label: 'Credit & ledger', body: 'Order activity on your account, with dates and values', icon: Scale, tone: 'bg-slate-100 text-slate-700' },
   { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
+  { href: '/retailer/home#home-reorder', label: 'Reorder', body: 'Your recently purchased packs, one tap away', icon: RotateCcw, tone: 'bg-cyan-50 text-cyan-700' },
   { href: '/retailer/quick-order', label: 'Quick order', body: 'Find products by name', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
   { href: '/retailer/favorites', label: 'Favourites', body: 'Your saved products for faster restocking', icon: Heart, tone: 'bg-rose-50 text-rose-700' },
+  { href: '/retailer/coupons', label: 'Coupons & offers', body: 'Your available codes and used offers', icon: Ticket, tone: 'bg-pink-50 text-pink-700' },
   { href: '/retailer/notifications', label: 'Notifications', body: 'Order and account updates', icon: Bell, tone: 'bg-violet-50 text-violet-700' },
   { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-indigo-50 text-indigo-700' },
   { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, credit and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
@@ -63,7 +68,7 @@ export default async function RetailerAccountPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: retailer }, { data: profile }, { count: orderCount }, { count: unreadCount }, walletSummary, { count: addressCount }] =
+  const [retailerResult, profileResult, { count: orderCount }, { count: unreadCount }, walletSummary, { count: addressCount }] =
     await Promise.all([
       supabase
         .from('retailers')
@@ -83,6 +88,10 @@ export default async function RetailerAccountPage() {
         .select('id', { count: 'exact', head: true })
         .eq('retailer_id', user.id),
     ]);
+
+  const retailer = retailerResult.data ?? null;
+  const profile = profileResult.data ?? null;
+  const detailsUnavailable = !!retailerResult.error || !!profileResult.error;
 
   const shopName = retailer?.shop_name ?? user.fullName;
   const area = retailer?.areas
@@ -163,6 +172,15 @@ export default async function RetailerAccountPage() {
         {/* Profile completion — real fields only, computed server-side. */}
         <ProfileCompletionBar completion={completion} />
       </section>
+
+      {detailsUnavailable ? (
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>
+            <span className="font-bold">Some account details could not be loaded.</span> Fields shown as “Not provided” could not be verified right now and are not estimated.
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-7">
         <div className="space-y-5">

@@ -4,27 +4,25 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { BrandDirectory } from '@/components/retailer/brand-directory';
 import type { BrandCardData } from '@/components/retailer/brand-card';
+import { loadBrandDirectory } from '@/lib/retailer/brand-detail';
 
-interface BrandRow extends BrandCardData {
-  products: { count: number }[] | null;
-}
-
-export default async function RetailerBrandsPage() {
+export default async function RetailerBrandsPage({
+  searchParams,
+}: {
+  searchParams: { category?: string };
+}) {
   await requireUser();
   const supabase = createClient();
-  const { data } = await supabase
-    .from('brands')
-    .select('id, name, logo_url, products(count)')
-    .eq('is_active', true)
-    .order('name')
-    .returns<BrandRow[]>();
+  const categoryId = searchParams.category?.trim() ?? '';
+  const directory = await loadBrandDirectory(supabase, categoryId || undefined);
 
-  const brands: BrandCardData[] = (data ?? []).map((brand) => ({
+  const brands: BrandCardData[] = directory.brands.map((brand) => ({
     id: brand.id,
     name: brand.name,
     logo_url: brand.logo_url,
-    productCount: brand.products?.[0]?.count ?? 0,
+    productCount: brand.productCount,
   }));
+  const selectedCategory = directory.categories.find((category) => category.id === categoryId) ?? null;
 
   return (
     <div className="space-y-5 sm:space-y-7">
@@ -45,21 +43,75 @@ export default async function RetailerBrandsPage() {
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Trusted brands</p>
             <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Shop by brand</h1>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 sm:text-sm">
-              Pick a brand to open the product catalog with that brand&apos;s products and your retailer pricing.
+              Pick a brand to see every active product at your retailer pricing.
             </p>
           </div>
         </div>
       </section>
+
+      {directory.categories.length > 0 ? (
+        <form action="/retailer/brands" method="get" className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="relative flex-1">
+            <span className="sr-only">Filter brands by category</span>
+            <select
+              name="category"
+              defaultValue={selectedCategory?.id ?? ''}
+              className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 pr-10 text-sm font-semibold text-slate-900 outline-none focus:border-primary-300 focus:ring-4 focus:ring-primary-50"
+            >
+              <option value="">All categories</option>
+              {directory.categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="flex h-12 min-w-[5.5rem] flex-1 items-center justify-center rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:flex-none"
+            >
+              Filter
+            </button>
+            {selectedCategory ? (
+              <Link
+                href="/retailer/brands"
+                className="flex h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:flex-none"
+              >
+                Clear
+              </Link>
+            ) : null}
+          </div>
+        </form>
+      ) : null}
+
+      {selectedCategory ? (
+        <p className="text-[11px] text-slate-500" role="status">
+          Showing brands with active products in <span className="font-bold text-slate-700">{selectedCategory.name}</span>.
+        </p>
+      ) : null}
 
       {brands.length > 0 ? (
         <BrandDirectory brands={brands} />
       ) : (
         <section className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 text-center">
           <BadgeCheck className="h-8 w-8 text-slate-300" aria-hidden="true" />
-          <p className="mt-3 text-sm font-semibold text-slate-700">No brands yet</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Brands will appear as products are added to the marketplace.
+          <p className="mt-3 text-sm font-semibold text-slate-700">
+            {selectedCategory ? `No brands in ${selectedCategory.name} yet` : 'No brands yet'}
           </p>
+          <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
+            {selectedCategory
+              ? 'Products with a listed brand appear here. Browse the category directly to see everything available.'
+              : 'Brands will appear as products are added to the marketplace.'}
+          </p>
+          {selectedCategory ? (
+            <Link
+              href={`/retailer/catalog?category=${selectedCategory.id}`}
+              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700"
+            >
+              Browse this category <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          ) : null}
         </section>
       )}
     </div>

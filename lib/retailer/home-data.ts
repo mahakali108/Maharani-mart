@@ -56,6 +56,15 @@ export interface HomeReorderItem {
   availability: AvailabilityState;
   canReorder: boolean;
 }
+/** Live scheme row — the same active/in-window rows the retailer Schemes page lists. */
+export interface HomeSchemeRow {
+  id: string;
+  name: string;
+  description: string | null;
+  is_festival: boolean;
+  starts_at: string;
+  ends_at: string;
+}
 export interface RetailerHomeData {
   banners: PromoBannerData[];
   categories: CategoryCardData[];
@@ -63,8 +72,9 @@ export interface RetailerHomeData {
   products: PricedCatalogCard[];
   frequent: PricedCatalogCard[];
   reorders: HomeReorderItem[];
+  schemes: HomeSchemeRow[];
   cart: HomeCartSummary;
-  errors: { catalog: boolean; categories: boolean; brands: boolean; banners: boolean; history: boolean; pricing: boolean };
+  errors: { catalog: boolean; categories: boolean; brands: boolean; banners: boolean; history: boolean; pricing: boolean; schemes: boolean };
 }
 
 /** Same scope as the catalog filter: parent + its active immediate children.
@@ -147,7 +157,7 @@ export async function loadRetailerHome(
     .or(`starts_at.is.null,starts_at.lte.${nowIso}`).or(`ends_at.is.null,ends_at.gte.${nowIso}`);
   bannerQuery = areaId ? bannerQuery.or(`area_id.is.null,area_id.eq.${areaId}`) : bannerQuery.is('area_id', null);
 
-  const [bannerResult, categoryResult, brandResult, productResult, historyResult, cartResult, favoriteIds] = await Promise.all([
+  const [bannerResult, categoryResult, brandResult, productResult, schemeResult, historyResult, cartResult, favoriteIds] = await Promise.all([
     bannerQuery.order('sort_order').limit(12).returns<BannerRow[]>(),
     supabase.from('categories').select('id, name, image_url, parent_id, products(count)')
       .eq('is_active', true).eq('products.is_active', true).order('sort_order').returns<HomeCategoryRow[]>(),
@@ -155,6 +165,9 @@ export async function loadRetailerHome(
       .eq('is_active', true).eq('products.is_active', true).order('name').returns<BrandRow[]>(),
     supabase.from('products').select(PRODUCT_CARD_SELECT).eq('is_active', true)
       .order('created_at', { ascending: false }).order('id').limit(80).returns<CatalogProductRow[]>(),
+    // Same active/in-window rules as the retailer Schemes page — real rows only.
+    supabase.from('schemes').select('id, name, description, is_festival, starts_at, ends_at')
+      .eq('is_active', true).lte('starts_at', nowIso).gte('ends_at', nowIso).order('ends_at').limit(6).returns<HomeSchemeRow[]>(),
     supabase.from('orders').select('id, placed_at, status, order_items ( id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case )')
       .eq('retailer_id', retailerId).neq('status', 'cancelled').order('placed_at', { ascending: false }).limit(40).returns<HomeOrder[]>(),
     // Header's cheap HEAD count is separate; this bounded detail read is needed
@@ -166,7 +179,7 @@ export async function loadRetailerHome(
 
   const errors = {
     catalog: !!productResult.error, categories: !!categoryResult.error, brands: !!brandResult.error,
-    banners: !!bannerResult.error, history: !!historyResult.error, pricing: false,
+    banners: !!bannerResult.error, history: !!historyResult.error, pricing: false, schemes: !!schemeResult.error,
   };
   const discoveryRows = productResult.error ? [] : productResult.data ?? [];
   const history = homeHistory(historyResult.error ? [] : historyResult.data ?? []);
@@ -222,6 +235,10 @@ export async function loadRetailerHome(
     products: discoveryRows.map((row) => cardById.get(row.id)!),
     frequent: frequentIds.map((id) => cardById.get(id)).filter((card): card is PricedCatalogCard => !!card),
     reorders,
+    schemes: (schemeResult.error ? [] : schemeResult.data ?? []).map((scheme) => ({
+      id: scheme.id, name: scheme.name, description: scheme.description,
+      is_festival: scheme.is_festival, starts_at: scheme.starts_at, ends_at: scheme.ends_at,
+    })),
     cart: homeCartSummary(cartLines, products, pricingData, cartResult.count, !!cartResult.error),
     errors,
   };

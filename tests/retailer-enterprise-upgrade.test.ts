@@ -443,7 +443,7 @@ describe('retailer data isolation is enforced in every read', () => {
 
   it('re-quotes server-side before an order is written', () => {
     const create = read('lib/orders/create-order.ts');
-    expect(create).toContain('quoteOrderForRetailer({ retailerId, lines, supabase })');
+    expect(create).toContain('quoteOrderForRetailer({ retailerId, lines, supabase, couponCode })');
     expect(create).toContain('quote.credit.exceedsLimit');
     expect(create).not.toMatch(/unit_price:\s*line\.(clientPrice|submittedPrice)/);
   });

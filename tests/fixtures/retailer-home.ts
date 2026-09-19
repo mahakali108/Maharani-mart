@@ -30,8 +30,8 @@ export function pricingData(): CatalogPricingData {
 }
 export function emptyHome(): RetailerHomeData {
   return {
-    banners: [], categories: [], brands: [], products: [], frequent: [], reorders: [],
+    banners: [], categories: [], brands: [], products: [], frequent: [], reorders: [], schemes: [],
     cart: { itemCount: 0, totalQuantity: 0, subtotal: 0, savings: 0, needsReview: false, unavailable: false },
-    errors: { catalog: false, categories: false, brands: false, banners: false, history: false, pricing: false },
+    errors: { catalog: false, categories: false, brands: false, banners: false, history: false, pricing: false, schemes: false },
   };
 }

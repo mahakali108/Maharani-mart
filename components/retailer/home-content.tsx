@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import {
-  ArrowRight, BadgePercent, BarChart3, Clock3, Headset, LayoutGrid, MapPin, Package,
-  ReceiptText, RotateCcw, ShieldCheck, ShoppingBag, Sparkles, Store, Truck, Wallet,
+  ArrowRight, BadgePercent, BarChart3, CalendarDays, Clock3, Headset, LayoutGrid, MapPin,
+  Package, ReceiptText, RotateCcw, ShieldCheck, ShoppingBag, Sparkles, Store, Tag, Truck, Wallet,
 } from 'lucide-react';
+import { formatIndiaDate } from '@/lib/datetime/india';
 import { BrandCard } from '@/components/retailer/brand-card';
 import { CategoryCard } from '@/components/retailer/category-card';
 import { ProductCard } from '@/components/retailer/product-card';
@@ -79,6 +80,11 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
         </ul> : <HomeEmptyState icon={LayoutGrid} title={data.errors.categories ? 'Categories are temporarily unavailable' : 'No categories available yet'} body="You can still open the catalog to look for products." href="/retailer/catalog" linkLabel="Browse catalog" />}
       </section>
 
+      {data.brands.length ? <section aria-label="Shop by brand" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <SectionHeading eyebrow="Find your favourites" title="Shop by brand" href="/retailer/brands" linkLabel="View all brands" />
+        <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{data.brands.slice(0, 10).map((brand) => <li className="min-w-0" key={brand.id}><BrandCard brand={brand} compact /></li>)}</ul>
+      </section> : null}
+
       <section aria-label="Featured products" className="space-y-4">
         <SectionHeading eyebrow="For your next restock" title="Featured products" href="/retailer/catalog" linkLabel="Browse catalog" />
         {data.errors.pricing ? <p role="status" className="text-xs text-amber-800">Current pricing could not be loaded. Add to Cart will be available when prices can be verified.</p> : null}
@@ -87,11 +93,32 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
         </div> : <HomeEmptyState icon={Package} title={data.errors.catalog ? 'Products are temporarily unavailable' : 'Your catalog is getting ready'} body="Active products and your current wholesale prices will appear here when available." href="/retailer/catalog" linkLabel="Browse Products" />}
       </section>
 
-      <section aria-label="Wholesale deals" className="space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 sm:p-5">
-        <SectionHeading eyebrow="More quantity. Better value." title="Wholesale deals" href="/retailer/schemes" linkLabel="View offers" />
-        <p className="text-xs leading-5 text-slate-600">Buy more, save more with configured quantity rates. Each deal shows the quantity needed to unlock it.</p>
-        {deals.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{deals.map((product) => <WholesaleDealCard key={product.id} product={product} />)}</div>
-          : <HomeEmptyState icon={BadgePercent} title={data.errors.pricing ? 'Quantity rates are temporarily unavailable' : 'No bulk deals available right now'} body="Browse the catalog for current wholesale prices, or check the offers page for active schemes." href="/retailer/schemes" linkLabel="Check offers" />}
+      <section aria-label="Offers and coupons" className="space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 sm:p-5">
+        <SectionHeading eyebrow="Save more on restocks" title="Offers &amp; coupons" href="/retailer/schemes" linkLabel="View all offers" />
+        {data.schemes.length ? <div className="grid gap-3 sm:grid-cols-2">
+          {data.schemes.slice(0, 3).map((scheme) => (
+            <article key={scheme.id} className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-primary-700">
+                  <Tag className="h-3 w-3" aria-hidden="true" /> {scheme.is_festival ? 'Festival offer' : 'Retailer scheme'}
+                </span>
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+                  <CalendarDays className="h-3 w-3" aria-hidden="true" /> Till {formatIndiaDate(scheme.ends_at)}
+                </span>
+              </div>
+              <h3 className="mt-2 truncate text-sm font-bold text-slate-900">{scheme.name}</h3>
+              {scheme.description ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-600">{scheme.description}</p> : null}
+              <Link href="/retailer/catalog?offers=1" className="mt-2.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300">
+                View products <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            </article>
+          ))}
+        </div> : null}
+        {deals.length ? <>
+          <p className="text-xs leading-5 text-slate-600">Buy more, save more with configured quantity rates. Each deal shows the quantity needed to unlock it.</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{deals.map((product) => <WholesaleDealCard key={product.id} product={product} />)}</div>
+        </> : null}
+        {!data.schemes.length && !deals.length ? <HomeEmptyState icon={BadgePercent} title={data.errors.schemes || data.errors.pricing ? 'Offers are temporarily unavailable' : 'No offers live right now'} body="Active schemes and festival offers appear here when they go live. Your current wholesale prices still apply." href="/retailer/schemes" linkLabel="Check offers" /> : null}
       </section>
 
       <section id="home-reorder" aria-label="Buy again" className="scroll-mt-36 space-y-4">
@@ -101,11 +128,6 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
           : <HomeEmptyState icon={RotateCcw} title={data.errors.history ? 'Order history is temporarily unavailable' : 'Make your next restock a one-tap reorder'} body="Products from your confirmed orders will appear here. Start with the catalog, or review your existing orders." href="/retailer/orders" linkLabel="View orders" />}
         {data.frequent.length ? <ProductRail title="Frequently ordered by you" href="/retailer/catalog?sort=frequent" linkLabel="View products" products={data.frequent} /> : null}
       </section>
-
-      {data.brands.length ? <section aria-label="Shop by brand" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <SectionHeading eyebrow="Find your favourites" title="Shop by brand" href="/retailer/brands" linkLabel="View all brands" />
-        <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{data.brands.slice(0, 10).map((brand) => <li className="min-w-0" key={brand.id}><BrandCard brand={brand} compact /></li>)}</ul>
-      </section> : null}
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <HomeCartSummary cart={data.cart} />

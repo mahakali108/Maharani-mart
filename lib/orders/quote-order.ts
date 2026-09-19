@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
+import { validateCouponForOrder } from '@/lib/coupons/validate';
 import { calculateCreditPosition, roundMoney, type CreditPosition } from '@/lib/orders/credit';
 import { getProductPriceOverrides, resolvePackCasePrice } from '@/lib/retailer/effective-price';
 import { calculateRetailerPiecePrice, type RetailerPiecePricing } from '@/lib/retailer/retailer-pricing';
@@ -44,6 +45,9 @@ export interface QuotedOrderItem {
 export interface QuotedOrderLine {
   productId: string;
   productName: string;
+  /** Scoping ids for coupon eligibility (0051); null when the product has none. */
+  categoryId: string | null;
+  brandId: string | null;
   packId: string;
   packName: string;
   /** Pieces ordered. */
@@ -78,6 +82,13 @@ export interface QuotedOrderLine {
   items: QuotedOrderItem[];
 }
 
+export interface QuotedCoupon {
+  id: string;
+  code: string;
+  /** Rupees subtracted from the GST-inclusive grand total. */
+  discount: number;
+}
+
 export interface OrderQuote {
   retailerId: string;
   subtotal: number;
@@ -86,6 +97,8 @@ export interface OrderQuote {
   grandTotal: number;
   lines: QuotedOrderLine[];
   credit: CreditPosition;
+  /** Set when a valid coupon was revalidated and applied (0051). */
+  coupon: QuotedCoupon | null;
 }
 
 export type QuoteOrderResult = { error: string } | { quote: OrderQuote };
@@ -123,7 +136,16 @@ interface PackForQuote {
   moq: number;
   allow_loose_pieces?: boolean;
   is_active: boolean;
-  products: { id: string; name: string; gst_percent: number; is_active: boolean } | null;
+  // category_id/brand_id feed the coupon eligibility engine (0051) without a
+  // second read; they are never rendered as pricing.
+  products: {
+    id: string;
+    name: string;
+    gst_percent: number;
+    is_active: boolean;
+    category_id: string | null;
+    brand_id: string | null;
+  } | null;
 }
 
 export function normalizeQuoteLines(lines: RequestedQuoteLine[]): { error: string } | { lines: Map<string, number> } {
@@ -159,10 +181,18 @@ export async function quoteOrderForRetailer({
   retailerId,
   lines,
   supabase = createClient(),
+  couponCode,
 }: {
   retailerId: string;
   lines: RequestedQuoteLine[];
   supabase?: ReturnType<typeof createClient>;
+  /**
+   * Raw coupon code, if the retailer has one applied to the cart. The code is
+   * REVALIDATED here against fresh database state — an expired, exhausted or
+   * ineligible coupon fails the whole quote rather than billing a stale
+   * discount. No discount VALUE is ever accepted from the caller.
+   */
+  couponCode?: string | null;
 }): Promise<QuoteOrderResult> {
   const normalizedResult = normalizeQuoteLines(lines);
   if ('error' in normalizedResult) return normalizedResult;
@@ -187,7 +217,7 @@ export async function quoteOrderForRetailer({
   const { data: packData, error: packError } = await supabase
     .from('product_packs')
     .select(
-      'id, product_id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active, products ( id, name, gst_percent, is_active )'
+      'id, product_id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active, products ( id, name, gst_percent, is_active, category_id, brand_id )'
     )
     .in('id', [...normalized.keys()]);
   if (packError) return { error: 'The product catalog could not be loaded. Please try again.' };
@@ -263,6 +293,8 @@ export async function quoteOrderForRetailer({
     quotedLines.push({
       productId: pack.product_id,
       productName: product.name,
+      categoryId: product.category_id,
+      brandId: product.brand_id,
       packId,
       packName: pack.pack_name,
       quantity,
@@ -286,16 +318,43 @@ export async function quoteOrderForRetailer({
     });
   }
 
-  const grandTotal = roundMoney(subtotal + gstTotal);
+  // COUPON (0051) — the ONLY discount layer. It is applied to the GST-inclusive
+  // grand total as a rupee reduction: per-line GST extraction (above) is left
+  // completely untouched, order_items rows are unchanged, and
+  // `discount_total`/`grand_total` on the persisted order reconcile exactly.
+  let discountTotal = 0;
+  let quotedCoupon: QuotedCoupon | null = null;
+  const code = (couponCode ?? '').trim().toUpperCase();
+  if (code) {
+    const couponLines = quotedLines.map((line) => ({
+      productId: line.productId,
+      categoryId: line.categoryId,
+      brandId: line.brandId,
+      subtotal: line.subtotal,
+    }));
+    const validation = await validateCouponForOrder(supabase, {
+      retailerId: retailer.id,
+      code,
+      lines: couponLines,
+    });
+    if (!validation.valid) {
+      return { error: validation.message };
+    }
+    discountTotal = validation.discount;
+    quotedCoupon = { id: validation.coupon.id, code: validation.coupon.code, discount: validation.discount };
+  }
+
+  const grandTotal = roundMoney(subtotal + gstTotal - discountTotal);
   return {
     quote: {
       retailerId: retailer.id,
       subtotal,
       gstTotal,
-      discountTotal: 0,
+      discountTotal,
       grandTotal,
       lines: quotedLines,
       credit: calculateCreditPosition(creditLimitRupees, outstandingRupees, grandTotal),
+      coupon: quotedCoupon,
     },
   };
 }

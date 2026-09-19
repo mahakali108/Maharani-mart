@@ -7,6 +7,7 @@ import { notifyOrderEvent } from '@/lib/notifications/notify';
 import type { Database } from '@/types/database.types';
 import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
 import { canTransitionOrderStatus, describeTransitionError } from '@/lib/orders/state-machine';
+import { releaseOrderCoupon } from '@/lib/coupons/validate';
 
 type OrderStatusEnum = Database['public']['Enums']['order_status'];
 
@@ -135,6 +136,9 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
   } catch (err) {
     console.warn('Wallet reversal failed (non-blocking):', err);
   }
+
+  // A cancelled order no longer consumes its coupon (0051).
+  await releaseOrderCoupon(supabase, orderId);
 
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
