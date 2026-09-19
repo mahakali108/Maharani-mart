@@ -31,7 +31,7 @@ export function BrandCard({
 }) {
   return (
     <Link
-      href={`/retailer/catalog?brand=${brand.id}`}
+      href={`/retailer/brands/${brand.id}`}
       className={cn(
         'group flex h-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
         compact && 'min-h-[4.5rem] rounded-xl p-2.5'

@@ -43,6 +43,8 @@ const NEW_PAGES = [
   'app/retailer/account/notification-preferences/page.tsx',
   'app/retailer/cart/saved/page.tsx',
   'app/retailer/reports/page.tsx',
+  'app/retailer/categories/[id]/page.tsx',
+  'app/retailer/brands/[id]/page.tsx',
 ];
 
 /** Arbitrary Tailwind width values in px/rem that exceed a 320px phone. */

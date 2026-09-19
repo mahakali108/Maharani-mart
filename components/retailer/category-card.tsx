@@ -13,13 +13,16 @@ export interface CategoryCardData {
 export function CategoryCard({
   category,
   compact = false,
+  href,
 }: {
   category: CategoryCardData;
   compact?: boolean;
+  /** Optional destination override (e.g. a category detail page). */
+  href?: string;
 }) {
   return (
     <Link
-      href={`/retailer/catalog?category=${category.id}`}
+      href={href ?? `/retailer/catalog?category=${category.id}`}
       className={cn(
         'group block h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
         compact && 'rounded-xl'

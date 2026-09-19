@@ -90,15 +90,43 @@ describe('homepage navigation and profile', () => {
       expect(nav.getByRole('link', { name }).getAttribute('href')).toBe(href);
     }
   });
-  it('category and brand links use their real catalog filter IDs', () => {
+  it('category and brand links use their real destinations', () => {
     const data = emptyHome();
     data.categories = [{ id: CATEGORY, name: 'Fixture category', image_url: null, productCount: 3 }];
     data.brands = [{ id: BRAND, name: 'Fixture brand', logo_url: null }];
     render(<HomeContent data={data} wallet={null} services={[]} />);
+    // Home category tiles go straight to the catalog with the real filter id.
     expect(screen.getByRole('link', { name: /Fixture category/ }).getAttribute('href')).toBe(`/retailer/catalog?category=${CATEGORY}`);
-    expect(screen.getByRole('link', { name: /Fixture brand/ }).getAttribute('href')).toBe(`/retailer/catalog?brand=${BRAND}`);
+    // Brand cards open the brand detail page (brands → products flow).
+    expect(screen.getByRole('link', { name: /Fixture brand/ }).getAttribute('href')).toBe(`/retailer/brands/${BRAND}`);
     expect(screen.getByRole('link', { name: 'View all categories' }).getAttribute('href')).toBe('/retailer/categories');
     expect(screen.getByRole('link', { name: 'View all brands' }).getAttribute('href')).toBe('/retailer/brands');
+  });
+
+  it('lists live schemes in the offers section with their real windows and products links', () => {
+    const data = emptyHome();
+    data.schemes = [{
+      id: 'scheme-1', name: 'Diwali scheme', description: 'Festival pricing',
+      is_festival: true, starts_at: '2026-01-01T00:00:00Z', ends_at: '2027-01-01T00:00:00Z',
+    }];
+    render(<HomeContent data={data} wallet={null} services={[]} />);
+    expect(screen.getByRole('heading', { name: 'Offers & coupons' })).toBeTruthy();
+    expect(screen.getByText('Diwali scheme')).toBeTruthy();
+    expect(screen.getByText('Festival offer')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /View products/ }).getAttribute('href')).toBe('/retailer/catalog?offers=1');
+    expect(screen.getByRole('link', { name: 'View all offers' }).getAttribute('href')).toBe('/retailer/schemes');
+  });
+
+  it('shows an honest empty state in offers when no scheme or deal is live', () => {
+    render(<HomeContent data={emptyHome()} wallet={null} services={[]} />);
+    expect(screen.getByText('No offers live right now')).toBeTruthy();
+  });
+
+  it('flags offers as unavailable rather than empty when the scheme read failed', () => {
+    const data = emptyHome();
+    data.errors.schemes = true;
+    render(<HomeContent data={data} wallet={null} services={[]} />);
+    expect(screen.getByText('Offers are temporarily unavailable')).toBeTruthy();
   });
   it('renders error feedback with a functional retry instead of pretending data is empty', async () => {
     const data = emptyHome(); data.errors.categories = true;

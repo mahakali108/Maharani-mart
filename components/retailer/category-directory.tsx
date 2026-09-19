@@ -43,7 +43,7 @@ export function CategoryDirectory({ categories }: { categories: DirectoryCategor
               : category.children;
             return (
               <article key={category.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <CategoryCard category={category} />
+                <CategoryCard category={category} href={`/retailer/categories/${category.id}`} />
                 {matchingChildren.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5 border-t border-slate-100 px-3 py-3">
                     {matchingChildren.slice(0, 8).map((child) => (

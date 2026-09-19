@@ -31,6 +31,7 @@ export function supabaseFixture(
         if (op === 'in') return (value as unknown[]).includes(row[column]);
         if (op === 'is') return row[column] === value;
         if (op === 'lte') return String(row[column]) <= String(value);
+        if (op === 'gte') return String(row[column]) >= String(value);
         return true;
       });
     }
@@ -63,6 +64,7 @@ export function supabaseFixture(
       in: (column: string, value: unknown[]) => { query.filters.push({ op: 'in', column, value }); return chain; },
       is: (column: string, value: unknown) => { query.filters.push({ op: 'is', column, value }); return chain; },
       lte: (column: string, value: unknown) => { query.filters.push({ op: 'lte', column, value }); return chain; },
+      gte: (column: string, value: unknown) => { query.filters.push({ op: 'gte', column, value }); return chain; },
       or: (value: string) => { query.filters.push({ op: 'or', column: '', value }); return chain; },
       order: (column: string, options?: { ascending?: boolean }) => { sorts.push({ column, asc: options?.ascending !== false }); return chain; },
       limit: (limit: number) => { query.limit = limit; return chain; },
