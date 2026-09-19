@@ -41,6 +41,7 @@ const NEW_PAGES = [
   'app/retailer/account/security/page.tsx',
   'app/retailer/account/addresses/page.tsx',
   'app/retailer/account/notification-preferences/page.tsx',
+  'app/retailer/account/loading.tsx',
   'app/retailer/cart/saved/page.tsx',
   'app/retailer/reports/page.tsx',
   'app/retailer/categories/[id]/page.tsx',
