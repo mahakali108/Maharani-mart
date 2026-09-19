@@ -46,6 +46,11 @@ const NEW_PAGES = [
   'app/retailer/reports/page.tsx',
   'app/retailer/categories/[id]/page.tsx',
   'app/retailer/brands/[id]/page.tsx',
+  'app/retailer/coupons/page.tsx',
+  'app/retailer/coupons/loading.tsx',
+  'components/retailer/coupon-card.tsx',
+  'components/retailer/coupon-apply-form.tsx',
+  'components/retailer/coupon-page-skeleton.tsx',
 ];
 
 /** Arbitrary Tailwind width values in px/rem that exceed a 320px phone. */
