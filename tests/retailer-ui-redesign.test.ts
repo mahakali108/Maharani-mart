@@ -156,3 +156,27 @@ describe('retailer-facing pages do not expose internal pricing fields', () => {
     });
   }
 });
+
+describe('retailer catalog directory', () => {
+  it('shows independent category and brand directories using real detail links', async () => {
+    const fs = await import('node:fs/promises');
+    const source = await fs.readFile('app/retailer/categories/page.tsx', 'utf8');
+    expect(source).toContain('Categories');
+    expect(source).toContain('Brands');
+    expect(source).toContain(".from('categories')");
+    expect(source).toContain(".from('brands')");
+    expect(await fs.readFile('components/retailer/category-directory.tsx', 'utf8')).toContain(
+      'href={`/retailer/categories/${child.id}`}'
+    );
+    expect(await fs.readFile('components/retailer/brand-card.tsx', 'utf8')).toContain(
+      'href={`/retailer/brands/${brand.id}`}'
+    );
+  });
+
+  it('keeps category detail independent from the brand directory', async () => {
+    const fs = await import('node:fs/promises');
+    const source = await fs.readFile('app/retailer/categories/[id]/page.tsx', 'utf8');
+    expect(source).not.toContain('Brands in this category');
+    expect(source).not.toContain('/retailer/brands/');
+  });
+});

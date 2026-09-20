@@ -49,7 +49,7 @@ export function CategoryDirectory({ categories }: { categories: DirectoryCategor
                     {matchingChildren.slice(0, 8).map((child) => (
                       <Link
                         key={child.id}
-                        href={`/retailer/catalog?category=${child.id}`}
+                        href={`/retailer/categories/${child.id}`}
                         className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-primary-50 hover:text-primary-700"
                       >
                         {child.name}
