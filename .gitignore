@@ -49,3 +49,11 @@ supabase/.temp
 *.keystore
 *.jks
 local.properties
+
+# Firebase credentials — a service-account JSON or a raw private key must
+# never be committed. (.env, .env.local, .env.*.local and *.pem are already
+# covered above; the placeholder file .env.local.example stays committable.)
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+*.key
