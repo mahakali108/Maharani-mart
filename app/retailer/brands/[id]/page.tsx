@@ -6,7 +6,13 @@ import { getRetailerShoppingContext } from '@/lib/retailer/shopping-context';
 import { ProductCard } from '@/components/retailer/product-card';
 import { StoredImage } from '@/components/media/stored-image';
 import { loadBrandProducts } from '@/lib/retailer/brand-detail';
-import { CATALOG_PAGE_SIZE } from '@/lib/retailer/catalog-params';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
+import { readCursor } from '@/lib/infinite-scroll/keyset';
 
 function BrandMonogram({ name }: { name: string }) {
   const monogram = name
@@ -19,27 +25,37 @@ function BrandMonogram({ name }: { name: string }) {
   return <span className="text-lg font-black tracking-tight text-primary-700">{monogram || 'B'}</span>;
 }
 
-export default async function RetailerBrandDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { page?: string };
-}) {
+export default async function RetailerBrandDetailPage({ params }: { params: { id: string } }) {
   const { user, retailer } = await getRetailerShoppingContext();
   const supabase = createClient();
-  const page = Math.max(1, parseInt(searchParams.page ?? '1', 10) || 1);
+  const canResolvePrices = !!retailer;
   const data = await loadBrandProducts(
     supabase,
     user.id,
     retailer?.area_id ?? null,
     params.id,
-    page,
-    !!retailer
+    null,
+    canResolvePrices
   );
   if (!data.brand) notFound();
 
-  const hrefForPage = (target: number) => `/retailer/brands/${data.brand!.id}?page=${target}`;
+  /** Server Action for the batches after the first; the brand id is captured. */
+  async function loadMoreBrandProducts(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    const context = await getRetailerShoppingContext();
+    const batch = await loadBrandProducts(
+      createClient(),
+      context.user.id,
+      context.retailer?.area_id ?? null,
+      params.id,
+      readCursor(cursor),
+      !!context.retailer
+    );
+    return {
+      rows: batch.products.map((product) => <ProductCard key={product.id} {...product} />),
+      nextCursor: batch.nextCursor,
+    };
+  }
 
   return (
     <div className="space-y-5 pb-24 sm:space-y-7 lg:pb-0">
@@ -114,10 +130,7 @@ export default async function RetailerBrandDetailPage({
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">What&apos;s available</p>
-              <h2 className="mt-0.5 text-lg font-bold text-slate-900 sm:text-xl">
-                {data.brand.name} products
-                {data.page > 1 ? ` · page ${data.page}` : ''}
-              </h2>
+              <h2 className="mt-0.5 text-lg font-bold text-slate-900 sm:text-xl">{data.brand.name} products</h2>
             </div>
           </div>
 
@@ -128,47 +141,39 @@ export default async function RetailerBrandDetailPage({
           ) : null}
           {data.resultCapped ? (
             <p role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
-              Showing the first {CATALOG_PAGE_SIZE * (data.totalPages)} products for this brand. Use search in the catalog to find anything beyond.
+              Showing the first {data.productCount ?? data.products.length} products for this brand. Use search in the
+              catalog to find anything beyond.
             </p>
           ) : null}
 
-          <div className="grid grid-cols-2 items-stretch gap-2.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-            {data.products.map((product) => (
-              <ProductCard key={product.id} {...product} />
-            ))}
-          </div>
+          <InfiniteScrollProvider
+            loader={loadMoreBrandProducts}
+            initialCursor={data.nextCursor}
+            initialHasMore={data.hasMore}
+            resetKey={params.id}
+          >
+            <div className="grid grid-cols-2 items-stretch gap-2.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+              <InfiniteScrollRows
+                skeleton={
+                  <>
+                    {[0, 1, 2, 3].map((index) => (
+                      <div
+                        key={index}
+                        aria-hidden="true"
+                        className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-slate-50"
+                      />
+                    ))}
+                  </>
+                }
+              >
+                {data.products.map((product) => (
+                  <ProductCard key={product.id} {...product} />
+                ))}
+              </InfiniteScrollRows>
+            </div>
 
-          {data.totalPages > 1 ? (
-            <nav className="flex items-center justify-center gap-2 pt-2" aria-label="Brand product pages">
-              {data.page > 1 ? (
-                <Link
-                  href={hrefForPage(data.page - 1)}
-                  className="flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                >
-                  <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Previous
-                </Link>
-              ) : (
-                <span aria-disabled="true" className="flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-4 text-xs font-bold text-slate-300">
-                  <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Previous
-                </span>
-              )}
-              <span className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-bold text-slate-600">
-                Page {data.page} of {data.totalPages}
-              </span>
-              {data.page < data.totalPages ? (
-                <Link
-                  href={hrefForPage(data.page + 1)}
-                  className="flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                >
-                  Next <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
-              ) : (
-                <span aria-disabled="true" className="flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-4 text-xs font-bold text-slate-300">
-                  Next <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                </span>
-              )}
-            </nav>
-          ) : null}
+            <InfiniteScrollStatus endLabel="No more products" loadingLabel="Loading more products…" />
+          </InfiniteScrollProvider>
         </section>
       )}
     </div>

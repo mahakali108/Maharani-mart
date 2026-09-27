@@ -1,29 +1,19 @@
 import Link from 'next/link';
-import {
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Info,
-  ReceiptText,
-  WalletCards,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Clock,
-  CalendarClock,
-} from 'lucide-react';
+import { ArrowLeft, ChevronRight, Info, ReceiptText, Clock, CalendarClock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { formatInr } from '@/lib/retailer/format';
-import { parseCatalogPage } from '@/lib/retailer/catalog-params';
 import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 import {
   getRetailerCreditAccount,
   getRetailerWalletSummary,
   getRetailerLedger,
-  getRetailerLedgerPaginated,
-  paiseToRupees,
+  getRetailerLedgerBatch,
   formatPaise,
+  type WalletTransaction,
 } from '@/lib/retailer/wallet';
+import { WalletLedgerList } from '@/components/retailer/wallet-ledger-list';
+import { readCursor } from '@/lib/infinite-scroll/keyset';
 import { computeCreditDueDate, type CreditPaymentStatus } from '@/lib/retailer/credit-terms';
 import { loadRetailerLedger } from '@/lib/retailer/ledger';
 
@@ -37,21 +27,6 @@ const STATUS_LABELS: Record<string, string> = {
   returned: 'Returned',
 };
 
-const TX_TYPE_LABELS: Record<string, string> = {
-  ORDER_DEBIT: 'Order',
-  PAYMENT_CREDIT: 'Payment',
-  REFUND_CREDIT: 'Refund',
-  MANUAL_CREDIT: 'Credit',
-  MANUAL_DEBIT: 'Debit',
-  ORDER_REVERSAL: 'Reversal',
-  ADJUSTMENT: 'Adjustment',
-  CREDIT_LIMIT_CHANGE: 'Limit Change',
-};
-
-function ledgerHref(page: number): string {
-  return page > 1 ? `/retailer/account/ledger?page=${page}` : '/retailer/account/ledger';
-}
-
 const PAYMENT_STATUS_META: Record<
   CreditPaymentStatus,
   { label: string; className: string }
@@ -63,26 +38,32 @@ const PAYMENT_STATUS_META: Record<
   overdue: { label: 'Overdue', className: 'bg-primary-50 text-primary-700' },
 };
 
-export default async function RetailerLedgerPage({
-  searchParams,
-}: {
-  searchParams: { page?: string };
-}) {
+export default async function RetailerLedgerPage() {
   const user = await requireUser();
   const supabase = createClient();
-  const page = parseCatalogPage(searchParams.page);
 
   // New wallet system: authoritative summary from ledger + legacy
   const [walletSummary, walletLedger, legacyLedger, creditAccount, fullLedger] = await Promise.all([
     getRetailerWalletSummary(supabase, user.id),
-    getRetailerLedgerPaginated(supabase, user.id, page, 25),
-    loadRetailerLedger(supabase, user.id, page),
+    getRetailerLedgerBatch(supabase, user.id, null),
+    // Legacy order activity: the first page of the old order-ledger view is
+    // kept for backward compatibility, rendered exactly as before.
+    loadRetailerLedger(supabase, user.id, 1),
     getRetailerCreditAccount(supabase, user.id),
     getRetailerLedger(supabase, user.id, 1000),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(walletLedger.total / 25));
   const hasConfiguredLimit = walletSummary.hasConfiguredLimit;
+
+  /** Server Action for ledger batches 2..n; the retailer id is re-derived. */
+  async function loadMoreLedger(
+    cursor: string | null
+  ): Promise<{ items: WalletTransaction[]; nextCursor: string | null }> {
+    'use server';
+    const caller = await requireUser();
+    const batch = await getRetailerLedgerBatch(createClient(), caller.id, readCursor(cursor));
+    return { items: batch.entries, nextCursor: batch.nextCursor };
+  }
 
   // Credit terms + due date (real data only): the due date is derived from
   // the oldest still-outstanding ledger debit + the configured Net-N terms.
@@ -251,154 +232,12 @@ export default async function RetailerLedgerPage({
               <Clock className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
             </div>
 
-            {walletLedger.entries.length === 0 ? (
-              <div className="flex flex-col items-center justify-center px-5 py-14 text-center">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                  <WalletCards className="h-6 w-6" aria-hidden="true" />
-                </span>
-                <h3 className="mt-4 break-words text-sm font-bold text-slate-800">No wallet transactions yet</h3>
-                <p className="mt-1.5 max-w-sm break-words text-xs leading-5 text-slate-500">
-                  Orders you place and payments recorded by your distributor will appear here. No fake data is shown.
-                </p>
-                <Link
-                  href="/retailer/catalog"
-                  className="mt-5 flex h-10 items-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white transition hover:bg-primary-700"
-                >
-                  Browse products <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Link>
-              </div>
-            ) : (
-              <>
-                {/* Mobile list */}
-                <ul className="divide-y divide-slate-100 lg:hidden">
-                  {walletLedger.entries.map((entry) => {
-                    const isDebit = entry.direction === 'debit';
-                    const amount = paiseToRupees(entry.amount_paise);
-                    if (entry.transaction_type === 'CREDIT_LIMIT_CHANGE') return null; // hide from retailer
-                    return (
-                      <li key={entry.id} className="min-w-0 px-4 py-3.5">
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <div className="flex min-w-0 items-start gap-2.5">
-                            <span
-                              className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                                isDebit ? 'bg-primary-50 text-primary-600' : 'bg-emerald-50 text-emerald-600'
-                              }`}
-                            >
-                              {isDebit ? <ArrowUpCircle className="h-4 w-4" /> : <ArrowDownCircle className="h-4 w-4" />}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="break-words text-xs font-bold text-slate-900">
-                                {TX_TYPE_LABELS[entry.transaction_type] ?? entry.transaction_type}
-                              </p>
-                              <p className="mt-0.5 break-words text-[10px] leading-4 text-slate-500">
-                                {entry.description}
-                              </p>
-                              <p className="mt-1 break-words text-[10px] text-slate-400">
-                                {formatIndiaDateTime(entry.created_at)}
-                                {entry.reference_type ? ` · ${entry.reference_type}` : ''}
-                                {entry.reference_id ? ` ${entry.reference_id.slice(0, 8)}…` : ''}
-                              </p>
-                              {entry.reason ? (
-                                <p className="mt-1 break-words text-[10px] text-slate-400">Reason: {entry.reason}</p>
-                              ) : null}
-                            </div>
-                          </div>
-                          <p
-                            className={`shrink-0 break-words text-sm font-bold ${
-                              isDebit ? 'text-primary-700' : 'text-emerald-700'
-                            }`}
-                          >
-                            {isDebit ? '-' : '+'}
-                            {formatInr(amount)}
-                          </p>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                {/* Desktop table */}
-                <table className="hidden w-full min-w-0 text-left text-xs lg:table">
-                  <thead className="border-b border-slate-100 bg-white text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                    <tr>
-                      <th className="px-5 py-3">Date</th>
-                      <th className="px-5 py-3">Type</th>
-                      <th className="px-5 py-3">Description</th>
-                      <th className="px-5 py-3 text-right">Amount</th>
-                      <th className="px-5 py-3">Reference</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {walletLedger.entries
-                      .filter((e) => e.transaction_type !== 'CREDIT_LIMIT_CHANGE')
-                      .map((entry) => {
-                        const isDebit = entry.direction === 'debit';
-                        return (
-                          <tr key={entry.id} className="hover:bg-slate-50/70">
-                            <td className="whitespace-nowrap px-5 py-3 text-slate-600">
-                              {formatIndiaDateTime(entry.created_at)}
-                            </td>
-                            <td className="px-5 py-3">
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                  isDebit ? 'bg-primary-50 text-primary-700' : 'bg-emerald-50 text-emerald-700'
-                                }`}
-                              >
-                                {isDebit ? (
-                                  <ArrowUpCircle className="h-3 w-3" />
-                                ) : (
-                                  <ArrowDownCircle className="h-3 w-3" />
-                                )}
-                                {TX_TYPE_LABELS[entry.transaction_type] ?? entry.transaction_type}
-                              </span>
-                            </td>
-                            <td className="max-w-[260px] truncate px-5 py-3 text-slate-700">{entry.description}</td>
-                            <td
-                              className={`px-5 py-3 text-right font-bold ${
-                                isDebit ? 'text-primary-700' : 'text-emerald-700'
-                              }`}
-                            >
-                              {isDebit ? '-' : '+'}
-                              {formatInr(paiseToRupees(entry.amount_paise))}
-                            </td>
-                            <td className="px-5 py-3 text-slate-500">
-                              {entry.reference_type ? `${entry.reference_type}` : '—'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-
-                {totalPages > 1 ? (
-                  <nav className="flex items-center justify-center gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
-                    {page > 1 ? (
-                      <Link
-                        href={ledgerHref(page - 1)}
-                        className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700"
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5" /> Previous
-                      </Link>
-                    ) : (
-                      <span />
-                    )}
-                    <span className="text-[10px] font-semibold text-slate-500">
-                      Page {page} of {totalPages}
-                    </span>
-                    {page < totalPages ? (
-                      <Link
-                        href={ledgerHref(page + 1)}
-                        className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700"
-                      >
-                        Next <ChevronRight className="h-3.5 w-3.5" />
-                      </Link>
-                    ) : (
-                      <span />
-                    )}
-                  </nav>
-                ) : null}
-              </>
-            )}
+            <WalletLedgerList
+              entries={walletLedger.entries}
+              loader={loadMoreLedger}
+              initialCursor={walletLedger.nextCursor}
+              initialHasMore={Boolean(walletLedger.nextCursor)}
+            />
           </section>
 
           {/* Legacy order activity for backward compat */}

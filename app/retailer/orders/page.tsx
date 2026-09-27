@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import {
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   CircleDashed,
   ClipboardList,
@@ -18,8 +17,30 @@ import { requireUser } from '@/lib/auth/session';
 import { formatInr } from '@/lib/retailer/format';
 import { describeOrderTotals } from '@/lib/orders/item-display';
 import { formatIndiaRelativeDateTime, indiaDayEndIso, indiaDayStartIso } from '@/lib/datetime/india';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
+import {
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  readCursor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
+/** Rows per batch. */
 const PAGE_SIZE = 15;
+
+/** Newest first, `id` breaking ties so batches never overlap. */
+const ORDER: KeysetColumn[] = [
+  { column: 'placed_at', ascending: false },
+  { column: 'id', ascending: false },
+];
 
 type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'packed' | 'dispatched' | 'delivered' | 'cancelled' | 'returned';
 
@@ -57,21 +78,139 @@ interface OrderRow {
   order_items: { quantity: number; quantity_unit: 'cases' | 'pieces' | null; quantity_pieces: number | null }[] | null;
 }
 
-function ordersHref({ status, q, page, from, to }: { status?: string; q?: string; page?: number; from?: string; to?: string }) {
+function ordersHref({ status, q, from, to }: { status?: string; q?: string; from?: string; to?: string }) {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (q) params.set('q', q);
   if (from) params.set('from', from);
   if (to) params.set('to', to);
-  if (page && page > 1) params.set('page', String(page));
   const query = params.toString();
   return `/retailer/orders${query ? `?${query}` : ''}`;
+}
+
+interface OrderFilters {
+  status: string;
+  q: string;
+  from: string;
+  to: string;
+}
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
+/**
+ * One batch of this retailer's orders. RLS scopes `orders` to the caller, and
+ * the extra `.eq('retailer_id', user.id)` is the same belt-and-braces filter
+ * the old paged query used.
+ *
+ * The exact total is counted for the FIRST batch only — it is the "N orders
+ * found" heading, and re-counting it on every scroll would be the single most
+ * expensive thing on the page.
+ */
+async function loadOrderBatch(
+  supabase: SupabaseClient,
+  retailerId: string,
+  filters: OrderFilters,
+  cursor: ListCursor | null
+) {
+  let query = supabase
+    .from('orders')
+    .select(
+      'id, order_number, status, subtotal, gst_total, grand_total, placed_at, order_items(quantity, quantity_unit, quantity_pieces)',
+      cursor === null ? { count: 'exact' } : {}
+    )
+    .eq('retailer_id', retailerId);
+
+  if (filters.status) query = query.eq('status', filters.status);
+  if (filters.q) query = query.ilike('order_number', `%${filters.q}%`);
+  // Date filters are Asia/Kolkata calendar days; convert to UTC instants.
+  if (filters.from) query = query.gte('placed_at', indiaDayStartIso(filters.from)!);
+  if (filters.to) query = query.lte('placed_at', indiaDayEndIso(filters.to)!);
+
+  const { data, count } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const rows = (data ?? []) as OrderRow[];
+  const batch = toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
+  return { ...batch, total: count ?? rows.length };
+}
+
+function renderOrderCards(rows: OrderRow[]) {
+  return rows.map((order) => {
+    const meta = STATUS_META[order.status];
+    const StatusIcon = meta.icon;
+    const canInvoice = ['confirmed', 'processing', 'packed', 'dispatched', 'delivered'].includes(order.status);
+    const canTrack = ['pending', 'confirmed', 'processing', 'packed', 'dispatched'].includes(order.status);
+    const totals = describeOrderTotals(order.order_items ?? []);
+    return (
+      <article
+        key={order.id}
+        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:shadow-md"
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${meta.style}`}>
+              <StatusIcon className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <Link
+                href={`/retailer/orders/${order.id}`}
+                className="truncate font-mono text-xs font-bold text-slate-900 hover:text-primary-600"
+              >
+                {order.order_number}
+              </Link>
+              <p className="mt-0.5 text-[9px] text-slate-500">
+                Placed {formatIndiaRelativeDateTime(order.placed_at)}
+              </p>
+            </div>
+          </div>
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ring-1 ring-inset ${meta.style}`}>
+            {meta.label}
+          </span>
+        </div>
+
+        <div className="p-4">
+          <p className="text-[10px] font-medium text-slate-500">{meta.message}</p>
+          <div className="mt-4 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Order total</p>
+              <p className="mt-1 text-xl font-bold tracking-tight text-slate-950">{formatInr(order.grand_total)}</p>
+              <p className="text-[9px] text-slate-500">
+                {totals.lineCount} line{totals.lineCount === 1 ? '' : 's'} · {totals.totalPieces} pc
+                {totals.totalPieces === 1 ? '' : 's'} · incl. GST
+              </p>
+            </div>
+            <Link
+              href={`/retailer/orders/${order.id}`}
+              className="flex h-9 items-center gap-1 rounded-lg bg-slate-950 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700"
+            >
+              {canTrack ? 'Track order' : 'View details'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50/60 px-4 py-2.5">
+          <Link
+            href={`/retailer/orders/${order.id}/reorder`}
+            className="flex items-center gap-1.5 text-[9px] font-bold text-slate-600 hover:text-primary-600"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reorder
+          </Link>
+          {canInvoice ? (
+            <Link
+              href={`/retailer/orders/${order.id}/invoice`}
+              className="flex items-center gap-1.5 text-[9px] font-bold text-slate-600 hover:text-primary-600"
+            >
+              <FileText className="h-3.5 w-3.5" aria-hidden="true" /> Invoice
+            </Link>
+          ) : null}
+        </div>
+      </article>
+    );
+  });
 }
 
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: { status?: string; page?: string; q?: string; from?: string; to?: string };
+  searchParams: { status?: string; q?: string; from?: string; to?: string };
 }) {
   const user = await requireUser();
   const supabase = createClient();
@@ -80,26 +219,19 @@ export default async function OrdersPage({
   const q = searchParams.q?.trim() ?? '';
   const dateFrom = searchParams.from?.trim() ?? '';
   const dateTo = searchParams.to?.trim() ?? '';
-  const page = Math.max(1, Number(searchParams.page) || 1);
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
 
-  let query = supabase
-    .from('orders')
-    .select('id, order_number, status, subtotal, gst_total, grand_total, placed_at, order_items(quantity, quantity_unit, quantity_pieces)', { count: 'exact' })
-    .eq('retailer_id', user.id)
-    .order('placed_at', { ascending: false })
-    .range(from, to);
+  const filters: OrderFilters = { status, q, from: dateFrom, to: dateTo };
+  const firstBatch = await loadOrderBatch(supabase, user.id, filters, null);
+  const orders = firstBatch.items;
+  const count = firstBatch.total;
 
-  if (status) query = query.eq('status', status);
-  if (q) query = query.ilike('order_number', `%${q}%`);
-  // Date filters are Asia/Kolkata calendar days; convert to UTC instants.
-  if (dateFrom) query = query.gte('placed_at', indiaDayStartIso(dateFrom)!);
-  if (dateTo) query = query.lte('placed_at', indiaDayEndIso(dateTo)!);
-
-  const { data, count } = await query;
-  const orders = (data ?? []) as OrderRow[];
-  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+  /** Server Action for batches 2..n; the retailer id is re-derived server-side. */
+  async function loadMoreOrders(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    const caller = await requireUser();
+    const batch = await loadOrderBatch(createClient(), caller.id, filters, readCursor(cursor));
+    return { rows: renderOrderCards(batch.items), nextCursor: batch.nextCursor };
+  }
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -239,117 +371,33 @@ export default async function OrdersPage({
           ) : null}
         </section>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {orders.map((order) => {
-            const meta = STATUS_META[order.status];
-            const StatusIcon = meta.icon;
-            const canInvoice = ['confirmed', 'processing', 'packed', 'dispatched', 'delivered'].includes(order.status);
-            const canTrack = ['pending', 'confirmed', 'processing', 'packed', 'dispatched'].includes(order.status);
-            const totals = describeOrderTotals(order.order_items ?? []);
-            return (
-              <article
-                key={order.id}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${meta.style}`}
-                    >
-                      <StatusIcon className="h-4 w-4" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <Link
-                        href={`/retailer/orders/${order.id}`}
-                        className="truncate font-mono text-xs font-bold text-slate-900 hover:text-primary-600"
-                      >
-                        {order.order_number}
-                      </Link>
-                      <p className="mt-0.5 text-[9px] text-slate-500">
-                        Placed{' '}
-                        {formatIndiaRelativeDateTime(order.placed_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ring-1 ring-inset ${meta.style}`}
-                  >
-                    {meta.label}
-                  </span>
-                </div>
+        <InfiniteScrollProvider
+          loader={loadMoreOrders}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={ordersHref(filters)}
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <InfiniteScrollRows
+              skeleton={
+                <>
+                  {[0, 1].map((index) => (
+                    <div
+                      key={index}
+                      aria-hidden="true"
+                      className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-slate-50"
+                    />
+                  ))}
+                </>
+              }
+            >
+              {renderOrderCards(orders)}
+            </InfiniteScrollRows>
+          </div>
 
-                <div className="p-4">
-                  <p className="text-[10px] font-medium text-slate-500">{meta.message}</p>
-                  <div className="mt-4 flex items-end justify-between gap-3">
-                    <div>
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Order total</p>
-                      <p className="mt-1 text-xl font-bold tracking-tight text-slate-950">
-                        {formatInr(order.grand_total)}
-                      </p>
-                      <p className="text-[9px] text-slate-500">
-                        {totals.lineCount} line{totals.lineCount === 1 ? '' : 's'} ·{' '}
-                        {totals.totalPieces} pc{totals.totalPieces === 1 ? '' : 's'} · incl. GST
-                      </p>
-                    </div>
-                    <Link
-                      href={`/retailer/orders/${order.id}`}
-                      className="flex h-9 items-center gap-1 rounded-lg bg-slate-950 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700"
-                    >
-                      {canTrack ? 'Track order' : 'View details'}{' '}
-                      <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                    </Link>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 border-t border-slate-100 bg-slate-50/60 px-4 py-2.5">
-                  <Link
-                    href={`/retailer/orders/${order.id}/reorder`}
-                    className="flex items-center gap-1.5 text-[9px] font-bold text-slate-600 hover:text-primary-600"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reorder
-                  </Link>
-                  {canInvoice ? (
-                    <Link
-                      href={`/retailer/orders/${order.id}/invoice`}
-                      className="flex items-center gap-1.5 text-[9px] font-bold text-slate-600 hover:text-primary-600"
-                    >
-                      <FileText className="h-3.5 w-3.5" aria-hidden="true" /> Invoice
-                    </Link>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+          <InfiniteScrollStatus endLabel="No more orders" loadingLabel="Loading more orders…" />
+        </InfiniteScrollProvider>
       )}
-
-      {totalPages > 1 ? (
-        <nav className="flex items-center justify-center gap-3 pt-2" aria-label="Order pages">
-          {page > 1 ? (
-            <Link
-              href={ordersHref({ status, q, from: dateFrom, to: dateTo, page: page - 1 })}
-              className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 hover:border-primary-200 hover:text-primary-600"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Previous
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-[10px] font-semibold text-slate-500">
-            Page {page} of {totalPages}
-          </span>
-          {page < totalPages ? (
-            <Link
-              href={ordersHref({ status, q, from: dateFrom, to: dateTo, page: page + 1 })}
-              className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 hover:border-primary-200 hover:text-primary-600"
-            >
-              Next <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      ) : null}
     </div>
   );
 }

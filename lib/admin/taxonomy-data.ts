@@ -1,15 +1,20 @@
 import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
+import { ADMIN_PAGE_SIZE } from '@/lib/admin/catalog-query';
 import {
-  ADMIN_PAGE_SIZE,
-  adminPageRange,
-  adminTotalPages,
-} from '@/lib/admin/catalog-query';
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 import {
   escapeLikeLiteral,
   normalizeTaxonomyName,
   type TaxonomyParams,
+  type TaxonomySort,
 } from '@/lib/admin/taxonomy-query';
 
 /**
@@ -17,8 +22,14 @@ import {
  *
  * Both lists are single-table and every offered filter/sort is a plain column,
  * so — unlike the product list (lib/admin/catalog-data.ts, Mode 2) — there is
- * no derived working-set mode here: search, status filter, sort, `.range()`
- * pagination and `count: 'exact'` all go to Postgres in one query per page.
+ * no derived working-set mode here: search, status filter and sort all go to
+ * Postgres in one query per batch.
+ *
+ * Batches are fetched by KEYSET cursor, not by `?page=`: the sort columns are
+ * non-null and end in the unique `id` tiebreaker, so "everything after the row
+ * I just showed" is an exact, index-served predicate. Scrolling stays cheap no
+ * matter how far down the list the operator is, and a row created while they
+ * scroll cannot shift or repeat what is on screen.
  *
  * Nothing here invents a number. `products(count)` is the real link count from
  * the database (PostgREST nested aggregate over `products.brand_id` /
@@ -48,16 +59,17 @@ export interface AdminBrandRow {
   products: { count: number }[] | null;
 }
 
-export interface TaxonomyPageResult<Row> {
-  rows: Row[];
-  /** Real total matching the filters — drives "Page 1 of N". */
-  total: number;
-  totalPages: number;
+/** One batch of taxonomy rows plus the cursor that continues the list. */
+export interface TaxonomyBatch<Row> {
+  items: Row[];
+  /** `null` means the list is complete. */
+  nextCursor: string | null;
 }
 
 /** Ceiling on the parent-chain walk in `categoryParentChainHits`. */
 const MAX_PARENT_CHAIN = 100;
 
+/** Search + lifecycle filter, shared by both taxonomy lists. */
 function applyTaxonomyFilters<T extends { ilike: (c: string, v: string) => T; eq: (c: string, v: boolean) => T }>(
   query: T,
   params: TaxonomyParams
@@ -71,48 +83,78 @@ function applyTaxonomyFilters<T extends { ilike: (c: string, v: string) => T; eq
   return next;
 }
 
-function applyTaxonomySort<
-  T extends {
-    order: (column: string, options?: { ascending?: boolean }) => T;
+/**
+ * The ORDER BY for a taxonomy sort — and, in the same breath, the shape of the
+ * keyset cursor. `id` is always the last term: category names may repeat under
+ * different parents, so a cursor has to be able to point at exactly one row.
+ */
+export function taxonomyOrder(sort: TaxonomySort): KeysetColumn[] {
+  if (sort === 'name-desc') {
+    return [
+      { column: 'name', ascending: false },
+      { column: 'created_at', ascending: true },
+      { column: 'id', ascending: true },
+    ];
   }
->(query: T, sort: TaxonomyParams['sort']): T {
-  // Secondary order on created_at keeps pages deterministic when two rows
-  // share a name (legal for categories under different parents).
-  if (sort === 'name-desc') return query.order('name', { ascending: false }).order('created_at', { ascending: true });
-  if (sort === 'newest') return query.order('created_at', { ascending: false }).order('name', { ascending: true });
-  if (sort === 'oldest') return query.order('created_at', { ascending: true }).order('name', { ascending: true });
-  return query.order('name', { ascending: true }).order('created_at', { ascending: true });
+  if (sort === 'newest') {
+    return [
+      { column: 'created_at', ascending: false },
+      { column: 'name', ascending: true },
+      { column: 'id', ascending: true },
+    ];
+  }
+  if (sort === 'oldest') {
+    return [
+      { column: 'created_at', ascending: true },
+      { column: 'name', ascending: true },
+      { column: 'id', ascending: true },
+    ];
+  }
+  return [
+    { column: 'name', ascending: true },
+    { column: 'created_at', ascending: true },
+    { column: 'id', ascending: true },
+  ];
 }
 
 /**
- * One page of categories, DB-paginated, with the parent names and the linked
- * product count resolved for the rows on that page only.
+ * One batch of rows from `categories` or `brands`. Both tables have the same
+ * filters, the same sorts and the same `products(count)` aggregate, so the two
+ * list pages share this single query instead of two near-copies.
  */
-export async function loadAdminCategoriesPage(
+async function loadTaxonomyBatch<Row extends object>(
   supabase: SupabaseClient,
-  params: TaxonomyParams
-): Promise<TaxonomyPageResult<AdminCategoryRow & { parentName: string | null }>> {
-  const { from, to } = adminPageRange(params.page, ADMIN_PAGE_SIZE);
-
-  const { data, count, error } = (await applyTaxonomySort(
-    applyTaxonomyFilters(
-      supabase.from('categories').select(
-        'id, name, parent_id, image_url, sort_order, is_active, created_at, products(count)',
-        { count: 'exact' }
-      ),
-      params
-    ),
-    params.sort
-  ).range(from, to)) as unknown as {
-    data: AdminCategoryRow[] | null;
-    count: number | null;
-    error: { message: string } | null;
-  };
+  table: 'categories' | 'brands',
+  params: TaxonomyParams,
+  cursor: ListCursor | null
+): Promise<TaxonomyBatch<Row>> {
+  const order = taxonomyOrder(params.sort);
+  // PostgREST rejects a column the table does not have, so each table selects
+  // its own columns; everything else about the two queries is shared.
+  const columns =
+    table === 'categories'
+      ? 'id, name, parent_id, image_url, sort_order, is_active, created_at, products(count)'
+      : 'id, name, logo_url, is_active, created_at, products(count)';
+  const query = applyTaxonomyFilters(supabase.from(table).select(columns), params);
+  const { data, error } = await applyCursor(applyKeysetOrder(query, order), cursor, order, ADMIN_PAGE_SIZE);
   if (error) throw new Error(error.message);
+  const rows = (data ?? []) as unknown as Row[];
+  return toListBatch(rows, ADMIN_PAGE_SIZE, (row) => keysetCursorFor(row, order));
+}
 
-  const rows = data ?? [];
+/**
+ * One batch of categories, with the parent names for THAT batch resolved in a
+ * single bounded query (never one query per row, and never for rows that are
+ * not being rendered).
+ */
+export async function loadAdminCategoryBatch(
+  supabase: SupabaseClient,
+  params: TaxonomyParams,
+  cursor: ListCursor | null
+): Promise<TaxonomyBatch<AdminCategoryRow & { parentName: string | null }>> {
+  const batch = await loadTaxonomyBatch<AdminCategoryRow>(supabase, 'categories', params, cursor);
+  const rows = batch.items;
 
-  // Resolve parent names for just this page — one bounded query, not one per row.
   const parentIds = [...new Set(rows.map((row) => row.parent_id).filter((id): id is string => id !== null))];
   const parentNames = new Map<string, string>();
   if (parentIds.length > 0) {
@@ -128,39 +170,18 @@ export async function loadAdminCategoriesPage(
   }
 
   return {
-    rows: rows.map((row) => ({ ...row, parentName: row.parent_id ? parentNames.get(row.parent_id) ?? null : null })),
-    total: count ?? 0,
-    totalPages: adminTotalPages(count ?? 0, ADMIN_PAGE_SIZE),
+    items: rows.map((row) => ({ ...row, parentName: row.parent_id ? parentNames.get(row.parent_id) ?? null : null })),
+    nextCursor: batch.nextCursor,
   };
 }
 
-/** One page of brands, DB-paginated, with the linked product count. */
-export async function loadAdminBrandsPage(
+/** One batch of brands, with the linked product count. */
+export async function loadAdminBrandBatch(
   supabase: SupabaseClient,
-  params: TaxonomyParams
-): Promise<TaxonomyPageResult<AdminBrandRow>> {
-  const { from, to } = adminPageRange(params.page, ADMIN_PAGE_SIZE);
-
-  const { data, count, error } = (await applyTaxonomySort(
-    applyTaxonomyFilters(
-      supabase.from('brands').select('id, name, logo_url, is_active, created_at, products(count)', {
-        count: 'exact',
-      }),
-      params
-    ),
-    params.sort
-  ).range(from, to)) as unknown as {
-    data: AdminBrandRow[] | null;
-    count: number | null;
-    error: { message: string } | null;
-  };
-  if (error) throw new Error(error.message);
-
-  return {
-    rows: data ?? [],
-    total: count ?? 0,
-    totalPages: adminTotalPages(count ?? 0, ADMIN_PAGE_SIZE),
-  };
+  params: TaxonomyParams,
+  cursor: ListCursor | null
+): Promise<TaxonomyBatch<AdminBrandRow>> {
+  return loadTaxonomyBatch<AdminBrandRow>(supabase, 'brands', params, cursor);
 }
 
 /** Counts for the /admin/catalog hub cards — real rows, never estimates. */

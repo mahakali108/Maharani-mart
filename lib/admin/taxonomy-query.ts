@@ -8,10 +8,9 @@
  * the page only ever sees validated values, and the rules can be unit-tested
  * without rendering anything (tests/admin-taxonomy-query.test.ts).
  *
- * Reuses the product list's generic primitives — `sanitizeAdminSearch`,
- * `ADMIN_STATUS_FILTERS`, `parseAdminPage`, `adminPageRange`,
- * `adminTotalPages` — so the two lists bound `?page=`, strip LIKE wildcards
- * and clamp pages identically. Only what is genuinely different lives here.
+ * Reuses the product list's generic primitives — `sanitizeAdminSearch` and
+ * `ADMIN_STATUS_FILTERS` — so both lists strip LIKE wildcards identically.
+ * Only what is genuinely different lives here.
  *
  * PURE — no Supabase, no `next/*`, no env, no secrets.
  */
@@ -20,7 +19,6 @@ import {
   ADMIN_STATUS_FILTERS,
   type AdminStatusFilter,
   sanitizeAdminSearch,
-  parseAdminPage,
 } from '@/lib/admin/catalog-query';
 
 /** The two admin taxonomy list routes this module builds links for. */
@@ -48,7 +46,6 @@ export interface TaxonomyParams {
   /** Lifecycle filter. `categories`/`brands` have only `is_active` (0001). */
   status: AdminStatusFilter;
   sort: TaxonomySort;
-  page: number;
 }
 
 function oneOf<T extends string>(raw: string | undefined, allowed: readonly T[], fallback: T): T {
@@ -66,7 +63,6 @@ export function parseTaxonomyParams(
     q: sanitizeAdminSearch(first(searchParams.q)),
     status: oneOf(first(searchParams.status), ADMIN_STATUS_FILTERS, 'all'),
     sort: oneOf(first(searchParams.sort), TAXONOMY_SORTS, 'name'),
-    page: parseAdminPage(first(searchParams.page)),
   };
 }
 
@@ -85,9 +81,9 @@ const PARAM_ORDER: (keyof TaxonomyParams)[] = ['q', 'status', 'sort'];
 /**
  * Build a link that preserves the current filter/sort state.
  *
- * `page` is intentionally never emitted: changing a filter must land on page 1
- * of the NEW result set, not on page 7 of a set that may not have one.
- * `overrides` may set a key to `undefined` to drop it.
+ * There is no `page` to preserve: the list scrolls, so a filter change simply
+ * re-runs the query from the top. `overrides` may set a key to `undefined` to
+ * drop it.
  */
 export function taxonomyHref(
   base: TaxonomyListRoute,
@@ -106,13 +102,6 @@ export function taxonomyHref(
   }
   const qs = query.toString();
   return `${base}${qs ? `?${qs}` : ''}`;
-}
-
-/** Pagination link: current state plus an explicit page. */
-export function taxonomyPageHref(base: TaxonomyListRoute, params: TaxonomyParams, page: number): string {
-  const href = taxonomyHref(base, params);
-  if (page <= 1) return href;
-  return `${href}${href.includes('?') ? '&' : '?'}page=${page}`;
 }
 
 /**

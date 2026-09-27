@@ -6,9 +6,32 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  InfiniteScrollTableSkeleton,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import {
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  readCursor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
+/** Rows per batch. */
 const PAGE_SIZE = 25;
+
+/** Newest first, `id` breaking ties so a batch never repeats or skips a row. */
+const ORDER: KeysetColumn[] = [
+  { column: 'created_at', ascending: false },
+  { column: 'id', ascending: false },
+];
 
 const TABLE_OPTIONS = [
   'products',
@@ -49,48 +72,43 @@ const ACTION_STYLES: Record<string, string> = {
   DELETE: 'bg-primary-50 text-primary-700',
 };
 
+interface AuditFilters {
+  table: string;
+  action: string;
+  q: string;
+}
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
 /**
- * Super Admin / Admin Audit Log viewer.
+ * One batch of audit rows, with the editor names for THAT batch resolved in a
+ * single bounded query.
  *
- * Authorization:
+ * Authorization is untouched:
  *   1. middleware.ts restricts /admin/* to super_admin/admin.
  *   2. audit_logs RLS (0001_init.sql) allows is_staff_or_above() to read all
- *      rows — the server-side Supabase client inherits the caller's JWT so
- *      the same RLS policy is the final enforcement boundary.
- *   3. We never expose sensitive fields: passwords, tokens, and secrets
- *      never reach this table (the log_audit trigger captures only column
- *      values from business tables, never auth secrets).
+ *      rows — the server-side Supabase client inherits the caller's JWT so the
+ *      same RLS policy is the final enforcement boundary.
+ *   3. We never expose sensitive fields: passwords, tokens, and secrets never
+ *      reach this table (the log_audit trigger captures only column values
+ *      from business tables, never auth secrets).
  */
-export default async function AuditLogsPage({
-  searchParams,
-}: {
-  searchParams: { table?: string; action?: string; q?: string; page?: string };
-}) {
-  const supabase = createClient();
-
-  const tableFilter = searchParams.table ?? '';
-  const actionFilter = searchParams.action ?? '';
-  const q = searchParams.q?.trim() ?? '';
-  const page = Math.max(1, Number(searchParams.page) || 1);
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-
+async function loadAuditBatch(
+  supabase: SupabaseClient,
+  filters: AuditFilters,
+  cursor: ListCursor | null
+) {
   let query = supabase
     .from('audit_logs')
-    .select('id, table_name, record_id, action, changed_by, old_data, new_data, created_at', {
-      count: 'exact',
-    })
-    .order('created_at', { ascending: false })
-    .range(from, to);
+    .select('id, table_name, record_id, action, changed_by, old_data, new_data, created_at');
 
-  if (tableFilter) query = query.eq('table_name', tableFilter);
-  if (actionFilter) query = query.eq('action', actionFilter);
-  if (q) query = query.ilike('record_id', `%${q}%`);
+  if (filters.table) query = query.eq('table_name', filters.table);
+  if (filters.action) query = query.eq('action', filters.action);
+  if (filters.q) query = query.ilike('record_id', `%${filters.q}%`);
 
-  const { data: auditData, count } = await query;
-  const rawRows = (auditData ?? []) as Omit<AuditLogRow, 'changed_by_name'>[];
+  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const rawRows = (data ?? []) as Omit<AuditLogRow, 'changed_by_name'>[];
 
-  // Resolve changed_by names separately (same pattern as other pages).
   const changedByIds = [...new Set(rawRows.map((r) => r.changed_by).filter((id): id is string => !!id))];
   const { data: profileData } =
     changedByIds.length > 0
@@ -101,18 +119,62 @@ export default async function AuditLogsPage({
     ((profileData ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name])
   );
 
-  const logs: AuditLogRow[] = rawRows.map((r) => ({
-    ...r,
-    changed_by_name: r.changed_by ? nameById.get(r.changed_by) ?? 'Unknown user' : null,
-  }));
+  const batch = toListBatch(rawRows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
+  return {
+    items: batch.items.map((row) => ({
+      ...row,
+      changed_by_name: row.changed_by ? nameById.get(row.changed_by) ?? 'Unknown user' : null,
+    })),
+    nextCursor: batch.nextCursor,
+  };
+}
 
-  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
-  const hasFilters = tableFilter || actionFilter || q;
+function renderAuditRows(rows: AuditLogRow[]) {
+  return rows.map((log) => (
+    <tr key={log.id}>
+      <td className="whitespace-nowrap px-5 py-3 text-xs text-ink-400">{formatIndiaDateTime(log.created_at)}</td>
+      <td className="px-5 py-3 text-ink-700">{log.changed_by_name ?? 'System'}</td>
+      <td className="px-5 py-3">
+        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ACTION_STYLES[log.action] ?? 'bg-ink-100 text-ink-600'}`}>
+          {log.action}
+        </span>
+      </td>
+      <td className="px-5 py-3 font-mono text-xs text-ink-600">{log.table_name}</td>
+      <td className="px-5 py-3 font-mono text-xs text-ink-400">{log.record_id.slice(0, 8)}…</td>
+      <td className="px-5 py-3">
+        <ChangeDetails oldData={log.old_data} newData={log.new_data} action={log.action} />
+      </td>
+    </tr>
+  ));
+}
 
-  const filterParams = new URLSearchParams();
-  if (tableFilter) filterParams.set('table', tableFilter);
-  if (actionFilter) filterParams.set('action', actionFilter);
-  if (q) filterParams.set('q', q);
+/**
+ * Super Admin / Admin Audit Log viewer — the list now scrolls instead of
+ * paging, so a long audit trail is read top-to-bottom without ever touching a
+ * "Next" button.
+ */
+export default async function AuditLogsPage({
+  searchParams,
+}: {
+  searchParams: { table?: string; action?: string; q?: string };
+}) {
+  const supabase = createClient();
+
+  const filters: AuditFilters = {
+    table: searchParams.table ?? '',
+    action: searchParams.action ?? '',
+    q: searchParams.q?.trim() ?? '',
+  };
+
+  const firstBatch = await loadAuditBatch(supabase, filters, null);
+  const logs = firstBatch.items;
+  const hasFilters = Boolean(filters.table || filters.action || filters.q);
+
+  async function loadMoreAudit(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    const batch = await loadAuditBatch(createClient(), filters, readCursor(cursor));
+    return { rows: renderAuditRows(batch.items), nextCursor: batch.nextCursor };
+  }
 
   return (
     <div className="space-y-6">
@@ -134,9 +196,9 @@ export default async function AuditLogsPage({
         <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="relative sm:col-span-2">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <Input name="q" defaultValue={q} placeholder="Search record ID…" className="pl-9" />
+            <Input name="q" defaultValue={filters.q} placeholder="Search record ID…" className="pl-9" />
           </div>
-          <Select name="table" defaultValue={tableFilter}>
+          <Select name="table" defaultValue={filters.table}>
             <option value="">All tables</option>
             {TABLE_OPTIONS.map((t) => (
               <option key={t} value={t}>
@@ -144,7 +206,7 @@ export default async function AuditLogsPage({
               </option>
             ))}
           </Select>
-          <Select name="action" defaultValue={actionFilter}>
+          <Select name="action" defaultValue={filters.action}>
             <option value="">All actions</option>
             {ACTION_OPTIONS.map((a) => (
               <option key={a} value={a}>
@@ -179,7 +241,12 @@ export default async function AuditLogsPage({
           }
         />
       ) : (
-        <>
+        <InfiniteScrollProvider
+          loader={loadMoreAudit}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={`${filters.table}|${filters.action}|${filters.q}`}
+        >
           <Card className="table-scroll p-0">
             <table className="w-full min-w-[760px] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
@@ -193,50 +260,15 @@ export default async function AuditLogsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
-                {logs.map((log) => (
-                  <tr key={log.id}>
-                    <td className="whitespace-nowrap px-5 py-3 text-xs text-ink-400">
-                      {formatIndiaDateTime(log.created_at)}
-                    </td>
-                    <td className="px-5 py-3 text-ink-700">{log.changed_by_name ?? 'System'}</td>
-                    <td className="px-5 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ACTION_STYLES[log.action] ?? 'bg-ink-100 text-ink-600'}`}>
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 font-mono text-xs text-ink-600">{log.table_name}</td>
-                    <td className="px-5 py-3 font-mono text-xs text-ink-400">{log.record_id.slice(0, 8)}…</td>
-                    <td className="px-5 py-3">
-                      <ChangeDetails oldData={log.old_data} newData={log.new_data} action={log.action} />
-                    </td>
-                  </tr>
-                ))}
+                <InfiniteScrollRows skeleton={<InfiniteScrollTableSkeleton columns={6} />}>
+                  {renderAuditRows(logs)}
+                </InfiniteScrollRows>
               </tbody>
             </table>
           </Card>
 
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              {page > 1 ? (
-                <Link href={`/admin/audit-logs?${filterParams.toString()}&page=${page - 1}`}>
-                  <Button size="sm" variant="outline">
-                    Previous
-                  </Button>
-                </Link>
-              ) : null}
-              <span className="text-xs text-ink-400">
-                Page {page} of {totalPages}
-              </span>
-              {page < totalPages ? (
-                <Link href={`/admin/audit-logs?${filterParams.toString()}&page=${page + 1}`}>
-                  <Button size="sm" variant="outline">
-                    Next
-                  </Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
-        </>
+          <InfiniteScrollStatus endLabel="No more audit entries" loadingLabel="Loading more…" />
+        </InfiniteScrollProvider>
       )}
     </div>
   );

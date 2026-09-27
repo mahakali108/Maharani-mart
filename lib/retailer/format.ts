@@ -6,6 +6,16 @@ export function formatInr(value: number): string {
   return `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Paise (integer, the only money unit stored in the DB) to rupees.
+ *
+ * Lives here rather than in `lib/retailer/wallet.ts` because wallet.ts is
+ * `server-only` and client components that render money must not pull it in.
+ */
+export function paiseToRupees(paise: number): number {
+  return Math.round(paise) / 100;
+}
+
 export function calcDiscountPercent(mrp: number | null | undefined, price: number | null | undefined): number {
   if (mrp == null || price == null || mrp <= price) return 0;
   return Math.round(((mrp - price) / mrp) * 100);

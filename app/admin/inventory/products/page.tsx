@@ -8,9 +8,35 @@ import { Select } from '@/components/ui/select';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import { ProductThresholdsForm } from '@/components/admin/product-thresholds-form';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  InfiniteScrollTableSkeleton,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
 import type { ProductTotalsViewRow } from '@/types/inventory.types';
+import {
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  readCursor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
+/** Rows per batch. */
 const PAGE_SIZE = 25;
+
+/**
+ * Name order, `product_id` breaking ties: two products can share a name, and a
+ * keyset cursor must be able to point at exactly one row.
+ */
+const ORDER: KeysetColumn[] = [
+  { column: 'product_name', ascending: true },
+  { column: 'product_id', ascending: true },
+];
 
 const STATUS_STYLES: Record<string, string> = {
   healthy: 'bg-green-50 text-green-700',
@@ -24,29 +50,88 @@ const STATUS_LABELS: Record<string, string> = {
   out_of_stock: 'Out of stock',
 };
 
-export default async function InventoryProductsPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; status?: string; page?: string };
-}) {
-  const supabase = createClient();
-  const page = Math.max(1, Number(searchParams.page) || 1);
-  const q = (searchParams.q ?? '').trim();
-  const status = searchParams.status ?? '';
+interface ProductFilters {
+  q: string;
+  status: string;
+}
 
-  let query = supabase.from('inventory_product_totals').select('*', { count: 'exact' });
-  if (q) query = query.or(`product_name.ilike.%${q}%,sku_code.ilike.%${q}%`);
-  if (status) query = query.eq('stock_status', status);
+type SupabaseClient = ReturnType<typeof createClient>;
+
+/**
+ * One batch of `inventory_product_totals` rows. The view is already
+ * is_staff_or_above()-gated (0017), so this keeps exactly the same visibility
+ * rules as the old paged query — only the window changed.
+ */
+async function loadProductBatch(
+  supabase: SupabaseClient,
+  filters: ProductFilters,
+  cursor: ListCursor | null
+) {
+  let query = supabase.from('inventory_product_totals').select('*');
+  if (filters.q) query = query.or(`product_name.ilike.%${filters.q}%,sku_code.ilike.%${filters.q}%`);
+  if (filters.status) query = query.eq('stock_status', filters.status);
 
   // The view covers every product; hide never-stocked items unless the
   // caller explicitly asks for out-of-stock (where zero rows matter).
-  if (status !== 'out_of_stock') query = query.gt('quantity_on_hand', 0);
+  if (filters.status !== 'out_of_stock') query = query.gt('quantity_on_hand', 0);
 
-  const from = (page - 1) * PAGE_SIZE;
-  const { data, count } = await query.order('product_name').range(from, from + PAGE_SIZE - 1);
-
+  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
   const rows = (data ?? []) as unknown as ProductTotalsViewRow[];
-  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+  return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
+}
+
+function renderProductRows(rows: ProductTotalsViewRow[]) {
+  return rows.map((r) => (
+    <tr key={r.product_id}>
+      <td className="px-5 py-3">
+        <Link href={`/admin/products/${r.product_id}`} className="font-medium text-ink-900 hover:text-primary-600">
+          {r.product_name}
+        </Link>
+        <p className="font-mono text-xs text-ink-400">{r.sku_code}</p>
+      </td>
+      <td className="px-5 py-3">
+        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[r.stock_status]}`}>
+          {STATUS_LABELS[r.stock_status]}
+        </span>
+      </td>
+      <td className="px-5 py-3 text-right font-medium text-ink-900">{r.quantity_on_hand}</td>
+      <td className="px-5 py-3 text-right text-ink-600">{r.reserved_quantity}</td>
+      <td className="px-5 py-3 text-right font-semibold text-ink-900">{r.available_quantity}</td>
+      <td className="px-5 py-3 text-right text-ink-600">
+        ₹{Number(r.estimated_value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+      </td>
+      <td className="px-5 py-3">
+        <ProductThresholdsForm
+          productId={r.product_id}
+          minStock={r.min_stock}
+          reorderLevel={r.reorder_level}
+          maxStock={r.max_stock}
+        />
+      </td>
+    </tr>
+  ));
+}
+
+export default async function InventoryProductsPage({
+  searchParams,
+}: {
+  searchParams: { q?: string; status?: string };
+}) {
+  const supabase = createClient();
+
+  const filters: ProductFilters = {
+    q: (searchParams.q ?? '').trim(),
+    status: searchParams.status ?? '',
+  };
+
+  const firstBatch = await loadProductBatch(supabase, filters, null);
+  const rows = firstBatch.items;
+
+  async function loadMoreProducts(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    const batch = await loadProductBatch(createClient(), filters, readCursor(cursor));
+    return { rows: renderProductRows(batch.items), nextCursor: batch.nextCursor };
+  }
 
   return (
     <div className="space-y-6">
@@ -61,8 +146,8 @@ export default async function InventoryProductsPage({
 
       <Card>
         <form method="get" className="flex flex-wrap gap-2">
-          <Input name="q" defaultValue={q} placeholder="Search name or SKU…" className="max-w-xs" />
-          <Select name="status" defaultValue={status} className="max-w-[180px]">
+          <Input name="q" defaultValue={filters.q} placeholder="Search name or SKU…" className="max-w-xs" />
+          <Select name="status" defaultValue={filters.status} className="max-w-[180px]">
             <option value="">All statuses</option>
             <option value="healthy">Healthy</option>
             <option value="low_stock">Low stock</option>
@@ -81,7 +166,12 @@ export default async function InventoryProductsPage({
           body="Products appear here once they have stock recorded — confirm a GRN to receive inventory."
         />
       ) : (
-        <>
+        <InfiniteScrollProvider
+          loader={loadMoreProducts}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={`${filters.q}|${filters.status}`}
+        >
           <Card className="overflow-x-auto p-0">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
@@ -96,55 +186,15 @@ export default async function InventoryProductsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
-                {rows.map((r) => (
-                  <tr key={r.product_id}>
-                    <td className="px-5 py-3">
-                      <Link href={`/admin/products/${r.product_id}`} className="font-medium text-ink-900 hover:text-primary-600">
-                        {r.product_name}
-                      </Link>
-                      <p className="font-mono text-xs text-ink-400">{r.sku_code}</p>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[r.stock_status]}`}>
-                        {STATUS_LABELS[r.stock_status]}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right font-medium text-ink-900">{r.quantity_on_hand}</td>
-                    <td className="px-5 py-3 text-right text-ink-600">{r.reserved_quantity}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-ink-900">{r.available_quantity}</td>
-                    <td className="px-5 py-3 text-right text-ink-600">
-                      ₹{Number(r.estimated_value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                    </td>
-                    <td className="px-5 py-3">
-                      <ProductThresholdsForm
-                        productId={r.product_id}
-                        minStock={r.min_stock}
-                        reorderLevel={r.reorder_level}
-                        maxStock={r.max_stock}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                <InfiniteScrollRows skeleton={<InfiniteScrollTableSkeleton columns={7} />}>
+                  {renderProductRows(rows)}
+                </InfiniteScrollRows>
               </tbody>
             </table>
           </Card>
 
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              {page > 1 ? (
-                <Link href={`/admin/inventory/products?q=${encodeURIComponent(q)}&status=${status}&page=${page - 1}`}>
-                  <Button size="sm" variant="outline">Previous</Button>
-                </Link>
-              ) : null}
-              <span className="text-xs text-ink-400">Page {page} of {totalPages}</span>
-              {page < totalPages ? (
-                <Link href={`/admin/inventory/products?q=${encodeURIComponent(q)}&status=${status}&page=${page + 1}`}>
-                  <Button size="sm" variant="outline">Next</Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
-        </>
+          <InfiniteScrollStatus endLabel="No more products" loadingLabel="Loading more…" />
+        </InfiniteScrollProvider>
       )}
     </div>
   );

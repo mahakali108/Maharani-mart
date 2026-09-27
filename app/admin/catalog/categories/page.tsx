@@ -10,9 +10,16 @@ import {
   countTaxonomyFilters,
   hasTaxonomyFilters,
   parseTaxonomyParams,
-  taxonomyPageHref,
 } from '@/lib/admin/taxonomy-query';
-import { loadAdminCategoriesPage } from '@/lib/admin/taxonomy-data';
+import { loadAdminCategoryBatch, type AdminCategoryRow } from '@/lib/admin/taxonomy-data';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  InfiniteScrollTableSkeleton,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
+import { readCursor } from '@/lib/infinite-scroll/keyset';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +31,39 @@ import { AdminEmptyState } from '@/components/admin/empty-state';
 interface Option {
   id: string;
   name: string;
+}
+
+type CategoryListRow = AdminCategoryRow & { parentName: string | null };
+
+/** Shared by the first (server-rendered) batch and every batch after it. */
+function renderCategoryRows(rows: CategoryListRow[], canManage: boolean) {
+  return rows.map((category) => (
+    <tr key={category.id}>
+      <td className="px-5 py-3 font-medium text-ink-900">
+        {category.name}
+        <span className="ml-2 text-xs font-normal text-ink-400 sm:hidden">
+          {category.parentName ? `under ${category.parentName}` : 'top level'}
+        </span>
+      </td>
+      <td className="hidden px-5 py-3 text-ink-600 sm:table-cell">{category.parentName ?? '— Top level —'}</td>
+      <td className="hidden px-5 py-3 text-ink-600 md:table-cell">{category.products?.[0]?.count ?? 0}</td>
+      <td className="px-5 py-3">
+        {canManage ? (
+          <CategoryRowActions id={category.id} isActive={category.is_active} />
+        ) : (
+          <span
+            className={
+              category.is_active
+                ? 'rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700'
+                : 'rounded-lg bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-500'
+            }
+          >
+            {category.is_active ? 'Active' : 'Inactive'}
+          </span>
+        )}
+      </td>
+    </tr>
+  ));
 }
 
 const STATUS_LABELS: Record<AdminStatusFilter, string> = {
@@ -51,8 +91,8 @@ export default async function CategoriesPage({
   const params = parseTaxonomyParams(searchParams);
   const supabase = createClient();
 
-  const [{ rows, total, totalPages }, { data: categoryOptions }] = await Promise.all([
-    loadAdminCategoriesPage(supabase, params),
+  const [firstBatch, { data: categoryOptions }] = await Promise.all([
+    loadAdminCategoryBatch(supabase, params, null),
     // Parent options for the add form — the same bounded-in-practice options
     // list every other admin surface (e.g. the product form) loads.
     canManage
@@ -60,8 +100,17 @@ export default async function CategoriesPage({
       : Promise.resolve({ data: null }),
   ]);
 
+  const rows = firstBatch.items;
   const activeFilters = hasTaxonomyFilters(params);
   const filterCount = countTaxonomyFilters(params);
+
+  /** Server Action for batches 2..n; filters ride along encrypted. */
+  async function loadMoreCategories(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    await requireUser();
+    const batch = await loadAdminCategoryBatch(createClient(), params, readCursor(cursor));
+    return { rows: renderCategoryRows(batch.items, canManage), nextCursor: batch.nextCursor };
+  }
 
   return (
     <div className="space-y-6">
@@ -122,11 +171,16 @@ export default async function CategoriesPage({
           body={
             activeFilters
               ? 'Try a different search term or status, or clear the filters above.'
-              : 'Add your first category above — products need a category to appear correctly in the retailer catalog.'
+              : 'Add your first category above — products can optionally be linked to one.'
           }
         />
       ) : (
-        <>
+        <InfiniteScrollProvider
+          loader={loadMoreCategories}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={`${params.q}|${params.status}|${params.sort}`}
+        >
           <Card className="table-scroll p-0">
             <table className="w-full text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
@@ -138,67 +192,15 @@ export default async function CategoriesPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
-                {rows.map((category) => (
-                  <tr key={category.id}>
-                    <td className="px-5 py-3 font-medium text-ink-900">
-                      {category.name}
-                      <span className="ml-2 text-xs font-normal text-ink-400 sm:hidden">
-                        {category.parentName ? `under ${category.parentName}` : 'top level'}
-                      </span>
-                    </td>
-                    <td className="hidden px-5 py-3 text-ink-600 sm:table-cell">
-                      {category.parentName ?? '— Top level —'}
-                    </td>
-                    <td className="hidden px-5 py-3 text-ink-600 md:table-cell">
-                      {category.products?.[0]?.count ?? 0}
-                    </td>
-                    <td className="px-5 py-3">
-                      {canManage ? (
-                        <CategoryRowActions id={category.id} isActive={category.is_active} />
-                      ) : (
-                        <span
-                          className={
-                            category.is_active
-                              ? 'rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700'
-                              : 'rounded-lg bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-500'
-                          }
-                        >
-                          {category.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                <InfiniteScrollRows skeleton={<InfiniteScrollTableSkeleton columns={4} />}>
+                  {renderCategoryRows(rows, canManage)}
+                </InfiniteScrollRows>
               </tbody>
             </table>
           </Card>
 
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              {params.page > 1 ? (
-                <Link href={taxonomyPageHref('/admin/catalog/categories', params, params.page - 1)}>
-                  <Button size="sm" variant="outline">
-                    Previous
-                  </Button>
-                </Link>
-              ) : null}
-              <span className="text-xs text-ink-400">
-                Page {params.page} of {totalPages} · {total} categor{total === 1 ? 'y' : 'ies'}
-              </span>
-              {params.page < totalPages ? (
-                <Link href={taxonomyPageHref('/admin/catalog/categories', params, params.page + 1)}>
-                  <Button size="sm" variant="outline">
-                    Next
-                  </Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-center text-xs text-ink-400">
-              {total} categor{total === 1 ? 'y' : 'ies'}
-            </p>
-          )}
-        </>
+          <InfiniteScrollStatus endLabel="No more categories" loadingLabel="Loading more…" />
+        </InfiniteScrollProvider>
       )}
     </div>
   );

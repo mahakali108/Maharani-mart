@@ -221,7 +221,10 @@ describe('retailer pages', () => {
   });
 
   it('lists only the caller\'s tickets with status filters', () => {
-    expect(listPage).toContain("eq('retailer_id', user.id)");
+    // The list scrolls now, so the owner filter lives in the batch loader
+    // (shared by the first batch and every batch after it) — but the caller's
+    // own id is still what scopes the read.
+    expect(listPage).toContain("eq('retailer_id', retailerId)");
     expect(listPage).toContain('All tickets');
     expect(listPage).toContain('New ticket');
   });
@@ -281,10 +284,25 @@ describe('priority end-to-end wiring', () => {
     expect(adminFilters).toContain('Filter by category');
     expect(adminFilters).toContain('Filter by priority');
     expect(adminFilters).toContain("router.push(");
-    // The page applies all three filters server-side.
-    expect(adminListPage).toMatch(/if \(topic\) query = query\.eq\('topic', topic\);/);
-    expect(adminListPage).toMatch(/if \(priority\) query = query\.eq\('priority', priority\);/);
+    // The page applies all three filters server-side, inside the batch loader
+    // that every infinite-scroll step (including the first) goes through.
+    expect(adminListPage).toMatch(/if \(filters\.topic\) query = query\.eq\('topic', filters\.topic\);/);
+    expect(adminListPage).toMatch(/if \(filters\.priority\) query = query\.eq\('priority', filters\.priority\);/);
+    expect(adminListPage).toMatch(/if \(filters\.status !== 'all'\) query = query\.eq\('status', filters\.status\);/);
     expect(adminListPage).toContain('priority');
+    // The filters are captured by the Server Action, so scrolling keeps them.
+    expect(adminListPage).toContain("loadTicketBatch(createClient(), filters, readCursor(cursor))");
+    expect(adminListPage).toContain('resetKey={`${status}|${topic}|${priority}`}');
+  });
+
+  it('admin queue scrolls instead of paging', () => {
+    expect(adminListPage).toContain('InfiniteScrollProvider');
+    expect(adminListPage).toContain('InfiniteScrollRows');
+    expect(adminListPage).toContain('InfiniteScrollStatus');
+    // Bounded batches, and no page-number UI anywhere in the file.
+    expect(adminListPage).toMatch(/const BATCH_SIZE = \d+;/);
+    expect(adminListPage).toContain('applyCursor(');
+    expect(adminListPage).not.toMatch(/Page \{|searchParams\.page|totalPages|Previous<\/|Next<\//);
   });
 });
 
