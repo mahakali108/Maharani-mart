@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadBrandDirectory, loadBrandProducts } from '@/lib/retailer/brand-detail';
+import { decodeCursor } from '@/lib/infinite-scroll/cursor';
 import { supabaseFixture } from './helpers/supabase-fixture';
 
 const PARENT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -126,16 +127,29 @@ describe('loadBrandProducts', () => {
       retailer_favorites: [],
     });
 
-    const firstPage = await loadBrandProducts(supabaseFixture(fixtures()) as never, RETAILER, null, BRAND_A, 1);
+    const firstPage = await loadBrandProducts(supabaseFixture(fixtures()) as never, RETAILER, null, BRAND_A, null);
     expect(firstPage.brand).toEqual({ id: BRAND_A, name: 'Brand A', logo_url: null });
     expect(firstPage.productCount).toBe(25);
+    // One batch of BRAND_PAGE_SIZE, and a cursor because one row is left.
     expect(firstPage.products).toHaveLength(24);
-    expect(firstPage.totalPages).toBe(2);
-    expect(firstPage.page).toBe(1);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.nextCursor).toBeTruthy();
 
-    const secondPage = await loadBrandProducts(supabaseFixture(fixtures()) as never, RETAILER, null, BRAND_A, 2);
+    const secondPage = await loadBrandProducts(
+      supabaseFixture(fixtures()) as never,
+      RETAILER,
+      null,
+      BRAND_A,
+      decodeCursor(firstPage.nextCursor)
+    );
     expect(secondPage.products).toHaveLength(1);
-    expect(secondPage.page).toBe(2);
+    // The last batch ends the list — the UI shows "No more products".
+    expect(secondPage.hasMore).toBe(false);
+    expect(secondPage.nextCursor).toBeNull();
+
+    // The two batches are disjoint: no row is ever shown twice.
+    const firstIds = new Set(firstPage.products.map((product) => product.id));
+    expect(secondPage.products.every((product) => !firstIds.has(product.id))).toBe(true);
   });
 
   it('prices products through the canonical engine (derived per-piece fallback)', async () => {
@@ -148,7 +162,7 @@ describe('loadBrandProducts', () => {
       RETAILER,
       null,
       BRAND_A,
-      1
+      null
     );
     // No selling tiers configured: the derived rate is case_price / units_per_case.
     expect(data.pricingUnavailable).toBe(false);
@@ -165,7 +179,7 @@ describe('loadBrandProducts', () => {
       RETAILER,
       null,
       BRAND_A,
-      1,
+      null,
       false
     );
     expect(data.pricingUnavailable).toBe(true);
@@ -180,7 +194,7 @@ describe('loadBrandProducts', () => {
       RETAILER,
       null,
       'ffffffff-ffff-4fff-8fff-ffffffffffff',
-      1
+      null
     );
     expect(data.brand).toBeNull();
     expect(data.products).toEqual([]);
@@ -195,7 +209,7 @@ describe('loadBrandProducts', () => {
       RETAILER,
       null,
       BRAND_A,
-      1
+      null
     );
     expect(data.brand).not.toBeNull();
     expect(data.errors.catalog).toBe(true);

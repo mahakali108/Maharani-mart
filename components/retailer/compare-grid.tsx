@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { GitCompareArrows, Scale, X } from 'lucide-react';
 import { ProductCard, type ProductCardProps } from '@/components/retailer/product-card';
+import { InfiniteScrollStatus, useInfiniteList } from '@/components/ui/infinite-scroll';
 import { formatInr } from '@/lib/retailer/format';
 import { cn } from '@/lib/utils/cn';
 
@@ -27,13 +28,47 @@ function readStoredIds(): string[] {
  * this retailer (from-price, MRP, discount, GST, MOQ, best pack). No invented
  * ratings or specs — only fields that exist on the priced card.
  */
-export function CompareGrid({ cards }: { cards: ProductCardProps[] }) {
+export function CompareGrid({
+  cards,
+  loader,
+  initialCursor,
+  initialHasMore,
+  resetKey,
+}: {
+  cards: ProductCardProps[];
+  /** Server Action returning the next batch; omit for a fixed grid. */
+  loader?: (cursor: string | null) => Promise<{ items: ProductCardProps[]; nextCursor: string | null }>;
+  initialCursor?: string | null;
+  initialHasMore?: boolean;
+  resetKey?: string;
+}) {
+  // Each card keeps a compare checkbox, so the grid owns its rows and appends
+  // DATA rather than pre-rendered markup — the same state machine every other
+  // scrolling list in the app uses.
+  const list = useInfiniteList<ProductCardProps>({
+    loader: loader ?? (async () => ({ items: [], nextCursor: null })),
+    initialCursor,
+    initialHasMore,
+    resetKey,
+  });
+
+  const gridCards = useMemo(() => {
+    const merged = [...cards];
+    const seen = new Set(merged.map((card) => card.id));
+    for (const card of list.items) {
+      if (seen.has(card.id)) continue;
+      seen.add(card.id);
+      merged.push(card);
+    }
+    return merged;
+  }, [cards, list.items]);
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setSelectedIds(readStoredIds().filter((id) => cards.some((card) => card.id === id)));
+    setSelectedIds(readStoredIds().filter((id) => gridCards.some((card) => card.id === id)));
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -51,8 +86,8 @@ export function CompareGrid({ cards }: { cards: ProductCardProps[] }) {
   }
 
   const selected = useMemo(
-    () => selectedIds.map((id) => cards.find((card) => card.id === id)).filter((card): card is ProductCardProps => !!card),
-    [selectedIds, cards]
+    () => selectedIds.map((id) => gridCards.find((card) => card.id === id)).filter((card): card is ProductCardProps => !!card),
+    [selectedIds, gridCards]
   );
 
   const rows: { label: string; render: (card: ProductCardProps) => string }[] = [
@@ -79,7 +114,7 @@ export function CompareGrid({ cards }: { cards: ProductCardProps[] }) {
   return (
     <div className="relative">
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
-        {cards.map((card) => {
+        {gridCards.map((card) => {
           const checked = selectedIds.includes(card.id);
           return (
             <div key={card.id} className="relative">
@@ -105,7 +140,19 @@ export function CompareGrid({ cards }: { cards: ProductCardProps[] }) {
             </div>
           );
         })}
+        {list.loading
+          ? [0, 1, 2, 3].map((index) => (
+              <div key={`loading-${index}`} aria-hidden="true">
+                <div className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-slate-50" />
+                <div className="mt-1 h-8" />
+              </div>
+            ))
+          : null}
       </div>
+
+      {loader ? (
+        <InfiniteScrollStatus state={list} endLabel="No more products" loadingLabel="Loading more products…" />
+      ) : null}
 
       {/* Floating compare tray — sits above the bottom nav, safe-area aware. */}
       {selected.length >= 2 && !sheetOpen ? (

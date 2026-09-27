@@ -16,10 +16,9 @@ import {
   ADMIN_STOCK_FILTERS,
   ADMIN_STOCK_LABELS,
   ADMIN_STATUS_FILTERS,
+  type AdminCatalogParams,
+  type AdminProductSort as AdminProductSortValue,
   adminCatalogHref,
-  adminCatalogPageHref,
-  adminPageRange,
-  adminTotalPages,
   countAdminFilters,
   hasAdminFilters,
   needsDerivedLookup,
@@ -40,13 +39,184 @@ import {
   type AdminProductRow,
   type ResolvedAdminProduct,
 } from '@/lib/admin/catalog-data';
-import { ProductBulkPanel } from '@/components/admin/product-bulk-panel';
+import {
+  ProductBulkPanel,
+  toBulkPanelProduct,
+  type BulkPanelProduct,
+} from '@/components/admin/product-bulk-panel';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { Package } from 'lucide-react';
+import {
+  applyCursor,
+  applyKeysetOrder,
+  cursorOffset,
+  keysetCursorFor,
+  readCursor,
+  toListBatch,
+  toOffsetBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
 interface Option {
   id: string;
   name: string;
+}
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
+/**
+ * The ORDER BY for each DB-sortable admin sort, and — in the same breath — the
+ * shape of the keyset cursor. Every column here is NOT NULL (0001_init.sql) and
+ * `id` is always the last term, so "everything after the row I just showed" is
+ * an exact, index-served predicate rather than an OFFSET walk.
+ */
+function adminSortOrder(sort: AdminProductSortValue): KeysetColumn[] {
+  if (sort === 'oldest') {
+    return [
+      { column: 'created_at', ascending: true },
+      { column: 'id', ascending: true },
+    ];
+  }
+  if (sort === 'name') {
+    return [
+      { column: 'name', ascending: true },
+      { column: 'id', ascending: true },
+    ];
+  }
+  if (sort === 'name-desc') {
+    return [
+      { column: 'name', ascending: false },
+      { column: 'id', ascending: true },
+    ];
+  }
+  if (sort === 'price-high') {
+    return [
+      { column: 'base_price', ascending: false },
+      { column: 'id', ascending: true },
+    ];
+  }
+  if (sort === 'price-low') {
+    return [
+      { column: 'base_price', ascending: true },
+      { column: 'id', ascending: true },
+    ];
+  }
+  if (sort === 'updated') {
+    return [
+      { column: 'updated_at', ascending: false },
+      { column: 'id', ascending: true },
+    ];
+  }
+  return [
+    { column: 'created_at', ascending: false },
+    { column: 'id', ascending: false },
+  ];
+}
+
+/**
+ * One batch of resolved admin products.
+ *
+ * MODE 1 (every filter and the sort are expressible in SQL) pages the database
+ * with a keyset cursor. MODE 2 (stock / sales / margin / MOQ, none of which are
+ * columns on `products`) still resolves a bounded working set of
+ * ADMIN_DERIVED_LOOKUP_LIMIT rows, filters and ranks it in memory, and then
+ * batches over it with an offset cursor — the same honest disclosure as before,
+ * just without a page number.
+ */
+async function loadAdminProductBatch(
+  supabase: SupabaseClient,
+  params: AdminCatalogParams,
+  view: { canViewCost: boolean },
+  cursor: ListCursor | null
+): Promise<{ items: ResolvedAdminProduct[]; nextCursor: string | null; resultCapped: boolean }> {
+  const derived = needsDerivedLookup(params);
+  const relatedIds =
+    params.q && needsRelatedIdLookup(params.field)
+      ? await loadSearchRelatedIds(supabase, params.q, params.field === 'sku' ? 'sku' : 'all')
+      : { brandIds: [], categoryIds: [], packProductIds: [] };
+  const searchClause = buildSearchClause(params, relatedIds);
+
+  if (params.q && searchMatchesNothing(params, relatedIds)) {
+    return { items: [], nextCursor: null, resultCapped: false };
+  }
+
+  /** Build the products query with every SQL-expressible filter applied. */
+  const baseQuery = () => {
+    let query = supabase.from('products').select(ADMIN_PRODUCT_SELECT);
+    if (searchClause) query = query.or(searchClause) as never;
+    if (params.brand) query = query.eq('brand_id', params.brand) as never;
+    if (params.category) query = query.eq('category_id', params.category) as never;
+    if (params.status === 'active') query = query.eq('is_active', true) as never;
+    if (params.status === 'inactive') query = query.eq('is_active', false) as never;
+    if (params.gst !== 'all') query = query.eq('gst_percent', Number(params.gst)) as never;
+    if (params.minPrice !== null) query = query.gte('base_price', params.minPrice) as never;
+    if (params.maxPrice !== null) query = query.lte('base_price', params.maxPrice) as never;
+    return query;
+  };
+
+  if (!derived) {
+    const order = adminSortOrder(params.sort);
+    const { data, error } = await applyCursor(
+      applyKeysetOrder(baseQuery(), order),
+      cursor,
+      order,
+      ADMIN_PAGE_SIZE
+    ) as never as { data: AdminProductRow[] | null; error: { message: string } | null };
+    if (error) throw new Error(error.message);
+
+    const batch = toListBatch(data ?? [], ADMIN_PAGE_SIZE, (row) => keysetCursorFor(row, order));
+    return {
+      items: resolveAdminProducts(batch.items, {
+        stock: await loadStockMap(supabase),
+        sales: new Map(),
+        costs: view.canViewCost ? await loadCostMap(supabase) : new Map(),
+        includeCost: view.canViewCost,
+      }),
+      nextCursor: batch.nextCursor,
+      resultCapped: false,
+    };
+  }
+
+  // MODE 2 — bounded working set, ordered by name so the cap, when it binds,
+  // drops a deterministic tail rather than an arbitrary one.
+  const offset = cursorOffset(cursor);
+  const { data, error } = (await baseQuery()
+    .order('name', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(ADMIN_DERIVED_LOOKUP_LIMIT)) as never as {
+    data: AdminProductRow[] | null;
+    error: { message: string } | null;
+  };
+  if (error) throw new Error(error.message);
+  const resultCapped = (data ?? []).length >= ADMIN_DERIVED_LOOKUP_LIMIT;
+
+  const needsStock = params.stock !== 'all' || params.maxStock !== null || params.sort === 'stock-low';
+  const needsSales = params.sort === 'sales';
+  const needsCost = view.canViewCost && params.sort === 'margin-high';
+  const resolved0 = resolveAdminProducts(data ?? [], {
+    stock: needsStock ? await loadStockMap(supabase) : new Map(),
+    sales: needsSales ? await loadSalesMap(supabase) : new Map(),
+    costs: needsCost ? await loadCostMap(supabase) : new Map(),
+    includeCost: view.canViewCost,
+  });
+  const filtered = resolved0.filter((row) => matchesDerivedFilters(row, params));
+  const ordered = sortResolvedProducts(filtered, params.sort);
+  const batch = toOffsetBatch(ordered, ADMIN_PAGE_SIZE, offset);
+
+  return {
+    items: resolveAdminProducts(
+      batch.items as unknown as AdminProductRow[],
+      {
+        stock: needsStock ? await loadStockMap(supabase) : new Map(),
+        sales: needsSales ? await loadSalesMap(supabase) : new Map(),
+        costs: view.canViewCost ? await loadCostMap(supabase) : new Map(),
+        includeCost: view.canViewCost,
+      }
+    ),
+    nextCursor: batch.nextCursor,
+    resultCapped,
+  };
 }
 
 /**
@@ -72,147 +242,39 @@ export default async function ProductsPage({
   const canManagePricing = can(user.role, 'pricing.manage');
   const canViewCost = can(user.role, 'products.view_cost');
 
-  const derived = needsDerivedLookup(params);
-  // The variant-SKU field resolves product ids from product_packs first; `all`
-  // resolves brand / category / variant names. Every other field is a direct
-  // column on `products`, so no extra lookup is issued for them.
-  const relatedIds = params.q && needsRelatedIdLookup(params.field)
-    ? await loadSearchRelatedIds(supabase, params.q, params.field === 'sku' ? 'sku' : 'all')
-    : { brandIds: [], categoryIds: [], packProductIds: [] };
-  const searchClause = buildSearchClause(params, relatedIds);
-  const noPossibleResults = searchMatchesNothing(params, relatedIds);
-
-  // Derived lookups are only issued when something actually needs them, so the
-  // default browse path stays a single paginated query.
-  const needsStock = derived && (params.stock !== 'all' || params.maxStock !== null || params.sort === 'stock-low');
-  const needsSales = params.sort === 'sales';
-  const needsCost = canViewCost && params.sort === 'margin-high';
-
-  const [{ data: brandOptions }, { data: categoryOptions }] = await Promise.all([
+  const [{ data: brandOptions }, { data: categoryOptions }, firstBatch] = await Promise.all([
     supabase.from('brands').select('id, name').order('name').returns<Option[]>(),
     supabase.from('categories').select('id, name').order('sort_order').order('name').returns<Option[]>(),
+    loadAdminProductBatch(supabase, params, { canViewCost }, null),
   ]);
-
-  const [stockMap, salesMap, costMap] = await Promise.all([
-    needsStock ? loadStockMap(supabase) : Promise.resolve(new Map()),
-    needsSales ? loadSalesMap(supabase) : Promise.resolve(new Map()),
-    needsCost ? loadCostMap(supabase) : Promise.resolve(new Map()),
-  ]);
-
-  /** Build the products query with every SQL-expressible filter applied. */
-  const baseQuery = () => {
-    let query = supabase.from('products').select(ADMIN_PRODUCT_SELECT, { count: 'exact' });
-    if (searchClause) query = query.or(searchClause) as never;
-    if (params.brand) query = query.eq('brand_id', params.brand) as never;
-    if (params.category) query = query.eq('category_id', params.category) as never;
-    if (params.status === 'active') query = query.eq('is_active', true) as never;
-    if (params.status === 'inactive') query = query.eq('is_active', false) as never;
-    if (params.gst !== 'all') query = query.eq('gst_percent', Number(params.gst)) as never;
-    if (params.minPrice !== null) query = query.gte('base_price', params.minPrice) as never;
-    if (params.maxPrice !== null) query = query.lte('base_price', params.maxPrice) as never;
-    return query;
-  };
-
-  let rows: AdminProductRow[] = [];
-  let total = 0;
-  let resultCapped = false;
-  let stockMap2 = stockMap;
-  let salesMap2 = salesMap;
-  let costMap2 = costMap;
-
-  if (noPossibleResults) {
-    // Nothing to query: report an empty set rather than an unfiltered one.
-    rows = [];
-    total = 0;
-  } else if (derived) {
-    // MODE 2 — bounded working set. Ordered by name so the cap, when it binds,
-    // drops a deterministic tail rather than an arbitrary one.
-    const { data, count, error } = await baseQuery()
-      .order('name', { ascending: true })
-      .limit(ADMIN_DERIVED_LOOKUP_LIMIT) as never as {
-      data: AdminProductRow[] | null;
-      count: number | null;
-      error: { message: string } | null;
-    };
-    if (error) throw new Error(error.message);
-    resultCapped = (data ?? []).length >= ADMIN_DERIVED_LOOKUP_LIMIT;
-    total = count ?? 0;
-
-    // Stock badges and the stock sort need the map even when no stock filter
-    // is active, but only for the rows that survived the SQL filters.
-    const resolved0 = resolveAdminProducts(data ?? [], {
-      stock: stockMap,
-      sales: salesMap,
-      costs: costMap,
-      includeCost: canViewCost,
-    });
-    const filtered = resolved0.filter((row) => matchesDerivedFilters(row, params));
-    const ordered = sortResolvedProducts(filtered, params.sort);
-    const { from, to } = adminPageRange(params.page, ADMIN_PAGE_SIZE);
-    const pageRows = ordered.slice(from, to + 1);
-
-    // Mode 2 pages over a working set, so the total is the filtered length,
-    // not the SQL count — otherwise "Page 3 of 40" would point at rows that
-    // the stock filter already removed.
-    total = ordered.length;
-
-    // Lazily load stock/sales/cost for just this page when the map was not
-    // needed for filtering or sorting.
-    const pageNeeds = pageRows.length > 0;
-    const [pageStock, pageSales, pageCosts] = await Promise.all([
-      pageNeeds && !needsStock ? loadStockMap(supabase) : Promise.resolve(stockMap),
-      pageNeeds && !needsSales ? loadSalesMap(supabase) : Promise.resolve(salesMap),
-      pageNeeds && canViewCost && !needsCost ? loadCostMap(supabase) : Promise.resolve(costMap),
-    ]);
-
-    rows = pageRows as unknown as AdminProductRow[];
-    stockMap2 = pageStock;
-    salesMap2 = pageSales;
-    costMap2 = pageCosts;
-  } else {
-    // MODE 1 — DB pagination.
-    const { from, to } = adminPageRange(params.page, ADMIN_PAGE_SIZE);
-    let query = baseQuery();
-    if (params.sort === 'oldest') query = query.order('created_at', { ascending: true }) as never;
-    else if (params.sort === 'name') query = query.order('name', { ascending: true }) as never;
-    else if (params.sort === 'name-desc') query = query.order('name', { ascending: false }) as never;
-    else if (params.sort === 'price-high') query = query.order('base_price', { ascending: false }) as never;
-    else if (params.sort === 'price-low') query = query.order('base_price', { ascending: true }) as never;
-    else if (params.sort === 'updated') query = query.order('updated_at', { ascending: false }) as never;
-    else query = query.order('created_at', { ascending: false }) as never;
-
-    const { data, count, error } = (await query.range(from, to)) as unknown as {
-      data: AdminProductRow[] | null;
-      count: number | null;
-      error: { message: string } | null;
-    };
-    if (error) throw new Error(error.message);
-    rows = data ?? [];
-    total = count ?? 0;
-
-    const [pageStock, pageSales, pageCosts] = await Promise.all([
-      rows.length > 0 ? loadStockMap(supabase) : Promise.resolve(new Map()),
-      Promise.resolve(new Map()),
-      rows.length > 0 && canViewCost ? loadCostMap(supabase) : Promise.resolve(new Map()),
-    ]);
-    stockMap2 = pageStock;
-    salesMap2 = pageSales;
-    costMap2 = pageCosts;
-  }
-
-  const resolved: ResolvedAdminProduct[] = resolveAdminProducts(rows, {
-    stock: stockMap2,
-    sales: salesMap2,
-    costs: costMap2,
-    includeCost: canViewCost,
-  });
+  const resolved = firstBatch.items;
 
   const brands = brandOptions ?? [];
   const categories = categoryOptions ?? [];
   const activeFilters = hasAdminFilters(params);
   const filterCount = countAdminFilters(params);
-  const totalPages = adminTotalPages(total, ADMIN_PAGE_SIZE);
   const exportHref = `/admin/products/export${adminCatalogHref(params).split('?')[1] ? `?${adminCatalogHref(params).split('?')[1]}` : ''}`;
+
+  /**
+   * Server Action for batches 2..n. The row needs its own resolved pricing and
+   * permission-derived cost column, so this returns plain serialisable rows the
+   * product table can own (selection state lives client-side) — the same
+   * scrolling contract, just carrying data instead of markup.
+   */
+  async function loadMoreProducts(
+    cursor: string | null
+  ): Promise<{ items: BulkPanelProduct[]; nextCursor: string | null }> {
+    'use server';
+    const caller = await requireUser();
+    const batch = await loadAdminProductBatch(
+      createClient(),
+      params,
+      { canViewCost: can(caller.role, 'products.view_cost') },
+      readCursor(cursor)
+    );
+    return { items: batch.items.map(toBulkPanelProduct), nextCursor: batch.nextCursor };
+  }
+
 
   return (
     <div className="space-y-6">
@@ -344,7 +406,7 @@ export default async function ProductsPage({
         </form>
       </Card>
 
-      {resultCapped ? (
+      {firstBatch.resultCapped ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-4 text-amber-800">
           This view ranks by a value that is not stored on the product row (stock, sales, margin or MOQ), so it works
           over the first <span className="font-bold">{ADMIN_DERIVED_LOOKUP_LIMIT}</span> products that match the other
@@ -373,33 +435,11 @@ export default async function ProductsPage({
             canManagePricing={canManagePricing}
             canViewCost={canViewCost}
             exportHref={exportHref}
+            loader={loadMoreProducts}
+            initialCursor={firstBatch.nextCursor}
+            initialHasMore={Boolean(firstBatch.nextCursor)}
+            resetKey={adminCatalogHref(params)}
           />
-
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              {params.page > 1 ? (
-                <Link href={adminCatalogPageHref(params, params.page - 1)}>
-                  <Button size="sm" variant="outline">
-                    Previous
-                  </Button>
-                </Link>
-              ) : null}
-              <span className="text-xs text-ink-400">
-                Page {params.page} of {totalPages} · {total} product{total === 1 ? '' : 's'}
-              </span>
-              {params.page < totalPages ? (
-                <Link href={adminCatalogPageHref(params, params.page + 1)}>
-                  <Button size="sm" variant="outline">
-                    Next
-                  </Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-center text-xs text-ink-400">
-              {total} product{total === 1 ? '' : 's'}
-            </p>
-          )}
         </>
       )}
     </div>

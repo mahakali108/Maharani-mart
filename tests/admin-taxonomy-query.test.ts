@@ -8,15 +8,14 @@ import {
   normalizeTaxonomyName,
   parseTaxonomyParams,
   taxonomyHref,
-  taxonomyPageHref,
 } from '@/lib/admin/taxonomy-query';
 
 const CATEGORIES = '/admin/catalog/categories' as const;
 const BRANDS = '/admin/catalog/brands' as const;
 
 describe('taxonomy list param parsing', () => {
-  it('defaults to an unfiltered, name-sorted first page', () => {
-    expect(parseTaxonomyParams({})).toEqual({ q: '', status: 'all', sort: 'name', page: 1 });
+  it('defaults to an unfiltered, name-sorted list', () => {
+    expect(parseTaxonomyParams({})).toEqual({ q: '', status: 'all', sort: 'name' });
   });
 
   it('sanitises the search term exactly like the product list does', () => {
@@ -33,11 +32,11 @@ describe('taxonomy list param parsing', () => {
     expect(parseTaxonomyParams({ sort: 'newest' }).sort).toBe('newest');
   });
 
-  it('bounds the page number', () => {
-    expect(parseTaxonomyParams({ page: '0' }).page).toBe(1);
-    expect(parseTaxonomyParams({ page: '-3' }).page).toBe(1);
-    expect(parseTaxonomyParams({ page: '999999' }).page).toBe(500);
-    expect(parseTaxonomyParams({ page: '4' }).page).toBe(4);
+  it('ignores a stale ?page= instead of skipping rows', () => {
+    // The list scrolls, so a deep link carrying ?page= must simply start at the
+    // top rather than open an empty slice or error.
+    expect(parseTaxonomyParams({ page: '0' })).toEqual({ q: '', status: 'all', sort: 'name' });
+    expect(parseTaxonomyParams({ page: '999999', q: 'tata' })).toEqual({ q: 'tata', status: 'all', sort: 'name' });
   });
 
   it('reads the first value when a param is repeated', () => {
@@ -88,16 +87,10 @@ describe('taxonomy link building', () => {
     expect(taxonomyHref(BRANDS, params, { q: undefined })).toBe(`${BRANDS}?status=inactive`);
   });
 
-  it('never emits page from the params — a filter change must restart at page 1', () => {
+  it('never emits a page — there is no pagination link to build any more', () => {
     const params = parseTaxonomyParams({ q: 'tata', page: '7' });
     expect(taxonomyHref(CATEGORIES, params)).not.toContain('page=');
-  });
-
-  it('appends an explicit page for pagination links', () => {
-    const params = parseTaxonomyParams({ q: 'tata' });
-    expect(taxonomyPageHref(BRANDS, params, 1)).toBe(`${BRANDS}?q=tata`);
-    expect(taxonomyPageHref(BRANDS, params, 3)).toBe(`${BRANDS}?q=tata&page=3`);
-    expect(taxonomyPageHref(CATEGORIES, parseTaxonomyParams({}), 2)).toBe(`${CATEGORIES}?page=2`);
+    expect(taxonomyHref(BRANDS, parseTaxonomyParams({}))).toBe(BRANDS);
   });
 });
 

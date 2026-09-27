@@ -7,42 +7,103 @@ import { Select } from '@/components/ui/select';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import { StatusBadge } from '@/components/admin/status-badge';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  InfiniteScrollTableSkeleton,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
 import type { GrnRow } from '@/types/inventory.types';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import {
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  readCursor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
+/** Rows per batch. */
 const PAGE_SIZE = 25;
+
+/** Newest first, `id` breaking ties so batches never overlap. */
+const ORDER: KeysetColumn[] = [
+  { column: 'created_at', ascending: false },
+  { column: 'id', ascending: false },
+];
 
 interface GrnListRow extends GrnRow {
   warehouses: { name: string } | null;
 }
 
+type SupabaseClient = ReturnType<typeof createClient>;
+
+/**
+ * One batch of GRNs. Line counts are resolved for the rows in THIS batch only
+ * (the old page pulled every grn_items row in the database on every request).
+ */
+async function loadGrnBatch(supabase: SupabaseClient, status: string, cursor: ListCursor | null) {
+  let query = supabase.from('grns').select('*, warehouses ( name )');
+  if (status) query = query.eq('status', status);
+
+  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const batch = toListBatch((data ?? []) as unknown as GrnListRow[], PAGE_SIZE, (row) =>
+    keysetCursorFor(row, ORDER)
+  );
+
+  const itemCounts = new Map<string, number>();
+  if (batch.items.length > 0) {
+    const { data: itemData } = await supabase
+      .from('grn_items')
+      .select('grn_id')
+      .in('grn_id', batch.items.map((grn) => grn.id));
+    for (const item of (itemData ?? []) as { grn_id: string }[]) {
+      itemCounts.set(item.grn_id, (itemCounts.get(item.grn_id) ?? 0) + 1);
+    }
+  }
+
+  return { items: batch.items, nextCursor: batch.nextCursor, itemCounts };
+}
+
+function renderGrnRows(rows: GrnListRow[], itemCounts: Map<string, number>) {
+  return rows.map((g) => (
+    <tr key={g.id}>
+      <td className="px-5 py-3">
+        <Link href={`/admin/inventory/grn/${g.id}`} className="font-mono font-medium text-ink-900 hover:text-primary-600">
+          {g.grn_number}
+        </Link>
+      </td>
+      <td className="px-5 py-3 text-ink-600">{g.warehouses?.name ?? '—'}</td>
+      <td className="px-5 py-3 text-ink-600">{g.supplier_reference ?? '—'}</td>
+      <td className="px-5 py-3 text-right text-ink-600">{itemCounts.get(g.id) ?? 0}</td>
+      <td className="px-5 py-3">
+        <StatusBadge status={g.status} />
+      </td>
+      <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(g.created_at)}</td>
+      <td className="px-5 py-3 text-ink-500">{g.confirmed_at ? formatIndiaDateTime(g.confirmed_at) : '—'}</td>
+    </tr>
+  ));
+}
+
 export default async function GrnListPage({
   searchParams,
 }: {
-  searchParams: { status?: string; page?: string };
+  searchParams: { status?: string };
 }) {
   const supabase = createClient();
-  const page = Math.max(1, Number(searchParams.page) || 1);
   const status = searchParams.status ?? '';
 
-  let query = supabase
-    .from('grns')
-    .select('*, warehouses ( name )', { count: 'exact' })
-    .order('created_at', { ascending: false });
-  if (status) query = query.eq('status', status);
+  const firstBatch = await loadGrnBatch(supabase, status, null);
+  const grns = firstBatch.items;
 
-  const from = (page - 1) * PAGE_SIZE;
-  const [{ data, count }, { data: itemData }] = await Promise.all([
-    query.range(from, from + PAGE_SIZE - 1),
-    supabase.from('grn_items').select('grn_id'),
-  ]);
-
-  const grns = (data ?? []) as unknown as GrnListRow[];
-  const itemCounts = new Map<string, number>();
-  for (const item of (itemData ?? []) as { grn_id: string }[]) {
-    itemCounts.set(item.grn_id, (itemCounts.get(item.grn_id) ?? 0) + 1);
+  async function loadMoreGrns(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    const batch = await loadGrnBatch(createClient(), status, readCursor(cursor));
+    return { rows: renderGrnRows(batch.items, new Map(batch.itemCounts)), nextCursor: batch.nextCursor };
   }
-  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
   return (
     <div className="space-y-6">
@@ -71,7 +132,9 @@ export default async function GrnListPage({
             <option value="confirmed">Confirmed</option>
             <option value="cancelled">Cancelled</option>
           </Select>
-          <Button type="submit" size="sm" variant="outline">Filter</Button>
+          <Button type="submit" size="sm" variant="outline">
+            Filter
+          </Button>
         </form>
       </Card>
 
@@ -82,7 +145,12 @@ export default async function GrnListPage({
           body="Create your first Goods Received Note to bring stock into inventory with batch and expiry tracking."
         />
       ) : (
-        <>
+        <InfiniteScrollProvider
+          loader={loadMoreGrns}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={status}
+        >
           <Card className="overflow-x-auto p-0">
             <table className="w-full min-w-[800px] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
@@ -97,41 +165,15 @@ export default async function GrnListPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
-                {grns.map((g) => (
-                  <tr key={g.id}>
-                    <td className="px-5 py-3">
-                      <Link href={`/admin/inventory/grn/${g.id}`} className="font-mono font-medium text-ink-900 hover:text-primary-600">
-                        {g.grn_number}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 text-ink-600">{g.warehouses?.name ?? '—'}</td>
-                    <td className="px-5 py-3 text-ink-600">{g.supplier_reference ?? '—'}</td>
-                    <td className="px-5 py-3 text-right text-ink-600">{itemCounts.get(g.id) ?? 0}</td>
-                    <td className="px-5 py-3"><StatusBadge status={g.status} /></td>
-                    <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(g.created_at)}</td>
-                    <td className="px-5 py-3 text-ink-500">{g.confirmed_at ? formatIndiaDateTime(g.confirmed_at) : '—'}</td>
-                  </tr>
-                ))}
+                <InfiniteScrollRows skeleton={<InfiniteScrollTableSkeleton columns={7} />}>
+                  {renderGrnRows(grns, firstBatch.itemCounts)}
+                </InfiniteScrollRows>
               </tbody>
             </table>
           </Card>
 
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              {page > 1 ? (
-                <Link href={`/admin/inventory/grn?status=${status}&page=${page - 1}`}>
-                  <Button size="sm" variant="outline">Previous</Button>
-                </Link>
-              ) : null}
-              <span className="text-xs text-ink-400">Page {page} of {totalPages}</span>
-              {page < totalPages ? (
-                <Link href={`/admin/inventory/grn?status=${status}&page=${page + 1}`}>
-                  <Button size="sm" variant="outline">Next</Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
-        </>
+          <InfiniteScrollStatus endLabel="No more GRNs" loadingLabel="Loading more…" />
+        </InfiniteScrollProvider>
       )}
     </div>
   );

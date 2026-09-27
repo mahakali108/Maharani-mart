@@ -10,6 +10,7 @@ import { toggleProductActiveAction, deleteProductAction } from '@/lib/admin/prod
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { InfiniteScrollStatus, useInfiniteList } from '@/components/ui/infinite-scroll';
 import { cn } from '@/lib/utils/cn';
 import type { ResolvedAdminProduct } from '@/lib/admin/catalog-data';
 
@@ -92,6 +93,10 @@ export function ProductBulkPanel({
   canManagePricing,
   canViewCost,
   exportHref,
+  loader,
+  initialCursor,
+  initialHasMore,
+  resetKey,
 }: {
   products: ResolvedAdminProduct[];
   brands: Option[];
@@ -101,8 +106,34 @@ export function ProductBulkPanel({
   canManagePricing: boolean;
   canViewCost: boolean;
   exportHref: string;
+  /** Server Action returning the next batch of rows; omit for a fixed list. */
+  loader?: (cursor: string | null) => Promise<{ items: BulkPanelProduct[]; nextCursor: string | null }>;
+  initialCursor?: string | null;
+  initialHasMore?: boolean;
+  resetKey?: string;
 }) {
-  const rows = useMemo(() => products.map(toBulkPanelProduct), [products]);
+  // Rows carry selection state and per-row actions, so this list owns its rows
+  // and appends DATA rather than pre-rendered markup. Same state machine every
+  // other scrolling list in the app uses.
+  const list = useInfiniteList<BulkPanelProduct>({
+    loader: loader ?? (async () => ({ items: [], nextCursor: null })),
+    initialCursor,
+    initialHasMore,
+    resetKey,
+  });
+
+  const rows = useMemo(() => {
+    const merged = products.map(toBulkPanelProduct);
+    const seen = new Set(merged.map((row) => row.id));
+    // Keyset/offset batches are already disjoint; this is belt-and-braces
+    // against a row appearing in two batches after an ordering change.
+    for (const row of list.items) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      merged.push(row);
+    }
+    return merged;
+  }, [products, list.items]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkKind, setBulkKind] = useState<BulkKind>('activate');
   const [exporting, startExport] = useTransition();
@@ -556,6 +587,14 @@ export function ProductBulkPanel({
           })}
         </ul>
       </form>
+
+      {loader ? (
+        <InfiniteScrollStatus
+          state={list}
+          endLabel="No more products"
+          loadingLabel="Loading more products…"
+        />
+      ) : null}
     </div>
   );
 }

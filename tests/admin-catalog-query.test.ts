@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ADMIN_MAX_PAGE,
   ADMIN_PAGE_SIZE,
   adminCatalogHref,
-  adminCatalogPageHref,
-  adminPageRange,
-  adminTotalPages,
   countAdminFilters,
   hasAdminFilters,
   isDbSortableAdminSort,
   needsDerivedLookup,
   parseAdminCatalogParams,
-  parseAdminPage,
   parseAdminSort,
   sanitizeAdminSearch,
 } from '@/lib/admin/catalog-query';
@@ -56,26 +51,21 @@ describe('sort parsing', () => {
   });
 });
 
-describe('page parsing and bounds', () => {
-  it('clamps a hostile deep page instead of requesting a huge range', () => {
-    expect(parseAdminPage('999999')).toBe(ADMIN_MAX_PAGE);
-    expect(parseAdminPage('0')).toBe(1);
-    expect(parseAdminPage('-4')).toBe(1);
-    expect(parseAdminPage('abc')).toBe(1);
-    expect(parseAdminPage('3')).toBe(3);
+describe('batch size', () => {
+  it('loads a sane number of rows per batch', () => {
+    // Small enough for a phone, large enough that scrolling is not chatty.
+    expect(ADMIN_PAGE_SIZE).toBeGreaterThanOrEqual(10);
+    expect(ADMIN_PAGE_SIZE).toBeLessThanOrEqual(50);
   });
 
-  it('computes inclusive range bounds', () => {
-    expect(adminPageRange(1)).toEqual({ from: 0, to: ADMIN_PAGE_SIZE - 1 });
-    expect(adminPageRange(3, 10)).toEqual({ from: 20, to: 29 });
-    expect(adminPageRange(0, 10)).toEqual({ from: 0, to: 9 });
-  });
-
-  it('always has at least one page', () => {
-    expect(adminTotalPages(0)).toBe(1);
-    expect(adminTotalPages(25)).toBe(1);
-    expect(adminTotalPages(26)).toBe(2);
-    expect(adminTotalPages(101)).toBe(5);
+  it('has no page-based helpers left to misuse', async () => {
+    // `?page=` is gone: nothing in the module may map a page number to a range
+    // any more, so a stale deep link can only ever land on the first batch.
+    const module = await import('@/lib/admin/catalog-query');
+    expect(Object.keys(module)).not.toContain('parseAdminPage');
+    expect(Object.keys(module)).not.toContain('adminPageRange');
+    expect(Object.keys(module)).not.toContain('adminTotalPages');
+    expect(Object.keys(module)).not.toContain('adminCatalogPageHref');
   });
 });
 
@@ -94,7 +84,6 @@ describe('parameter parsing', () => {
       maxPrice: null,
       maxStock: null,
       sort: 'newest',
-      page: 1,
     });
   });
 
@@ -111,7 +100,6 @@ describe('parameter parsing', () => {
       maxPrice: '500',
       maxStock: '20',
       sort: 'margin-high',
-      page: '4',
     });
     expect(params.q).toBe('tea');
     expect(params.field).toBe('hsn');
@@ -122,7 +110,6 @@ describe('parameter parsing', () => {
     expect(params.maxPrice).toBe(500);
     expect(params.maxStock).toBe(20);
     expect(params.sort).toBe('margin-high');
-    expect(params.page).toBe(4);
   });
 
   it('drops an inverted price range rather than returning nothing', () => {
@@ -169,19 +156,15 @@ describe('link building', () => {
     expect(href).toBe('/admin/products?q=tea&sort=name');
   });
 
-  it('drops page when a filter changes, so you land on page 1 of the new set', () => {
+  it('never emits a page — a filter change re-runs the list from the top', () => {
     const params = parseAdminCatalogParams({ q: 'tea', page: '7' });
     expect(adminCatalogHref(params)).not.toContain('page');
     expect(adminCatalogHref(params, { q: 'coffee' })).toBe('/admin/products?q=coffee');
   });
 
-  it('keeps every other filter when paging', () => {
+  it('keeps every filter in the shareable link', () => {
     const params = parseAdminCatalogParams({ q: 'tea', brand: 'b1', stock: 'low_stock' });
-    expect(adminCatalogPageHref(params, 3)).toBe(
-      '/admin/products?q=tea&brand=b1&stock=low_stock&page=3'
-    );
-    // Page 1 is the same as the unfiltered-state link.
-    expect(adminCatalogPageHref(params, 1)).toBe('/admin/products?q=tea&brand=b1&stock=low_stock');
+    expect(adminCatalogHref(params)).toBe('/admin/products?q=tea&brand=b1&stock=low_stock');
   });
 
   it('can clear one filter without touching the rest', () => {

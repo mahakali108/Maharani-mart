@@ -81,10 +81,8 @@ export const ADMIN_STOCK_LABELS: Record<AdminStockFilter, string> = {
 export const ADMIN_GST_FILTERS = ['all', '0', '5', '12', '18', '28'] as const;
 export type AdminGstFilter = (typeof ADMIN_GST_FILTERS)[number];
 
+/** Rows per batch — the admin list scrolls, so this is a batch size, not a page. */
 export const ADMIN_PAGE_SIZE = 25;
-
-/** Bound on `?page=` so a crafted deep range cannot ask for rows 1,000,000+. */
-export const ADMIN_MAX_PAGE = 500;
 
 /**
  * Upper bound on rows pulled into memory when a derived sort or filter is
@@ -119,7 +117,6 @@ export interface AdminCatalogParams {
   minMoq: number | null;
   maxMoq: number | null;
   sort: AdminProductSort;
-  page: number;
 }
 
 /**
@@ -185,25 +182,6 @@ export function parseAdminSort(raw: string | undefined): AdminProductSort {
   return oneOf(raw, ADMIN_PRODUCT_SORTS, 'newest');
 }
 
-export function parseAdminPage(raw: string | undefined): number {
-  const parsed = Number.parseInt(raw ?? '', 10);
-  if (!Number.isFinite(parsed) || parsed < 1) return 1;
-  return Math.min(parsed, ADMIN_MAX_PAGE);
-}
-
-/** Inclusive PostgREST `.range()` bounds for a 1-based page. */
-export function adminPageRange(page: number, pageSize: number = ADMIN_PAGE_SIZE) {
-  const safePage = Math.max(1, Math.floor(page));
-  const size = Math.max(1, Math.floor(pageSize));
-  const from = (safePage - 1) * size;
-  return { from, to: from + size - 1 };
-}
-
-export function adminTotalPages(count: number, pageSize: number = ADMIN_PAGE_SIZE): number {
-  if (!Number.isFinite(count) || count <= 0) return 1;
-  return Math.max(1, Math.ceil(count / Math.max(1, pageSize)));
-}
-
 /** Turn raw `searchParams` into a fully defaulted, bounds-checked query. */
 export function parseAdminCatalogParams(
   searchParams: Record<string, string | string[] | undefined>
@@ -230,7 +208,6 @@ export function parseAdminCatalogParams(
     minMoq: parseBound(first(searchParams.minMoq)),
     maxMoq: parseBound(first(searchParams.maxMoq)),
     sort: parseAdminSort(first(searchParams.sort)),
-    page: parseAdminPage(first(searchParams.page)),
   };
 }
 
@@ -285,9 +262,8 @@ const PARAM_ORDER: (keyof AdminCatalogParams)[] = [
 /**
  * Build a link that preserves the current filter/sort state.
  *
- * `page` is intentionally never emitted: changing a filter must land on page 1
- * of the NEW result set, not on page 7 of a set that may not have one.
- * `overrides` may set a key to `undefined` to drop it.
+ * There is no page to preserve: the list scrolls, so a filter change re-runs
+ * the query from the top. `overrides` may set a key to `undefined` to drop it.
  */
 export function adminCatalogHref(
   params: AdminCatalogParams,
@@ -308,13 +284,6 @@ export function adminCatalogHref(
   }
   const qs = query.toString();
   return `/admin/products${qs ? `?${qs}` : ''}`;
-}
-
-/** Pagination link: current state plus an explicit page. */
-export function adminCatalogPageHref(params: AdminCatalogParams, page: number): string {
-  const base = adminCatalogHref(params);
-  if (page <= 1) return base;
-  return `${base}${base.includes('?') ? '&' : '?'}page=${page}`;
 }
 
 /**

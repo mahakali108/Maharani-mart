@@ -10,9 +10,16 @@ import {
   countTaxonomyFilters,
   hasTaxonomyFilters,
   parseTaxonomyParams,
-  taxonomyPageHref,
 } from '@/lib/admin/taxonomy-query';
-import { loadAdminBrandsPage } from '@/lib/admin/taxonomy-data';
+import { loadAdminBrandBatch, type AdminBrandRow } from '@/lib/admin/taxonomy-data';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  InfiniteScrollTableSkeleton,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
+import { readCursor } from '@/lib/infinite-scroll/keyset';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +27,31 @@ import { Select } from '@/components/ui/select';
 import { BrandForm } from '@/components/admin/brand-form';
 import { BrandRowActions } from '@/components/admin/brand-row-actions';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+
+/** Shared by the first (server-rendered) batch and every batch after it. */
+function renderBrandRows(rows: AdminBrandRow[], canManage: boolean) {
+  return rows.map((brand) => (
+    <tr key={brand.id}>
+      <td className="px-5 py-3 font-medium text-ink-900">{brand.name}</td>
+      <td className="hidden px-5 py-3 text-ink-600 md:table-cell">{brand.products?.[0]?.count ?? 0}</td>
+      <td className="px-5 py-3">
+        {canManage ? (
+          <BrandRowActions id={brand.id} isActive={brand.is_active} />
+        ) : (
+          <span
+            className={
+              brand.is_active
+                ? 'rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700'
+                : 'rounded-lg bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-500'
+            }
+          >
+            {brand.is_active ? 'Active' : 'Inactive'}
+          </span>
+        )}
+      </td>
+    </tr>
+  ));
+}
 
 const STATUS_LABELS: Record<AdminStatusFilter, string> = {
   all: 'Any status',
@@ -44,10 +76,19 @@ export default async function BrandsPage({
   const params = parseTaxonomyParams(searchParams);
   const supabase = createClient();
 
-  const { rows, total, totalPages } = await loadAdminBrandsPage(supabase, params);
+  const firstBatch = await loadAdminBrandBatch(supabase, params, null);
+  const rows = firstBatch.items;
 
   const activeFilters = hasTaxonomyFilters(params);
   const filterCount = countTaxonomyFilters(params);
+
+  /** Server Action for batches 2..n; filters ride along encrypted. */
+  async function loadMoreBrands(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    await requireUser();
+    const batch = await loadAdminBrandBatch(createClient(), params, readCursor(cursor));
+    return { rows: renderBrandRows(batch.items, canManage), nextCursor: batch.nextCursor };
+  }
 
   return (
     <div className="space-y-6">
@@ -112,7 +153,12 @@ export default async function BrandsPage({
           }
         />
       ) : (
-        <>
+        <InfiniteScrollProvider
+          loader={loadMoreBrands}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={`${params.q}|${params.status}|${params.sort}`}
+        >
           <Card className="table-scroll p-0">
             <table className="w-full text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
@@ -123,59 +169,15 @@ export default async function BrandsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
-                {rows.map((brand) => (
-                  <tr key={brand.id}>
-                    <td className="px-5 py-3 font-medium text-ink-900">{brand.name}</td>
-                    <td className="hidden px-5 py-3 text-ink-600 md:table-cell">
-                      {brand.products?.[0]?.count ?? 0}
-                    </td>
-                    <td className="px-5 py-3">
-                      {canManage ? (
-                        <BrandRowActions id={brand.id} isActive={brand.is_active} />
-                      ) : (
-                        <span
-                          className={
-                            brand.is_active
-                              ? 'rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700'
-                              : 'rounded-lg bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-500'
-                          }
-                        >
-                          {brand.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                <InfiniteScrollRows skeleton={<InfiniteScrollTableSkeleton columns={3} />}>
+                  {renderBrandRows(rows, canManage)}
+                </InfiniteScrollRows>
               </tbody>
             </table>
           </Card>
 
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              {params.page > 1 ? (
-                <Link href={taxonomyPageHref('/admin/catalog/brands', params, params.page - 1)}>
-                  <Button size="sm" variant="outline">
-                    Previous
-                  </Button>
-                </Link>
-              ) : null}
-              <span className="text-xs text-ink-400">
-                Page {params.page} of {totalPages} · {total} brand{total === 1 ? '' : 's'}
-              </span>
-              {params.page < totalPages ? (
-                <Link href={taxonomyPageHref('/admin/catalog/brands', params, params.page + 1)}>
-                  <Button size="sm" variant="outline">
-                    Next
-                  </Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-center text-xs text-ink-400">
-              {total} brand{total === 1 ? '' : 's'}
-            </p>
-          )}
-        </>
+          <InfiniteScrollStatus endLabel="No more brands" loadingLabel="Loading more…" />
+        </InfiniteScrollProvider>
       )}
     </div>
   );

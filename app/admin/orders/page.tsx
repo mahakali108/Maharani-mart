@@ -6,9 +6,36 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  InfiniteScrollTableSkeleton,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import {
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  readCursor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
+/** Rows per batch. Small enough for a phone, large enough to avoid chatter. */
 const PAGE_SIZE = 20;
+
+/**
+ * The list ORDER BY — and, in the same breath, the shape of the keyset cursor.
+ * `id` is the tiebreaker: two orders can share a `placed_at`, so without it a
+ * batch boundary could repeat or skip a row.
+ */
+const ORDER: KeysetColumn[] = [
+  { column: 'placed_at', ascending: false },
+  { column: 'id', ascending: false },
+];
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'processing', 'packed', 'dispatched', 'delivered', 'cancelled', 'returned'];
 
@@ -32,32 +59,86 @@ interface OrderRow {
   retailers: { shop_name: string } | null;
 }
 
+interface OrderFilters {
+  q: string;
+  status: string;
+}
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
+/**
+ * One batch of orders.
+ *
+ * Supabase/RLS behaviour is unchanged: this runs server-side with the caller's
+ * session, so an admin sees every order and a scoped user still sees only the
+ * rows their policies allow. Only the WINDOW changed — `?page=N` links became
+ * an opaque cursor plus a `limit + 1` probe row.
+ */
+async function loadOrderBatch(
+  supabase: SupabaseClient,
+  filters: OrderFilters,
+  cursor: ListCursor | null
+) {
+  let query = supabase
+    .from('orders')
+    .select('id, order_number, status, grand_total, placed_at, retailers ( shop_name )');
+
+  if (filters.q) query = query.ilike('order_number', `%${filters.q}%`);
+  if (filters.status) query = query.eq('status', filters.status);
+
+  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const rows = (data ?? []) as unknown as OrderRow[];
+  return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
+}
+
+/** Shared by the first (server-rendered) batch and every batch after it. */
+function renderOrderRows(rows: OrderRow[]) {
+  return rows.map((o) => (
+    <tr key={o.id}>
+      <td className="px-5 py-3">
+        <Link href={`/admin/orders/${o.id}`} className="font-mono text-xs font-medium text-ink-900 hover:text-primary-600">
+          {o.order_number}
+        </Link>
+      </td>
+      <td className="px-5 py-3 text-ink-600">{o.retailers?.shop_name ?? '—'}</td>
+      <td className="px-5 py-3 font-medium text-ink-900">₹{o.grand_total.toFixed(2)}</td>
+      <td className="px-5 py-3">
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[o.status]}`}>
+          {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+        </span>
+      </td>
+      <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(o.placed_at)}</td>
+    </tr>
+  ));
+}
+
 export default async function AdminOrdersPage({
   searchParams,
 }: {
-  searchParams: { q?: string; status?: string; page?: string };
+  searchParams: { q?: string; status?: string };
 }) {
   const supabase = createClient();
 
-  const q = searchParams.q?.trim() ?? '';
-  const status = searchParams.status ?? '';
-  const page = Math.max(1, Number(searchParams.page) || 1);
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
+  const filters: OrderFilters = {
+    q: searchParams.q?.trim() ?? '',
+    status: searchParams.status ?? '',
+  };
+  // `?page=` is dead. A deep link that still carries one starts at the top
+  // instead of erroring or silently showing an empty slice.
+  const firstBatch = await loadOrderBatch(supabase, filters, null);
+  const orders = firstBatch.items;
+  const hasFilters = Boolean(filters.q || filters.status);
 
-  let query = supabase
-    .from('orders')
-    .select('id, order_number, status, grand_total, placed_at, retailers ( shop_name )', { count: 'exact' })
-    .order('placed_at', { ascending: false })
-    .range(from, to);
-
-  if (q) query = query.ilike('order_number', `%${q}%`);
-  if (status) query = query.eq('status', status);
-
-  const { data, count } = await query;
-  const orders = (data ?? []) as unknown as OrderRow[];
-  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
-  const hasFilters = q || status;
+  /**
+   * Server Action for batches 2..n. `filters` rides along in React's encrypted
+   * bound arguments, so the active search/status can never be swapped for
+   * another retailer's data — and even if it could, RLS is still the last word.
+   */
+  async function loadMoreOrders(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    const batch = await loadOrderBatch(createClient(), filters, readCursor(cursor));
+    return { rows: renderOrderRows(batch.items), nextCursor: batch.nextCursor };
+  }
 
   return (
     <div className="space-y-6">
@@ -70,9 +151,9 @@ export default async function AdminOrdersPage({
         <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="relative sm:col-span-2">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <Input name="q" defaultValue={q} placeholder="Search order number…" className="pl-9" />
+            <Input name="q" defaultValue={filters.q} placeholder="Search order number…" className="pl-9" />
           </div>
-          <Select name="status" defaultValue={status}>
+          <Select name="status" defaultValue={filters.status}>
             <option value="">All statuses</option>
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
@@ -102,7 +183,12 @@ export default async function AdminOrdersPage({
           body={hasFilters ? 'Try a different search or clear the filters above.' : 'Orders placed by retailers will appear here.'}
         />
       ) : (
-        <>
+        <InfiniteScrollProvider
+          loader={loadMoreOrders}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={`${filters.q}|${filters.status}`}
+        >
           <Card className="table-scroll p-0">
             <table className="w-full min-w-[720px] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
@@ -115,43 +201,15 @@ export default async function AdminOrdersPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
-                {orders.map((o) => (
-                  <tr key={o.id}>
-                    <td className="px-5 py-3">
-                      <Link href={`/admin/orders/${o.id}`} className="font-mono text-xs font-medium text-ink-900 hover:text-primary-600">
-                        {o.order_number}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 text-ink-600">{o.retailers?.shop_name ?? '—'}</td>
-                    <td className="px-5 py-3 font-medium text-ink-900">₹{o.grand_total.toFixed(2)}</td>
-                    <td className="px-5 py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[o.status]}`}>
-                        {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-ink-500">{formatIndiaDateTime(o.placed_at)}</td>
-                  </tr>
-                ))}
+                <InfiniteScrollRows skeleton={<InfiniteScrollTableSkeleton columns={5} />}>
+                  {renderOrderRows(orders)}
+                </InfiniteScrollRows>
               </tbody>
             </table>
           </Card>
 
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              {page > 1 ? (
-                <Link href={`/admin/orders?q=${q}&status=${status}&page=${page - 1}`}>
-                  <Button size="sm" variant="outline">Previous</Button>
-                </Link>
-              ) : null}
-              <span className="text-xs text-ink-400">Page {page} of {totalPages}</span>
-              {page < totalPages ? (
-                <Link href={`/admin/orders?q=${q}&status=${status}&page=${page + 1}`}>
-                  <Button size="sm" variant="outline">Next</Button>
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
-        </>
+          <InfiniteScrollStatus endLabel="No more orders" loadingLabel="Loading more orders…" />
+        </InfiniteScrollProvider>
       )}
     </div>
   );

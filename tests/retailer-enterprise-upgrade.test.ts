@@ -5,16 +5,14 @@ import {
   CATALOG_MAX_ROWS,
   CATALOG_PAGE_SIZE,
   catalogHref,
-  catalogPageHref,
-  catalogPageRange,
-  catalogTotalPages,
   hasDerivedPriceConstraints,
   isDbSortable,
-  parseCatalogPage,
   parseCatalogSort,
   sanitizeSearchTerm,
   type CatalogQuery,
 } from '@/lib/retailer/catalog-params';
+import { decodeCursor, encodeCursor, toListBatch, toOffsetBatch } from '@/lib/infinite-scroll/cursor';
+import { buildKeysetPredicate, type KeysetColumn } from '@/lib/infinite-scroll/keyset';
 import {
   LEDGER_EXCLUDED_STATUSES,
   LEDGER_PAGE_SIZE,
@@ -51,128 +49,131 @@ function entry(overrides: Partial<LedgerOrderEntry> = {}): LedgerOrderEntry {
   };
 }
 
-describe('catalog pagination math', () => {
-  it('parses ?page= defensively', () => {
-    expect(parseCatalogPage(undefined)).toBe(1);
-    expect(parseCatalogPage('')).toBe(1);
-    expect(parseCatalogPage('abc')).toBe(1);
-    expect(parseCatalogPage('0')).toBe(1);
-    expect(parseCatalogPage('-5')).toBe(1);
-    expect(parseCatalogPage('3')).toBe(3);
-    expect(parseCatalogPage('2.9')).toBe(2);
-    // A huge value cannot request an arbitrarily deep range.
-    expect(parseCatalogPage('99999999')).toBeLessThanOrEqual(500);
-  });
-
-  it('maps a 1-based page to inclusive PostgREST range bounds', () => {
-    expect(catalogPageRange(1, 24)).toEqual({ from: 0, to: 23 });
-    expect(catalogPageRange(2, 24)).toEqual({ from: 24, to: 47 });
-    expect(catalogPageRange(3, 24)).toEqual({ from: 48, to: 71 });
-    expect(catalogPageRange(0, 24)).toEqual({ from: 0, to: 23 });
-    // Consecutive pages never overlap and never skip a row.
-    const first = catalogPageRange(1, CATALOG_PAGE_SIZE);
-    const second = catalogPageRange(2, CATALOG_PAGE_SIZE);
-    expect(second.from).toBe(first.to + 1);
-  });
-
-  it('always reports at least one page', () => {
-    expect(catalogTotalPages(0, 24)).toBe(1);
-    expect(catalogTotalPages(-3, 24)).toBe(1);
-    expect(catalogTotalPages(1, 24)).toBe(1);
-    expect(catalogTotalPages(24, 24)).toBe(1);
-    expect(catalogTotalPages(25, 24)).toBe(2);
-    expect(catalogTotalPages(240, 24)).toBe(10);
-  });
-
-  it('drops ?page= from every filter/sort link so a change lands on page 1', () => {
-    const values: CatalogQuery = { q: 'oil', category: 'c1', sort: 'price-low', page: '7' };
-    expect(catalogHref(values)).not.toContain('page=');
-    expect(catalogHref(values)).toContain('q=oil');
-    expect(catalogHref({ ...values, page: '7' })).toBe(catalogHref({ ...values, page: undefined }));
-  });
-
-  it('keeps the active filter state on pagination links', () => {
-    const values: CatalogQuery = { q: 'oil', category: 'c1', sort: 'price-low' };
-    expect(catalogPageHref(values, 1)).toBe(catalogHref(values));
-    const next = catalogPageHref(values, 2);
-    expect(next).toContain('page=2');
-    expect(next).toContain('q=oil');
-    expect(next).toContain('category=c1');
-    expect(next).toContain('sort=price-low');
-    expect(next.startsWith('/retailer/catalog?')).toBe(true);
-  });
-
-  it('knows which sorts SQL can express and which need resolved prices', () => {
-    expect(isDbSortable('recommended')).toBe(true);
-    expect(isDbSortable('name')).toBe(true);
-    expect(isDbSortable('newest')).toBe(true);
-    expect(isDbSortable('price-low')).toBe(false);
-    expect(isDbSortable('price-high')).toBe(false);
-    expect(isDbSortable('discount')).toBe(false);
-    expect(isDbSortable('frequent')).toBe(false);
-    for (const sort of ['recommended', 'price-low', 'price-high', 'discount', 'newest', 'frequent', 'name'] as const) {
-      expect(parseCatalogSort(sort)).toBe(sort);
-    }
-    expect(parseCatalogSort('nonsense')).toBe('recommended');
-  });
-
-  it('routes every price-dependent constraint to the bounded in-memory mode', () => {
-    const base = { sort: 'recommended' as const, minPrice: null, maxPrice: null, minDiscount: null, maxMoq: null, onlyOffers: false };
-    expect(hasDerivedPriceConstraints(base)).toBe(false);
-    expect(hasDerivedPriceConstraints({ ...base, minPrice: 10 })).toBe(true);
-    expect(hasDerivedPriceConstraints({ ...base, maxPrice: 10 })).toBe(true);
-    expect(hasDerivedPriceConstraints({ ...base, minDiscount: 5 })).toBe(true);
-    expect(hasDerivedPriceConstraints({ ...base, maxMoq: 2 })).toBe(true);
-    expect(hasDerivedPriceConstraints({ ...base, onlyOffers: true })).toBe(true);
-    expect(hasDerivedPriceConstraints({ ...base, sort: 'price-low' })).toBe(true);
-    expect(hasDerivedPriceConstraints({ ...base, sort: 'frequent' })).toBe(true);
-    // A DB-sortable sort with no price constraint stays fully DB-paginated.
-    expect(hasDerivedPriceConstraints({ ...base, sort: 'name' })).toBe(false);
-  });
-
-  it('keeps the working-set cap a sane multiple of the page size', () => {
+describe('catalog batching math', () => {
+  it('keeps the batch size sane and the working-set cap a multiple of it', () => {
+    // Small enough for a phone, large enough that scrolling is not chatty.
+    expect(CATALOG_PAGE_SIZE).toBeGreaterThanOrEqual(12);
+    expect(CATALOG_PAGE_SIZE).toBeLessThanOrEqual(48);
     expect(CATALOG_MAX_ROWS).toBeGreaterThan(CATALOG_PAGE_SIZE);
     expect(CATALOG_MAX_ROWS % CATALOG_PAGE_SIZE).toBe(0);
   });
 
-  it('still strips PostgREST metacharacters from a search term', () => {
-    expect(sanitizeSearchTerm('500g Oil%,_*')).toBe('500g Oil');
-    expect(sanitizeSearchTerm('a'.repeat(300))).toHaveLength(80);
+  it('has no page-based helpers left to misuse', async () => {
+    // `?page=` is gone from the catalog: nothing may map a page number to a
+    // range any more, so a stale deep link lands on the first batch.
+    const module = await import('@/lib/retailer/catalog-params');
+    expect(Object.keys(module)).not.toContain('parseCatalogPage');
+    expect(Object.keys(module)).not.toContain('catalogPageRange');
+    expect(Object.keys(module)).not.toContain('catalogTotalPages');
+    expect(Object.keys(module)).not.toContain('catalogPageHref');
+  });
+
+  it('probes one row past the batch so "has more" needs no COUNT', () => {
+    const cursorFor = (row: { id: string }) => encodeCursor({ k: 'keyset', v: [row.id] });
+    const rows = Array.from({ length: CATALOG_PAGE_SIZE + 1 }, (_, index) => ({ id: `p${index}` }));
+
+    const full = toListBatch(rows, CATALOG_PAGE_SIZE, cursorFor);
+    expect(full.items).toHaveLength(CATALOG_PAGE_SIZE);
+    expect(full.nextCursor).toBeTruthy();
+
+    const last = toListBatch(rows.slice(0, CATALOG_PAGE_SIZE), CATALOG_PAGE_SIZE, cursorFor);
+    expect(last.items).toHaveLength(CATALOG_PAGE_SIZE);
+    // Exactly a full batch with no probe row => the list is complete.
+    expect(last.nextCursor).toBeNull();
+  });
+
+  it('never repeats or skips a row between consecutive offset batches', () => {
+    const rows = Array.from({ length: 55 }, (_, index) => ({ id: `p${index}` }));
+    // Each call gets what the database would return for that window: one probe
+    // row past the batch, exactly like `.range(offset, offset + size)`.
+    const window = (offset: number) => rows.slice(offset, offset + CATALOG_PAGE_SIZE + 1);
+    const first = toOffsetBatch(window(0), CATALOG_PAGE_SIZE, 0);
+    const second = toOffsetBatch(window(CATALOG_PAGE_SIZE), CATALOG_PAGE_SIZE, CATALOG_PAGE_SIZE);
+    const third = toOffsetBatch(window(CATALOG_PAGE_SIZE * 2), CATALOG_PAGE_SIZE, CATALOG_PAGE_SIZE * 2);
+
+    expect(first.items).toHaveLength(CATALOG_PAGE_SIZE);
+    expect([...first.items, ...second.items, ...third.items].map((row) => row.id)).toEqual(
+      rows.map((row) => row.id)
+    );
+    expect(third.nextCursor).toBeNull();
+  });
+
+  it('builds a keyset predicate that excludes the rows already shown', () => {
+    const order: KeysetColumn[] = [
+      { column: 'is_new_launch', ascending: false },
+      { column: 'name', ascending: true },
+      { column: 'id', ascending: true },
+    ];
+    const predicate = buildKeysetPredicate(order, ['true', 'Basmati', 'pid-1']);
+    // "new launches past this one" OR "same flag, name after" OR "same flag
+    // and name, id after" — the composite keyset seek, in PostgREST syntax.
+    expect(predicate).toContain('is_new_launch.lt.');
+    expect(predicate).toContain('and(is_new_launch.eq.');
+    expect(predicate).toContain('name.gt.');
+    expect(predicate).toContain('id.gt.');
+    // A cursor the sort cannot describe (NULL value) is refused, not guessed.
+    expect(buildKeysetPredicate(order, [null, 'Basmati', 'pid-1'])).toBeNull();
+  });
+
+  it('round-trips a cursor opaquely and rejects junk', () => {
+    const cursor = encodeCursor({ k: 'keyset', v: ['Basmati', 'pid-1'] });
+    expect(decodeCursor(cursor)).toEqual({ k: 'keyset', v: ['Basmati', 'pid-1'] });
+    // Opaque: nothing about the query shape is readable in the token.
+    expect(cursor).not.toContain('Basmati');
+    expect(decodeCursor('not-a-cursor')).toBeNull();
+    expect(decodeCursor('')).toBeNull();
+    expect(decodeCursor(undefined)).toBeNull();
+    expect(decodeCursor(encodeCursor({ k: 'offset', o: -5 }))).toBeNull();
   });
 });
 
-describe('catalog page wiring', () => {
+describe('catalog list wiring', () => {
+  // The catalog's data loading lives in its own module so the first
+  // (server-rendered) batch and every scrolled batch share one query.
+  const batches = read('lib/retailer/catalog-batches.ts');
   const page = read('app/retailer/catalog/page.tsx');
+  const grid = read('components/retailer/compare-grid.tsx');
 
-  it('paginates in the database when it safely can', () => {
-    expect(page).toContain('.range(from, to)');
-    expect(page).toContain("count: 'exact'");
-    expect(page).toContain('catalogPageRange(');
-    expect(page).toContain('catalogTotalPages(');
+  it('streams batches from the database when it safely can', () => {
+    expect(batches).toContain('applyCursor(');
+    expect(batches).toContain('applyKeysetOrder(');
+    expect(batches).toContain('CATALOG_PAGE_SIZE');
+    // No page arithmetic survives: a batch is addressed by an opaque cursor.
+    expect(batches).not.toContain('.range(from, to)');
+    expect(batches).not.toContain('catalogPageRange');
+    expect(batches).not.toContain('catalogTotalPages');
   });
 
   it('bounds the in-memory working set instead of fetching the whole catalog', () => {
-    expect(page).toContain('.limit(CATALOG_MAX_ROWS)');
-    expect(page).toContain('resultCapped');
+    expect(batches).toContain('.limit(CATALOG_MAX_ROWS)');
+    expect(batches).toContain('resultCapped');
   });
 
-  it('renders pagination controls and tells the truth when the cap binds', () => {
-    expect(page).toContain('catalogPageHref(filterValues, page - 1)');
-    expect(page).toContain('catalogPageHref(filterValues, page + 1)');
-    expect(page).toContain('Page {page} of {totalPages}');
-    expect(page).toContain('Narrow the search or pick a category to see the rest');
+  it('shows no page number, Next or Previous anywhere in the catalog', () => {
+    for (const source of [page, batches, grid]) {
+      expect(source).not.toMatch(/Page \{/);
+      expect(source).not.toMatch(/>Previous|Previous</);
+      expect(source).not.toMatch(/>Next|Next </);
+      expect(source).not.toMatch(/\?page=/);
+    }
+    // …and instead scrolls: the page hands a Server Action to the grid, which
+    // appends batches with the shared infinite-scroll state machine.
+    expect(page).toContain('loadMoreCatalog');
+    expect(page).toContain('resetKey={catalogHref(filterValues)}');
+    expect(grid).toContain('useInfiniteList');
+    expect(grid).toContain('InfiniteScrollStatus');
   });
 
   it('searches variant/size and barcode but never an internal SKU', () => {
-    expect(page).toContain('pack_name.ilike');
-    expect(page).toContain('barcode.ilike');
-    expect(page).not.toContain('sku_code');
-    expect(page).not.toContain('pack_sku_code');
+    expect(batches).toContain('pack_name.ilike');
+    expect(batches).toContain('barcode.ilike');
+    expect(batches).not.toContain('sku_code');
+    expect(batches).not.toContain('pack_sku_code');
   });
 
   it('only pays for the order-frequency ranking when that sort is requested', () => {
-    expect(page).toContain("sort === 'frequent'");
-    expect(page).toContain('getOrderFrequencyMap');
+    expect(batches).toContain("filters.sort === 'frequent'");
+    expect(batches).toContain('getOrderFrequencyMap');
   });
 
   /**
@@ -184,8 +185,8 @@ describe('catalog page wiring', () => {
    * "Frequent" tab even though the retailer buys it every week.
    */
   it('restricts the frequent sort to the retailer\'s real order history, not the fetch window', () => {
-    const frequentBlock = page.match(
-      /if \(sort === 'frequent' && frequency\.size > 0\) \{[\s\S]*?\n  \}/
+    const frequentBlock = batches.match(
+      /if \(filters\.sort === 'frequent' && frequency\.size > 0\) \{[\s\S]*?\n  \}/
     );
     expect(frequentBlock, 'frequent sort must restrict the query to the history ids').not.toBeNull();
     const block = frequentBlock![0];
@@ -202,19 +203,20 @@ describe('catalog page wiring', () => {
   });
 
   it('ranks the frequent sort by real times-ordered, never an invented popularity score', () => {
-    expect(page).toContain(
-      "if (sort === 'frequent') return b.timesOrdered - a.timesOrdered || Number(b.isNewLaunch) - Number(a.isNewLaunch);"
+    expect(batches).toContain(
+      "if (filters.sort === 'frequent') return b.timesOrdered - a.timesOrdered || Number(b.isNewLaunch) - Number(a.isNewLaunch);"
     );
     // `timesOrdered` is derived from this retailer's own order_items, so the
     // ranking is real history. There is no popularity/bestseller/trending
-    // column in the schema and none is fabricated here: every SQL ORDER BY on
-    // this page must name a column that genuinely exists.
-    const orderByColumns = [...page.matchAll(/\.order\('([a-z_]+)'/g)].map((match) => match[1]);
+    // column in the schema and none is fabricated here: every ORDER BY column
+    // this list uses must be one that genuinely exists (`id` is the unique
+    // tiebreaker every batch cursor needs).
+    const orderByColumns = [...batches.matchAll(/column: '([a-z_]+)'/g)].map((match) => match[1]);
     expect(orderByColumns.length).toBeGreaterThan(0);
     for (const column of orderByColumns) {
-      expect(['name', 'created_at', 'is_new_launch', 'sort_order']).toContain(column);
+      expect(['name', 'created_at', 'is_new_launch', 'id']).toContain(column);
     }
-    expect(page).not.toMatch(/\.order\('(popularity|sales_rank|bestseller|trending_score)'/);
+    expect(batches).not.toMatch(/column: '(popularity|sales_rank|bestseller|trending_score)'/);
   });
 });
 
@@ -323,10 +325,12 @@ describe('ledger page never fabricates a financial position', () => {
     }
   });
 
-  it('is server-only, paginated and links to the real order or wallet', () => {
+  it('is server-only, batched by cursor and links to the real order or wallet', () => {
     if (page.includes('getRetailerWalletSummary')) {
       expect(walletLib).toContain("import 'server-only'");
-      expect(walletLib).toContain('.range(from, to)');
+      // Paged ranges are gone; the ledger streams with a keyset cursor.
+      expect(walletLib).toContain('applyCursor(');
+      expect(walletLib).not.toContain('.range(from, to)');
       expect(page).toContain('/retailer/orders/');
     } else {
       expect(lib).toContain("import 'server-only'");

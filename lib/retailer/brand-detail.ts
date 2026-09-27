@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { cursorOffset, offsetCursorFor } from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
+
 import type { createClient } from '@/lib/supabase/server';
 import {
   loadCatalogPricing,
@@ -129,34 +132,40 @@ export interface BrandDetailData {
   products: PricedCatalogCard[];
   /** True when the brand has products but pricing could not be resolved. */
   pricingUnavailable: boolean;
-  page: number;
-  totalPages: number;
+  /** Opaque cursor for the next batch; `null` when the brand is fully listed. */
+  nextCursor: string | null;
+  hasMore: boolean;
   resultCapped: boolean;
   errors: { brand: boolean; catalog: boolean; pricing: boolean };
 }
 
 /**
- * Loads one brand's active products with the retailer's own resolved pricing
- * (the same canonical engine the catalog uses). Paginates over a bounded
- * working set — no unbounded fetches.
+ * Loads one batch of a brand's active products with the retailer's own resolved
+ * pricing (the same canonical engine the catalog uses).
+ *
+ * The brand page lists a bounded working set of at most BRAND_MAX_ROWS products
+ * (new launches first, then name) and streams it to the browser in
+ * BRAND_PAGE_SIZE batches, so a brand with hundreds of SKUs still costs one
+ * bounded query plus one pricing resolution per batch — never the whole set at
+ * once, and never a page number in the URL.
  */
 export async function loadBrandProducts(
   supabase: ReturnType<typeof createClient>,
   retailerId: string,
   areaId: string | null,
   brandId: string,
-  page: number,
+  cursor: ListCursor | null,
   canResolvePrices = true
 ): Promise<BrandDetailData> {
-  const safePage = Math.max(1, Math.floor(page) || 1);
+  const offset = cursorOffset(cursor);
   const errors = { brand: false, catalog: false, pricing: false };
   const base = {
     brand: null as BrandDetailData['brand'],
     productCount: null as number | null,
     products: [] as PricedCatalogCard[],
     pricingUnavailable: false,
-    page: safePage,
-    totalPages: 1,
+    nextCursor: null as string | null,
+    hasMore: false,
     resultCapped: false,
   };
   if (!brandId) return { ...base, errors: { ...errors, brand: true } };
@@ -184,8 +193,10 @@ export async function loadBrandProducts(
 
   const rows = productRows ?? [];
   const resultCapped = (count ?? 0) > BRAND_MAX_ROWS;
-  const totalPages = Math.max(1, Math.ceil(rows.length / BRAND_PAGE_SIZE));
-  const paged = rows.slice((safePage - 1) * BRAND_PAGE_SIZE, safePage * BRAND_PAGE_SIZE);
+  // One extra row is the probe that says whether another batch exists.
+  const paged = rows.slice(offset, offset + BRAND_PAGE_SIZE);
+  const hasMore = rows.length > offset + BRAND_PAGE_SIZE;
+  const nextCursor = hasMore ? offsetCursorFor(offset, BRAND_PAGE_SIZE) : null;
 
   let products: PricedCatalogCard[] = [];
   let pricingUnavailable = false;
@@ -212,8 +223,8 @@ export async function loadBrandProducts(
     productCount: count ?? (rows.length > 0 ? rows.length : 0),
     products,
     pricingUnavailable,
-    page: safePage,
-    totalPages,
+    nextCursor,
+    hasMore,
     resultCapped,
     errors,
   };

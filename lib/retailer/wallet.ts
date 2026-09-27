@@ -1,4 +1,14 @@
 import 'server-only';
+import { paiseToRupees } from '@/lib/retailer/format';
+
+import {
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 import type { createClient } from '@/lib/supabase/server';
 
 export interface WalletTransaction {
@@ -46,9 +56,9 @@ export interface WalletSummary {
   allowOverdue: boolean;
 }
 
-export function paiseToRupees(paise: number): number {
-  return Math.round(paise) / 100;
-}
+// Re-exported from the client-safe display helpers: a client component that
+// renders an amount must not have to import this server-only module.
+export { paiseToRupees } from '@/lib/retailer/format';
 
 export function rupeesToPaise(rupees: number): number {
   return Math.round(rupees * 100);
@@ -187,20 +197,50 @@ export async function getRetailerLedger(
   return data ?? [];
 }
 
-export async function getRetailerLedgerPaginated(
+/**
+ * One batch of a retailer's wallet ledger.
+ *
+ * Newest first, `id` breaking ties: two ledger rows can share a `created_at`,
+ * so the tiebreaker is what makes "everything after this row" exact. That turns
+ * the old `?page=` walk into a keyset seek — scrolling stays cheap however far
+ * back the retailer goes, and a payment recorded while they scroll cannot
+ * repeat or skip a row.
+ *
+ * The exact total is counted for the FIRST batch only: it feeds the
+ * "N transactions" heading, and re-counting it on every scroll would be the
+ * most expensive query on the page.
+ */
+export const WALLET_LEDGER_BATCH_SIZE = 25;
+
+/** ORDER BY for the ledger list — also the shape of its keyset cursor. */
+export const WALLET_LEDGER_ORDER: { column: string; ascending: boolean }[] = [
+  { column: 'created_at', ascending: false },
+  { column: 'id', ascending: false },
+];
+
+export async function getRetailerLedgerBatch(
   supabase: ReturnType<typeof createClient>,
   retailerId: string,
-  page = 1,
-  pageSize = 25
-): Promise<{ entries: WalletTransaction[]; total: number }> {
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
-  const { data, count } = await supabase
-    .from('retailer_wallet_ledger')
-    .select('*', { count: 'exact' })
-    .eq('retailer_id', retailerId)
-    .order('created_at', { ascending: false })
-    .range(from, to)
-    .returns<WalletTransaction[]>();
-  return { entries: data ?? [], total: count ?? 0 };
+  cursor: ListCursor | null,
+  pageSize: number = WALLET_LEDGER_BATCH_SIZE
+): Promise<{ entries: WalletTransaction[]; nextCursor: string | null; total: number }> {
+  const order: KeysetColumn[] = WALLET_LEDGER_ORDER.map((column) => ({
+    column: column.column,
+    ascending: column.ascending,
+  }));
+  const { data, count } = await applyCursor(
+    applyKeysetOrder(
+      supabase
+        .from('retailer_wallet_ledger')
+        .select('*', cursor === null ? { count: 'exact' } : {})
+        .eq('retailer_id', retailerId),
+      order
+    ),
+    cursor,
+    order,
+    pageSize
+  ).returns<WalletTransaction[]>();
+  const rows = data ?? [];
+  const batch = toListBatch(rows, pageSize, (row) => keysetCursorFor(row, order));
+  return { entries: batch.items, nextCursor: batch.nextCursor, total: count ?? rows.length };
 }

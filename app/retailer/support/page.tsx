@@ -1,8 +1,23 @@
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Headset, ListPlus, PackageSearch } from 'lucide-react';
+import { ChevronRight, Headset, ListPlus, PackageSearch } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
+import {
+  InfiniteScrollProvider,
+  InfiniteScrollRows,
+  InfiniteScrollStatus,
+  type InfiniteScrollBatch,
+} from '@/components/ui/infinite-scroll';
+import {
+  applyCursor,
+  applyKeysetOrder,
+  keysetCursorFor,
+  readCursor,
+  toListBatch,
+  type KeysetColumn,
+} from '@/lib/infinite-scroll/keyset';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 import {
   SUPPORT_PRIORITY_LABELS,
   SUPPORT_STATUSES,
@@ -13,7 +28,14 @@ import {
   type SupportTopic,
 } from '@/lib/retailer/support';
 
+/** Rows per batch. */
 const PAGE_SIZE = 20;
+
+/** Newest first, `id` breaking ties so batches never overlap. */
+const ORDER: KeysetColumn[] = [
+  { column: 'created_at', ascending: false },
+  { column: 'id', ascending: false },
+];
 
 const STATUS_STYLES: Record<SupportStatus, string> = {
   open: 'bg-amber-50 text-amber-700 ring-amber-200',
@@ -41,40 +63,114 @@ interface TicketRow {
   orders: { order_number: string; status: string } | null;
 }
 
-function supportHref(status: string, page: number): string {
+function supportHref(status: string): string {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
-  if (page > 1) params.set('page', String(page));
   const query = params.toString();
   return `/retailer/support${query ? `?${query}` : ''}`;
+}
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
+/**
+ * One batch of this retailer's tickets. `support_tickets` RLS already scopes
+ * the rows to the caller; the explicit `retailer_id` filter is the same
+ * belt-and-braces the old paged query used.
+ */
+async function loadTicketBatch(
+  supabase: SupabaseClient,
+  retailerId: string,
+  status: string,
+  cursor: ListCursor | null
+) {
+  let query = supabase
+    .from('support_tickets')
+    .select('id, ticket_number, subject, topic, priority, status, created_at, updated_at, orders ( order_number, status )')
+    .eq('retailer_id', retailerId);
+  if (status) query = query.eq('status', status);
+
+  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const rows = (data ?? []) as unknown as TicketRow[];
+  return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
+}
+
+function renderTicketCards(rows: TicketRow[]) {
+  return rows.map((ticket) => {
+    const TopicLabel = SUPPORT_TOPIC_LABELS[ticket.topic] ?? ticket.topic;
+    return (
+      <article
+        key={ticket.id}
+        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:shadow-md"
+      >
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/retailer/support/${ticket.id}`}
+                className="font-mono text-xs font-bold text-slate-900 hover:text-primary-600"
+              >
+                {ticket.ticket_number}
+              </Link>
+              <span className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold ring-1 ring-inset ${STATUS_STYLES[ticket.status]}`}>
+                {SUPPORT_STATUS_LABELS[ticket.status]}
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold text-slate-500">
+                {TopicLabel}
+              </span>
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold ring-1 ring-inset ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.normal}`}
+              >
+                {SUPPORT_PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
+              </span>
+            </div>
+            <Link
+              href={`/retailer/support/${ticket.id}`}
+              className="mt-1.5 block truncate text-sm font-bold text-slate-900 hover:text-primary-600"
+            >
+              {ticket.subject}
+            </Link>
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+              <span>Opened {formatIndiaRelativeDateTime(ticket.created_at)}</span>
+              {ticket.orders ? (
+                <span className="inline-flex items-center gap-1">
+                  <PackageSearch className="h-3 w-3" aria-hidden="true" />
+                  Order <span className="font-mono font-semibold text-slate-600">{ticket.orders.order_number}</span>
+                </span>
+              ) : null}
+            </p>
+          </div>
+          <Link
+            href={`/retailer/support/${ticket.id}`}
+            className="flex h-9 shrink-0 items-center gap-1 self-start rounded-lg bg-slate-950 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700 sm:self-center"
+          >
+            View conversation <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </div>
+      </article>
+    );
+  });
 }
 
 export default async function RetailerSupportPage({
   searchParams,
 }: {
-  searchParams: { status?: string; page?: string };
+  searchParams: { status?: string };
 }) {
   const user = await requireUser();
   const supabase = createClient();
 
   const status = SUPPORT_STATUSES.includes(searchParams.status as SupportStatus) ? (searchParams.status as SupportStatus) : '';
-  const page = Math.max(1, Number(searchParams.page) || 1);
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
 
-  let query = supabase
-    .from('support_tickets')
-    .select('id, ticket_number, subject, topic, priority, status, created_at, updated_at, orders ( order_number, status )', {
-      count: 'exact',
-    })
-    .eq('retailer_id', user.id)
-    .order('created_at', { ascending: false })
-    .range(from, to);
-  if (status) query = query.eq('status', status);
+  const firstBatch = await loadTicketBatch(supabase, user.id, status, null);
+  const tickets = firstBatch.items;
 
-  const { data, count } = await query;
-  const tickets = (data ?? []) as unknown as TicketRow[];
-  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+  /** Server Action for batches 2..n; the retailer id is re-derived server-side. */
+  async function loadMoreTickets(cursor: string | null): Promise<InfiniteScrollBatch> {
+    'use server';
+    const caller = await requireUser();
+    const batch = await loadTicketBatch(createClient(), caller.id, status, readCursor(cursor));
+    return { rows: renderTicketCards(batch.items), nextCursor: batch.nextCursor };
+  }
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -111,7 +207,7 @@ export default async function RetailerSupportPage({
             return (
               <Link
                 key={tab.value}
-                href={supportHref(tab.value, 1)}
+                href={supportHref(tab.value)}
                 aria-current={active ? 'page' : undefined}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:text-[11px] ${
                   active
@@ -147,93 +243,33 @@ export default async function RetailerSupportPage({
           </Link>
         </section>
       ) : (
-        <div className="grid gap-3">
-          {tickets.map((ticket) => {
-            const TopicLabel = SUPPORT_TOPIC_LABELS[ticket.topic] ?? ticket.topic;
-            return (
-              <article
-                key={ticket.id}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:shadow-md"
-              >
-                <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/retailer/support/${ticket.id}`}
-                        className="font-mono text-xs font-bold text-slate-900 hover:text-primary-600"
-                      >
-                        {ticket.ticket_number}
-                      </Link>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold ring-1 ring-inset ${STATUS_STYLES[ticket.status]}`}
-                      >
-                        {SUPPORT_STATUS_LABELS[ticket.status]}
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold text-slate-500">
-                        {TopicLabel}
-                      </span>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold ring-1 ring-inset ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.normal}`}
-                      >
-                        {SUPPORT_PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
-                      </span>
-                    </div>
-                    <Link
-                      href={`/retailer/support/${ticket.id}`}
-                      className="mt-1.5 block truncate text-sm font-bold text-slate-900 hover:text-primary-600"
-                    >
-                      {ticket.subject}
-                    </Link>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
-                      <span>Opened {formatIndiaRelativeDateTime(ticket.created_at)}</span>
-                      {ticket.orders ? (
-                        <span className="inline-flex items-center gap-1">
-                          <PackageSearch className="h-3 w-3" aria-hidden="true" />
-                          Order <span className="font-mono font-semibold text-slate-600">{ticket.orders.order_number}</span>
-                        </span>
-                      ) : null}
-                    </p>
-                  </div>
-                  <Link
-                    href={`/retailer/support/${ticket.id}`}
-                    className="flex h-9 shrink-0 items-center gap-1 self-start rounded-lg bg-slate-950 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700 sm:self-center"
-                  >
-                    View conversation <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Link>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
+        <InfiniteScrollProvider
+          loader={loadMoreTickets}
+          initialCursor={firstBatch.nextCursor}
+          initialHasMore={Boolean(firstBatch.nextCursor)}
+          resetKey={status}
+        >
+          <div className="grid gap-3">
+            <InfiniteScrollRows
+              skeleton={
+                <>
+                  {[0, 1, 2].map((index) => (
+                    <div
+                      key={index}
+                      aria-hidden="true"
+                      className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-slate-50"
+                    />
+                  ))}
+                </>
+              }
+            >
+              {renderTicketCards(tickets)}
+            </InfiniteScrollRows>
+          </div>
 
-      {totalPages > 1 ? (
-        <nav className="flex items-center justify-center gap-3 pt-2" aria-label="Support ticket pages">
-          {page > 1 ? (
-            <Link
-              href={supportHref(status, page - 1)}
-              className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 hover:border-primary-200 hover:text-primary-600"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Previous
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-[10px] font-semibold text-slate-500">
-            Page {page} of {totalPages}
-          </span>
-          {page < totalPages ? (
-            <Link
-              href={supportHref(status, page + 1)}
-              className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 hover:border-primary-200 hover:text-primary-600"
-            >
-              Next <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      ) : null}
+          <InfiniteScrollStatus endLabel="No more tickets" loadingLabel="Loading more tickets…" />
+        </InfiniteScrollProvider>
+      )}
     </div>
   );
 }
