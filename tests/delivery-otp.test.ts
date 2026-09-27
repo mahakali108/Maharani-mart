@@ -2,7 +2,13 @@
  * Delivery OTP helpers (lib/delivery/otp.ts) — the security core of the
  * Phase 4 handover proof. Pure Node (node:crypto), no network.
  */
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterEach, describe, expect, it } from 'vitest';
+
+// Stored OTP hashes are HMAC-keyed since Phase 0 (SEC-8); hashing fails closed
+// without a server secret, so the suite runs with an explicit test key.
+process.env.DELIVERY_OTP_SECRET = 'test-delivery-otp-secret';
+
 import {
   MAX_OTP_ATTEMPTS,
   OTP_LENGTH,
@@ -76,5 +82,58 @@ describe('hashDeliveryOtp / verifyDeliveryOtp', () => {
 describe('attempt ceiling', () => {
   it('matches the database CHECK constraint (otp_attempts <= 10)', () => {
     expect(MAX_OTP_ATTEMPTS).toBe(10);
+  });
+});
+
+describe('keyed OTP hash (Phase 0 / SEC-8)', () => {
+  const plainSha = (orderId: string, otp: string) => createHash('sha256').update(`${orderId}:${otp}`, 'utf8').digest('hex');
+  const originalSecret = process.env.DELIVERY_OTP_SECRET;
+  const originalServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  afterEach(() => {
+    process.env.DELIVERY_OTP_SECRET = originalSecret;
+    if (originalServiceKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceKey;
+  });
+
+  it('the stored hash is NOT the unkeyed SHA-256 an attacker could brute-force offline', () => {
+    expect(hashDeliveryOtp(ORDER_ID, '424242')).not.toBe(plainSha(ORDER_ID, '424242'));
+  });
+
+  it('an offline dictionary without the key finds nothing', () => {
+    const stored = hashDeliveryOtp(ORDER_ID, '000042');
+    let found: string | null = null;
+    for (let i = 0; i < 1000; i += 1) {
+      const guess = i.toString().padStart(6, '0');
+      if (plainSha(ORDER_ID, guess) === stored) found = guess;
+    }
+    expect(found).toBeNull();
+  });
+
+  it('depends on the server key', () => {
+    const withKeyA = hashDeliveryOtp(ORDER_ID, '424242');
+    process.env.DELIVERY_OTP_SECRET = 'a-different-secret';
+    expect(hashDeliveryOtp(ORDER_ID, '424242')).not.toBe(withKeyA);
+    expect(verifyDeliveryOtp(ORDER_ID, '424242', withKeyA)).toBe(false);
+  });
+
+  it('falls back to a key derived from SUPABASE_SERVICE_ROLE_KEY (never the raw key)', () => {
+    delete process.env.DELIVERY_OTP_SECRET;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
+    const hash = hashDeliveryOtp(ORDER_ID, '424242');
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(verifyDeliveryOtp(ORDER_ID, '424242', hash)).toBe(true);
+    expect(hash).not.toBe(plainSha(ORDER_ID, '424242'));
+  });
+
+  it('fails closed when no server secret is configured', () => {
+    delete process.env.DELIVERY_OTP_SECRET;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    expect(() => hashDeliveryOtp(ORDER_ID, '424242')).toThrow(/not configured/);
+  });
+
+  it('still verifies OTPs issued before the change (legacy unkeyed hash), and only the right OTP', () => {
+    const legacy = plainSha(ORDER_ID, '135790');
+    expect(verifyDeliveryOtp(ORDER_ID, '135790', legacy)).toBe(true);
+    expect(verifyDeliveryOtp(ORDER_ID, '135791', legacy)).toBe(false);
   });
 });

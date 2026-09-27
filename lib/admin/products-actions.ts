@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { can } from '@/lib/permissions/permissions';
 import { loadPackCost } from '@/lib/admin/cost-access';
 import { isRenderableMediaRef } from '@/lib/media/refs';
 import {
@@ -262,12 +263,84 @@ export async function createProductAction(
   redirect(`/admin/products/${data.id}`);
 }
 
+type ValidatedProductDraft = Extract<ReturnType<typeof validateProductDraft>, { ok: true }>['value'];
+
+/**
+ * Non-pricing product edit (holders of `products.edit` without
+ * `pricing.manage`). Rejects the submission if any money / tax / pack-size
+ * value differs from what is stored, and otherwise writes only operational
+ * columns — cost is never read or written on this path (0025 hides it).
+ */
+async function updateProductOperationalFields(
+  supabase: ReturnType<typeof createClient>,
+  productId: string,
+  d: ValidatedProductDraft,
+  extra: { brandId: string; categoryId: string; isNewLaunch: boolean }
+): Promise<ProductFormState> {
+  const { data: current } = await supabase
+    .from('products')
+    .select('base_price, gst_percent, hsn_code, units_per_case')
+    .eq('id', productId)
+    .maybeSingle<{ base_price: number; gst_percent: number; hsn_code: string | null; units_per_case: number }>();
+  if (!current) return { error: 'Product not found.' };
+
+  const defaultPackId = await findDefaultPackId(supabase, productId);
+  let storedCasePrice: number | null = null;
+  if (defaultPackId) {
+    const { data: pack } = await supabase
+      .from('product_packs')
+      .select('case_price')
+      .eq('id', defaultPackId)
+      .maybeSingle<{ case_price: number | null }>();
+    storedCasePrice = pack?.case_price == null ? null : Number(pack.case_price);
+  }
+
+  const pricingChanged =
+    Number(current.base_price) !== d.mrp ||
+    Number(current.gst_percent) !== Number(d.gstPercent) ||
+    (current.hsn_code ?? null) !== (d.hsnCode ?? null) ||
+    Number(current.units_per_case) !== d.unitsPerCase ||
+    (storedCasePrice !== null && storedCasePrice !== d.casePrice);
+  if (pricingChanged) {
+    return { error: 'Only an Admin can change the price, MRP, GST, HSN code or case size.' };
+  }
+
+  const { error } = await supabase
+    .from('products')
+    .update({
+      name: d.name,
+      brand_id: extra.brandId || null,
+      category_id: extra.categoryId || null,
+      unit: d.unit,
+      barcode: d.barcode,
+      lead_time_days: d.leadTimeDays,
+      is_new_launch: extra.isNewLaunch,
+    } as unknown as never)
+    .eq('id', productId);
+  if (error) {
+    return {
+      error: error.message.includes('duplicate') ? 'A product with this barcode already exists.' : error.message,
+      errors: error.message.includes('duplicate') ? { barcode: 'That barcode is already used by another product.' } : undefined,
+    };
+  }
+  if (defaultPackId) {
+    await supabase
+      .from('product_packs')
+      .update({ barcode: d.barcode, moq: d.moq } as unknown as never)
+      .eq('id', defaultPackId);
+  }
+
+  revalidatePath('/admin/products');
+  revalidatePath(`/admin/products/${productId}`);
+  return null;
+}
+
 export async function updateProductAction(
   productId: string,
   _prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  await requirePermission('products.edit');
+  const user = await requirePermission('products.edit');
 
   const validated = validateProductDraft(readProductDraft(formData));
   if (!validated.ok) {
@@ -280,6 +353,14 @@ export async function updateProductAction(
   const isNewLaunch = formData.get('isNewLaunch') === 'on';
 
   const supabase = createClient();
+
+  // Price, GST, HSN, case size and cost are Admin decisions (`pricing.manage`).
+  // Anyone else holding `products.edit` may only change operational fields;
+  // the database enforces the same rule (migration 0052 guard triggers).
+  if (!can(user.role, 'pricing.manage')) {
+    return updateProductOperationalFields(supabase, productId, d, { brandId, categoryId, isNewLaunch });
+  }
+
   const cost = d.costPrice;
   // The legacy internal product code is left untouched so historical values
   // survive an edit; it is never read from the form.
@@ -584,7 +665,7 @@ export async function addProductPackAction(
   _prevState: PackFormState,
   formData: FormData
 ): Promise<PackFormState> {
-  const user = await requirePermission('products.edit');
+  const user = await requirePermission('pricing.manage');
 
   const parsed = packSchema.safeParse({
     packName: formData.get('packName'),
@@ -874,7 +955,7 @@ const packPricingSchema = z.object({
 });
 
 export async function savePackPricingAction(input: z.input<typeof packPricingSchema>): Promise<PackPricingFormState> {
-  const user = await requirePermission('products.edit');
+  const user = await requirePermission('pricing.manage');
   const parsed = packPricingSchema.safeParse(input);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid pricing configuration.' };
@@ -1046,7 +1127,7 @@ export async function savePackPricingAction(input: z.input<typeof packPricingSch
  * duplicate starts inactive so it doesn't immediately affect retailers.
  */
 export async function duplicatePackAction(packId: string, productId: string) {
-  const user = await requirePermission('products.edit');
+  const user = await requirePermission('pricing.manage');
   const supabase = createClient();
 
   // Fetch the source pack with its tiers.

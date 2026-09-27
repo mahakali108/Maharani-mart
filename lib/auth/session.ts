@@ -12,13 +12,29 @@ export interface CurrentUser {
 interface ProfileRow {
   role: UserRole;
   full_name: string;
+  is_active: boolean;
+}
+
+interface RetailerStatusRow {
+  status: string;
 }
 
 /**
- * Server-only helper for layouts/pages: fetches the authenticated user
- * plus their profile. Middleware already enforces role-based routing,
- * so this is a defense-in-depth check (also gives layouts the display
- * name/role they need without duplicating the query everywhere).
+ * Server-only helper for layouts, pages AND Server Actions: fetches the
+ * authenticated user plus their profile, and refuses accounts that are not
+ * allowed to act. Middleware performs the same gate for page navigation, but
+ * a Server Action / route handler can be invoked directly (and a JWT stays
+ * valid after suspension until it expires), so this check must not depend
+ * on middleware having run:
+ *
+ *   - deactivated profile (profiles.is_active = false) → /login?error=account_inactive
+ *   - retailer without an approved retailers row:
+ *       suspended            → /login?error=account_suspended
+ *       pending / no row     → /pending-approval
+ *
+ * `redirect()` throws, so no protected code after this call runs for them.
+ * The database enforces the same rule independently (migration 0052:
+ * is_active_account() restrictive policies + current_user_role()).
  */
 export async function requireUser(): Promise<CurrentUser> {
   const supabase = createClient();
@@ -32,12 +48,31 @@ export async function requireUser(): Promise<CurrentUser> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, full_name')
+    .select('role, full_name, is_active')
     .eq('id', user!.id)
     .single<ProfileRow>();
 
   if (!profile) {
     redirect('/login');
+  }
+
+  if (profile!.is_active !== true) {
+    redirect('/login?error=account_inactive');
+  }
+
+  if (profile!.role === 'retailer') {
+    const { data: retailer } = await supabase
+      .from('retailers')
+      .select('status')
+      .eq('id', user!.id)
+      .maybeSingle<RetailerStatusRow>();
+
+    if (retailer?.status === 'suspended') {
+      redirect('/login?error=account_suspended');
+    }
+    if (retailer?.status !== 'active') {
+      redirect('/pending-approval');
+    }
   }
 
   return {

@@ -27,10 +27,11 @@ export default async function LowStockPage({
       .in('stock_status', ['low_stock', 'out_of_stock'])
       .order('available_quantity', { ascending: true })
       .limit(200),
-    // mv_top_products is refreshed nightly (pg_cron) from real orders;
-    // empty until delivered orders exist. Not guarded by table RLS, but
-    // this page is admin-only via middleware + layout.
-    supabase.from('mv_top_products' as never).select('*').order('qty_sold', { ascending: false }).limit(10),
+    // mv_top_products is refreshed nightly (pg_cron) from real orders; empty
+    // until delivered orders exist. A materialized view cannot carry RLS, so
+    // direct SELECT is revoked (migration 0052) and it is read through the
+    // Admin-gated admin_top_products() function (ordered by qty_sold desc).
+    supabase.rpc('admin_top_products' as never, { p_limit: 10 } as never),
   ]);
 
   const totals = ((totalsData ?? []) as unknown as ProductTotalsViewRow[]).filter(

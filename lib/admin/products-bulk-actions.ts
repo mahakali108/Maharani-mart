@@ -124,7 +124,8 @@ async function bulkAssignTaxonomy(formData: FormData): Promise<BulkResult> {
  * `gst_percent`, which is exactly what an amended invoice requires.
  */
 async function bulkSetGst(formData: FormData): Promise<BulkResult> {
-  await requirePermission('products.edit');
+  // GST is printed on the tax invoice and reprices every future order: Admin-only.
+  await requirePermission('pricing.manage');
 
   const selected = normalizeBulkIds(formData.getAll('productIds'));
   if ('error' in selected) return { ok: false, error: selected.error };

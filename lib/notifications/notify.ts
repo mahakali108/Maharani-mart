@@ -16,6 +16,13 @@ export interface NotifyInput {
   recipientId: string;
   title: string;
   body: string;
+  /**
+   * Text persisted in the outbound channel queue (`notification_logs`)
+   * instead of `body`. REQUIRED whenever `body` contains a secret (e.g. a
+   * delivery OTP): the queue is an operational log, so secrets must never be
+   * written there. The in-app notification (recipient-only RLS) keeps `body`.
+   */
+  channelBody?: string;
   linkUrl?: string;
   category?: NotificationCategory;
 }
@@ -82,7 +89,7 @@ export async function queueChannelNotification(
     recipient_id: input.recipientId,
     channel,
     status: 'queued',
-    payload: { title: input.title, body: input.body, link_url: input.linkUrl ?? null },
+    payload: { title: input.title, body: input.channelBody ?? input.body, link_url: input.linkUrl ?? null },
   };
   const { error } = await supabase.from('notification_logs').insert(payload as unknown as never);
   if (error) throw new Error(`Failed to queue ${channel} notification: ${error.message}`);

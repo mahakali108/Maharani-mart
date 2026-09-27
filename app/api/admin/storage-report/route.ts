@@ -26,11 +26,13 @@ export async function GET() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_active')
     .eq('id', user.id)
-    .single<{ role: UserRole }>();
+    .single<{ role: UserRole; is_active: boolean }>();
 
-  if (!profile || (profile.role !== 'super_admin' && profile.role !== 'admin')) {
+  // Deactivated admins are refused here too: this route reads storage usage
+  // with the service role, so the database's is_active checks do not apply.
+  if (!profile || profile.is_active !== true || (profile.role !== 'super_admin' && profile.role !== 'admin')) {
     return NextResponse.json({ error: 'Not authorised.' }, { status: 403 });
   }
 
