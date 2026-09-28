@@ -159,6 +159,8 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
     recipientId: order.retailer_id,
     title: 'Order dispatched',
     body: `Your order ${order.order_number} is on its way. Your delivery OTP is ${otp} — share it with the delivery person only after receiving your goods.`,
+    // The OTP is shown only in the retailer's in-app notification — never persisted in the channel queue.
+    channelBody: `Your order ${order.order_number} is on its way. Open the Maharani app to view your delivery OTP.`,
     linkUrl: `/retailer/orders/${orderId}/delivery`,
   });
 

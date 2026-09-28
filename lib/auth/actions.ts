@@ -358,8 +358,10 @@ export async function registerRetailerAction(
     email,
     password,
     options: {
+      // No `role` here: the handle_new_user() trigger always creates a
+      // pending RETAILER for public signups and ignores any metadata role
+      // (migration 0052) — signup metadata is fully client-controlled.
       data: {
-        role: 'retailer',
         full_name: fullName,
         phone,
         shop_name: shopName,
@@ -374,6 +376,12 @@ export async function registerRetailerAction(
       return {
         code: 'duplicate_email',
         error: 'An account with this email already exists. Please log in instead.',
+      };
+    }
+    if (signUpError.message.toLowerCase().includes('invalid_area')) {
+      // handle_new_user() rejects a missing / unknown / inactive area.
+      return {
+        fieldErrors: { areaId: 'Select a valid service area.' },
       };
     }
     if (signUpError.message.toLowerCase().includes('phone_already_registered')) {

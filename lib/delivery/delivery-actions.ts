@@ -276,6 +276,8 @@ export async function regenerateDeliveryOtpAction(orderId: string): Promise<Deli
     recipientId: order.retailer_id,
     title: 'New delivery OTP',
     body: `Your delivery OTP for order ${order.order_number} is ${otp}. Share it with the delivery person only after receiving your goods.`,
+    // The OTP is shown only in the retailer's in-app notification — never persisted in the channel queue.
+    channelBody: `A new delivery OTP for order ${order.order_number} is ready. Open the Maharani app to view it.`,
     linkUrl: `/retailer/orders/${orderId}/delivery`,
   });
 

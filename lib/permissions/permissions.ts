@@ -84,7 +84,11 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'reports.view.all', 'banners.manage', 'routes.manage.all', 'dashboard.view', 'support.manage',
   ],
   staff: [
-    'products.view', 'products.create', 'products.edit', 'master_data.manage',
+    // No 'products.create' / 'pricing.manage': creating a product or pack
+    // sets its price, and price / GST / HSN / SKU / tiers / coupons / schemes
+    // are Admin-only (migration 0052 enforces the same in RLS + triggers).
+    // 'products.edit' covers operational fields only (see products-actions).
+    'products.view', 'products.edit', 'master_data.manage',
     'inventory.view', 'inventory.manage', 'inventory.adjust',
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.return.manage', 'returns.manage',
@@ -106,7 +110,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
 /**
  * `products.view_cost` gates purchase cost and margin. It is deliberately NOT
- * held by staff or salesman even though they can create and edit products:
+ * held by staff or salesman even though staff can edit operational product
+ * fields:
  * migration 0025 revokes `SELECT (cost_price)` from anon/authenticated at the
  * database level, so the admin-only cost accessors return NULL for them
  * anyway. The permission exists so the UI hides the column rather than

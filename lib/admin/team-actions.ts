@@ -33,15 +33,17 @@ const staffSchema = z.object({
  * session. This is exactly the "Phase 2" use case that client was
  * already reserved for.
  *
- * Creating the auth user still fires the same handle_new_user() DB
- * trigger used by retailer registration (see
- * supabase/migrations/0002_auth_trigger.sql / 0012_...), so the
- * matching `profiles` row is created automatically from user_metadata
- * — no separate profiles insert needed here, and no risk of the two
- * ever drifting out of sync.
+ * Creating the auth user still fires the handle_new_user() DB trigger used
+ * by retailer registration, so the `profiles` row is created atomically with
+ * the auth user. Since migration 0052 the trigger NEVER reads the role from
+ * user_metadata (any visitor controls that via signUp()); the staff/salesman
+ * role comes only from a short-lived `staff_account_invites` row written
+ * here with the service role, which the trigger consumes for this exact
+ * email. Public signup cannot create such a row (RLS on, no policies,
+ * privileges revoked from anon/authenticated).
  */
 export async function createStaffAction(_prevState: TeamFormState, formData: FormData): Promise<TeamFormState> {
-  await requirePermission('team.manage');
+  const actor = await requirePermission('team.manage');
 
   const parsed = staffSchema.safeParse({
     fullName: formData.get('fullName'),
@@ -68,14 +70,30 @@ export async function createStaffAction(_prevState: TeamFormState, formData: For
   }
 
   const adminClient = createServiceRoleClient();
+  const inviteEmail = email.trim().toLowerCase();
+  const { error: inviteError } = await adminClient.from('staff_account_invites' as never).upsert(
+    {
+      email: inviteEmail,
+      role,
+      created_by: actor.id,
+      expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    } as never,
+    { onConflict: 'email' }
+  );
+  if (inviteError) {
+    return { error: 'Could not authorise the new account. Please try again.' };
+  }
+
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
-    email,
+    email: inviteEmail,
     password,
     email_confirm: true,
-    user_metadata: { role, full_name: fullName, phone },
+    user_metadata: { full_name: fullName, phone },
   });
 
   if (createError) {
+    // Never leave a usable invite behind for this email.
+    await adminClient.from('staff_account_invites' as never).delete().eq('email', inviteEmail);
     if (createError.message.toLowerCase().includes('already registered') || createError.message.toLowerCase().includes('already exists')) {
       return { error: 'An account with this email already exists.' };
     }
@@ -88,7 +106,19 @@ export async function createStaffAction(_prevState: TeamFormState, formData: For
     return { error: createError.message };
   }
   if (!created.user) {
+    await adminClient.from('staff_account_invites' as never).delete().eq('email', inviteEmail);
     return { error: 'Account creation failed unexpectedly.' };
+  }
+
+  // Confirm the trigger applied the invited role (fail loudly otherwise —
+  // the account would be a pending retailer, never a privileged one).
+  const { data: createdProfile } = await adminClient
+    .from('profiles')
+    .select('role')
+    .eq('id', created.user.id)
+    .maybeSingle<{ role: string }>();
+  if (createdProfile?.role !== role) {
+    return { error: 'The account was created without the requested role. Set the role from Control Center before use.' };
   }
 
   if (areaId || warehouseId) {
