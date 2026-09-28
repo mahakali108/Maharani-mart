@@ -143,8 +143,8 @@ function renderCollectionRows(rows: CollectionRow[]) {
         ) : (
           <p className="text-xs text-ink-400">
             {row.status === 'verified'
-              ? `Verified ${row.verified_at ? formatIndiaDateTime(row.verified_at) : '—'}${row.ledger_entry_id ? ' · wallet credited' : ''}`
-              : `Rejected ${row.verified_at ? formatIndiaDateTime(row.verified_at) : '—'} · nothing credited`}
+              ? `Verified ${row.verified_at ? formatIndiaDateTime(row.verified_at) : '—'}${row.ledger_entry_id ? ' · coins added' : ''}`
+              : `Rejected ${row.verified_at ? formatIndiaDateTime(row.verified_at) : '—'} · no coins added`}
           </p>
         )}
       </div>
@@ -199,7 +199,7 @@ export default async function AdminCollectionsPage({
         <div>
           <h1 className="text-2xl font-semibold text-ink-950">Payment Collections</h1>
           <p className="mt-1 text-sm text-ink-500">
-            Field collections recorded by sales executives. The wallet is credited only when you verify.
+            Field collections recorded by sales executives. Coins are added to the shop only when you verify.
           </p>
         </div>
         <Card className="px-4 py-3">
@@ -235,7 +235,7 @@ export default async function AdminCollectionsPage({
           title={filters.status === 'pending' ? 'Nothing waiting for verification' : 'No collections match your filters'}
           body={
             filters.status === 'pending'
-              ? 'When a sales executive records money collected in the field, it lands here for a finance check before the wallet is credited.'
+              ? 'When a sales executive records money collected in the field, it lands here for a finance check before the coins are added.'
               : 'Try a different search or status.'
           }
         />

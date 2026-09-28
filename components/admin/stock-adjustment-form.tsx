@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { WarehouseStatusField } from '@/components/admin/warehouse-status-field';
 
 interface Option {
   id: string;
@@ -14,7 +15,20 @@ interface Option {
 
 const initialState: StockAdjustmentFormState = null;
 
-export function StockAdjustmentForm({ products, warehouses }: { products: Option[]; warehouses: Option[] }) {
+/**
+ * The warehouse is NOT chosen here. The business runs exactly one active
+ * warehouse, so the server resolves it (lib/warehouse/resolver.ts) and this
+ * form only shows which one the adjustment will be recorded against.
+ */
+export function StockAdjustmentForm({
+  products,
+  warehouse,
+  warehouseError,
+}: {
+  products: Option[];
+  warehouse: { name: string } | null;
+  warehouseError?: string | null;
+}) {
   const [state, formAction] = useFormState(createStockAdjustmentAction, initialState);
 
   return (
@@ -39,19 +53,7 @@ export function StockAdjustmentForm({ products, warehouses }: { products: Option
             ))}
           </Select>
         </div>
-        <div>
-          <Label htmlFor="warehouseId">Warehouse</Label>
-          <Select id="warehouseId" name="warehouseId" required defaultValue="">
-            <option value="" disabled>
-              {warehouses.length ? 'Select a warehouse' : 'No warehouses yet'}
-            </option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <WarehouseStatusField label="Warehouse" warehouse={warehouse} error={warehouseError} />
         <div>
           <Label htmlFor="quantity">Quantity change</Label>
           <Input id="quantity" name="quantity" type="number" step={1} placeholder="e.g. 50 or -12" required />
@@ -63,7 +65,9 @@ export function StockAdjustmentForm({ products, warehouses }: { products: Option
         </div>
       </div>
 
-      <SubmitButton pendingLabel="Recording…">Record adjustment</SubmitButton>
+      <SubmitButton pendingLabel="Recording…" disabled={!warehouse}>
+        Record adjustment
+      </SubmitButton>
     </form>
   );
 }

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { WarehouseStatusField } from '@/components/admin/warehouse-status-field';
 
 interface Option {
   id: string;
@@ -44,7 +45,16 @@ function newLine(): GrnLine {
  * the browser never decides quantities that reach the database
  * without passing the zod schema + confirm_grn RPC checks.
  */
-export function GrnForm({ products, warehouses }: { products: ProductOption[]; warehouses: Option[] }) {
+export function GrnForm({
+  products,
+  warehouse,
+  warehouseError,
+}: {
+  products: ProductOption[];
+  /** The single ACTIVE warehouse, resolved server-side — never a client choice. */
+  warehouse: { name: string } | null;
+  warehouseError?: string | null;
+}) {
   const router = useRouter();
   const [state, formAction] = useFormState(createGrnAction, initialState);
   const [lines, setLines] = useState<GrnLine[]>([newLine()]);
@@ -77,15 +87,7 @@ export function GrnForm({ products, warehouses }: { products: ProductOption[]; w
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="warehouseId">Receiving warehouse</Label>
-          <Select id="warehouseId" name="warehouseId" required defaultValue="">
-            <option value="" disabled>{warehouses.length ? 'Select warehouse' : 'No active warehouses'}</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>{w.name}</option>
-            ))}
-          </Select>
-        </div>
+        <WarehouseStatusField label="Receiving warehouse" warehouse={warehouse} error={warehouseError} />
         <div>
           <Label htmlFor="supplierReference">Supplier reference (optional)</Label>
           <Input id="supplierReference" name="supplierReference" placeholder="Supplier name / party" />

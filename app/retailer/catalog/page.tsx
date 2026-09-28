@@ -23,7 +23,7 @@ import {
   sanitizeSearchTerm,
   type CatalogQuery,
 } from '@/lib/retailer/catalog-params';
-import { readCursor } from '@/lib/infinite-scroll/keyset';
+import { readContinuation } from '@/lib/infinite-scroll/keyset';
 
 interface CategoryRow {
   id: string;
@@ -119,6 +119,15 @@ export default async function RetailerCatalogPage({
     'use server';
     const caller = await requireUser();
     const client = createClient();
+    // A cursor the server cannot decode must END the list, never restart it.
+    // `readContinuation(null)` means "first batch", so an undecodable
+    // continuation cursor previously re-served batch #1 to a scrolling shopper
+    // — the exact shape of the "stuck on Loading more products…" loop.
+    // Terminating here keeps a corrupt/foreign cursor from replaying the
+    // catalog.
+    const continuation = readContinuation(cursor);
+    if (!continuation.ok) return { items: [], nextCursor: null };
+    const decoded = continuation.cursor;
     const [{ data: shopper }, { data: cats }, { data: brandRows }] = await Promise.all([
       client.from('retailers').select('area_id').eq('id', caller.id).maybeSingle<{ area_id: string }>(),
       client.from('categories').select('id, name, parent_id').eq('is_active', true).returns<CatalogCategory[]>(),
@@ -130,7 +139,7 @@ export default async function RetailerCatalogPage({
       filters,
       cats ?? [],
       brandRows ?? [],
-      readCursor(cursor)
+      decoded
     );
     return { items: batch.cards, nextCursor: batch.nextCursor };
   }

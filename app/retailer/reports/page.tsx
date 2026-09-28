@@ -20,6 +20,7 @@ import {
   loadSpendTrend,
 } from '@/lib/retailer/reports';
 import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
+import { coinBalancePaise, COIN_SYMBOL } from '@/lib/coins/math';
 
 export const metadata = { title: 'Purchase reports — Maharani Traders' };
 
@@ -203,8 +204,18 @@ export default async function ReportsPage() {
 
           <section className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <StatCard icon={ReceiptText} label="All-time orders" value={String(trend.reduce((sum, row) => sum + row.orderCount, 0))} tone="bg-blue-50 text-blue-700" />
-            <StatCard icon={Scale} label="Credit used (outstanding)" value={formatPaise(walletSummary.outstandingPaise)} tone="bg-amber-50 text-amber-700" />
-            <StatCard icon={Percent} label="Available credit" value={walletSummary.availablePaise !== null ? formatPaise(walletSummary.availablePaise) : '—'} tone="bg-emerald-50 text-emerald-700" />
+            <StatCard
+              icon={Scale}
+              label="Coins spent"
+              value={formatPaise(walletSummary.outstandingPaise)}
+              tone="bg-amber-50 text-amber-700"
+            />
+            <StatCard
+              icon={Percent}
+              label={`${COIN_SYMBOL} Coins available`}
+              value={formatPaise(coinBalancePaise(walletSummary.creditLimitPaise, walletSummary.outstandingPaise))}
+              tone="bg-emerald-50 text-emerald-700"
+            />
           </section>
         </>
       )}

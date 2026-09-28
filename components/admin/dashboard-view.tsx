@@ -275,7 +275,7 @@ export function DashboardView({
               <CardHeader className="mb-3">
                 <CardTitle className="flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-primary-600" />
-                  Credit / outstanding
+                  Legacy credit (historical)
                 </CardTitle>
               </CardHeader>
               <Link href="/admin/wallets" className="text-xs font-medium text-primary-600 hover:text-primary-700">
@@ -285,12 +285,16 @@ export function DashboardView({
             <SectionState
               status={data.credit.status}
               emptyTitle="No retailer accounts yet"
-              emptyBody="Outstanding and limits appear once retailers are on the books."
+              emptyBody="Historical credit balances appear once retailers are on the books."
             >
               <p className="text-2xl font-semibold text-ink-950">{formatInr(data.credit.totalOutstanding)}</p>
               <p className="mt-1 text-xs text-ink-400">
                 Limit {formatInrCompact(data.credit.totalConfiguredLimit)} · utilization{' '}
                 {data.credit.utilizationPct === null ? '—' : `${data.credit.utilizationPct}%`}
+              </p>
+              <p className="mt-1 text-[11px] leading-4 text-ink-400">
+                Read-only historical view of credit-era balances, kept for reconciliation. Retailer credit is no longer
+                offered — the live balance is 🪙 coins.
               </p>
               <p className={`mt-2 text-sm ${data.credit.overLimitCount > 0 ? 'font-medium text-primary-700' : 'text-ink-500'}`}>
                 {data.credit.overLimitCount} over limit

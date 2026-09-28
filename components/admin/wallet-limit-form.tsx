@@ -55,7 +55,7 @@ export function WalletLimitForm({
       });
       if ('error' in result) setError(result.error);
       else {
-        setMessage(result.message ?? 'Limit updated');
+        setMessage(result.message ?? 'Coin funding updated');
         setReason('');
       }
     });
@@ -68,26 +68,28 @@ export function WalletLimitForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <Label>Credit Limit (₹)</Label>
+          <Label>Coin funding (₹)</Label>
           <Input type="number" min={0} step={0.01} value={limit} onChange={(e) => setLimit(e.target.value)} required />
-          <p className="mt-1 text-[10px] text-ink-400">Current: ₹{currentLimit.toFixed(2)} · Outstanding: ₹{currentOutstanding.toFixed(2)}</p>
+          <p className="mt-1 text-[10px] text-ink-400">
+            Funding: ₹{currentLimit.toFixed(2)} · Coins already spent: ₹{currentOutstanding.toFixed(2)} · 1 coin = ₹1
+          </p>
         </div>
         <div>
-          <Label>Overdue Limit (₹) — if overdue allowed</Label>
+          <Label>Legacy overdue threshold (₹) — historical fields only</Label>
           <Input type="number" min={0} step={0.01} value={overdueLimitState} onChange={(e) => setOverdueLimitState(e.target.value)} />
         </div>
         <div className="sm:col-span-2 flex items-center gap-2">
           <input type="checkbox" checked={allowOverdueState} onChange={(e) => setAllowOverdueState(e.target.checked)} id="allowOverdue" />
-          <Label htmlFor="allowOverdue">Allow overdue (explicit Admin approval for negative available credit)</Label>
+          <Label htmlFor="allowOverdue">Legacy overdue policy (historical — coins never go negative)</Label>
         </div>
         <div className="sm:col-span-2">
           <Label>Reason (required)</Label>
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} required placeholder="e.g. Initial limit approved by Finance" />
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} required placeholder="e.g. Festival coin funding approved by Finance" />
         </div>
       </div>
 
       <button type="submit" disabled={isPending} className="w-full rounded-xl bg-ink-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-        {isPending ? 'Updating...' : 'Set Credit Limit'}
+        {isPending ? 'Updating…' : 'Set coin funding'}
       </button>
       <p className="text-[11px] text-ink-400">Only authorized Admin/staff may change limits. Retailers cannot change their own. All changes audited.</p>
     </form>

@@ -2,7 +2,8 @@ import 'server-only';
 
 import { z } from 'zod';
 import type { AICard, AIToolContext, AIToolDefinition } from '@/lib/ai/types';
-import { calculateCreditPosition } from '@/lib/orders/credit';
+import { getRetailerCoinPosition } from '@/lib/coins/server';
+import { computeCoinPayment } from '@/lib/coins/math';
 import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
 import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { resolveRetailerTarget } from '@/lib/ai/safety/auth';
@@ -103,7 +104,7 @@ async function reorderDraft(orderId: string, context: AIToolContext) {
   let token: string | undefined;
   try { token = createConfirmationToken(context.actor, 'add_to_cart', { lines }); } catch { /* configuration is reported by missing action */ }
   const card: AICard = {
-    type: 'cart', title: `Reorder draft from ${(details.data as { order: OrderRow }).order.order_number}`, subtitle: 'Current price, MOQ, GST and credit were revalidated. No order was placed.', quality: 'verified', source: 'Previous owned order + shared current quote service',
+    type: 'cart', title: `Reorder draft from ${(details.data as { order: OrderRow }).order.order_number}`, subtitle: 'Current price, MOQ, GST and coins were revalidated. No order was placed.', quality: 'verified', source: 'Previous owned order + shared current quote service',
     lines: result.quote.lines.map((line) => ({
       label: `${line.productName} · ${line.packName}`,
       value: `${line.pieces} pcs (${line.cases} Case${line.cases === 1 ? '' : 's'} + ${line.loosePieces} loose)`,
@@ -164,15 +165,81 @@ async function reorderSuggestions(context: AIToolContext) {
   return verified({ suggestions, quality: 'estimate' }, cards, `${orders.length} authorized order headers and ${items?.length ?? 0} item rows`);
 }
 
-async function creditSummary(input: { retailerId?: string; orderValue?: number }, context: AIToolContext) {
+/**
+ * 🪙 Coins — the ONLY balance a retailer has.
+ *
+ * Maharani Traders does not offer retailer credit, so this tool answers with the
+ * coin position (available / spent / used by this order / remaining payable)
+ * instead of a credit limit. The amount is read from the same server-side source
+ * the checkout uses, so the assistant can never quote a balance the till would
+ * disagree with.
+ *
+ * The legacy tool names (`get_retailer_credit`, `get_credit_summary`, …) still
+ * resolve here so existing assistants and stored conversations keep working —
+ * they simply report coins now.
+ */
+async function coinSummary(input: { retailerId?: string; orderValue?: number }, context: AIToolContext) {
   const target = resolveRetailerTarget(context.actor, input.retailerId);
   if (!target) return unavailable('A valid authorized retailer context is required.');
-  const { data, error } = await context.supabase.from('retailers').select('id, shop_name, credit_limit, outstanding_balance').eq('id', target).maybeSingle<{ id: string; shop_name: string; credit_limit: number; outstanding_balance: number }>();
+
+  const { data, error } = await context.supabase
+    .from('retailers')
+    .select('id, shop_name')
+    .eq('id', target)
+    .maybeSingle<{ id: string; shop_name: string }>();
   if (error) return dbFailure();
-  if (!data) return unavailable('Retailer credit was not found in your authorized data.');
-  const position = calculateCreditPosition(data.credit_limit, data.outstanding_balance, input.orderValue ?? 0);
-  return verified({ retailerId: data.id, ...position }, [{ type: 'credit', title: context.actor.role === 'retailer' ? 'Your business credit' : data.shop_name, quality: 'verified', source: 'Retailer credit record + shared credit calculator', metrics: [{ label: 'Credit limit', value: position.hasConfiguredLimit ? inr(position.creditLimit) : 'Not configured', quality: 'verified' }, { label: 'Outstanding', value: inr(position.outstandingBalance), quality: 'verified' }, { label: 'Available', value: position.availableCredit === null ? 'Not configured' : inr(position.availableCredit), quality: 'verified' }, ...(input.orderValue !== undefined ? [{ label: 'After order', value: position.availableAfterOrder === null ? 'Not configured' : inr(position.availableAfterOrder), quality: 'verified' as const }] : [])] }]);
+  if (!data) return unavailable('This shop was not found in your authorized data.');
+
+  let position: Awaited<ReturnType<typeof getRetailerCoinPosition>>;
+  try {
+    position = await getRetailerCoinPosition(context.supabase as never, data.id);
+  } catch {
+    return unavailable('The coin balance could not be read right now.');
+  }
+
+  // An order value turns the balance into the exact checkout arithmetic:
+  // coins used = min(balance, total); the rest is payable on delivery.
+  const orderTotalPaise = input.orderValue === undefined ? null : Math.round(input.orderValue * 100);
+  const payment = orderTotalPaise === null
+    ? null
+    : computeCoinPayment({ orderTotalPaise, balancePaise: position.balancePaise });
+
+  return verified(
+    {
+      retailerId: data.id,
+      coinsAvailable: position.balanceRupees,
+      coinsSpent: position.outstandingPaise / 100,
+      ...(payment
+        ? {
+            orderTotal: payment.orderTotalPaise / 100,
+            coinsUsed: payment.usedPaise / 100,
+            remainingPayable: payment.remainingPaise / 100,
+          }
+        : {}),
+    },
+    [
+      {
+        type: 'coins',
+        title: context.actor.role === 'retailer' ? 'Your coins' : data.shop_name,
+        quality: 'verified',
+        source: 'Retailer wallet ledger + shared coin calculator',
+        metrics: [
+          { label: '🪙 Coins available', value: inr(position.balanceRupees), quality: 'verified' },
+          { label: 'Coins spent', value: inr(position.outstandingPaise / 100), quality: 'verified' },
+          ...(payment
+            ? [
+                { label: '🪙 Coins used on this order', value: inr(payment.usedPaise / 100), quality: 'verified' as const },
+                { label: 'Remaining payable', value: inr(payment.remainingPaise / 100), quality: 'verified' as const },
+              ]
+            : []),
+        ],
+      },
+    ]
+  );
 }
+
+/** @deprecated Renamed to `coinSummary`; kept for existing importers. */
+const creditSummary = coinSummary;
 
 export const orderTools: AIToolDefinition[] = [
   { name: 'get_orders', description: 'List RLS-authorized orders with optional retailer/status filters.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: retailerOptionalSchema, inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, status: { type: 'string' }, limit: { type: 'integer', maximum: 30 } } }, execute: listOrders },
@@ -182,13 +249,17 @@ export const orderTools: AIToolDefinition[] = [
   { name: 'reorder_previous_order', description: 'Prepare a current validated reorder draft from an owned previous order. Never places an order.', actionClass: 'PREPARE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: orderIdSchema, inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderId'], properties: { orderId: { type: 'string', format: 'uuid' } } }, execute: async ({ orderId }, context) => reorderDraft(orderId, context) },
   { name: 'get_reorder_suggestions', description: 'Estimate retailer reorder intervals using actual authorized purchase occurrences. Estimates are labeled.', actionClass: 'READ', roles: ['retailer'], surfaces: ['retailer'], inputSchema: z.object({}), inputJsonSchema: { type: 'object', additionalProperties: false }, execute: async (_, context) => reorderSuggestions(context) },
   { name: 'get_retailer_orders', description: 'Get orders for the current or explicitly selected RLS-authorized retailer.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: retailerOptionalSchema, inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, status: { type: 'string' }, limit: { type: 'integer' } } }, execute: listOrders },
-  { name: 'get_credit_summary', description: 'Get authorized retailer credit using the shared existing credit calculator.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000).optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number', minimum: 0 } } }, execute: creditSummary },
-  { name: 'get_retailer_credit', description: 'Get authorized retailer credit using the shared existing credit calculator.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000).optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number' } } }, execute: creditSummary },
-  { name: 'get_available_credit', description: 'Get currently available authorized retailer credit.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' } } }, execute: creditSummary },
-  { name: 'calculate_order_credit_impact', description: 'Calculate credit impact with the shared credit source of truth.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000) }), inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderValue'], properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number', minimum: 0 } } }, execute: creditSummary },
+  { name: 'get_retailer_coins', description: '🪙 Get the coin balance (available, spent) of the current or explicitly selected retailer. Coins are the only shop balance; there is no credit.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000).optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number', minimum: 0 } } }, execute: coinSummary },
+  { name: 'get_coin_balance', description: '🪙 Get the coin balance of the current or explicitly selected retailer, using the shared coin source of truth.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' } } }, execute: coinSummary },
+  { name: 'calculate_order_coin_impact', description: '🪙 Calculate how many coins an order of the given value would use, and what stays payable on delivery.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000) }), inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderValue'], properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number', minimum: 0 } } }, execute: coinSummary },
+  // Legacy names kept so an existing assistant keeps working; they report coins.
+  { name: 'get_credit_summary', description: 'Deprecated alias of get_retailer_coins — retailer credit was removed; this reports the 🪙 coin balance.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000).optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number', minimum: 0 } } }, execute: coinSummary },
+  { name: 'get_retailer_credit', description: 'Deprecated alias of get_retailer_coins — retailer credit was removed; this reports the 🪙 coin balance.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000).optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number' } } }, execute: coinSummary },
+  { name: 'get_available_credit', description: 'Deprecated alias of get_retailer_coins — retailer credit was removed; this reports 🪙 coins available.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' } } }, execute: coinSummary },
+  { name: 'calculate_order_credit_impact', description: 'Deprecated alias of calculate_order_coin_impact — reports the 🪙 coins an order would use.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000) }), inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderValue'], properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number', minimum: 0 } } }, execute: coinSummary },
   { name: 'search_invoices', description: 'Search existing order-generated tax invoices in RLS-authorized order data.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: retailerOptionalSchema, inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, limit: { type: 'integer', maximum: 30 } } }, execute: async (input, context) => { const result = await listOrders(input, context); if (result.cards) result.cards = result.cards.map((card) => ({ ...card, type: 'invoice' as const, title: `Invoice ${card.title}`, actions: card.id ? [{ type: 'link', label: context.actor.surface === 'retailer' ? 'View invoice' : 'View order', href: context.actor.surface === 'retailer' ? `/retailer/orders/${card.id}/invoice` : `${context.actor.surface === 'salesman' ? '/salesman/orders' : context.actor.surface === 'staff' ? '/staff/orders' : '/admin/orders'}/${card.id}` }] : card.actions })); return result; } },
   { name: 'get_invoice', description: 'Get an existing order-generated invoice from RLS-authorized order data.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: orderIdSchema, inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderId'], properties: { orderId: { type: 'string', format: 'uuid' } } }, execute: async ({ orderId }, context) => getOrder(orderId, context) },
   { name: 'get_invoice_summary', description: 'Summarize verified subtotal, discount, GST and total from an order-generated invoice.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: orderIdSchema, inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderId'], properties: { orderId: { type: 'string', format: 'uuid' } } }, execute: async ({ orderId }, context) => getOrder(orderId, context) },
 ];
 
-export { listOrders, getOrder, reorderDraft, reorderSuggestions, creditSummary };
+export { listOrders, getOrder, reorderDraft, reorderSuggestions, coinSummary, creditSummary };

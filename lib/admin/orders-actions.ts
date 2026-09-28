@@ -8,6 +8,7 @@ import type { Database } from '@/types/database.types';
 import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
 import { canTransitionOrderStatus, describeTransitionError } from '@/lib/orders/state-machine';
 import { releaseOrderCoupon } from '@/lib/coupons/validate';
+import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 
 type OrderStatusEnum = Database['public']['Enums']['order_status'];
 
@@ -30,6 +31,14 @@ export async function assignWarehouseAction(orderId: string, warehouseId: string
   if (!order) return { error: 'Order not found.' };
   if (order.status !== 'pending') return { error: 'Warehouse can only be reassigned before the order is approved.' };
 
+  // ONE active warehouse: an order can only be assigned to it, never to an
+  // arbitrary (or stale/deactivated) warehouse id posted by a browser.
+  const resolved = await resolveActiveWarehouse(supabase);
+  if (!resolved.ok) return { error: resolved.message };
+  if (resolved.warehouse.id !== warehouseId) {
+    return { error: `Orders can only be assigned to the active warehouse (${resolved.warehouse.name}).` };
+  }
+
   const { error } = await supabase.from('orders').update({ warehouse_id: warehouseId } as unknown as never).eq('id', orderId);
   if (error) return { error: error.message };
 
@@ -51,7 +60,7 @@ export async function assignWarehouseAction(orderId: string, warehouseId: string
  * batch, and concurrent approvals/orders can never oversell. If there is
  * not enough stock the approval fails cleanly and the order stays pending.
  *
- * Pricing/GST/MOQ/credit validation remain untouched in the order
+ * Pricing/GST/MOQ/coin validation remain untouched in the order
  * creation path (lib/orders/create-order.ts).
  */
 export async function approveOrderAction(orderId: string): Promise<OrderActionResult> {
@@ -66,7 +75,17 @@ export async function approveOrderAction(orderId: string): Promise<OrderActionRe
 
   if (!order) return { error: 'Order not found.' };
   if (order.status !== 'pending') return { error: 'Only pending orders can be approved.' };
-  if (!order.warehouse_id) return { error: 'Assign a warehouse before approving this order.' };
+  if (!order.warehouse_id) {
+    // No warehouse on the order: try the configured one before asking a human.
+    const resolved = await resolveActiveWarehouse(supabase);
+    if (!resolved.ok) return { error: resolved.message };
+    const { error: assignError } = await supabase
+      .from('orders')
+      .update({ warehouse_id: resolved.warehouse.id } as unknown as never)
+      .eq('id', orderId);
+    if (assignError) return { error: assignError.message };
+    order.warehouse_id = resolved.warehouse.id;
+  }
 
   const { data: reservation, error: reservationError } = await supabase.rpc('reserve_order_stock' as never, {
     p_order_id: orderId,
@@ -129,7 +148,7 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
     .eq('id', orderId);
   if (error) return { error: error.message };
 
-  // Wallet reversal: create ORDER_REVERSAL credit entry, do not overwrite original
+  // Coin reversal: append an ORDER_REVERSAL credit entry; the original stays.
   try {
     const user = await supabase.auth.getUser();
     await reverseOrderWalletDebit(orderId, order.retailer_id, reason || 'Order cancelled', user.data.user?.id ?? null);

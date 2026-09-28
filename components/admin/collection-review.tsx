@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Admin finance controls for a pending payment collection: verify (credits
- * the retailer's wallet through the ledger) or reject (credits nothing).
+ * Admin finance controls for a pending payment collection: verify (adds the
+ * amount to the shop's 🪙 coins through the ledger) or reject (adds nothing).
  */
 
 import { useState, useTransition } from 'react';
@@ -46,7 +46,7 @@ export function CollectionReviewButtons({ collectionId }: { collectionId: string
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={isPending} onClick={verify}>
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          Verify &amp; credit wallet
+          Verify &amp; add coins
         </Button>
         <Button size="sm" variant="outline" disabled={isPending} onClick={() => setShowReject((v) => !v)}>
           <XCircle className="h-4 w-4" />

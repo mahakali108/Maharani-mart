@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { requireWarehouseId } from '@/lib/warehouse/resolver';
 
 export type GrnActionResult = { error?: string; success?: boolean; grnId?: string } | null;
 
@@ -22,7 +23,7 @@ const grnLineSchema = z.object({
 
 const grnSchema = z
   .object({
-    warehouseId: z.string().uuid('Select a warehouse.'),
+    warehouseId: z.string().uuid('Select a warehouse.').optional().or(z.literal('')),
     supplierReference: z.string().trim().max(120).optional().or(z.literal('')),
     invoiceReference: z.string().trim().max(120).optional().or(z.literal('')),
     notes: z.string().trim().max(1000).optional().or(z.literal('')),
@@ -77,10 +78,14 @@ export async function createGrnAction(
   }
 
   const supabase = createClient();
+  // Receiving site: the single ACTIVE warehouse, resolved server-side.
+  const warehouse = await requireWarehouseId(supabase, parsed.data.warehouseId || null);
+  if (!warehouse.ok) return { error: warehouse.error };
+
   const { data: grn, error: grnError } = await supabase
     .from('grns')
     .insert({
-      warehouse_id: parsed.data.warehouseId,
+      warehouse_id: warehouse.warehouseId,
       supplier_reference: parsed.data.supplierReference || null,
       invoice_reference: parsed.data.invoiceReference || null,
       notes: parsed.data.notes || null,

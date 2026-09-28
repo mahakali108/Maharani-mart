@@ -21,7 +21,10 @@ import { requireUser } from '@/lib/auth/session';
 import { RetailerOrderActions } from '@/components/retailer/order-actions-panel';
 import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card';
 import { formatInr } from '@/lib/retailer/format';
-import { calculateCreditPosition } from '@/lib/orders/credit';
+import { coinBalancePaise, COIN_SYMBOL } from '@/lib/coins/math';
+import { getOrderCoinMovement } from '@/lib/coins/server';
+import { paiseToRupees } from '@/lib/retailer/format';
+import { rupeesToPaise } from '@/lib/retailer/wallet';
 import { OrderStatusTimeline, type TrackedStatus, type StatusHistoryEntry } from '@/components/retailer/order-status-timeline';
 import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 import { buildCanonicalProductName } from '@/lib/retailer/product-name';
@@ -107,7 +110,14 @@ export default async function OrderDetailPage({
   // invented. Actual dispatch/delivery stamps come from the order record.
   const deliveryEstimate = process.env.COMPANY_DELIVERY_ESTIMATE?.trim() || null;
 
-  const [{ data: order }, { data: itemData }, { data: historyData }, { data: retailer }, { data: profile }] = await Promise.all([
+  const [
+    { data: order },
+    { data: itemData },
+    { data: historyData },
+    { data: retailer },
+    { data: profile },
+    coinMovement,
+  ] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, status, subtotal, gst_total, discount_total, grand_total, notes, placed_at, dispatched_at, delivered_at, shipping_address')
@@ -133,6 +143,9 @@ export default async function OrderDetailPage({
       .eq('id', user.id)
       .maybeSingle<OrderRetailerRow>(),
     supabase.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle<OrderProfileRow>(),
+    // 🪙 What this specific order spent, read from the ledger (no denormalised
+    // column to drift): a cancelled order refunds the coins and reports 0.
+    getOrderCoinMovement(supabase, params.id, user.id),
   ]);
 
   if (!order) notFound();
@@ -157,7 +170,7 @@ export default async function OrderDetailPage({
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
             <p className="font-bold">Order placed successfully</p>
-            <p className="mt-0.5 text-xs">Your order is awaiting confirmation. Pricing, GST and credit were validated server-side.</p>
+            <p className="mt-0.5 text-xs">Your order is awaiting confirmation. Pricing, GST and coins were validated server-side.</p>
           </div>
         </div>
       ) : null}
@@ -279,7 +292,7 @@ export default async function OrderDetailPage({
             Settlement for this order, from real data only. `orders` has no
             payment_method column and no credit-terms model, so this reports the
             order's own recorded GST-inclusive total and the account's CURRENT
-            credit position (clearly labelled as current, not as at order time).
+            coin position (clearly labelled as current, not as at order time).
           */}
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5">
@@ -293,30 +306,38 @@ export default async function OrderDetailPage({
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-600">Method</span>
-                <span className="font-bold text-slate-900">
-                  {retailer && retailer.credit_limit > 0 ? 'Business credit account' : 'No credit facility configured'}
-                </span>
+                <span className="font-bold text-slate-900">{COIN_SYMBOL} Coins + cash on delivery</span>
               </div>
-              {retailer ? (() => {
-                const position = calculateCreditPosition(retailer.credit_limit, retailer.outstanding_balance);
-                return position.hasConfiguredLimit ? (
-                  <>
-                    <div className="flex items-center justify-between gap-3 border-t border-dashed border-slate-200 pt-2">
-                      <span className="text-slate-500">Outstanding on your account now</span>
-                      <span className="font-semibold text-slate-800">{formatInr(position.outstandingBalance)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-slate-500">Available credit now</span>
-                      <span className="font-semibold text-slate-800">{formatInr(position.availableCredit ?? 0)}</span>
-                    </div>
-                  </>
-                ) : null;
-              })() : null}
+              {retailer ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 border-t border-dashed border-slate-200 pt-2">
+                    <span className="text-slate-500">
+                      {coinMovement.refunded ? 'Coins refunded for this order' : 'Coins used on this order'}
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      {formatInr(paiseToRupees(coinMovement.refunded ? coinMovement.refundedPaise : coinMovement.spentPaise))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-slate-500">{COIN_SYMBOL} Coins available now</span>
+                    <span className="font-semibold text-slate-800">
+                      {formatInr(
+                        paiseToRupees(
+                          coinBalancePaise(
+                            rupeesToPaise(retailer.credit_limit ?? 0),
+                            rupeesToPaise(retailer.outstanding_balance ?? 0)
+                          )
+                        )
+                      )}
+                    </span>
+                  </div>
+                </>
+              ) : null}
               <Link
                 href="/retailer/account/ledger"
                 className="flex h-9 items-center justify-center rounded-lg border border-slate-200 text-[10px] font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600"
               >
-                View credit &amp; ledger
+                View coin history
               </Link>
             </div>
           </section>

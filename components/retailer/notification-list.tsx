@@ -32,7 +32,7 @@ export type NotificationLoader = (
 
 function iconFor(title: string, body: string) {
   const text = `${title} ${body}`.toLowerCase();
-  if (text.includes('credit') || text.includes('outstanding') || text.includes('limit')) return CreditCard;
+  if (text.includes('coin') || text.includes('wallet')) return CreditCard;
   if (text.includes('scheme') || text.includes('offer') || text.includes('festival')) return Tag;
   if (text.includes('dispatch') || text.includes('deliver') || text.includes('on the way')) return Truck;
   if (text.includes('order')) return PackageCheck;

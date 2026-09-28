@@ -141,13 +141,19 @@ describe('infinite scrolling list', () => {
 
     function SlowHarness() {
       const queue = [...batches];
-      async function loader() {
+      async function loader(cursor: string | null) {
         inFlight += 1;
         peak = Math.max(peak, inFlight);
         await new Promise((resolve) => setTimeout(resolve, 5));
         const rows = queue.shift() ?? [];
         inFlight -= 1;
-        return { rows: rows.map((label) => <li key={label}>{label}</li>), nextCursor: queue.length > 0 ? 'x' : null };
+        // Cursors ADVANCE (`cursor` → next). A loader that hands back the
+        // cursor it was given terminates the list by design (see
+        // tests/catalog-loading.test.tsx), so this fixture must not repeat one.
+        return {
+          rows: rows.map((label) => <li key={label}>{label}</li>),
+          nextCursor: queue.length > 0 ? `${cursor ?? 'start'}:${rows.length}` : null,
+        };
       }
       return (
         <InfiniteScrollProvider loader={loader} initialCursor="x" initialHasMore>
@@ -293,12 +299,17 @@ describe('infinite scrolling list', () => {
 
     function ManualHarness() {
       const queue = [['second'], ['third']];
-      async function loader() {
+      async function loader(cursor: string | null) {
         const rows = queue.shift() ?? [];
-        return { rows: rows.map((label) => <li key={label}>{label}</li>), nextCursor: queue.length > 0 ? 'x' : null };
+        // Advancing cursors (never the one we were handed) — a repeated cursor
+        // stops the list by design.
+        return {
+          rows: rows.map((label) => <li key={label}>{label}</li>),
+          nextCursor: queue.length > 0 ? `${cursor ?? 'start'}:${rows.length}` : null,
+        };
       }
       return (
-        <InfiniteScrollProvider loader={loader} initialCursor="x" initialHasMore>
+        <InfiniteScrollProvider loader={loader} initialCursor="start" initialHasMore>
           <ul aria-label="rows">
             <InfiniteScrollRows>
               <li>first</li>

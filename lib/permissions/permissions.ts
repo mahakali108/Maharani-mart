@@ -46,6 +46,12 @@ export type Permission =
   | 'retailers.suspend'
   | 'retailers.assign_salesman'
   | 'retailers.manage_wallet'
+  /**
+   * 🪙 COINS: the one permission that allows a coin balance to change by hand.
+   * Held by admin + super_admin ONLY — staff and salesman must never be able
+   * to top up, adjust, reverse or otherwise move a shop's coins.
+   */
+  | 'coins.manage'
   | 'team.manage'
   | 'targets.manage'
   | 'commissions.manage'
@@ -68,7 +74,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
     'deliveries.view.all', 'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record', 'collections.verify',
-    'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet',
+    'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet', 'coins.manage',
     'team.manage', 'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all',
     'command_center.view', 'dashboard.view', 'support.manage',
@@ -79,7 +85,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'orders.view.all', 'orders.create', 'orders.approve', 'orders.assign', 'orders.cancel', 'orders.dispatch',
     'orders.deliver', 'orders.return.manage', 'returns.manage',
     'deliveries.view.all', 'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record', 'collections.verify',
-    'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet',
+    'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet', 'coins.manage',
     'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all', 'dashboard.view', 'support.manage',
   ],

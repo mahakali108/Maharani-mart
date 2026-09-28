@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { coinBalancePaise, COIN_SYMBOL } from '@/lib/coins/math';
 import {
   InfiniteScrollProvider,
   InfiniteScrollRows,
@@ -28,6 +29,7 @@ interface RetailerRow {
   address: string | null;
   area_id: string;
   status: 'pending_approval' | 'active' | 'suspended';
+  /** Legacy wallet columns: funding and spent. Read, never written, here. */
   credit_limit: number;
   outstanding_balance: number;
 }
@@ -46,6 +48,10 @@ interface RetailerCard extends RetailerRow {
   ownerName: string | null;
   phone: string | null;
   recentOrder: RecentOrderRow | null;
+  /** 🪙 Coins the shop can spend (funding − coins spent, clamped at 0). */
+  coinsAvailableRupees: number;
+  /** 🪙 Coins the shop has spent, summed from the ledger. */
+  coinsSpentRupees: number;
 }
 
 const STATUS_STYLES: Record<RetailerRow['status'], string> = {
@@ -118,7 +124,7 @@ async function loadRetailerBatch(
   const retailerIds = retailers.map((retailer) => retailer.id);
   const areaIds = [...new Set(retailers.map((retailer) => retailer.area_id))];
 
-  const [{ data: profileRows }, { data: areaRows }, { data: orderRows }] = await Promise.all([
+  const [{ data: profileRows }, { data: areaRows }, { data: orderRows }, { data: ledgerRows }] = await Promise.all([
     retailerIds.length
       ? supabase.from('profiles').select('id, full_name, phone').in('id', retailerIds)
       : Promise.resolve({ data: [] as unknown[] }),
@@ -132,7 +138,29 @@ async function loadRetailerBatch(
           .in('retailer_id', retailerIds)
           .order('placed_at', { ascending: false })
       : Promise.resolve({ data: [] as unknown[] }),
+    // 🪙 One bounded aggregate for the whole batch (never a per-retailer query):
+    // the live ledger is the authority for coins, so a shop whose balance moved
+    // shows the same number here as its own coin history page.
+    retailerIds.length
+      ? supabase
+          .from('retailer_wallet_ledger')
+          .select('retailer_id, amount_paise, direction, transaction_type, is_reversed')
+          .in('retailer_id', retailerIds)
+          .eq('is_reversed', false)
+          .neq('transaction_type', 'CREDIT_LIMIT_CHANGE')
+      : Promise.resolve({ data: [] as unknown[] }),
   ]);
+
+  // Spent coins per retailer, from the recorded rows only.
+  const spentPaiseByRetailer = new Map<string, number>();
+  for (const row of (ledgerRows ?? []) as unknown as {
+    retailer_id: string;
+    amount_paise: number;
+    direction: string;
+  }[]) {
+    if (row.direction !== 'debit') continue;
+    spentPaiseByRetailer.set(row.retailer_id, (spentPaiseByRetailer.get(row.retailer_id) ?? 0) + Number(row.amount_paise));
+  }
 
   const profileById = new Map(
     ((profileRows ?? []) as unknown as { id: string; full_name: string; phone: string }[]).map((profile) => [profile.id, profile])
@@ -157,6 +185,14 @@ async function loadRetailerBatch(
       ownerName: profileById.get(retailer.id)?.full_name ?? null,
       phone: profileById.get(retailer.id)?.phone ?? null,
       recentOrder: recentOrderByRetailer.get(retailer.id) ?? null,
+      // 🪙 Coins, computed from the ledger; the funded baseline is the legacy
+      // wallet column, exactly as the shared coin balance does it.
+      coinsAvailableRupees:
+        coinBalancePaise(
+          Math.round((retailer.credit_limit ?? 0) * 100),
+          spentPaiseByRetailer.get(retailer.id) ?? Math.round((retailer.outstanding_balance ?? 0) * 100)
+        ) / 100,
+      coinsSpentRupees: (spentPaiseByRetailer.get(retailer.id) ?? Math.round((retailer.outstanding_balance ?? 0) * 100)) / 100,
     })),
     nextCursor: batch.nextCursor,
   };
@@ -183,14 +219,12 @@ function renderRetailerCards(cards: RetailerCard[]) {
 
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-ink-100 pt-3">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-ink-400">Credit limit</p>
-            <p className="break-words text-xs font-medium text-ink-800">
-              {retailer.credit_limit > 0 ? `₹${retailer.credit_limit.toFixed(2)}` : 'Not set'}
-            </p>
+            <p className="text-[10px] uppercase tracking-wide text-ink-400">{COIN_SYMBOL} Coins available</p>
+            <p className="break-words text-xs font-medium text-ink-800">₹{retailer.coinsAvailableRupees.toFixed(2)}</p>
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-ink-400">Outstanding</p>
-            <p className="break-words text-xs font-medium text-ink-800">₹{retailer.outstanding_balance.toFixed(2)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-ink-400">Coins spent</p>
+            <p className="break-words text-xs font-medium text-ink-800">₹{retailer.coinsSpentRupees.toFixed(2)}</p>
           </div>
         </div>
 

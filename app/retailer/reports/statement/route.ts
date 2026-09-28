@@ -11,7 +11,9 @@ const TX_LABELS: Record<WalletTransaction['transaction_type'], string> = {
   REFUND_CREDIT: 'Refund',
   MANUAL_CREDIT: 'Manual credit',
   MANUAL_DEBIT: 'Manual debit',
-  CREDIT_LIMIT_CHANGE: 'Credit limit change',
+  // Legacy transaction type kept for historical rows: it funds the coin purse,
+  // so the customer-facing label is coins, not credit.
+  CREDIT_LIMIT_CHANGE: 'Coins added (funding)',
   ORDER_REVERSAL: 'Order reversal',
   ADJUSTMENT: 'Adjustment',
 };

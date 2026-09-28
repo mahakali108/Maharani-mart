@@ -18,15 +18,19 @@ import { formatIndiaDateTime } from '@/lib/datetime/india';
 import { paiseToRupees } from '@/lib/retailer/format';
 import type { WalletTransaction } from '@/lib/retailer/wallet';
 
+/**
+ * Ledger row labels, in coin language. Transaction types are the historical
+ * database vocabulary and are never rewritten — only how they read.
+ */
 const TX_TYPE_LABELS: Record<string, string> = {
-  ORDER_DEBIT: 'Order',
-  PAYMENT_CREDIT: 'Payment',
-  REFUND_CREDIT: 'Refund',
-  MANUAL_CREDIT: 'Credit',
-  MANUAL_DEBIT: 'Debit',
-  ORDER_REVERSAL: 'Reversal',
-  ADJUSTMENT: 'Adjustment',
-  CREDIT_LIMIT_CHANGE: 'Limit Change',
+  ORDER_DEBIT: 'Coins spent',
+  PAYMENT_CREDIT: 'Coins added',
+  REFUND_CREDIT: 'Coins refunded',
+  MANUAL_CREDIT: 'Coins added',
+  MANUAL_DEBIT: 'Coins removed',
+  ORDER_REVERSAL: 'Coins refunded',
+  ADJUSTMENT: 'Coin adjustment',
+  CREDIT_LIMIT_CHANGE: 'Coins funded',
 };
 
 export type WalletLedgerLoader = (

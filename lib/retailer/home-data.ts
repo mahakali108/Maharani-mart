@@ -153,8 +153,12 @@ export async function loadRetailerHome(
   const nowIso = now.toISOString();
   // `*` is intentional for this small public-content table: existing banners
   // keep rendering before the optional subtitle/CTA migration is applied.
-  let bannerQuery = supabase.from('banners').select('*').eq('is_active', true)
-    .or(`starts_at.is.null,starts_at.lte.${nowIso}`).or(`ends_at.is.null,ends_at.gte.${nowIso}`);
+  // The schedule window is decided in ONE place — `isBannerVisible`, in India
+  // time — because the old SQL `starts_at <= now AND ends_at >= now` filter
+  // disagreed with the admin form: an end date stored at midnight UTC hid the
+  // banner for that whole day. So the query only narrows to active, in-area,
+  // visible rows; the schedule is applied below.
+  let bannerQuery = supabase.from('banners').select('*').eq('is_active', true);
   bannerQuery = areaId ? bannerQuery.or(`area_id.is.null,area_id.eq.${areaId}`) : bannerQuery.is('area_id', null);
 
   const [bannerResult, categoryResult, brandResult, productResult, schemeResult, historyResult, cartResult, favoriteIds] = await Promise.all([

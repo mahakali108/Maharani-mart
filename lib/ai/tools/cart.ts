@@ -44,13 +44,16 @@ function quoteCard(quote: OrderQuote, title = 'Cart preview'): AICard {
   const q = quote;
   return {
     type: 'cart', title, subtitle: `${q.lines.length} verified line item${q.lines.length === 1 ? '' : 's'}`, quality: 'verified',
-    source: 'Shared order quote service: per-piece selling rate, MOQ, GST and credit',
+    source: 'Shared order quote service: per-piece selling rate, MOQ, GST and coins',
     lines: q.lines.map((line) => ({ label: `${line.productName} · ${line.packName}`, value: quoteLineLabel(line), detail: `${line.pieces} pcs · ${inr(line.lineTotal)}` })),
     metrics: [
       { label: 'Subtotal', value: inr(q.subtotal), quality: 'verified' },
       { label: 'GST', value: inr(q.gstTotal), quality: 'verified' },
       { label: 'Total', value: inr(q.grandTotal), quality: 'verified' },
-      { label: 'Credit check', value: q.credit.exceedsLimit ? 'Exceeds available credit' : 'Within configured credit', quality: 'verified' },
+      // 🪙 The only balance: how much of this total the coins cover, and what
+      // the shop pays on delivery. There is no credit decision any more.
+      { label: '🪙 Coins used', value: inr(q.coins.usedPaise / 100), quality: 'verified' },
+      { label: 'Payable on delivery', value: inr(q.coins.remainingPaise / 100), quality: 'verified' },
     ],
     actions: [{ type: 'link', label: 'Review cart', href: '/retailer/cart', tone: 'secondary' }],
   };
@@ -120,8 +123,8 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
     const quantity = Math.min(usual, stock.get(candidate.productId)?.available ?? 0);
     return quantity >= pack.moq ? [{ candidate, line: { packId: candidate.packId, quantity } }] : [];
   });
-  // Independent one-line quotes run concurrently; a final combined quote below
-  // is still the authoritative cart total and credit check.
+  // Independent one-line quotes run concurrently; the final combined quote
+  // below is still the authoritative cart total and coin calculation.
   const individuallyQuoted = await Promise.all(proposed.map(async (proposal) => ({
     ...proposal,
     result: await quoteOrderForRetailer({ retailerId: context.actor.id, lines: [proposal.line], supabase: context.supabase }),
@@ -131,7 +134,7 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
   let runningTotal = 0;
   for (const entry of individuallyQuoted) {
     if ('error' in entry.result) continue;
-    if (runningTotal + entry.result.quote.grandTotal > budget || entry.result.quote.credit.exceedsLimit) continue;
+    if (runningTotal + entry.result.quote.grandTotal > budget) continue;
     selected.push(entry.line);
     runningTotal += entry.result.quote.grandTotal;
     reasons.set(entry.line.packId, entry.candidate.count > 0 ? `Purchased in ${entry.candidate.count} recent order(s); quantity uses your recent average.` : 'Catalog fallback because there is not enough purchase history.');
@@ -139,8 +142,8 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
   const finalResult = selected.length
     ? await quoteOrderForRetailer({ retailerId: context.actor.id, lines: selected, supabase: context.supabase })
     : null;
-  if (!finalResult || 'error' in finalResult || finalResult.quote.grandTotal > budget || finalResult.quote.credit.exceedsLimit) {
-    return unavailable('No in-stock MOQ-valid combination fit the budget and configured credit using current data.');
+  if (!finalResult || 'error' in finalResult || finalResult.quote.grandTotal > budget) {
+    return unavailable('No in-stock MOQ-valid combination fits the budget using current data.');
   }
   const bestQuote: OrderQuote = finalResult.quote;
 

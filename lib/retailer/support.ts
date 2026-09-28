@@ -28,10 +28,12 @@ export const SUPPORT_PRIORITY_LABELS: Record<SupportPriority, string> = {
 
 export const SUPPORT_TOPIC_LABELS: Record<SupportTopic, string> = {
   order: 'Order issue',
-  payment: 'Payment / credit',
+  payment: 'Payment / coins',
   product: 'Product issue',
   delivery: 'Delivery issue',
-  credit: 'Credit account',
+  // Legacy topic value (tickets were stored with it): it now means "my coin
+  // balance and coin history", there being no credit account any more.
+  credit: '🪙 Coins',
   other: 'Other',
 };
 

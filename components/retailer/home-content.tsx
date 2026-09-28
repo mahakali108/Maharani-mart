@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {
   ArrowRight, BadgePercent, BarChart3, CalendarDays, Clock3, Headset, LayoutGrid, MapPin,
-  Package, ReceiptText, RotateCcw, ShieldCheck, ShoppingBag, Sparkles, Store, Tag, Truck, Wallet,
+  Package, ReceiptText, RotateCcw, ShieldCheck, ShoppingBag, Store, Tag, Truck,
 } from 'lucide-react';
 import { formatIndiaDate } from '@/lib/datetime/india';
 import { BrandCard } from '@/components/retailer/brand-card';
@@ -15,11 +15,10 @@ import { HomeCartSummary } from '@/components/retailer/home-cart-summary';
 import { HomeReorderCard } from '@/components/retailer/home-reorder-card';
 import { HomeRefreshButton } from '@/components/retailer/home-refresh-button';
 import { WholesaleDealCard } from '@/components/retailer/wholesale-deal-card';
-import { formatInr } from '@/lib/retailer/format';
-import { fromPaise } from '@/lib/retailer/case-pricing';
 import type { RetailerHomeData } from '@/lib/retailer/home-data';
 import type { HomeService } from '@/lib/retailer/home-services';
 import type { WalletSummary } from '@/lib/retailer/wallet';
+import { CoinsBalanceCard } from '@/components/retailer/coins-balance-card';
 
 export interface HomeContentProps {
   data: RetailerHomeData;
@@ -131,7 +130,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <HomeCartSummary cart={data.cart} />
-        <HomeCreditSummary wallet={wallet} />
+        <HomeCoinsSummary wallet={wallet} />
       </div>
 
       <section aria-label="Delivery and service benefits" className="space-y-4 border-t border-slate-200 pt-6">
@@ -152,17 +151,16 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
   );
 }
 
-function HomeCreditSummary({ wallet }: { wallet: WalletSummary | null }) {
-  return <section aria-label="Credit summary" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-    <div className="flex items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><Wallet className="h-5 w-5" aria-hidden="true" /></span><div><h2 className="text-base font-bold text-slate-900">Your business account</h2><p className="mt-0.5 text-[11px] text-slate-500">Keep your credit in view.</p></div></div>
-    {wallet ? <dl className="mt-4 space-y-3 text-xs">
-      <div className="flex flex-wrap justify-between gap-2"><dt className="text-slate-600">Outstanding</dt><dd className="font-semibold text-slate-900">{formatInr(fromPaise(wallet.outstandingPaise))}</dd></div>
-      <div className="flex flex-wrap justify-between gap-2"><dt className="text-slate-600">Available credit</dt><dd className="font-semibold text-emerald-700">{wallet.hasConfiguredLimit ? formatInr(fromPaise(wallet.availablePaise)) : 'Not configured'}</dd></div>
-      <div className="flex flex-wrap justify-between gap-2"><dt className="text-slate-600">Credit limit</dt><dd className="font-semibold text-slate-900">{wallet.hasConfiguredLimit ? formatInr(fromPaise(wallet.creditLimitPaise)) : 'Not configured'}</dd></div>
-    </dl> : <p className="mt-4 text-xs leading-5 text-slate-500">Credit details are currently unavailable. Open your ledger to review your account.</p>}
-    <Link href="/retailer/account/ledger" className="mt-4 flex min-h-11 items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-action-700 hover:bg-action-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500">View credit & ledger <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
-    <Link href="/retailer/favorites" className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-[11px] font-semibold text-action-700 hover:underline"><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Shop your favourites</Link>
-  </section>;
+function HomeCoinsSummary({ wallet }: { wallet: WalletSummary | null }) {
+  // 🪙 Coins only: no credit limit, no outstanding, no payment terms.
+  if (!wallet) return null;
+  return (
+    <CoinsBalanceCard
+      limitPaise={wallet.creditLimitPaise}
+      outstandingPaise={wallet.outstandingPaise}
+      title="Your coins"
+    />
+  );
 }
 
 function HomeEmptyState({ icon: Icon, title, body, href, linkLabel }: { icon: typeof Package; title: string; body: string; href: string; linkLabel: string }) {

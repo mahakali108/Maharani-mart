@@ -3,7 +3,7 @@
 /**
  * Sales executive "record a collection" form. The amount goes into the
  * admin verification queue (payment_collections, status pending) — the
- * retailer's wallet is credited only after finance verifies it.
+ * retailer's coins are added only after finance verifies it.
  * Optional photo proof is uploaded through the media pipeline into the
  * PRIVATE `payment-proofs` bucket.
  */
@@ -177,8 +177,8 @@ export function RecordCollectionForm({
         Submit for verification
       </Button>
       <p className="text-[11px] text-ink-400">
-        The retailer&apos;s wallet is credited only after the office verifies this collection — this form records field
-        cash, it does not credit the account.
+        The coins are added to the shop only after the office verifies this collection — this form records field cash,
+        it does not move any balance.
       </p>
     </Card>
   );

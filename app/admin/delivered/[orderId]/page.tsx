@@ -143,7 +143,7 @@ export default async function AdminDeliveredDetailPage({ params }: { params: { o
               <dd className="text-ink-800">₹{(settlement.deliveredValuePaise / 100).toFixed(2)}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-ink-500">Shortfall credited back</dt>
+              <dt className="text-ink-500">Shortfall coins refunded</dt>
               <dd className={settlement.creditBackPaise > 0 ? 'font-medium text-amber-700' : 'text-ink-800'}>
                 ₹{(settlement.creditBackPaise / 100).toFixed(2)}
               </dd>

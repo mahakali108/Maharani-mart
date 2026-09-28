@@ -132,7 +132,7 @@ export default async function RetailerAlertsPage() {
           </span>
           <h2 className="mt-4 text-lg font-bold text-slate-800">You&rsquo;re all caught up</h2>
           <p className="mt-2 text-xs text-slate-500">
-            Order updates, scheme alerts and credit messages will appear here.
+            Order updates, scheme alerts and coin messages will appear here.
           </p>
         </section>
       ) : (

@@ -24,8 +24,10 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { logoutAction } from '@/lib/auth/actions';
-import { CreditSummary } from '@/components/retailer/credit-summary';
+import { CoinsBalanceCard } from '@/components/retailer/coins-balance-card';
 import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
+import { coinBalancePaise } from '@/lib/coins/math';
+import { formatInr, paiseToRupees } from '@/lib/retailer/format';
 import { computeProfileCompletion } from '@/lib/retailer/profile-completion';
 import { KeyRound, MapPinned, NotebookText, PieChart, Settings2, Folders } from 'lucide-react';
 
@@ -50,8 +52,8 @@ const ACCOUNT_LINKS = [
   { href: '/retailer/cart/saved', label: 'Saved carts', body: 'Your reusable order lists', icon: Folders, tone: 'bg-lime-50 text-lime-700' },
   { href: '/retailer/account/security', label: 'Security', body: 'Password, sessions and account requests', icon: KeyRound, tone: 'bg-rose-50 text-rose-700' },
   { href: '/retailer/account/notification-preferences', label: 'Notification settings', body: 'Choose which updates you receive', icon: Settings2, tone: 'bg-fuchsia-50 text-fuchsia-700' },
-  { href: '#wallet-credit', label: 'Wallet & credit', body: 'Available credit and outstanding balance', icon: WalletCards, tone: 'bg-emerald-50 text-emerald-700' },
-  { href: '/retailer/account/ledger', label: 'Credit & ledger', body: 'Order activity on your account, with dates and values', icon: Scale, tone: 'bg-slate-100 text-slate-700' },
+  { href: '#coins', label: '🪙 Coins', body: 'Your coin balance and what it covers', icon: WalletCards, tone: 'bg-amber-50 text-amber-700' },
+  { href: '/retailer/account/ledger', label: 'Coin history', body: 'Every coin added, spent and refunded, with dates', icon: Scale, tone: 'bg-slate-100 text-slate-700' },
   { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
   { href: '/retailer/home#home-reorder', label: 'Reorder', body: 'Your recently purchased packs, one tap away', icon: RotateCcw, tone: 'bg-cyan-50 text-cyan-700' },
   { href: '/retailer/quick-order', label: 'Quick order', body: 'Find products by name', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
@@ -59,7 +61,7 @@ const ACCOUNT_LINKS = [
   { href: '/retailer/coupons', label: 'Coupons & offers', body: 'Your available codes and used offers', icon: Ticket, tone: 'bg-pink-50 text-pink-700' },
   { href: '/retailer/notifications', label: 'Notifications', body: 'Order and account updates', icon: Bell, tone: 'bg-violet-50 text-violet-700' },
   { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-indigo-50 text-indigo-700' },
-  { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, credit and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
+  { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, coins and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
   { href: '/retailer/support', label: 'Support tickets', body: 'Raise an issue and track every reply', icon: MessageCircle, tone: 'bg-emerald-50 text-emerald-700' },
   { href: '/retailer/help', label: 'Help centre', body: 'FAQs and distributor support', icon: CircleHelp, tone: 'bg-teal-50 text-teal-700' },
 ];
@@ -136,7 +138,7 @@ export default async function RetailerAccountPage() {
               </p>
               <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{shopName}</h1>
               <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-                Manage your shop profile, credit and order shortcuts.
+                Manage your shop profile, coins and order shortcuts.
               </p>
             </div>
           </div>
@@ -157,15 +159,9 @@ export default async function RetailerAccountPage() {
                     ? 'Account suspended'
                     : 'Retailer'}
             </span>
-            {retailer && retailer.credit_limit > 0 ? (
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-bold text-blue-700">
-                <WalletCards className="h-3.5 w-3.5" aria-hidden="true" /> Credit approved
-              </span>
-            ) : (
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-bold text-slate-600">
-                <WalletCards className="h-3.5 w-3.5" aria-hidden="true" /> Credit not configured
-              </span>
-            )}
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-[10px] font-bold text-amber-800">
+              <WalletCards className="h-3.5 w-3.5" aria-hidden="true" /> 🪙 {formatInr(paiseToRupees(coinBalancePaise(walletSummary.creditLimitPaise, walletSummary.outstandingPaise)))} coins
+            </span>
           </div>
         </div>
 
@@ -268,11 +264,11 @@ export default async function RetailerAccountPage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-36">
-          <div id="wallet-credit" className="scroll-mt-36">
-            <CreditSummary
-              creditLimit={walletSummary.creditLimitRupees}
-              outstandingBalance={walletSummary.outstandingRupees}
-              title="Wallet & credit"
+          <div id="coins" className="scroll-mt-36">
+            <CoinsBalanceCard
+              limitPaise={walletSummary.creditLimitPaise}
+              outstandingPaise={walletSummary.outstandingPaise}
+              title="🪙 Coins"
             />
           </div>
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">

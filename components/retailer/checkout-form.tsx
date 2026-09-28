@@ -125,7 +125,7 @@ export function CheckoutForm({
         <p className="flex items-start justify-center gap-1.5 text-center text-[9px] leading-4 text-slate-400">
           <LockKeyhole className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" aria-hidden="true" />
           <span>
-            By placing this order, prices, MOQ, GST, credit and availability will be securely rechecked.
+            By placing this order, prices, MOQ, GST, coins and availability will be securely rechecked on the server.
           </span>
         </p>
       </div>
