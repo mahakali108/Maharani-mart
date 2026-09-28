@@ -414,10 +414,12 @@ describe('buy-now behaviour', () => {
     expect(actions).toContain('const result = await addToCartAction(packId, quantity);');
   });
 
-  it('the selected variant card and the page footer both buy via the action (pack.id, qty) only', () => {
+  it('exactly one buy-now CTA (on the selected variant card) buys via the action (pack.id, qty) only', () => {
     expect(selector).toContain('await buyNowAction(pack.id, qty)');
-    expect(selector).toContain('Buy now — 1-click checkout');
     expect(selector).toContain('onClick={() => handleBuyPack(pack)}');
+    // The duplicate full-width footer button is gone — a single Buy now only.
+    expect(selector).not.toContain('Buy now — 1-click checkout');
+    expect(selector.match(/Buy now/g)).toHaveLength(1);
   });
 });
 

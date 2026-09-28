@@ -10,7 +10,6 @@ import {
   FileText,
   Package,
   PackageCheck,
-  ReceiptText,
   ShieldCheck,
   Tag,
   Truck,
@@ -385,6 +384,36 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         : null
       : null;
 
+  // Headline honesty: the big per-piece rate is the rate that applies RIGHT
+  // NOW for this variant — the quantity already in the cart when the retailer
+  // has pieces there, otherwise the variant's MOQ — priced by the same engine
+  // the server quote runs. The deepest-tier (best) rate is shown separately
+  // as "Best price … at …" so it can never read as the current price.
+  const selectedEnriched = selectedPack ? (packs.find((pack) => pack.id === selectedPack.id) ?? null) : null;
+  const headlineQty = selectedEnriched
+    ? Math.max(selectedEnriched.moq, cartItemByPackId.get(selectedEnriched.id)?.quantity ?? 0)
+    : 0;
+  const headlinePricing =
+    selectedEnriched && headlineQty > 0
+      ? calculateRetailerPiecePrice({
+          quantity: headlineQty,
+          unitsPerCase: selectedEnriched.units_per_case,
+          casePrice: 0,
+          tiers: selectedTiers,
+          gstPercent: product.gst_percent,
+          moq: selectedEnriched.moq,
+          derivedPiecePrice: selectedEnriched.derivedPiecePrice,
+        })
+      : null;
+  const headlineUnit =
+    headlinePricing && headlinePricing.orderable ? headlinePricing.unitPrice : selectedPiecePrice;
+  const headlineTierLabel =
+    headlinePricing && headlinePricing.orderable && headlinePricing.tier
+      ? tierRangeLabel(headlinePricing.tier.min_quantity, headlinePricing.tier.max_quantity)
+      : null;
+  const showBestRate =
+    selectedPiecePrice !== null && headlineUnit !== null && selectedPiecePrice < headlineUnit;
+
   // Real, server-resolved per-piece numbers for every size card of the switcher.
   // Nothing is estimated in the browser and no stock number is exposed
   // (inventory is product-level and staff-only — see docs/warehouse-gaps.md).
@@ -544,10 +573,10 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
 
         {/* Right Column: Mobile order per spec */}
         <div className="min-w-0 space-y-4 sm:space-y-5">
-          {/* Brand and availability + Complete real product name */}
-          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-5 lg:p-6">
+          {/* Purchase card: brand + availability, name, honest price, facts, size */}
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-4">
             {/* Brand and availability */}
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               {product.brands?.name ? (
                 <span className="max-w-full truncate rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700">
                   {product.brands.name}
@@ -565,50 +594,52 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             </div>
 
             {/* Complete real product name — universal, brand + product + variant */}
-            <h1 className="mt-3 min-w-0 break-words text-xl font-extrabold leading-[1.25] tracking-tight text-slate-950 sm:text-2xl lg:text-[26px]">
+            <h1 className="mt-2 min-w-0 break-words text-lg font-extrabold leading-snug tracking-tight text-slate-950 sm:text-xl">
               {canonicalProductName}
             </h1>
-            {/* Secondary line: show canonical source for debugging / audit */}
-            <p className="mt-1.5 text-[11px] leading-4 text-slate-400">
-              {product.brands?.name ? `${product.brands.name} · ` : ''}
-              {product.name}
-              {selectedPack?.pack_name ? ` · ${selectedPack.pack_name}` : ''}
-            </p>
 
-            {/* Pricing — clear hierarchy: price, MRP, discount, savings, tax */}
-            {selectedPiecePrice !== null ? (
-              <div className="mt-4 min-w-0 border-t border-slate-100 pt-4">
+            {/* Pricing — the headline is the rate that applies RIGHT NOW for this
+                variant (cart qty, else MOQ); the deepest-tier rate is labelled
+                as the best price so it can never read as the current price. */}
+            {selectedPiecePrice !== null && headlineUnit !== null ? (
+              <div className="mt-3 min-w-0 border-t border-slate-100 pt-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   {isViewingVariant ? `Piece price · ${selectedPack?.pack_name}` : 'Piece price from'}
                 </p>
-                <div className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                  <p className="break-words text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-                    {formatInr(selectedPiecePrice)}
-                    <span className="text-sm font-bold text-slate-500 sm:text-base">/pc</span>
+                <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <p className="break-words text-[26px] font-black leading-none tracking-tight text-slate-950 sm:text-3xl">
+                    {formatInr(headlineUnit)}
+                    <span className="text-sm font-bold text-slate-500">/pc</span>
                   </p>
                   {selectedPack?.mrp && selectedPack.mrp > selectedPiecePrice ? (
-                    <p className="text-sm font-medium text-slate-400 line-through sm:text-base">
+                    <p className="text-sm font-medium text-slate-400 line-through">
                       MRP {formatInr(selectedPack.mrp)}
                     </p>
                   ) : null}
                   {discount > 0 ? (
-                    <span className="text-sm font-extrabold text-emerald-600 sm:text-base">
-                      {discount}% off
+                    <span className="text-sm font-extrabold text-emerald-600">
+                      up to {discount}% off
                     </span>
                   ) : null}
                 </div>
+                {headlinePricing?.orderable ? (
+                  <p className="mt-1 text-[11px] font-semibold text-slate-600">
+                    for {headlineQty} pc{headlineQty === 1 ? '' : 's'}
+                    {headlineTierLabel ? ` · Tier ${headlineTierLabel}` : null}
+                  </p>
+                ) : null}
                 {saveAmount > 0 ? (
-                  <p className="mt-1 break-words text-xs font-bold text-emerald-700 sm:text-sm">
-                    You save {formatInr(saveAmount)} per piece vs MRP
+                  <p className="mt-0.5 break-words text-xs font-bold text-emerald-700">
+                    You save up to {formatInr(saveAmount)} per piece vs MRP
                   </p>
                 ) : null}
-                {selectedTierLabel ? (
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Best rate of {formatInr(selectedPiecePrice)}/pc at {selectedTierLabel}
+                {showBestRate && selectedTierLabel ? (
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    Best price {formatInr(selectedPiecePrice)}/pc at {selectedTierLabel}
                   </p>
                 ) : null}
-                <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
-                  Inclusive of all taxes · GST {product.gst_percent}% included · buy more pieces to save more
+                <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                  Inclusive of all taxes · GST {product.gst_percent}% included
                 </p>
                 {selectedPack ? (
                   <RetailerPriceSchedule
@@ -627,35 +658,28 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               </div>
             ) : null}
 
-            {/* Wholesale highlights — the specs a retailer scans before ordering */}
-            <div className="mt-4 min-w-0 border-t border-slate-100 pt-3.5">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Wholesale highlights
-              </p>
-              <ul className="mt-2 flex min-w-0 flex-wrap gap-1.5" aria-label="Order essentials">
-                {selectedPack ? (
-                  <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
-                    Min. order: {selectedPack.moq} pc{selectedPack.moq === 1 ? '' : 's'}
-                  </li>
-                ) : null}
-                {selectedPack?.pack_name ? (
-                  <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
-                    Pack: {selectedPack.pack_name}
-                  </li>
-                ) : null}
+            {/* Compact fact chips — MOQ, pack, GST, piece-selling, each shown once */}
+            <ul className="mt-3 flex min-w-0 flex-wrap gap-1.5 border-t border-slate-100 pt-3" aria-label="Order essentials">
+              {selectedPack ? (
                 <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
-                  GST: {product.gst_percent}%
+                  MOQ {selectedPack.moq} pc{selectedPack.moq === 1 ? '' : 's'}
                 </li>
+              ) : null}
+              {selectedPack?.pack_name ? (
                 <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
-                  Sold by piece
+                  {selectedPack.pack_name}
                 </li>
-              </ul>
-            </div>
+              ) : null}
+              <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
+                GST {product.gst_percent}%
+              </li>
+              <li className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700 ring-1 ring-inset ring-slate-200">
+                Sold by piece
+              </li>
+            </ul>
 
-            {/* Size/variant selector */}
-            <div className="mt-4 min-w-0 border-t border-slate-100 pt-4">
-              <VariantSwitcher model={variantSwitcher} productName={canonicalProductName} />
-            </div>
+            {/* Size/variant selector — owns its own divider, so no wrapper border here */}
+            <VariantSwitcher model={variantSwitcher} productName={canonicalProductName} />
           </section>
 
           {/* 5. MULTI-PRICE / MULTI-PACK TIERS — Quantity selector per spec */}
@@ -705,97 +729,85 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             </section>
           ) : null}
 
-          {/* 6. DELIVERY INFORMATION */}
+          {/* 6. DELIVERY — compact: lead time + dispatch source only. MOQ and GST
+              already live in the purchase card, so they are not repeated here. */}
           <section
             aria-label="Delivery information"
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+            className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm sm:p-4"
           >
-            <div className="mb-3 flex items-center gap-2 text-slate-900">
+            <div className="flex items-center gap-2 text-slate-900">
               <Truck className="h-4 w-4 text-primary-600" aria-hidden="true" />
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Delivery</h2>
             </div>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3">
-                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-                <div>
-                  <p className="text-xs font-bold text-slate-800">Typical lead time</p>
-                  <p className="mt-0.5 text-[11px] text-slate-500">
-                    {product.lead_time_days} day{product.lead_time_days === 1 ? '' : 's'} to your shop
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3">
-                <Package className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-                <div>
-                  <p className="text-xs font-bold text-slate-800">Direct from warehouse</p>
-                  <p className="mt-0.5 text-[11px] text-slate-500">Maharani Traders dispatch</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3">
-                <PackageCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-                <div>
-                  <p className="text-xs font-bold text-slate-800">MOQ protected</p>
-                  <p className="mt-0.5 text-[11px] text-slate-500">Pack minimum verified server-side</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3">
-                <ReceiptText className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-                <div>
-                  <p className="text-xs font-bold text-slate-800">GST on every invoice</p>
-                  <p className="mt-0.5 text-[11px] text-slate-500">{product.gst_percent}% GST shown</p>
-                </div>
-              </div>
-            </div>
+            <ul className="mt-2 space-y-1.5 text-xs text-slate-600">
+              <li className="flex items-center gap-2">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-primary-600" aria-hidden="true" />
+                <span>
+                  Typical delivery:{' '}
+                  <strong className="font-bold text-slate-800">
+                    {product.lead_time_days} day{product.lead_time_days === 1 ? '' : 's'}
+                  </strong>
+                </span>
+              </li>
+              <li className="flex items-center gap-2">
+                <Package className="h-3.5 w-3.5 shrink-0 text-primary-600" aria-hidden="true" />
+                <span>
+                  <strong className="font-bold text-slate-800">Direct from warehouse</strong> · Maharani Traders
+                  dispatch
+                </span>
+              </li>
+            </ul>
           </section>
 
-          {/* 7. PRODUCT DETAILS */}
-          <section
-            aria-label="Product details"
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-          >
-            <div className="mb-3 flex items-center gap-2 text-slate-900">
-              <FileText className="h-4 w-4 text-primary-600" aria-hidden="true" />
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Product details</h2>
-            </div>
-            <dl className="grid grid-cols-2 gap-2.5 text-xs sm:grid-cols-4">
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+          {/* 7. PRODUCT DETAILS — collapsed until tapped; real data only. */}
+          <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center gap-2 p-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-300 sm:p-4 [&::-webkit-details-marker]:hidden">
+              <FileText className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Product details</span>
+              <ChevronRight
+                className="ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90"
+                aria-hidden="true"
+              />
+            </summary>
+            <dl className="grid grid-cols-2 gap-2 border-t border-slate-100 p-3.5 text-xs sm:grid-cols-4 sm:p-4">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Base unit</dt>
                 <dd className="mt-1 break-words font-bold capitalize text-slate-900">{product.unit}</dd>
               </div>
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Sold by</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">Individual pieces</dd>
               </div>
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">GST rate</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">{product.gst_percent}%</dd>
               </div>
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">HSN code</dt>
                 <dd className="mt-1 break-words font-mono font-bold text-slate-900">{product.hsn_code ?? '—'}</dd>
               </div>
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">EAN / Barcode</dt>
                 <dd className="mt-1 break-all font-mono font-bold text-slate-900">
                   {selectedPack?.barcode ?? product.barcode ?? '—'}
                 </dd>
               </div>
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Selected size</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">{selectedPack?.pack_name ?? '—'}</dd>
               </div>
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Min order (MOQ)</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">
                   {selectedPack ? `${selectedPack.moq} pc${selectedPack.moq === 1 ? '' : 's'}` : '—'}
                 </dd>
               </div>
-              <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+              <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
                 <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Category</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">{product.categories?.name ?? '—'}</dd>
               </div>
             </dl>
-          </section>
+          </details>
         </div>
       </div>
 

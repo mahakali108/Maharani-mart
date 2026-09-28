@@ -140,11 +140,11 @@ describe('B2B marketplace actions', () => {
   });
 
   it('primary buy actions use the blue action color', () => {
-    // Selected variant's Buy now, the full-width 1-click checkout, the batch
-    // add and the sticky bar's View Cart are the four primary CTAs.
+    // Selected variant's Buy now, the batch add and the sticky bar's View
+    // Cart are the primary CTAs (the duplicate footer button is gone).
     const buyNow = selector.slice(
-      selector.indexOf('Buy now — 1-click checkout') - 700,
-      selector.indexOf('Buy now — 1-click checkout')
+      selector.indexOf('Buy now') - 700,
+      selector.indexOf('Buy now')
     );
     expect(buyNow).toContain('bg-action-600');
     const viewCart = selector.slice(
@@ -153,7 +153,7 @@ describe('B2B marketplace actions', () => {
     );
     expect(viewCart).toContain('bg-action-600');
     expect(selector).toContain('Add all selected');
-    expect(selector).toContain('Buy now — 1-click checkout');
+    expect(selector).not.toContain('Buy now — 1-click checkout');
     // The blue CTA count on the page is bounded — no decorative blue buttons.
     expect(selector.match(/bg-action-600/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
   });

@@ -126,7 +126,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
       <span
         aria-disabled="true"
         title="This size is currently unavailable"
-        className="flex w-[8.5rem] shrink-0 cursor-not-allowed snap-start flex-col rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-2.5 text-slate-400 sm:w-auto"
+        className="flex w-[7.75rem] shrink-0 cursor-not-allowed snap-start flex-col rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-2 text-slate-400 sm:w-auto"
       >
         <span className="flex items-center justify-between gap-1">
           <span className="text-sm font-extrabold leading-none">{variant.label}</span>
@@ -143,7 +143,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
       href={variant.href}
       aria-current={variant.isSelected ? 'true' : undefined}
       className={cn(
-        'flex w-[8.5rem] shrink-0 snap-start flex-col rounded-2xl border p-2.5 transition sm:w-auto',
+        'flex w-[7.75rem] shrink-0 snap-start flex-col rounded-2xl border p-2 transition sm:w-auto',
         variant.isSelected
           ? 'border-primary-600 bg-primary-50/60 shadow-sm ring-2 ring-primary-100'
           : 'border-slate-200 bg-white hover:border-primary-300 hover:bg-primary-50/40'
@@ -163,11 +163,30 @@ export function VariantSwitcher({
 }) {
   if (model.variants.length === 0) return null;
 
+  // Single size: no "Choose size" wall — one compact Pack line. The price,
+  // MRP, slabs and quantity card on this page already describe this size.
+  if (model.variants.length === 1) {
+    const only = model.variants[0] ?? null;
+    if (!only) return null;
+    return (
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Pack</p>
+        {only.isAvailable ? (
+          <p className="mt-1 text-sm font-extrabold text-slate-900">{only.label}</p>
+        ) : (
+          <p role="status" className="mt-1 text-[11px] font-semibold text-amber-700">
+            {only.label} — currently unavailable.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   const inline = model.variants.slice(0, VISIBLE_LIMIT);
   const overflow = model.variants.slice(VISIBLE_LIMIT);
 
   return (
-    <div className="mt-4 border-t border-slate-100 pt-4">
+    <div className="mt-3 border-t border-slate-100 pt-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
         <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
           Choose size
@@ -181,7 +200,7 @@ export function VariantSwitcher({
       </div>
 
       <div
-        className="-mx-1 mt-2 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] sm:overflow-visible sm:px-0"
+        className="-mx-1 mt-2 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-[repeat(auto-fill,minmax(7.75rem,1fr))] sm:overflow-visible sm:px-0"
         role="group"
         aria-label={`${productName} sizes`}
       >
@@ -196,7 +215,7 @@ export function VariantSwitcher({
             <span className="group-open:hidden">View all {model.variants.length} sizes</span>
             <span className="hidden group-open:inline">Show fewer sizes</span>
           </summary>
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]">
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(7.75rem,1fr))]">
             {overflow.map((variant) => (
               <VariantCard key={variant.packId} variant={variant} />
             ))}
