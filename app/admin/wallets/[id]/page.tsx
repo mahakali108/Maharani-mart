@@ -143,14 +143,14 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm text-ink-500">
         <Link href="/admin/wallets" className="hover:text-ink-900">
-          Wallets
+          Retailer coins
         </Link>
         <span>/</span>
         <span className="text-ink-900">{retailer.shop_name}</span>
       </div>
 
       <div>
-        <h1 className="text-2xl font-semibold text-ink-950">{retailer.shop_name} — Credit Account</h1>
+        <h1 className="text-2xl font-semibold text-ink-950">🪙 {retailer.shop_name} — coins</h1>
         <p className="mt-1 text-sm text-ink-500">
           {profile?.full_name ?? '—'} {profile?.phone ? `· ${profile.phone}` : ''} · {retailer.status} · GSTIN:{' '}
           {retailer.gstin ?? '—'}
@@ -170,7 +170,7 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Set / Change Credit Limit</CardTitle>
+            <CardTitle>Coin funding (legacy credit limit)</CardTitle>
           </CardHeader>
           <WalletLimitForm
             retailerId={retailer.id}
@@ -188,7 +188,7 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
 
         <Card>
           <CardHeader>
-            <CardTitle>Payment Terms (Net-N)</CardTitle>
+            <CardTitle>Legacy payment terms (historical — ordering no longer uses terms)</CardTitle>
           </CardHeader>
           <WalletTermsForm
             retailerId={retailer.id}
@@ -228,26 +228,26 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
 
         <Card>
           <CardHeader>
-            <CardTitle>Record Customer Payment</CardTitle>
+            <CardTitle>🪙 Add coins (record a top-up)</CardTitle>
           </CardHeader>
           <WalletPaymentForm retailerId={retailer.id} />
           <p className="mt-2 text-[11px] text-ink-400">
-            Payments create a ledger credit entry, update outstanding and available credit through server-side
-            calculation, are auditable, prevent duplicate submission, and validate amount and retailer identity.
+            A top-up writes a ledger credit entry: the coin balance of the shop rises immediately, the amount, reason and
+            actor are recorded for audit, and a duplicate submission cannot credit the same coins twice.
           </p>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Credit Adjustment</CardTitle>
+          <CardTitle>🪙 Add or remove coins (adjustment — reason required)</CardTitle>
         </CardHeader>
         <WalletAdjustmentForm retailerId={retailer.id} />
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Complete Ledger (last 100)</CardTitle>
+          <CardTitle>Coin ledger (last 100) — every entry with reason and actor</CardTitle>
           <Link href={`/admin/retailers/${retailer.id}`} className="text-xs text-primary-600">
             View retailer profile →
           </Link>

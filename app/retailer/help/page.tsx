@@ -21,8 +21,8 @@ const FAQ = [
     a: 'Each pack has a minimum order quantity. The cart and checkout both re-check MOQ before an order is created.',
   },
   {
-    q: 'How does business credit work?',
-    a: 'If your distributor has set a credit limit, new orders cannot exceed available credit. Outstanding balance and remaining credit are shown at checkout and validated again when you place the order.',
+    q: 'How do coins work?',
+    a: 'Coins are your shop balance — 1 coin = ₹1. Your distributor adds coins to your account, and at checkout the server applies as many coins as your balance covers. Whatever is left is payable on delivery. The balance, coins used and remaining payable are shown before you place the order and re-checked on the server.',
   },
   {
     q: 'Can I cancel or return an order?',
@@ -74,7 +74,7 @@ export default function HelpPage({
           <div>
             <h2 className="text-sm font-bold text-primary-900">Create a support ticket</h2>
             <p className="mt-1 max-w-xl text-xs leading-5 text-primary-700">
-              Raise an issue — order, payment, product, delivery or credit — and track every reply in one
+              Raise an issue — order, payment, product, delivery or coins — and track every reply in one
               place. Your distributor is notified automatically and the ticket keeps the full conversation.
             </p>
           </div>
@@ -90,7 +90,7 @@ export default function HelpPage({
       <div className="grid gap-3 sm:grid-cols-2">
         {[
           { href: '/retailer/orders', icon: CircleHelp, title: 'Order issue', body: 'Track, invoice, reorder or cancel a pending order.' },
-          { href: '/retailer/home', icon: WalletCards, title: 'Payment / credit issue', body: 'Review available credit and outstanding balance.' },
+          { href: '/retailer/account/ledger', icon: WalletCards, title: 'Coins issue', body: 'Review your coin balance and full coin history.' },
           { href: '/retailer/catalog', icon: PackageSearch, title: 'Product issue', body: 'Check pack size, GST or current wholesale price.' },
           { href: '/retailer/orders?status=dispatched', icon: Truck, title: 'Delivery issue', body: 'Follow orders that are packed or on the way.' },
         ].map((item) => (

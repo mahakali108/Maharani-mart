@@ -229,9 +229,14 @@ describe('wallet idempotency', () => {
   });
 
   it('order debit uses order:{id} as idempotency key', () => {
+    // 🪙 The single coin-spend path derives the key from the order id, so a
+    // retried checkout can never debit the same order twice.
+    const coins = read('lib/coins/server.ts');
+    expect(coins).toContain('coinDebitKey(orderId)');
+    expect(coins).toContain("rpc('check_and_debit_retailer_wallet'");
+    expect(coins).toMatch(/p_idempotency_key: coinDebitKey\(orderId\)/);
     const createOrder = read('lib/orders/create-order.ts');
-    expect(createOrder).toContain('idempotencyKey = `order:${order.id}`');
-    expect(createOrder).toContain('check_and_debit_retailer_wallet');
+    expect(createOrder).toContain('debitCoinsForOrder');
   });
 
   it('payment uses pay: prefix and adjustment uses adj: prefix', () => {
@@ -283,17 +288,19 @@ describe('wallet over-limit rejection', () => {
     expect(migration).toContain('if v_allow_overdue and v_overdue_limit > 0 then');
   });
 
-  it('create-order cancels order on wallet error', () => {
+  it('create-order cancels the order when the coin debit fails', () => {
     const createOrder = read('lib/orders/create-order.ts');
-    expect(createOrder).toContain('cancelled');
-    expect(createOrder).toContain('walletError');
-    expect(createOrder.toLowerCase()).toContain('insufficient credit');
+    expect(createOrder).toContain('if (!debit.ok)');
+    expect(createOrder).toContain('status: \'cancelled\'');
+    expect(createOrder).toContain('Coin debit failed');
   });
 
-  it('checkout UI shows over-limit warning', () => {
+  it('checkout UI shows coins, never an over-limit credit warning', () => {
     const checkout = read('app/retailer/checkout/page.tsx');
-    expect(checkout).toContain('isOverLimit');
-    expect(checkout).toContain('Over limit');
+    // Credit is gone from the current flow: no limit, no over-limit banner.
+    expect(checkout).not.toContain('isOverLimit');
+    expect(checkout).not.toContain('Over limit');
+    expect(checkout).toContain('CoinsCheckoutSummary');
   });
 });
 
@@ -336,9 +343,27 @@ describe('wallet retailer isolation', () => {
 // 8. Admin/staff authorization
 // ---------------------------------------------------------------------------
 describe('wallet admin authorization', () => {
-  it('wallet actions require retailers.edit permission', () => {
+  it('every coin balance mutation requires the admin-only coins.manage permission', () => {
+    // 🪙 Coins are admin-only: `coins.manage` is granted to admin + super_admin
+    // and to nobody else, so staff/salesman/retailer can never move a balance.
     const walletActions = read('lib/admin/wallet-actions.ts');
-    expect(walletActions).toContain("requirePermission('retailers.edit')");
+    expect(walletActions).toContain("requirePermission('coins.manage')");
+    expect(walletActions).not.toContain("requirePermission('retailers.edit')");
+    // Every money-moving action in the file is guarded.
+    const guards = walletActions.match(/requirePermission\('coins\.manage'\)/g) ?? [];
+    const mutations = walletActions.match(/export async function \w+Action/g) ?? [];
+    expect(guards.length).toBe(mutations.length);
+
+    const perms = read('lib/permissions/permissions.ts');
+    const roleBlock = (role: string) => {
+      const start = perms.indexOf(`${role}: [`);
+      return perms.slice(start, perms.indexOf('],', start));
+    };
+    expect(roleBlock('super_admin')).toContain('coins.manage');
+    expect(roleBlock('admin')).toContain('coins.manage');
+    expect(roleBlock('staff')).not.toContain('coins.manage');
+    expect(roleBlock('salesman')).not.toContain('coins.manage');
+    expect(roleBlock('retailer')).not.toContain('coins.manage');
   });
 
   it('permissions file includes retailers.edit and manage_wallet', () => {
@@ -385,7 +410,9 @@ describe('wallet cancellation reversal', () => {
 
   it('CREDIT_LIMIT_CHANGE cannot be reversed', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
-    expect(walletActions).toContain('Credit limit changes cannot be reversed');
+    // 🪙 Coin wording for the same rule (a funding change is corrected by a
+    // new funding value, never by reversing the historical entry).
+    expect(walletActions).toContain('Coin funding changes cannot be reversed');
   });
 });
 
@@ -449,8 +476,10 @@ describe('wallet server-authoritative', () => {
   it('checkout does not trust client total, uses quoted grandTotal', () => {
     const createOrder = read('lib/orders/create-order.ts');
     expect(createOrder).toContain('quote.grandTotal');
-    expect(createOrder).toContain('rupeesToPaise(quote.grandTotal)');
-    expect(createOrder).toContain('Server-authoritative: never trusts client total');
+    // The coin deduction is derived from the SERVER quote (paise), never from a
+    // number posted by the browser.
+    expect(createOrder).toMatch(/orderTotalPaise: Math\.round\(quote\.grandTotal \* 100\)/);
+    expect(createOrder).toMatch(/quoteOrderForRetailer\(/);
   });
 
   it('ledger amount is bigint paise, always positive, direction says debit/credit', () => {

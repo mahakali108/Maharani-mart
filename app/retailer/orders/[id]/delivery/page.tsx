@@ -168,8 +168,8 @@ export default async function RetailerDeliveryPage({ params }: { params: { id: s
         </div>
         {items.some((item) => item.quantity_missing > 0 || item.quantity_damaged > 0) ? (
           <p className="rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-700">
-            Missing or damaged items are automatically credited back to your wallet — you never pay for goods you did
-            not receive. Check your ledger for the shortfall credit.
+            Missing or damaged items automatically refund coins to your coin balance — you never pay for goods you did
+            not receive. The refund appears in your coin history.
           </p>
         ) : null}
       </Card>

@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/admin/status-badge';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import type { ProductTotalsViewRow, ExpiryReportViewRow } from '@/types/inventory.types';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 
 interface RecentMovement {
   id: string;
@@ -50,7 +51,7 @@ export default async function InventoryPage() {
     { data: movementData },
     { data: grnData },
     { data: productData },
-    { data: warehouseData },
+    warehouseResolution,
     { data: warehouseCountData },
   ] = await Promise.all([
     supabase.from('inventory_product_totals').select('*'),
@@ -66,7 +67,7 @@ export default async function InventoryPage() {
       .order('created_at', { ascending: false })
       .limit(5),
     supabase.from('products').select('id, name').eq('is_active', true).order('name'),
-    supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
+    resolveActiveWarehouse(supabase),
     supabase.from('inventory_stock').select('warehouse_id'),
   ]);
 
@@ -75,7 +76,6 @@ export default async function InventoryPage() {
   const movements = (movementData ?? []) as unknown as RecentMovement[];
   const grns = (grnData ?? []) as unknown as RecentGrn[];
   const products = (productData ?? []) as Option[];
-  const warehouses = (warehouseData ?? []) as Option[];
 
   const totalUnits = totals.reduce((sum, t) => sum + t.quantity_on_hand, 0);
   const totalValue = totals.reduce((sum, t) => sum + Number(t.estimated_value ?? 0), 0);
@@ -198,7 +198,11 @@ export default async function InventoryPage() {
           Prefer GRNs for receipts and damage/expiry write-offs for losses — this form is for counted corrections and
           is recorded in the ledger as MANUAL_CORRECTION.
         </p>
-        <StockAdjustmentForm products={products} warehouses={warehouses} />
+        <StockAdjustmentForm
+          products={products}
+          warehouse={warehouseResolution.ok ? { name: warehouseResolution.warehouse.name } : null}
+          warehouseError={warehouseResolution.ok ? null : warehouseResolution.message}
+        />
       </Card>
 
       {totals.length === 0 ? (

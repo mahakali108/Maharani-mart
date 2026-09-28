@@ -46,7 +46,7 @@ export async function setCreditLimitAction(
   reason: string,
   options?: { allowOverdue?: boolean; overdueLimitRupees?: number; confirmBelowOutstanding?: boolean }
 ): Promise<WalletActionResult> {
-  await requirePermission('retailers.edit');
+  await requirePermission('coins.manage');
   const parsed = setLimitSchema.safeParse({
     retailerId,
     creditLimitRupees,
@@ -77,9 +77,9 @@ export async function setCreditLimitAction(
   // (or an approved overdue policy).
   if (limitPaise < outstandingPaise && !options?.allowOverdue && !options?.confirmBelowOutstanding) {
     return {
-      error: `New limit ₹${creditLimitRupees.toFixed(2)} is below the current outstanding ₹${(outstandingPaise / 100).toFixed(
+      error: `Coin funding ₹${creditLimitRupees.toFixed(2)} is below the ₹${(outstandingPaise / 100).toFixed(
         2
-      )}. Confirm the over-limit consequence to continue.`,
+      )} this shop has already spent. Confirm below the spent balance to continue.`,
     };
   }
 
@@ -118,7 +118,7 @@ export async function setCreditLimitAction(
   revalidatePath(`/admin/retailers/${retailerId}`);
   revalidatePath(`/admin/wallets`);
   revalidatePath(`/admin/wallets/${retailerId}`);
-  return { success: true, message: `Credit limit set to ₹${creditLimitRupees.toFixed(2)}` };
+  return { success: true, message: `Coin funding set to ₹${creditLimitRupees.toFixed(2)}` };
 }
 
 export async function recordPaymentAction(
@@ -130,7 +130,7 @@ export async function recordPaymentAction(
   notes?: string,
   idempotencyKey?: string
 ): Promise<WalletActionResult> {
-  await requirePermission('retailers.edit');
+  await requirePermission('coins.manage');
   const parsed = paymentSchema.safeParse({
     retailerId,
     amountRupees,
@@ -206,7 +206,7 @@ export async function recordAdjustmentAction(
   notes?: string,
   idempotencyKey?: string
 ): Promise<WalletActionResult> {
-  await requirePermission('retailers.edit');
+  await requirePermission('coins.manage');
   const parsed = adjustmentSchema.safeParse({
     retailerId,
     amountRupees,
@@ -272,7 +272,7 @@ export async function reverseTransactionAction(
   retailerId: string,
   reason: string
 ): Promise<WalletActionResult> {
-  await requirePermission('retailers.edit');
+  await requirePermission('coins.manage');
   if (!reason || reason.trim().length < 5) return { error: 'Reason must be at least 5 characters.' };
 
   const supabase = createClient();
@@ -296,7 +296,7 @@ export async function reverseTransactionAction(
 
   if (fetchError || !original) return { error: 'Transaction not found.' };
   if (original.is_reversed) return { error: 'Transaction already reversed.' };
-  if (original.transaction_type === 'CREDIT_LIMIT_CHANGE') return { error: 'Credit limit changes cannot be reversed; set a new limit instead.' };
+  if (original.transaction_type === 'CREDIT_LIMIT_CHANGE') return { error: 'Coin funding changes cannot be reversed; set new funding instead.' };
 
   // Create reversal entry with opposite direction
   const reversalDirection = original.direction === 'debit' ? 'credit' : 'debit';
@@ -369,7 +369,7 @@ export async function setPaymentTermsAction(
   // Same permission as setCreditLimitAction — the RLS write policy on the
   // credit account is is_admin_or_above(), so the app-level guard matches it
   // (staff cannot write credit terms, exactly like they cannot write limits).
-  await requirePermission('retailers.edit');
+  await requirePermission('coins.manage');
   const parsed = paymentTermsSchema.safeParse({ retailerId, paymentTermsDays, reason });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
 

@@ -6,9 +6,13 @@ import { Donut } from './charts';
 import { DataTable, inr, LinkPill, Section, SectionEmptyState, TagPill, Td } from './shared';
 
 /**
- * Credit & Risk Control — aggregates the existing `retailers` credit fields
- * through the SAME shared calculator (calculateCreditPosition) used by
- * checkout and Maharani AI. There is no second credit system.
+ * Credit & Risk Control — HISTORICAL receivables reporting.
+ *
+ * Retailer credit was removed from the live flow: on the current platform a
+ * shop's balance is 🪙 coins (see /admin/wallets). This section still reports the
+ * credit-era limit/outstanding fields so the owner can reconcile money that was
+ * already advanced and invoiced. It is read-only reporting and never gates an
+ * order — the values come from the same shared calculator the old flow used.
  *
  * Honest limitation: the schema has no payment/collection ledger, so
  * "payment trend" and "overdue" determination are reported as unavailable —
@@ -19,13 +23,13 @@ export function CreditSection({ credit }: { credit: CreditOverview }) {
   return (
     <Section
       title="Credit & risk control"
-      subtitle="Authoritative credit positions from the shared calculator — the same arithmetic checkout uses."
+      subtitle="Read-only historical credit positions (reconciliation). The live balance is 🪙 coins."
       icon={Wallet}
       status={credit.status}
       actions={<LinkPill href="/admin/retailers">Retailer management</LinkPill>}
     >
       {credit.status === 'empty' ? (
-        <SectionEmptyState title="No retailers yet" body="Credit positions appear as soon as retailers exist and order through the platform." />
+        <SectionEmptyState title="No retailers yet" body="Historical credit positions appear as soon as retailers exist on the books." />
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

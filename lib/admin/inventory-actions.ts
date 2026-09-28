@@ -5,12 +5,12 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { notifyLowStockIfNeeded } from '@/lib/inventory/alerts';
+import { requireWarehouseId } from '@/lib/warehouse/resolver';
 
 export type StockAdjustmentFormState = { error?: string } | null;
 
 const adjustmentSchema = z.object({
   productId: z.string().uuid('Select a product.'),
-  warehouseId: z.string().uuid('Select a warehouse.'),
   quantity: z.coerce
     .number()
     .int('Enter a whole number.')
@@ -42,7 +42,6 @@ export async function createStockAdjustmentAction(
 
   const parsed = adjustmentSchema.safeParse({
     productId: formData.get('productId'),
-    warehouseId: formData.get('warehouseId'),
     quantity: formData.get('quantity'),
     reason: formData.get('reason'),
   });
@@ -52,9 +51,14 @@ export async function createStockAdjustmentAction(
   const d = parsed.data;
 
   const supabase = createClient();
+  // ONE active warehouse: the server resolves it. A stale/forged id posted by a
+  // form is validated against the resolved warehouse and never trusted.
+  const warehouse = await requireWarehouseId(supabase, String(formData.get('warehouseId') ?? ''));
+  if (!warehouse.ok) return { error: warehouse.error };
+
   const { error } = await supabase.rpc('adjust_product_stock' as never, {
     p_product_id: d.productId,
-    p_warehouse_id: d.warehouseId,
+    p_warehouse_id: warehouse.warehouseId,
     p_quantity: d.quantity,
     p_reason: d.reason,
   } as never);

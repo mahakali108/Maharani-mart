@@ -6,6 +6,15 @@ import { calculateCreditPosition } from '@/lib/orders/credit';
  * record and the authoritative credit validation remains in
  * createOrderForRetailer when an order is submitted.
  */
+/**
+ * @deprecated RETIRED from the customer flow (credit removal phase).
+ *
+ * Maharani Traders does not offer retailer credit any more: the shop balance is
+ * 🪙 coins, rendered by `components/retailer/coins-balance-card.tsx` and
+ * `components/retailer/coins-checkout-summary.tsx`. This component is kept only
+ * as a historical reference and is deliberately not imported by any page — do
+ * not re-mount it on a customer surface.
+ */
 export function CreditSummary({
   creditLimit,
   outstandingBalance,

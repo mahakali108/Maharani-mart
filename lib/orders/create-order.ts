@@ -3,7 +3,8 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
 import type { Database } from '@/types/database.types';
-import { rupeesToPaise } from '@/lib/retailer/wallet';
+import { debitCoinsForOrder } from '@/lib/coins/server';
+import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 
 type OrderInsert = Database['public']['Tables']['orders']['Insert'];
 type OrderItemInsert = Database['public']['Tables']['order_items']['Insert'];
@@ -17,6 +18,10 @@ export interface CreatedOrder {
   id: string;
   orderNumber: string;
   grandTotal: number;
+  /** 🪙 Coins spent by this order (rupees, 2dp). */
+  coinsUsed: number;
+  /** What remains payable on delivery after coins (rupees, 2dp). */
+  payableOnDelivery: number;
 }
 
 export type CreateOrderResult = { error: string } | { order: CreatedOrder };
@@ -53,10 +58,14 @@ export async function createOrderForRetailer({
   if ('error' in quoted) return quoted;
   const { quote } = quoted;
 
-  if (quote.credit.exceedsLimit) {
-    return {
-      error: `This order exceeds the retailer's available credit of ₹${(quote.credit.availableCredit ?? 0).toFixed(2)}.`,
-    };
+  // ONE active warehouse: resolved server-side and frozen onto the order, so a
+  // freshly placed order is immediately dispatchable. A configuration problem
+  // (0 or 2+ active warehouses) is reported to the operator rather than
+  // guessed — the order is still taken, because refusing a shop's order is
+  // worse than an operator fixing the warehouse before approval.
+  const warehouse = await resolveActiveWarehouse(supabase);
+  if (!warehouse.ok) {
+    console.warn(`[orders] warehouse configuration error: ${warehouse.message}`);
   }
 
   const orderPayload: OrderInsert = {
@@ -74,6 +83,8 @@ export async function createOrderForRetailer({
     coupon_id: quote.coupon?.id ?? null,
     coupon_code: quote.coupon?.code ?? null,
     coupon_discount: quote.coupon?.discount ?? 0,
+    // Single-warehouse assignment (never a client value).
+    ...(warehouse.ok ? { warehouse_id: warehouse.warehouse.id } : {}),
   };
 
   const { data: order, error: orderError } = await supabase
@@ -146,51 +157,36 @@ export async function createOrderForRetailer({
     }
   }
 
-  // Wallet integration: create ORDER_DEBIT atomically with credit check
-  // Uses integer paise, idempotency key = order.id to prevent duplicate debit on retry
-  // Server-authoritative: never trusts client total, uses quoted grandTotal
-  try {
-    const amountPaise = rupeesToPaise(quote.grandTotal);
-    const idempotencyKey = `order:${order.id}`;
-    const description = `Order ${order.order_number} — ₹${quote.grandTotal.toFixed(2)}`;
+  // 🪙 COINS: the server decides the deduction from the LIVE balance — the
+  // browser never sends an amount, and an order is never refused for a low
+  // balance. The ledger write is atomic and idempotent (order:<id>), so a
+  // retried checkout cannot spend the same coins twice.
+  const debit = await debitCoinsForOrder(supabase, {
+    retailerId,
+    orderId: order.id,
+    orderTotalPaise: Math.round(quote.grandTotal * 100),
+    createdBy: collectedBy,
+    description: `Order ${order.order_number} — ₹${quote.grandTotal.toFixed(2)}`,
+  });
 
-    const { error: walletError } = await (
-      supabase as unknown as {
-        rpc: (name: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
-      }
-    ).rpc('check_and_debit_retailer_wallet', {
-      p_retailer_id: retailerId,
-      p_order_id: order.id,
-      p_amount_paise: amountPaise,
-      p_idempotency_key: idempotencyKey,
-      p_created_by: collectedBy ?? retailerId,
-      p_description: description,
-    });
-
-    if (walletError) {
-      // Credit check failed — cancel order and return error
-      await supabase
-        .from('orders')
-        .update({ status: 'cancelled', cancelled_reason: walletError.message } as unknown as never)
-        .eq('id', order.id)
-        .eq('status', 'pending');
-      return { error: walletError.message };
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Wallet debit failed';
-    // If wallet debit fails for any reason, cancel order to keep consistency
-    if (message.toLowerCase().includes('insufficient credit') || message.toLowerCase().includes('overdue')) {
-      await supabase
-        .from('orders')
-        .update({ status: 'cancelled', cancelled_reason: message } as unknown as never)
-        .eq('id', order.id)
-        .eq('status', 'pending');
-      return { error: message };
-    }
-    // For non-credit errors (e.g. function not yet migrated), log but don't block order
-    // This preserves backward compatibility with existing orders when ledger not yet present
-    console.warn('Wallet debit skipped or failed (non-blocking):', message);
+  if (!debit.ok) {
+    // Coins could not be spent: cancel the order rather than create one whose
+    // balance movement is unknown, and tell the caller exactly what happened.
+    await supabase
+      .from('orders')
+      .update({ status: 'cancelled', cancelled_reason: `Coin debit failed: ${debit.error}` } as unknown as never)
+      .eq('id', order.id)
+      .eq('status', 'pending');
+    return { error: `Your coins could not be applied: ${debit.error}` };
   }
 
-  return { order: { id: order.id, orderNumber: order.order_number, grandTotal: quote.grandTotal } };
+  return {
+    order: {
+      id: order.id,
+      orderNumber: order.order_number,
+      grandTotal: quote.grandTotal,
+      coinsUsed: debit.usedPaise / 100,
+      payableOnDelivery: debit.remainingPaise / 100,
+    },
+  };
 }

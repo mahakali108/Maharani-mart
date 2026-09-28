@@ -296,8 +296,11 @@ describe('delivery actions enforce the workflow', () => {
     expect(deliverySrc).toContain("rpc('return_order_stock'");
     expect(deliverySrc).toContain('reverseOrderWalletDebit(orderId, order.retailer_id');
     // A shortfall refund already credited is reversed too — no double credit.
-    expect(deliverySrc).toContain("eq('transaction_type', 'REFUND_CREDIT')");
-    expect(deliverySrc).toContain('is_reversed: true');
+    // It goes through the idempotent 🪙 sink (0053): staff cannot write the
+    // admin-only ledger directly, and a second return reverses nothing more.
+    expect(deliverySrc).toContain("rpc('order_shortfall_coins'");
+    expect(deliverySrc).toContain('p_reverse: true');
+    expect(deliverySrc).toMatch(/delivery-shortfall:\$\{delivery\.id\}/);
   });
 
   it('snapshots the return window from platform_settings at completion', () => {

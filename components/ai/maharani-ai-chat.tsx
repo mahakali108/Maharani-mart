@@ -50,7 +50,7 @@ function ResultCard({ card, onPrompt, onConfirm, confirming }: { card: AICard; o
 
 export function MaharaniAIChat({ surface, title, subtitle, quickActions }: { surface: AISurface; title: string; subtitle: string; quickActions: QuickAction[] }) {
   const welcome = surface === 'retailer'
-    ? 'Namaste! Main products, aapki pricing, schemes, credit, orders aur reorder suggestions ko current Maharani Traders data se verify karke help kar sakti hoon.'
+    ? 'Namaste! Main products, aapki pricing, schemes, coins, orders aur reorder suggestions ko current Maharani Traders data se verify karke help kar sakti hoon.'
     : surface === 'staff'
       ? 'I can inspect authorized stock, batches, expiry, GRNs and transfers. I will not modify inventory.'
       : surface === 'salesman'

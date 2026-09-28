@@ -72,9 +72,11 @@ describe('order creation revalidates and records the coupon server-side', () => 
     expect(source).toContain('p_coupon_id: quote.coupon.id');
     expect(source).toContain('p_order_id: order.id');
     expect(source).toMatch(/redeemError \|\| redeemed === false/);
-    // The redemption claim happens before the wallet debit.
+    // The redemption claim happens before the coin debit: the coupon is
+    // claimed (row-locked) first, so a discounted order never spends coins
+    // against a discount the database then refuses.
     const redeemIndex = source.indexOf("rpc('redeem_coupon'");
-    const debitIndex = source.indexOf("rpc('check_and_debit_retailer_wallet'");
+    const debitIndex = source.indexOf('debitCoinsForOrder(supabase, {');
     expect(redeemIndex).toBeGreaterThan(-1);
     expect(debitIndex).toBeGreaterThan(redeemIndex);
   });

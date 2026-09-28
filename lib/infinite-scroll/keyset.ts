@@ -148,6 +148,23 @@ export function readCursor(raw: string | null | undefined): ListCursor | null {
 }
 
 /**
+ * Interpret a cursor sent by the browser for a CONTINUATION request.
+ *
+ * `null`/empty means "no cursor" — the first batch. Anything present but
+ * undecodable must TERMINATE the list rather than restart it: every loader
+ * reads `null` as "start at the beginning", so replaying a bad continuation
+ * cursor re-serves batch #1 to a shopper who has already scrolled past it and
+ * (because the first batch always has a next cursor) loops forever.
+ */
+export function readContinuation(
+  raw: string | null | undefined
+): { ok: true; cursor: ListCursor | null } | { ok: false } {
+  if (raw === null || raw === undefined || raw === '') return { ok: true, cursor: null };
+  const cursor = decodeCursor(raw);
+  return cursor ? { ok: true, cursor } : { ok: false };
+}
+
+/**
  * Rows the client should never see twice.
  *
  * Keyset/offset batches are already disjoint, but a list can still contain a

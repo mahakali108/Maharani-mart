@@ -93,16 +93,42 @@ export function decodeCursor(raw: string | null | undefined): ListCursor | null 
     }
     if (candidate.k === 'keyset') {
       if (!Array.isArray(candidate.v) || candidate.v.length === 0 || candidate.v.length > 8) return null;
+      // Every KeysetValue the encoder can emit must survive this decode.
+      // Booleans are emitted by `is_new_launch`-led orderings (the catalog's
+      // default "recommended" sort), and rejecting them silently turned every
+      // continuation cursor back into `null` — which every loader reads as
+      // "start at the beginning", so the list re-served its first batch
+      // forever instead of advancing. Only truly unusable members (null,
+      // objects, arrays) invalidate the cursor.
       const values = candidate.v.map((value) =>
-        typeof value === 'string' || typeof value === 'number' ? value : null
+        typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+          ? value
+          : null
       );
       if (values.some((value) => value === null)) return null;
-      return { k: 'keyset', v: values as (string | number)[] };
+      return { k: 'keyset', v: values as (string | number | boolean)[] };
     }
     return null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Did a loader make progress?
+ *
+ * A loader that hands back the very cursor it was given cannot continue: asking
+ * again would re-request the same rows forever, which is exactly the
+ * "permanently stuck at Loading more products…" state (the scroll sentinel
+ * stays on screen, so the observer keeps firing). A terminal batch
+ * (`nextCursor === null`) always counts as progress, and so does the first
+ * batch loaded from `null`.
+ *
+ * PURE — covered by tests/infinite-scroll.test.ts.
+ */
+export function isCursorAdvancing(previous: string | null, next: string | null): boolean {
+  if (next === null || previous === null) return true;
+  return next !== previous;
 }
 
 /** One page of a list plus the cursor that fetches the page after it. */

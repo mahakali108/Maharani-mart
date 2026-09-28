@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { PromoBanner } from '@/components/retailer/promo-banner';
 import { cn } from '@/lib/utils/cn';
@@ -14,11 +14,24 @@ export interface PromoBannerData {
   cta_label?: string | null;
 }
 
-/** Same grid cell for every slide reserves the tallest slide's height.
- * Inactive slides are invisible and untabbable. Auto-rotation can be paused,
- * stops on focus, and respects reduced motion and document visibility. */
+/** Horizontal travel (px) that counts as a swipe rather than a tap. */
+const SWIPE_THRESHOLD = 40;
+
+/**
+ * Swipeable banner carousel.
+ *
+ * Same grid cell for every slide reserves the tallest slide's height, so
+ * changing slides never shifts the page. Inactive slides are invisible and
+ * untabbable. Swiping (touch) and the arrow buttons both move one slide, and
+ * the dots show position. Auto-rotation can be paused, stops on focus, and
+ * respects reduced motion and document visibility.
+ *
+ * With no active banners the component renders NOTHING — no skeleton, no empty
+ * box — so the home page never shows a giant blank banner area.
+ */
 export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
   const [index, setIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
   const [paused, setPaused] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(true);
@@ -51,8 +64,22 @@ export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
   const controlClass = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500';
   function show(next: number) { setPaused(true); setIndex((next + banners.length) % banners.length); }
 
+  /** Touch swipe: horizontal travel past the threshold moves one slide. */
+  function onTouchStart(event: React.TouchEvent) {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+  }
+  function onTouchEnd(event: React.TouchEvent) {
+    const startX = touchStartX.current;
+    touchStartX.current = null;
+    if (startX === null || !hasMultiple) return;
+    const deltaX = (event.changedTouches[0]?.clientX ?? startX) - startX;
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
+    show(deltaX < 0 ? activeIndex + 1 : activeIndex - 1);
+  }
+
   return (
     <section aria-label="Maharani Traders promotions" aria-roledescription="carousel"
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       onFocusCapture={(event) => { if (!(event.target as HTMLElement).closest('[data-rotation-control]')) setPaused(true); }}
       className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

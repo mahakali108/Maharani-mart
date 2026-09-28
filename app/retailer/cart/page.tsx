@@ -22,7 +22,7 @@ import { CartOrderSummary } from '@/components/retailer/cart-order-summary';
 import { CartCheckoutBar } from '@/components/retailer/cart-checkout-bar';
 import { CouponApplyForm } from '@/components/retailer/coupon-apply-form';
 import { ClearCartButton } from '@/components/retailer/clear-cart-button';
-import { CreditSummary } from '@/components/retailer/credit-summary';
+import { CoinsBalanceCard } from '@/components/retailer/coins-balance-card';
 import { ProductRail } from '@/components/retailer/product-rail';
 import { RecentlyViewedRail } from '@/components/retailer/recently-viewed';
 import { loadFavoriteIds } from '@/lib/retailer/catalog';
@@ -312,10 +312,11 @@ export default async function CartPage() {
             coupon={appliedCoupon}
           />
 
-          <CreditSummary
-            creditLimit={walletSummary.creditLimitRupees}
-            outstandingBalance={walletSummary.outstandingRupees}
-            orderImpact={grandTotal}
+          {/* 🪙 Coins — the only balance a retailer has (no credit, no terms). */}
+          <CoinsBalanceCard
+            limitPaise={walletSummary.creditLimitPaise}
+            outstandingPaise={walletSummary.outstandingPaise}
+            orderTotalPaise={Math.round(grandTotal * 100)}
           />
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

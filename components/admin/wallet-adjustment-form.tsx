@@ -7,6 +7,11 @@ import { recordAdjustmentAction } from '@/lib/admin/wallet-actions';
 
 export function WalletAdjustmentForm({ retailerId }: { retailerId: string }) {
   const [isPending, startTransition] = useTransition();
+  // One idempotency key per MOUNTED form: a double-click on "Record" reuses the
+  // same key, so the ledger's unique constraint turns the second submission
+  // into a no-op instead of crediting the shop twice. A fresh page view gets a
+  // fresh key, so a genuinely repeated adjustment is still possible.
+  const [idempotencyKey] = useState(() => `adj:${retailerId}:${Math.random().toString(36).slice(2, 12)}`);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,8 +35,15 @@ export function WalletAdjustmentForm({ retailerId }: { retailerId: string }) {
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const key = `adj:${retailerId}:${Date.now()}:${amountNum}:${type}`;
-      const result = await recordAdjustmentAction(retailerId, amountNum, direction, type, reason.trim(), notes || undefined, key);
+      const result = await recordAdjustmentAction(
+        retailerId,
+        amountNum,
+        direction,
+        type,
+        reason.trim(),
+        notes || undefined,
+        idempotencyKey
+      );
       if ('error' in result) setError(result.error);
       else {
         setMessage(result.message ?? 'Adjustment recorded');
@@ -55,22 +67,22 @@ export function WalletAdjustmentForm({ retailerId }: { retailerId: string }) {
         <div>
           <Label>Direction</Label>
           <select value={direction} onChange={(e) => setDirection(e.target.value as never)} className="w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm">
-            <option value="credit">Credit (reduces outstanding)</option>
-            <option value="debit">Debit (increases outstanding)</option>
+            <option value="credit">Add coins to the shop</option>
+            <option value="debit">Remove coins from the shop</option>
           </select>
         </div>
         <div>
           <Label>Type</Label>
           <select value={type} onChange={(e) => setType(e.target.value as never)} className="w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm">
-            <option value="MANUAL_CREDIT">Manual Credit</option>
-            <option value="MANUAL_DEBIT">Manual Debit</option>
-            <option value="REFUND_CREDIT">Refund Credit</option>
-            <option value="ADJUSTMENT">Adjustment</option>
+            <option value="MANUAL_CREDIT">Manual top-up</option>
+            <option value="MANUAL_DEBIT">Manual deduction</option>
+            <option value="REFUND_CREDIT">Refund</option>
+            <option value="ADJUSTMENT">Correction</option>
           </select>
         </div>
         <div className="sm:col-span-2">
           <Label>Reason (required)</Label>
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} required placeholder="e.g. Approved credit for festival scheme" />
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} required placeholder="e.g. Festival scheme coins approved" />
         </div>
         <div className="sm:col-span-2">
           <Label>Notes (optional)</Label>
@@ -79,9 +91,12 @@ export function WalletAdjustmentForm({ retailerId }: { retailerId: string }) {
       </div>
 
       <button type="submit" disabled={isPending} className="w-full rounded-xl bg-ink-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-        {isPending ? 'Recording...' : 'Record Adjustment'}
+        {isPending ? 'Recording…' : 'Record coin adjustment'}
       </button>
-      <p className="text-[11px] text-ink-400">Debit adjustments require reason. All actions are auditable and need confirmation.</p>
+      <p className="text-[11px] text-ink-400">
+        A reason is required. Every adjustment is written to the ledger with the amount, direction, reason and the
+        admin who made it.
+      </p>
     </form>
   );
 }

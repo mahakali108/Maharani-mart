@@ -65,7 +65,7 @@ export function WalletTermsForm({
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="terms-days">Payment terms (Net-N days)</Label>
+          <Label htmlFor="terms-days">Legacy payment terms (Net-N days) — historical only</Label>
           <Input
             id="terms-days"
             type="number"

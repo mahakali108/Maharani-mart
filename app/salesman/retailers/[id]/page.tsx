@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { getRetailerCoinPosition } from '@/lib/coins/server';
 
 interface RetailerDetail {
   id: string;
@@ -13,8 +14,6 @@ interface RetailerDetail {
   gstin: string | null;
   area_id: string;
   address: string | null;
-  credit_limit: number;
-  outstanding_balance: number;
   status: 'pending_approval' | 'active' | 'suspended';
   created_at: string;
 }
@@ -37,7 +36,7 @@ export default async function SalesmanRetailerDetailPage({ params }: { params: {
   // Therefore manually entering an unassigned retailer UUID returns 404.
   const { data: retailer } = await supabase
     .from('retailers')
-    .select('id, shop_name, gstin, area_id, address, credit_limit, outstanding_balance, status, created_at')
+    .select('id, shop_name, gstin, area_id, address, status, created_at')
     .eq('id', params.id)
     .eq('assigned_salesman_id', user.id)
     .maybeSingle<RetailerDetail>();
@@ -63,9 +62,9 @@ export default async function SalesmanRetailerDetailPage({ params }: { params: {
   ]);
 
   const recentOrders = orderData ?? [];
-  const availableCredit = retailer.credit_limit > 0
-    ? Math.max(0, retailer.credit_limit - retailer.outstanding_balance)
-    : null;
+  // 🪙 Coins are the shop's only balance — read from the same server source the
+  // checkout bills with. No credit limit/outstanding is shown to the field team.
+  const coinPosition = await getRetailerCoinPosition(supabase, retailer.id);
 
   return (
     <div className="space-y-5">
@@ -96,16 +95,16 @@ export default async function SalesmanRetailerDetailPage({ params }: { params: {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card className="p-3">
-          <p className="text-xs text-ink-400">Credit limit</p>
-          <p className="mt-1 text-sm font-semibold text-ink-900">{retailer.credit_limit > 0 ? `₹${retailer.credit_limit.toFixed(2)}` : 'Not set'}</p>
+          <p className="text-xs text-amber-700">🪙 Coins available</p>
+          <p className="mt-1 text-sm font-semibold text-ink-900">₹{coinPosition.balanceRupees.toFixed(2)}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-xs text-ink-400">Outstanding</p>
-          <p className="mt-1 text-sm font-semibold text-ink-900">₹{retailer.outstanding_balance.toFixed(2)}</p>
+          <p className="text-xs text-ink-400">Coins spent</p>
+          <p className="mt-1 text-sm font-semibold text-ink-900">₹{(coinPosition.outstandingPaise / 100).toFixed(2)}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-xs text-ink-400">Available</p>
-          <p className="mt-1 text-sm font-semibold text-ink-900">{availableCredit === null ? '—' : `₹${availableCredit.toFixed(2)}`}</p>
+          <p className="text-xs text-ink-400">Settlement</p>
+          <p className="mt-1 text-sm font-semibold text-ink-900">🪙 Coins + cash on delivery</p>
         </Card>
       </div>
 

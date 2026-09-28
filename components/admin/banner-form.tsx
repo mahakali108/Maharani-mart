@@ -34,6 +34,10 @@ export function BannerForm({ areas }: { areas: Option[] }) {
 
       <div>
         <Label>Banner image</Label>
+        {/* Artwork standard: the carousel reserves a 3:1 box and crops to fit. */}
+        <p className="mb-2 text-[11px] leading-4 text-ink-400">
+          Recommended {`1080 × 360 px`} (3:1). The image is cropped to 3:1 on the storefront — never stretched.
+        </p>
         {imageRef ? (
           <div className="relative mb-2 aspect-[3/1] w-full max-w-md overflow-hidden rounded-xl border border-ink-100">
             <StoredImage src={imageRef} alt="" size="banner" fill className="object-cover" />

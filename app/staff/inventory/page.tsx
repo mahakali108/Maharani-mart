@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { StockAdjustmentForm } from '@/components/admin/stock-adjustment-form';
+import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 import {
   InfiniteScrollProvider,
   InfiniteScrollRows,
@@ -86,15 +87,14 @@ export default async function StaffInventoryPage() {
   await requirePermission('inventory.view');
   const supabase = createClient();
 
-  const [firstBatch, { data: productData }, { data: warehouseData }] = await Promise.all([
+  const [firstBatch, { data: productData }, warehouseResolution] = await Promise.all([
     loadStockBatch(supabase, null),
     supabase.from('products').select('id, name').eq('is_active', true).order('name'),
-    supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
+    resolveActiveWarehouse(supabase),
   ]);
 
   const stock = firstBatch.items;
   const products = (productData ?? []) as Option[];
-  const warehouses = (warehouseData ?? []) as Option[];
 
   /** Server Action for the batches after the first. */
   async function loadMoreStock(cursor: string | null): Promise<InfiniteScrollBatch> {
@@ -120,7 +120,11 @@ export default async function StaffInventoryPage() {
 
       <Card>
         <p className="mb-3 text-sm font-semibold text-ink-800">Record a stock adjustment</p>
-        <StockAdjustmentForm products={products} warehouses={warehouses} />
+        <StockAdjustmentForm
+          products={products}
+          warehouse={warehouseResolution.ok ? { name: warehouseResolution.warehouse.name } : null}
+          warehouseError={warehouseResolution.ok ? null : warehouseResolution.message}
+        />
       </Card>
 
       {stock.length === 0 ? (

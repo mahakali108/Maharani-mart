@@ -105,7 +105,7 @@ function renderCollectionRows(rows: CollectionRow[]) {
       <span
         className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[row.status] ?? 'bg-ink-100 text-ink-600'}`}
       >
-        {row.status === 'verified' ? 'Verified — wallet credited' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+        {row.status === 'verified' ? 'Verified — coins added' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
       </span>
     </Card>
   ));
@@ -139,7 +139,7 @@ export default async function SalesmanCollectionsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-ink-950">Collections</h1>
         <p className="mt-1 text-sm text-ink-500">
-          Record money you collect in the field. The office verifies it before the retailer&apos;s wallet is credited.
+          Record money you collect in the field. The office verifies it before the coins are added to the shop.
         </p>
       </div>
 

@@ -17,7 +17,7 @@ export interface NotificationPrefsValues {
 const OPTIONS: { name: keyof NotificationPrefsValues; title: string; body: string }[] = [
   { name: 'orderUpdates', title: 'Order updates', body: 'Confirmations, packing, dispatch and delivery' },
   { name: 'paymentUpdates', title: 'Payment updates', body: 'Payments received and refunds' },
-  { name: 'walletUpdates', title: 'Wallet & credit', body: 'Ledger activity, limit changes and reversals' },
+  { name: 'walletUpdates', title: '🪙 Coins', body: 'Coin top-ups, spending and refunds' },
   { name: 'offerUpdates', title: 'Offers & schemes', body: 'Festival schemes, new launches and promotions' },
 ];
 

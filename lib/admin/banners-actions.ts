@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { deleteMedia, isRenderableMediaRef } from '@/lib/media';
-import { resolveBannerTarget } from '@/lib/retailer/banner-target';
+import { bannerScheduleInstants, resolveBannerTarget } from '@/lib/retailer/banner-target';
 import type { Database } from '@/types/database.types';
 
 export type BannerFormState = { error?: string } | null;
@@ -66,8 +66,12 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
     link_url: linkUrl || null,
     area_id: areaId || null,
     sort_order: count ?? 0,
-    starts_at: startsAt ? new Date(startsAt).toISOString() : null,
-    ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+    // A start date begins at 00:00 IST and an end date covers the whole IST
+    // day — "ends 30 Sep" keeps the banner up through 30 September.
+    ...(() => {
+      const schedule = bannerScheduleInstants(startsAt, endsAt);
+      return { starts_at: schedule.startsAt, ends_at: schedule.endsAt };
+    })(),
     created_by: user.id,
   };
 
@@ -102,6 +106,7 @@ export async function updateBannerAction(
   const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
 
   const supabase = createClient();
+  const schedule = bannerScheduleInstants(startsAt, endsAt);
   const payload: BannerUpdate = {
     title,
     image_url: imageUrl,
@@ -109,8 +114,8 @@ export async function updateBannerAction(
     cta_label: ctaLabel || null,
     link_url: linkUrl || null,
     area_id: areaId || null,
-    starts_at: startsAt ? new Date(startsAt).toISOString() : null,
-    ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+    starts_at: schedule.startsAt,
+    ends_at: schedule.endsAt,
   };
 
   const { error } = await supabase.from('banners').update(payload as unknown as never).eq('id', bannerId);

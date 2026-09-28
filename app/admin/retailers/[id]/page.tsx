@@ -130,11 +130,11 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
             <dd className="mt-0.5 font-medium text-ink-900">{r.address ?? '—'}</dd>
           </div>
           <div>
-            <dt className="text-ink-400">Credit limit</dt>
+            <dt className="text-ink-400">Coin funding (legacy credit limit)</dt>
             <dd className="mt-0.5 font-medium text-ink-900">₹{r.credit_limit.toFixed(2)}</dd>
           </div>
           <div>
-            <dt className="text-ink-400">Outstanding balance</dt>
+            <dt className="text-ink-400">🪙 Coins spent (legacy outstanding)</dt>
             <dd className="mt-0.5 font-medium text-ink-900">₹{r.outstanding_balance.toFixed(2)}</dd>
           </div>
           <div>

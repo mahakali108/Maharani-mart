@@ -8,7 +8,9 @@
  *   3. Nothing is invented: no terms → no date; no outstanding → nothing due;
  *      unanchorable outstanding → status without a fabricated date
  *   4. Migration 0049 is additive (one nullable column + check), no RLS change
- *   5. Admin sets terms via a guarded action; retailer ledger shows the card
+ *   5. Admin sets terms via a guarded action (historical/legacy fields)
+ *   6. NO retailer-facing surface shows terms: the customer ledger is a coin
+ *      history, and credit/Net-N copy was removed from the current flow.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -240,8 +242,8 @@ describe('migration 0049', () => {
 describe('admin surface', () => {
   it('setPaymentTermsAction is permission-guarded and schema-validated', () => {
     expect(walletActions).toContain('export async function setPaymentTermsAction');
-    // Matches the existing credit-limit guard (RLS write is is_admin_or_above).
-    expect(walletActions).toContain("requirePermission('retailers.edit')");
+    // Legacy terms are an admin-only writer, like every other wallet mutation.
+    expect(walletActions).toContain("requirePermission('coins.manage')");
     expect(walletActions).toContain('paymentTermsSchema');
   });
 
@@ -263,18 +265,29 @@ describe('admin surface', () => {
   });
 });
 
-describe('retailer ledger surface', () => {
-  it('shows the terms card with terms, outstanding and due date', () => {
-    expect(ledgerPage).toContain('Credit terms & payment status');
-    expect(ledgerPage).toContain('computeCreditDueDate');
-    expect(ledgerPage).toContain('getRetailerCreditAccount');
+describe('retailer ledger surface (coins, not credit)', () => {
+  it('is a coin history: no credit limit, outstanding, terms or due date', () => {
+    // Comments may explain the removal; what must never appear is the rendered
+    // copy. So the assertion runs on the page source with comments stripped.
+    const rendered = ledgerPage
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(rendered).not.toContain('Credit terms & payment status');
+    expect(rendered).not.toContain('computeCreditDueDate');
+    expect(rendered).not.toContain('getRetailerCreditAccount');
+    // Rendered labels would be capitalised; camelCase wallet props (the coin
+    // balance is derived from the ledger columns) are not user-visible copy.
+    expect(rendered).not.toMatch(/Credit limit|Available credit|Outstanding|Net-15|Net-30|Pay later|Payment due/);
+    expect(rendered).toContain('Coins available');
+    expect(rendered).toContain('Coins spent');
   });
 
-  it('never renders a due date when none is derivable', () => {
-    expect(ledgerPage).toMatch(/dueDate\?\.dueDateKey \? formatIndiaDate\(dueDate\.dueDateKey\) : '—'/);
+  it('never fabricates a due date because there is none', () => {
+    expect(ledgerPage).not.toMatch(/dueDate|due_date|Payment due/i);
   });
 
   it('the ledger stays scoped to the caller (RLS + query)', () => {
     expect(ledgerPage).toContain('await requireUser()');
+    expect(ledgerPage).toContain('getRetailerLedgerBatch');
   });
 });

@@ -204,9 +204,10 @@ describe('verifyCollectionAction / rejectCollectionAction', () => {
     expect(rejectFn).toContain('REJECTED: ');
   });
 
-  it('handles a retried verification via the existing idempotent credit (no double money)', () => {
+  it('handles a retried verification via the existing idempotent top-up (no double coins)', () => {
     expect(adminActions).toContain("'23505'");
-    expect(adminActions).toContain('existing credit linked');
+    // The 🪙 coin wording of the same idempotent outcome.
+    expect(adminActions).toContain('coins already added');
   });
 });
 

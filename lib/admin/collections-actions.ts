@@ -6,11 +6,11 @@
  * The payment_collections approval queue is the real meaning of
  * "verification": a pending collection is field cash that has NOT yet been
  * confirmed by finance. Verification:
- *   1. writes the PAYMENT_CREDIT row into retailer_wallet_ledger with the
+ *   1. writes the PAYMENT_CREDIT row (the coin top-up) into retailer_wallet_ledger with the
  *      deterministic idempotency key `collection:<collectionId>` (retry-safe),
  *   2. links that ledger entry back via payment_collections.ledger_entry_id,
  *   3. flips the status to `verified`.
- * Rejection records the reason in notes and credits nothing.
+ * Rejection records the reason in notes and adds no coins.
  *
  * Admins recording payments directly still use recordPaymentAction
  * (lib/admin/wallet-actions.ts) — that path credits the wallet immediately
@@ -55,7 +55,7 @@ function revalidateCollectionPaths(retailerId: string) {
   revalidatePath('/salesman/collections');
 }
 
-/** Verify a pending collection and credit the retailer's wallet. */
+/** Verify a pending collection and add the collected coins to the shop. */
 export async function verifyCollectionAction(collectionId: string): Promise<CollectionVerifyResult> {
   const user = await requireUser();
   if (!can(user.role, 'collections.verify')) {
@@ -72,7 +72,7 @@ export async function verifyCollectionAction(collectionId: string): Promise<Coll
     return { error: `This collection was already ${collection.status}.` };
   }
 
-  // 1. Credit the wallet — idempotent on `collection:<id>`.
+  // 1. Add the coins — idempotent on `collection:<id>`.
   const { data: account } = await supabase
     .from('retailer_credit_accounts')
     .select('id')
@@ -100,7 +100,7 @@ export async function verifyCollectionAction(collectionId: string): Promise<Coll
 
   if (ledgerError) {
     if (ledgerError.code === '23505') {
-      // A retried verification with the same key — the credit already
+      // A retried verification with the same key — the coins are already
       // exists; link it instead of failing.
       const { data: existing } = await supabase
         .from('retailer_wallet_ledger')
@@ -122,7 +122,7 @@ export async function verifyCollectionAction(collectionId: string): Promise<Coll
           .maybeSingle<{ id: string }>();
         if (relinked) {
           revalidateCollectionPaths(collection.retailer_id);
-          return { success: true, message: 'Collection verified (existing credit linked).' };
+          return { success: true, message: 'Collection verified (coins already added).' };
         }
         return { error: 'This collection changed while verifying — refresh and try again.' };
       }

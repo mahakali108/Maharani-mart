@@ -32,12 +32,36 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
   if (user.role !== 'retailer') return { error: 'Only a retailer can check out this cart.' };
 
   const supabase = createClient();
-  const { data: cartData } = await supabase
-    .from('cart_items')
-    .select('pack_id, quantity')
-    .eq('retailer_id', user.id);
 
-  const items = (cartData ?? []) as CartItemForCheckout[];
+  // DUPLICATE CHECKOUT PROTECTION — the cart is CLAIMED atomically.
+  //
+  // Deleting the rows and reading what was deleted lets Postgres decide who
+  // gets to check out: a double-tap, a retried request or two concurrent
+  // submissions race on the same rows, exactly one claim returns lines, and the
+  // other sees an empty cart. Without this both requests would read the same
+  // cart and place two orders for one basket of goods.
+  const { data: claimed, error: claimError } = await supabase
+    .from('cart_items')
+    .delete()
+    .eq('retailer_id', user.id)
+    .select('pack_id, quantity');
+
+  if (claimError) return { error: 'Your cart could not be prepared for checkout. Please try again.' };
+  const items = (claimed ?? []) as CartItemForCheckout[];
+  if (items.length === 0) {
+    return { error: 'Your cart is empty — add products before placing an order.' };
+  }
+
+  /** Put the claimed lines back if the order could not be created. */
+  async function restoreClaimedCart() {
+    try {
+      await supabase.from('cart_items').insert(
+        items.map((item) => ({ retailer_id: user.id, pack_id: item.pack_id, quantity: item.quantity })) as never
+      );
+    } catch (cause) {
+      console.error('Cart restore after a failed checkout failed.', cause);
+    }
+  }
 
   // Resolve the delivery address server-side: a saved address book entry
   // when an id is given, otherwise the profile address. Both flows freeze
@@ -61,7 +85,10 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
         state: string | null;
         pincode: string;
       } | never>();
-    if (!address) return { error: 'The selected delivery address could not be found. Pick an address and try again.' };
+    if (!address) {
+      await restoreClaimedCart();
+      return { error: 'The selected delivery address could not be found. Pick an address and try again.' };
+    }
     shippingAddress = {
       line: formatAddressLine(address),
       label: address.label,
@@ -82,7 +109,10 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
   // quote inside createOrderForRetailer revalidates it against fresh database
   // state before anything is billed (0051).
   const activeCoupon = await loadActiveCouponForRetailer(supabase, user.id);
-  if (activeCoupon.error) return { error: 'The applied coupon could not be verified. Please open your cart and try again.' };
+  if (activeCoupon.error) {
+    await restoreClaimedCart();
+    return { error: 'The applied coupon could not be verified. Please open your cart and try again.' };
+  }
 
   const result = await createOrderForRetailer({
     retailerId: user.id,
@@ -93,10 +123,15 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
     couponCode: activeCoupon.coupon?.code ?? null,
   });
 
-  if ('error' in result) return { error: result.error };
+  if ('error' in result) {
+    // Nothing was created: give the shop its cart back so the fix is one tap,
+    // not a rebuild of the whole order.
+    await restoreClaimedCart();
+    return { error: result.error };
+  }
 
-  await supabase.from('cart_items').delete().eq('retailer_id', user.id);
-  // The coupon was consumed by this order: clear the cart pointer so it is
+  // The cart was already cleared by the claim above; the coupon was consumed by
+  // this order, so clear the pointer too so it is
   // not silently re-applied to the next cart.
   await supabase.from('retailer_active_coupons').delete().eq('retailer_id', user.id);
   revalidatePath('/retailer/coupons');

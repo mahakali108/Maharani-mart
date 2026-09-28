@@ -18,6 +18,12 @@ export type AICardType =
   | 'scheme'
   | 'cart'
   | 'order'
+  /** 🪙 current balance card (retailer/staff surfaces). */
+  | 'coins'
+  /**
+   * @deprecated Historical credit card. Retailer credit is no longer offered;
+   * the field remains so stored/older AI responses still type-check.
+   */
   | 'credit'
   | 'invoice'
   | 'inventory'

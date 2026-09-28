@@ -43,6 +43,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Loader2, RotateCw } from 'lucide-react';
+import { isCursorAdvancing } from '@/lib/infinite-scroll/cursor';
 import { cn } from '@/lib/utils/cn';
 
 /** One batch of already-rendered rows, as returned by a row-level loader. */
@@ -140,17 +141,29 @@ export function useInfiniteList<T>({
     inFlightRef.current = true;
     setLoading(true);
     setError(null);
+    const requestCursor = cursorRef.current;
     try {
-      const batch = await loaderRef.current(cursorRef.current);
+      const batch = await loaderRef.current(requestCursor);
       const nextItems = batch?.items ?? [];
+      const nextCursor = batch?.nextCursor ?? null;
       if (nextItems.length === 0) {
         // Nothing came back: stop asking instead of looping forever.
         setHasMore(false);
         return;
       }
+      if (!isCursorAdvancing(requestCursor, nextCursor)) {
+        // The batch repeated the cursor it was fetched with. Appending it would
+        // duplicate rows already on screen and re-requesting it would loop
+        // forever, so the list ends here — a broken cursor must never become an
+        // infinite spinner.
+        // eslint-disable-next-line no-console
+        console.warn('[infinite-scroll] loader returned a non-advancing cursor; stopping the list.');
+        setHasMore(false);
+        return;
+      }
       setItems((previous) => [...previous, ...nextItems]);
-      setCursor(batch.nextCursor ?? null);
-      setHasMore(Boolean(batch.nextCursor));
+      setCursor(nextCursor);
+      setHasMore(Boolean(nextCursor));
     } catch (cause) {
       setError(cause instanceof Error && cause.message ? cause.message : 'Could not load more.');
     } finally {
@@ -235,7 +248,12 @@ export function InfiniteScrollProvider({
     // machine appends is itself one batch of rows.
     loader: async (cursor) => {
       const batch = await loader(cursor);
-      return { items: [batch.rows], nextCursor: batch.nextCursor };
+      const rows = Array.isArray(batch.rows) ? batch.rows : [batch.rows];
+      // A batch with nothing to render ends the list, whatever cursor came
+      // with it: appending an empty fragment and asking for more is the other
+      // way a list can spin forever ("Loading more…" with no rows arriving).
+      if (rows.length === 0) return { items: [], nextCursor: null };
+      return { items: [rows], nextCursor: batch.nextCursor };
     },
     initialCursor,
     initialHasMore,

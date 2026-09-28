@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
+import { getRetailerCoinPosition } from '@/lib/coins/server';
 import { SalesmanOrderBuilder } from '@/components/salesman/order-builder';
 import { Card } from '@/components/ui/card';
 
@@ -11,8 +12,6 @@ interface AssignedRetailer {
   id: string;
   shop_name: string;
   area_id: string;
-  credit_limit: number;
-  outstanding_balance: number;
   status: 'pending_approval' | 'active' | 'suspended';
 }
 
@@ -49,7 +48,7 @@ export default async function NewSalesmanOrderPage({
 
   const { data: retailerData } = await supabase
     .from('retailers')
-    .select('id, shop_name, area_id, credit_limit, outstanding_balance, status')
+    .select('id, shop_name, area_id, status')
     .eq('assigned_salesman_id', user.id)
     .eq('status', 'active')
     .order('shop_name')
@@ -130,17 +129,21 @@ export default async function NewSalesmanOrderPage({
     })
     .filter((product) => product.packs.length > 0);
 
+  // 🪙 The shop's coin balance, read server-side. Salesman capture has no
+  // credit control: coins are the balance, and the server recomputes them.
+  const coinPosition = await getRetailerCoinPosition(supabase, selectedRetailer.id);
+
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold text-ink-950">Create Order</h1>
-        <p className="mt-1 text-sm text-ink-500">Prices, GST, MOQ, and credit are rechecked when the order is submitted.</p>
+        <p className="mt-1 text-sm text-ink-500">Prices, GST, MOQ and coins are rechecked when the order is submitted.</p>
       </div>
       <SalesmanOrderBuilder
         retailers={retailers.map((retailer) => ({ id: retailer.id, shopName: retailer.shop_name }))}
         selectedRetailerId={selectedRetailer.id}
         products={products}
-        credit={{ limit: selectedRetailer.credit_limit, outstanding: selectedRetailer.outstanding_balance }}
+        coinsAvailableRupees={coinPosition.balanceRupees}
       />
     </div>
   );

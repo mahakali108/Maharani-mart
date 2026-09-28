@@ -85,15 +85,16 @@ export default async function AdminWalletsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-ink-950">Customer Wallets / Credit Accounts</h1>
+        <h1 className="text-2xl font-semibold text-ink-950">🪙 Retailer coins</h1>
         <p className="mt-1 text-sm text-ink-500">
-          B2B credit ledger — credit limit, outstanding, available, payment history, adjustments, audit.
+          The coin balance each shop can spend, funded by you and spent on orders — with every top-up, deduction and
+          refund recorded in the ledger with a reason and an actor. Maharani Traders does not extend retailer credit.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Search retailers</CardTitle>
+          <CardTitle>Find a shop by name</CardTitle>
         </CardHeader>
         <form className="flex gap-2">
           <Input name="q" defaultValue={q} placeholder="Search by shop name..." className="max-w-sm" />
@@ -119,10 +120,10 @@ export default async function AdminWalletsPage({
                 <th className="px-5 py-2 font-medium">Shop</th>
                 <th className="px-5 py-2 font-medium">Owner</th>
                 <th className="px-5 py-2 font-medium">Status</th>
-                <th className="px-5 py-2 font-medium">Credit Limit</th>
-                <th className="px-5 py-2 font-medium">Outstanding</th>
-                <th className="px-5 py-2 font-medium">Available</th>
-                <th className="px-5 py-2 font-medium">Overdue Allowed</th>
+                <th className="px-5 py-2 font-medium">Coin funding</th>
+                <th className="px-5 py-2 font-medium">Coins spent</th>
+                <th className="px-5 py-2 font-medium">🪙 Coins available</th>
+                <th className="px-5 py-2 font-medium">Overdue policy</th>
                 <th className="px-5 py-2 font-medium">Actions</th>
               </tr>
             </thead>
@@ -192,17 +193,19 @@ export default async function AdminWalletsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>How credit calculations work</CardTitle>
+          <CardTitle>How coin calculations work</CardTitle>
         </CardHeader>
         <div className="space-y-2 text-xs leading-5 text-ink-600">
           <p>
-            <strong>Outstanding balance</strong> = frozen opening balance (pre-wallet) + total valid debit entries
+            <strong>🪙 Coins spent</strong> = frozen opening balance (pre-wallet) + total valid debit entries
             (ORDER_DEBIT, MANUAL_DEBIT, ADJUSTMENT) − total valid credit entries (PAYMENT_CREDIT, REFUND_CREDIT,
-            MANUAL_CREDIT, ORDER_REVERSAL, ADJUSTMENT). The opening balance is frozen once and never added twice.
+            MANUAL_CREDIT, ORDER_REVERSAL, ADJUSTMENT). The opening balance is frozen once and never added twice, so
+            historical amounts are never counted again.
           </p>
           <p>
-            <strong>Available credit</strong> = Credit limit minus outstanding balance. Uses integer paise for all
-            calculations.
+            <strong>🪙 Coins available</strong> = coin funding minus coins spent, floored at zero — 1 coin = ₹1, in
+            integer paise. Orders spend min(coins available, order total) and the rest is payable on delivery; a shop
+            can never spend more than it holds.
           </p>
           <p>
             <strong>Ledger</strong> is immutable — no transaction is ever deleted. Corrections use reversal/adjustment

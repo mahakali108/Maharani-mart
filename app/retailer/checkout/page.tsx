@@ -19,13 +19,14 @@ import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
 import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
-import { CreditSummary } from '@/components/retailer/credit-summary';
+import { CoinsCheckoutSummary } from '@/components/retailer/coins-checkout-summary';
 import { CheckoutAddressProvider } from '@/components/retailer/checkout-address-context';
 import { CheckoutAddressSelector } from '@/components/retailer/checkout-address-selector';
 import type { SavedAddress } from '@/components/retailer/address-form';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
 import { buildCanonicalProductName } from '@/lib/retailer/product-name';
-import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
+import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
+import { coinBalancePaise, computeCoinPayment } from '@/lib/coins/math';
 import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
 import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
 
@@ -57,7 +58,12 @@ interface CartItemDetail {
   } | null;
 }
 
-interface RetailerCreditRow {
+/**
+ * `credit_limit` / `outstanding_balance` are the legacy wallet columns that
+ * BACK the coin balance (coins available = funded limit − spent). They are read
+ * only — nothing in the customer flow shows or charges credit.
+ */
+interface RetailerAccountRow {
   area_id: string;
   credit_limit: number;
   outstanding_balance: number;
@@ -87,7 +93,7 @@ export default async function CheckoutPage() {
       .from('retailers')
       .select('area_id, credit_limit, outstanding_balance, shop_name, address, areas ( name, district )')
       .eq('id', user.id)
-      .maybeSingle<RetailerCreditRow>(),
+      .maybeSingle<RetailerAccountRow>(),
     supabase.from('profiles').select('full_name, phone').eq('id', user.id).maybeSingle<CheckoutProfileRow>(),
     getRetailerWalletSummary(supabase, user.id),
     supabase
@@ -192,6 +198,17 @@ export default async function CheckoutPage() {
   const grandTotal = subtotal + gstTotal - discountTotal;
   const totalPieces = lines.reduce((sum, line) => sum + line.pieces, 0);
 
+  // 🪙 Coins, computed once from the SAME authoritative wallet position the
+  // order service re-reads before it debits. The browser never contributes an
+  // amount; this is display only and can only confirm what the server charges.
+  const coinsAvailablePaise = coinBalancePaise(walletSummary.creditLimitPaise, walletSummary.outstandingPaise);
+  const coinPayment = computeCoinPayment({
+    orderTotalPaise: Math.round(grandTotal * 100),
+    balancePaise: coinsAvailablePaise,
+  });
+  const coinsUsedRupees = coinPayment.usedPaise / 100;
+  const payableOnDeliveryRupees = coinPayment.remainingPaise / 100;
+
   return (
     <CheckoutAddressProvider defaultAddressId={defaultAddress?.id ?? null}>
     <div className="space-y-5 sm:space-y-6">
@@ -208,7 +225,7 @@ export default async function CheckoutPage() {
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Final review</p>
           <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Checkout</h1>
           <p className="mt-1 text-xs text-slate-500">
-            Review the items, address and credit before placing the order.
+            Review the items, address and your coin balance before placing the order.
           </p>
         </div>
         {/* Stepper — Cart → Checkout → Done. Visible from sm up. */}
@@ -319,53 +336,19 @@ export default async function CheckoutPage() {
           </section>
 
           {retailer ? (
-            <div className="space-y-3">
-              <CreditSummary
-                creditLimit={walletSummary.creditLimitRupees}
-                outstandingBalance={walletSummary.outstandingRupees}
-                orderImpact={grandTotal}
-              />
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wallet Ledger (Real-time)</p>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-                  <div className="min-w-0">
-                    <p className="text-slate-500">Limit</p>
-                    <p className="break-words font-bold text-slate-900">{formatPaise(walletSummary.creditLimitPaise)}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-slate-500">Outstanding</p>
-                    <p className="break-words font-bold text-slate-900">{formatPaise(walletSummary.outstandingPaise)}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-slate-500">Available</p>
-                    <p className={`break-words font-bold ${walletSummary.availablePaise < 0 ? 'text-primary-600' : 'text-emerald-600'}`}>
-                      {formatPaise(walletSummary.availablePaise)}
-                    </p>
-                  </div>
-                </div>
-                {walletSummary.isOverLimit ? (
-                  <p className="mt-2 rounded-lg bg-primary-50 px-2 py-1.5 text-[10px] font-bold text-primary-700">
-                    Over limit — this order will be rejected server-side unless payment is recorded.
-                  </p>
-                ) : null}
-                <p className="mt-2 text-[10px] leading-4 text-slate-500">
-                  Server-authoritative: checkout will atomically debit your wallet. No fake balances.
-                </p>
-                <Link href="/retailer/account/ledger" className="mt-2 inline-block text-[10px] font-bold text-primary-600 hover:underline">
-                  View wallet ledger →
-                </Link>
-              </div>
-            </div>
+            /* 🪙 Coins — the only balance a retailer has. No credit limit, no
+               outstanding, no terms: order total, coins available, coins used,
+               remaining payable. All four are server-computed. */
+            <CoinsCheckoutSummary orderTotalPaise={Math.round(grandTotal * 100)} balancePaise={coinsAvailablePaise} />
           ) : null}
 
-          {/* 3. PAYMENT / CREDIT */}
+          {/* 3. PAYMENT */}
           {/*
-            Settlement method, stated from real data only. The schema has no
-            `payment_method` column and no Net-15/Net-30 terms model, so this
-            reports whether a credit facility actually exists on the account and
-            says plainly that terms are set by the distributor — it never offers
-            a choice that could be manipulated client-side, and it never affects
-            price (which stays server-authoritative).
+            Settlement comes from coins only. There is no credit checkout, no
+            Net-15/Net-30 selection and no pay-later option — the browser cannot
+            choose a payment method that changes what is billed, because coins
+            are calculated and deducted server-side and everything else is
+            payable on delivery.
           */}
           <section
             aria-label="Payment"
@@ -379,19 +362,15 @@ export default async function CheckoutPage() {
             <div className="space-y-2 p-4 text-xs sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-600">Method</span>
-                <span className="font-bold text-slate-900">
-                  {walletSummary.hasConfiguredLimit
-                    ? 'Business credit account'
-                    : 'No credit facility configured'}
-                </span>
+                <span className="font-bold text-slate-900">🪙 Coins + cash on delivery</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-600">Final amount</span>
-                <span className="font-bold text-slate-900">{formatInr(grandTotal)}</span>
+                <span className="text-slate-600">Payable on delivery</span>
+                <span className="font-bold text-slate-900">{formatInr(payableOnDeliveryRupees)}</span>
               </div>
               <p className="pt-1 text-[10px] leading-4 text-slate-500">
-                Payment terms (for example Net-15 or Net-30) are set by your distributor and are not
-                selectable here. GST is already included in every price above — it is never added again at checkout.
+                Coins are applied automatically and deducted on the server. Any remaining amount is collected on
+                delivery. GST is already included in every price above — it is never added again at checkout.
               </p>
             </div>
           </section>
@@ -432,8 +411,16 @@ export default async function CheckoutPage() {
                 </div>
               ) : null}
               <div className="flex items-end justify-between border-t border-dashed border-slate-200 pt-4">
-                <span className="text-sm font-bold text-slate-900">Total (incl. GST)</span>
+                <span className="text-sm font-bold text-slate-900">Order total (incl. GST)</span>
                 <span className="text-2xl font-bold tracking-tight text-slate-950">{formatInr(grandTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>🪙 Coins used</span>
+                <span className="font-semibold text-emerald-700">−{formatInr(coinsUsedRupees)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm font-bold text-slate-900">
+                <span>Remaining payable</span>
+                <span>{formatInr(payableOnDeliveryRupees)}</span>
               </div>
               <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />

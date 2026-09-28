@@ -314,7 +314,7 @@ describe('ledger page never fabricates a financial position', () => {
   it('computes no fake running balance, uses real ledger or honest gap notice', () => {
     // New wallet page shows real ledger transactions, not fake running balance
     if (page.includes('Transaction History') || page.includes('walletLedger') || page.includes('getRetailerWalletSummary')) {
-      expect(page).toMatch(/Transaction History|Wallet & Credit|Credit & ledger/);
+      expect(page).toMatch(/Coin transactions|🪙 Coins|Coins available/);
       // Ensure no fabricated runningBalance variable, not the honest disclaimer text
       expect(page).not.toMatch(/runningBalance|balanceAfter/i);
       expect(lib).not.toMatch(/runningBalance|balanceAfter|balance_after/i);
@@ -448,7 +448,11 @@ describe('retailer data isolation is enforced in every read', () => {
   it('re-quotes server-side before an order is written', () => {
     const create = read('lib/orders/create-order.ts');
     expect(create).toContain('quoteOrderForRetailer({ retailerId, lines, supabase, couponCode })');
-    expect(create).toContain('quote.credit.exceedsLimit');
+    // The server re-quote is the only source of money: no credit gate remains
+    // (credit was removed from the current flow) and the coin debit is derived
+    // from the quoted grand total.
+    expect(create).not.toContain('quote.credit.exceedsLimit');
+    expect(create).toMatch(/orderTotalPaise: Math\.round\(quote\.grandTotal \* 100\)/);
     expect(create).not.toMatch(/unit_price:\s*line\.(clientPrice|submittedPrice)/);
   });
 });
@@ -531,7 +535,9 @@ describe('delivery address and settlement use real rows only', () => {
     expect(checkout).toContain('CheckoutAddressSelector');
     expect(read('components/retailer/checkout-address-selector.tsx')).toContain('DeliveryAddressCard');
     expect(checkout).toContain("select('area_id, credit_limit, outstanding_balance, shop_name, address, areas ( name, district )')");
-    expect(checkout).toContain('Payment terms (for example Net-15 or Net-30) are set by your distributor');
+    // Settlement is coins + cash on delivery — the credit terms copy is gone.
+    expect(checkout).toContain('CoinsCheckoutSummary');
+    expect(checkout).not.toContain('Payment terms (for example Net-15 or Net-30)');
 
     const detail = read('app/retailer/orders/[id]/page.tsx');
     expect(detail).toContain('DeliveryAddressCard');
@@ -545,7 +551,10 @@ describe('delivery address and settlement use real rows only', () => {
     const checkout = read('app/retailer/checkout/page.tsx');
     expect(checkout).not.toMatch(/name="paymentMethod"/);
     expect(checkout).not.toMatch(/net15|net30|net_15|net_30/i);
-    expect(checkout).toContain('Business credit account');
+    // No credit wording at all in the current checkout: coins + cash on delivery.
+    expect(checkout).not.toMatch(/Business credit account|Credit limit|Available credit|Outstanding/);
+    expect(checkout).toContain('CoinsCheckoutSummary');
+    expect(checkout).toContain('Payable on delivery');
   });
 });
 
@@ -599,8 +608,12 @@ describe('home renders only real retailer history', () => {
     expect(personalization).toContain('isBannerVisible(banner, areaId');
     const schedule = read('lib/retailer/banner-target.ts');
     expect(schedule).toContain('banner.area_id === areaId');
-    expect(schedule).toContain('hasStarted');
-    expect(schedule).toContain('hasNotEnded');
+    // Scheduling is inclusive and IST-aware: a start date begins at 00:00 IST
+    // and an end date covers the WHOLE day, so a banner never disappears on its
+    // own end date. (Replaces the old hasStarted/hasNotEnded pair.)
+    expect(schedule).toContain('bannerScheduleInstants');
+    expect(schedule).toContain('IST_OFFSET_MS');
+    expect(schedule).toContain("boundedInstant(endsAt, 'end')");
   });
 });
 

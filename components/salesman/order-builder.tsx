@@ -49,12 +49,13 @@ export function SalesmanOrderBuilder({
   retailers,
   selectedRetailerId,
   products,
-  credit,
+  coinsAvailableRupees,
 }: {
   retailers: RetailerOption[];
   selectedRetailerId: string;
   products: OrderProduct[];
-  credit: { limit: number; outstanding: number };
+  /** 🪙 Coins available to this shop (server-read). No credit exists any more. */
+  coinsAvailableRupees: number;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -112,7 +113,11 @@ export function SalesmanOrderBuilder({
     gstTotal += pricing.gst;
   }
   const estimatedTotal = subtotal + gstTotal;
-  const availableCredit = credit.limit > 0 ? Math.max(0, credit.limit - credit.outstanding) : null;
+  // 🪙 The same rule the server applies at checkout: coins cover min(balance,
+  // total) and whatever is left is collected on delivery. The server recomputes
+  // it from the live balance when the order is submitted.
+  const coinsUsedRupees = Math.min(Math.max(0, coinsAvailableRupees), estimatedTotal);
+  const payableOnDeliveryRupees = estimatedTotal - coinsUsedRupees;
 
   function setPackQuantity(pack: OrderPack, nextQuantity: number) {
     const normalized = nextQuantity <= 0 ? 0 : Math.max(pack.moq, Math.floor(nextQuantity));
@@ -164,14 +169,14 @@ export function SalesmanOrderBuilder({
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="min-w-0 rounded-xl bg-ink-50 p-3">
-            <p className="text-xs text-ink-400">Outstanding</p>
-            <p className="mt-0.5 break-words font-semibold text-ink-900">₹{credit.outstanding.toFixed(2)}</p>
+          <div className="min-w-0 rounded-xl bg-amber-50 p-3">
+            <p className="text-xs text-amber-700">🪙 Coins available</p>
+            <p className="mt-0.5 break-words font-semibold text-ink-900">₹{coinsAvailableRupees.toFixed(2)}</p>
           </div>
           <div className="min-w-0 rounded-xl bg-ink-50 p-3">
-            <p className="text-xs text-ink-400">Available credit</p>
+            <p className="text-xs text-ink-400">🪙 Coins used / payable</p>
             <p className="mt-0.5 break-words font-semibold text-ink-900">
-              {availableCredit === null ? 'Not configured' : `₹${availableCredit.toFixed(2)}`}
+              ₹{coinsUsedRupees.toFixed(2)} / ₹{payableOnDeliveryRupees.toFixed(2)}
             </p>
           </div>
         </div>

@@ -4,18 +4,19 @@ import { requirePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import { GrnForm } from '@/components/admin/grn-form';
+import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 
 export default async function NewGrnPage() {
   await requirePermission('inventory.view');
   const supabase = createClient();
 
-  const [{ data: productData }, { data: warehouseData }] = await Promise.all([
+  const [{ data: productData }, warehouseResolution] = await Promise.all([
     supabase.from('products').select('id, name, sku_code').eq('is_active', true).order('name'),
-    supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
+    // ONE active warehouse: resolved centrally, never chosen by the client.
+    resolveActiveWarehouse(supabase),
   ]);
 
   const products = (productData ?? []) as { id: string; name: string; sku_code: string }[];
-  const warehouses = (warehouseData ?? []) as { id: string; name: string }[];
 
   return (
     <div className="space-y-6">
@@ -33,7 +34,11 @@ export default async function NewGrnPage() {
         <CardHeader>
           <CardTitle>GRN details</CardTitle>
         </CardHeader>
-        <GrnForm products={products} warehouses={warehouses} />
+        <GrnForm
+          products={products}
+          warehouse={warehouseResolution.ok ? { name: warehouseResolution.warehouse.name } : null}
+          warehouseError={warehouseResolution.ok ? null : warehouseResolution.message}
+        />
       </Card>
     </div>
   );

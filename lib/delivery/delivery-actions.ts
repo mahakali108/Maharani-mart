@@ -45,6 +45,20 @@ import { generateDeliveryOtp, hashDeliveryOtp, isValidOtpFormat, verifyDeliveryO
 import { computePartialSettlement, type SettlementLine } from './settlement';
 import { computeReturnDeadline, parseReturnWindowDays } from './return-window';
 
+/**
+ * Minimal RPC surface for the 🪙 coin functions added in migration 0053. The
+ * generated database types predate those functions; this keeps the call typed
+ * without weakening the client for every other query.
+ */
+function RpcCapable(client: ReturnType<typeof createClient>) {
+  return client as unknown as {
+    rpc: (
+      name: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Types (server action results)
 // ---------------------------------------------------------------------------
@@ -504,36 +518,57 @@ export async function completeDeliveryAction(
     }
   }
 
-  // --- Shortfall credit-back (decision D4) ---
+  // --- Shortfall coin refund (decision D4) ---
+  //
+  // Missing/damaged value goes back as coins. The ledger is admin-only, so this
+  // is written through `order_shortfall_coins` (0053): one linked, bounded,
+  // idempotent REFUND_CREDIT per delivery — which is what makes it possible for
+  // the STAFF member completing the delivery to credit the shop at all.
   if (settlement.creditBackPaise > 0) {
-    const { data: account } = await supabase
-      .from('retailer_credit_accounts')
-      .select('id')
-      .eq('retailer_id', order.retailer_id)
-      .maybeSingle<{ id: string }>();
+    const shortfallNote = `${settlement.shortfallPieces} item(s) missing or damaged at delivery`;
+    const { error: creditError } = await RpcCapable(supabase).rpc('order_shortfall_coins', {
+      p_delivery_id: delivery.id,
+      p_amount_paise: settlement.creditBackPaise,
+      p_reason: shortfallNote,
+      p_created_by: user.id,
+      p_reverse: false,
+    });
 
-    const { error: creditError } = await supabase
-      .from('retailer_wallet_ledger')
-      .insert({
-        retailer_id: order.retailer_id,
-        account_id: account?.id ?? null,
-        transaction_type: 'REFUND_CREDIT',
-        amount_paise: settlement.creditBackPaise,
-        direction: 'credit',
-        reference_type: 'delivery',
-        reference_id: delivery.id,
-        description: `Shortfall credit for order ${order.order_number}`,
-        reason: `${settlement.shortfallPieces} item(s) missing or damaged at delivery`,
-        created_by: user.id,
-        idempotency_key: `delivery-shortfall:${delivery.id}`,
-        metadata: {
-          delivery_id: delivery.id,
-          order_id: orderId,
-          shortfall_pieces: settlement.shortfallPieces,
-          credit_rupees: settlement.creditBackPaise / 100,
-        },
-      } as never);
-    if (creditError && creditError.code !== '23505') return { error: creditError.message };
+    if (creditError && !/does not exist|could not find the function|schema cache/i.test(creditError.message)) {
+      // A duplicate shortfall credit (23505) is the idempotent success.
+      if ((creditError as { code?: string }).code !== '23505') return { error: creditError.message };
+    } else if (creditError) {
+      // Older database without 0053: the direct write still works for admins,
+      // and the unique idempotency key keeps it single.
+      const { data: account } = await supabase
+        .from('retailer_credit_accounts')
+        .select('id')
+        .eq('retailer_id', order.retailer_id)
+        .maybeSingle<{ id: string }>();
+
+      const { error: fallbackError } = await supabase
+        .from('retailer_wallet_ledger')
+        .insert({
+          retailer_id: order.retailer_id,
+          account_id: account?.id ?? null,
+          transaction_type: 'REFUND_CREDIT',
+          amount_paise: settlement.creditBackPaise,
+          direction: 'credit',
+          reference_type: 'delivery',
+          reference_id: delivery.id,
+          description: `Shortfall credit for order ${order.order_number}`,
+          reason: shortfallNote,
+          created_by: user.id,
+          idempotency_key: `delivery-shortfall:${delivery.id}`,
+          metadata: {
+            delivery_id: delivery.id,
+            order_id: orderId,
+            shortfall_pieces: settlement.shortfallPieces,
+            credit_rupees: settlement.creditBackPaise / 100,
+          },
+        } as never);
+      if (fallbackError && fallbackError.code !== '23505') return { error: fallbackError.message };
+    }
   }
 
   await notifyOrderEvent({
@@ -700,17 +735,17 @@ export async function recordReturnToWarehouseAction(
   // already credited at partial delivery, reverse that too so the retailer
   // is not credited twice for the same goods.
   await reverseOrderWalletDebit(orderId, order.retailer_id, 'returned to warehouse', user.id);
-  const { data: refund } = await supabase
-    .from('retailer_wallet_ledger')
-    .select('id, is_reversed')
-    .eq('transaction_type', 'REFUND_CREDIT')
-    .eq('reference_id', delivery.id)
-    .maybeSingle<{ id: string; is_reversed: boolean }>();
-  if (refund && !refund.is_reversed) {
-    await supabase
-      .from('retailer_wallet_ledger')
-      .update({ is_reversed: true, reversed_at: new Date().toISOString(), reversed_by: user.id } as never)
-      .eq('id', refund.id);
+  // A shortfall credit for this delivery, if any, is reversed in the same
+  // breath — the shop pays for the goods again because they came back. The
+  // function is idempotent: a second return reverses nothing more.
+  const { error: reverseShortfallError } = await RpcCapable(supabase).rpc('order_shortfall_coins', {
+    p_delivery_id: delivery.id,
+    p_reason: 'returned to warehouse',
+    p_created_by: user.id,
+    p_reverse: true,
+  });
+  if (reverseShortfallError && !/does not exist|could not find the function|schema cache/i.test(reverseShortfallError.message)) {
+    console.warn('Shortfall credit reversal failed:', reverseShortfallError.message);
   }
 
   await notifyOrderEvent({

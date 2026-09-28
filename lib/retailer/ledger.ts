@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
-import { calculateCreditPosition, roundMoney, type CreditPosition } from '@/lib/orders/credit';
+import { roundMoney } from '@/lib/orders/credit';
 
 /**
  * Retailer financial ledger — built ONLY from rows that already exist.
@@ -66,7 +66,6 @@ export interface LedgerData {
   totalEntries: number;
   /** Sum of the entries on THIS page only — never presented as a balance. */
   pageTotal: number;
-  credit: CreditPosition | null;
 }
 
 /**
@@ -169,10 +168,8 @@ export async function loadRetailerLedger(
     entries,
     totalEntries: count ?? entries.length,
     pageTotal: sumLedgerEntries(entries),
-    // The same single credit implementation used by checkout and the account
-    // card, so the ledger can never disagree with them.
-    credit: account
-      ? calculateCreditPosition(account.creditLimit, account.outstandingBalance)
-      : null,
+    // 🪙 No credit position is derived here any more: this module still reports
+    // real order charges and the account mirror (read-only history), while the
+    // live balance is the coin balance on the wallet ledger.
   };
 }

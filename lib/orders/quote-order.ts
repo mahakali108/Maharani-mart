@@ -2,12 +2,13 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { validateCouponForOrder } from '@/lib/coupons/validate';
-import { calculateCreditPosition, roundMoney, type CreditPosition } from '@/lib/orders/credit';
+import { roundMoney } from '@/lib/orders/credit';
 import { getProductPriceOverrides, resolvePackCasePrice } from '@/lib/retailer/effective-price';
 import { calculateRetailerPiecePrice, type RetailerPiecePricing } from '@/lib/retailer/retailer-pricing';
 import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
-import { getRetailerWalletPosition, paiseToRupees } from '@/lib/retailer/wallet';
+import { getRetailerWalletPosition, rupeesToPaise } from '@/lib/retailer/wallet';
+import { computeCoinPayment, coinBalancePaise, type CoinPayment } from '@/lib/coins/math';
 
 export interface RequestedQuoteLine {
   packId: string;
@@ -96,7 +97,11 @@ export interface OrderQuote {
   discountTotal: number;
   grandTotal: number;
   lines: QuotedOrderLine[];
-  credit: CreditPosition;
+  /**
+   * 🪙 Coins position for THIS order. Authoritative: computed from the wallet
+   * ledger and the quoted total, never from anything the client sent.
+   */
+  coins: CoinPayment;
   /** Set when a valid coupon was revalidated and applied (0051). */
   coupon: QuotedCoupon | null;
 }
@@ -121,8 +126,6 @@ interface RetailerForQuote {
   id: string;
   area_id: string;
   status: 'pending_approval' | 'active' | 'suspended';
-  credit_limit: number;
-  outstanding_balance: number;
 }
 
 interface PackForQuote {
@@ -167,7 +170,7 @@ export function normalizeQuoteLines(lines: RequestedQuoteLine[]): { error: strin
 
 /**
  * Authoritative, read-only order validation and quote path. It reuses the same
- * catalog, MOQ, case + loose-piece, GST-inclusive and credit rules as order
+ * catalog, MOQ, case + loose-piece, GST-inclusive and coin rules as order
  * creation. Callers may present this quote, but createOrderForRetailer always
  * quotes again before a write so a stale AI/cart quote can never become an
  * order unchecked.
@@ -200,19 +203,18 @@ export async function quoteOrderForRetailer({
 
   const { data: retailer, error: retailerError } = await supabase
     .from('retailers')
-    .select('id, area_id, status, credit_limit, outstanding_balance')
+    .select('id, area_id, status')
     .eq('id', retailerId)
     .maybeSingle<RetailerForQuote>();
 
   if (retailerError || !retailer) return { error: 'Retailer not found or not assigned to you.' };
   if (retailer.status !== 'active') return { error: 'Orders can only be created for an active retailer.' };
 
-  // Authoritative credit position from the wallet ledger (integer paise). The
+  // Authoritative coin position from the wallet ledger (integer paise). The
   // helper falls back to the legacy mirror columns if the wallet RPCs are not
   // yet deployed, so this never breaks an existing quote path.
+  // 🪙 The authoritative balance for this quote, read from the wallet ledger.
   const walletPosition = await getRetailerWalletPosition(supabase, retailer.id);
-  const creditLimitRupees = paiseToRupees(walletPosition.creditLimitPaise);
-  const outstandingRupees = paiseToRupees(walletPosition.outstandingPaise);
 
   const { data: packData, error: packError } = await supabase
     .from('product_packs')
@@ -345,6 +347,13 @@ export async function quoteOrderForRetailer({
   }
 
   const grandTotal = roundMoney(subtotal + gstTotal - discountTotal);
+  // 🪙 Coins: the server decides how much of this total the balance covers. The
+  // remainder is what the shop pays on delivery — an order is never refused for
+  // lack of coins.
+  const coins = computeCoinPayment({
+    orderTotalPaise: rupeesToPaise(grandTotal),
+    balancePaise: coinBalancePaise(walletPosition.creditLimitPaise, walletPosition.outstandingPaise),
+  });
   return {
     quote: {
       retailerId: retailer.id,
@@ -353,7 +362,7 @@ export async function quoteOrderForRetailer({
       discountTotal,
       grandTotal,
       lines: quotedLines,
-      credit: calculateCreditPosition(creditLimitRupees, outstandingRupees, grandTotal),
+      coins,
       coupon: quotedCoupon,
     },
   };
