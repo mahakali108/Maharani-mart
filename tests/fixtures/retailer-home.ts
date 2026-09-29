@@ -26,7 +26,7 @@ export const product: CatalogProductRow = {
   }],
 };
 export function pricingData(): CatalogPricingData {
-  return { overrides: new Map(), offerIds: new Set(), packTiers: new Map([[PACK, tiers]]), availability: new Map([[PRODUCT, 'in_stock']]) };
+  return { overrides: new Map(), offerIds: new Set(), packTiers: new Map([[PACK, tiers]]), availability: new Map([[PACK, { state: 'in_stock' }]]) };
 }
 export function emptyHome(): RetailerHomeData {
   return {

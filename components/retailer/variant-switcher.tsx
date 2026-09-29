@@ -20,10 +20,8 @@ import type { VariantSwitcherItem, VariantSwitcherModel } from '@/lib/retailer/v
  *     actually higher
  *   - an OFFER badge only when a real active scheme row exists
  *   - a BEST VALUE badge only when one size is genuinely cheaper per piece
- *   - availability from the pack's `is_active` flag
- *
- * Per-variant STOCK is intentionally not shown: inventory is tracked at
- * product level and is staff-only under RLS (see docs/warehouse-gaps.md).
+ *   - the simple server-resolved status for this exact pack (In Stock or
+ *     Out of Stock; exact counts are not sent to retailer-facing pages)
  *
  * Layout: a horizontally scrolling, snap-aligned row on mobile; a wrapped
  * grid from `sm` up. When a product has many sizes only the first
@@ -92,6 +90,15 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
             {pricing.tierSummary ? `Slabs ${pricing.tierSummary}` : 'Single rate per piece'}
           </span>
         </>
+      ) : null}
+
+      {variant.availability !== 'unknown' ? (
+        <span className={cn(
+          'mt-1.5 block text-[10px] font-bold leading-none',
+          variant.availability === 'in_stock' ? 'text-emerald-700' : 'text-rose-700'
+        )}>
+          {variant.availability === 'in_stock' ? 'In Stock' : 'Out of Stock'}
+        </span>
       ) : null}
 
       {variant.isBestValue || pricing?.hasOffer ? (

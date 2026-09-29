@@ -1,13 +1,15 @@
 import 'server-only';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
+import { releaseOrderCoupon } from '@/lib/coupons/validate';
 import type { Database } from '@/types/database.types';
-import { debitCoinsForOrder } from '@/lib/coins/server';
+import { debitCoinsForOrder, getOrderCoinMovement } from '@/lib/coins/server';
 import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 
 type OrderInsert = Database['public']['Tables']['orders']['Insert'];
 type OrderItemInsert = Database['public']['Tables']['order_items']['Insert'];
+type SupabaseClient = ReturnType<typeof createClient>;
 
 export interface RequestedOrderLine {
   packId: string;
@@ -26,6 +28,75 @@ export interface CreatedOrder {
 
 export type CreateOrderResult = { error: string } | { order: CreatedOrder };
 
+interface RequestOrderRow {
+  id: string;
+  order_number: string;
+  retailer_id: string;
+  collected_by: string | null;
+  grand_total: number;
+  status: string;
+  request_completed_at: string | null;
+}
+
+/** Return the original result for a repeated salesman form submission. */
+async function replayRequestKey(
+  supabase: SupabaseClient,
+  requestKey: string,
+  retailerId: string,
+  collectedBy: string | null
+): Promise<CreateOrderResult | null> {
+  const { data: existing, error } = await supabase
+    .from('orders')
+    .select('id, order_number, retailer_id, collected_by, grand_total, status, request_completed_at')
+    .eq('request_key', requestKey)
+    .maybeSingle<RequestOrderRow>();
+
+  if (error) return { error: 'The previous order attempt could not be verified. Refresh and check your orders.' };
+  if (!existing) return null;
+  if (existing.retailer_id !== retailerId || existing.collected_by !== collectedBy) {
+    return { error: 'This order request key has already been used.' };
+  }
+  if (existing.status === 'cancelled') {
+    return { error: 'This order request was already cancelled. Review the current stock and submit a new order.' };
+  }
+  if (!existing.request_completed_at) {
+    return { error: 'This order request is still being finalized. Refresh your orders before trying again.' };
+  }
+
+  const { data: firstItem, error: itemError } = await supabase
+    .from('order_items')
+    .select('id')
+    .eq('order_id', existing.id)
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (itemError) return { error: 'The previous order attempt could not be verified. Refresh and check your orders.' };
+  if (!firstItem) {
+    return { error: 'The previous order attempt did not finish. Change the order and submit it again.' };
+  }
+
+  const movement = await getOrderCoinMovement(supabase, existing.id, retailerId);
+  const grandTotal = Number(existing.grand_total);
+  const coinsUsed = movement.spentPaise / 100;
+  return {
+    order: {
+      id: existing.id,
+      orderNumber: existing.order_number,
+      grandTotal,
+      coinsUsed,
+      payableOnDelivery: Math.max(0, grandTotal - coinsUsed),
+    },
+  };
+}
+
+/**
+ * Convert the database stock guard's structured error into the compact message
+ * requested on customer checkout: “Only X available”.
+ */
+export function orderCreationErrorMessage(message: string): string {
+  const shortage = message.match(/INSUFFICIENT_STOCK:\s*(Only\s+\d+\s+available(?:\s+for\s+[^.\n]+)?)/i);
+  return shortage?.[1]?.trim() ?? message;
+}
+
 /**
  * Shared server-only order creation path. The authoritative read/validation
  * phase lives in quoteOrderForRetailer and is rerun immediately before every
@@ -38,11 +109,14 @@ export async function createOrderForRetailer({
   notes,
   shippingAddress,
   couponCode,
+  requestKey,
 }: {
   retailerId: string;
   collectedBy: string | null;
   lines: RequestedOrderLine[];
   notes: string;
+  /** Stable per-submission key used by the salesman form for retries. */
+  requestKey?: string | null;
   /** Server-verified delivery-address snapshot (0036); optional for legacy callers. */
   shippingAddress?: { line: string; label?: string; receiverName?: string; phone?: string } | null;
   /**
@@ -54,19 +128,23 @@ export async function createOrderForRetailer({
   couponCode?: string | null;
 }): Promise<CreateOrderResult> {
   const supabase = createClient();
+  if (requestKey) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestKey)) {
+      return { error: 'Invalid order request key.' };
+    }
+    if (!collectedBy) return { error: 'A capturing salesman is required for this retry-safe order.' };
+    const previous = await replayRequestKey(supabase, requestKey, retailerId, collectedBy);
+    if (previous) return previous;
+  }
+
   const quoted = await quoteOrderForRetailer({ retailerId, lines, supabase, couponCode });
   if ('error' in quoted) return quoted;
   const { quote } = quoted;
 
-  // ONE active warehouse: resolved server-side and frozen onto the order, so a
-  // freshly placed order is immediately dispatchable. A configuration problem
-  // (0 or 2+ active warehouses) is reported to the operator rather than
-  // guessed — the order is still taken, because refusing a shop's order is
-  // worse than an operator fixing the warehouse before approval.
+  // New simple-stock orders require the one configured active warehouse,
+  // resolved server-side. No client-supplied warehouse id is trusted.
   const warehouse = await resolveActiveWarehouse(supabase);
-  if (!warehouse.ok) {
-    console.warn(`[orders] warehouse configuration error: ${warehouse.message}`);
-  }
+  if (!warehouse.ok) return { error: warehouse.message };
 
   const orderPayload: OrderInsert = {
     retailer_id: retailerId,
@@ -83,8 +161,9 @@ export async function createOrderForRetailer({
     coupon_id: quote.coupon?.id ?? null,
     coupon_code: quote.coupon?.code ?? null,
     coupon_discount: quote.coupon?.discount ?? 0,
-    // Single-warehouse assignment (never a client value).
-    ...(warehouse.ok ? { warehouse_id: warehouse.warehouse.id } : {}),
+    // Re-resolved and forced again by the database BEFORE INSERT.
+    warehouse_id: warehouse.warehouse.id,
+    request_key: requestKey ?? null,
   };
 
   const { data: order, error: orderError } = await supabase
@@ -92,15 +171,17 @@ export async function createOrderForRetailer({
     .insert(orderPayload as unknown as never)
     .select('id, order_number')
     .single<{ id: string; order_number: string }>();
-  if (orderError || !order) return { error: orderError?.message ?? 'Failed to create order.' };
+  if (orderError || !order) {
+    if (requestKey && orderError?.code === '23505') {
+      const previous = await replayRequestKey(supabase, requestKey, retailerId, collectedBy);
+      if (previous) return previous;
+    }
+    return { error: orderError?.message ?? 'Failed to create order.' };
+  }
 
-  // Every quote line expands into ONE `order_items` row billed in PIECES at the
-  // applicable retail tier rate. The row is internally exact (`unit_price ×
-  // quantity = line_total`), `quantity_unit = 'pieces'` says what the row is
-  // billed in, and `quantity_pieces` snapshots the piece count so an invoice, a
-  // reorder or a dispatch never has to re-derive it from a pack configuration
-  // that may change afterwards. Order totals are the sum of these rows, so the
-  // persisted money always reconciles with the quote the retailer saw.
+  // Every quote line becomes one order_items row in pieces. The BEFORE INSERT
+  // trigger locks the selected product pack, checks its current count and
+  // atomically deducts it. A failure rolls the whole INSERT statement back.
   const itemPayloads: OrderItemInsert[] = quote.lines.flatMap((line) =>
     line.items.map((item) => ({
       order_id: order.id,
@@ -123,14 +204,12 @@ export async function createOrderForRetailer({
       .update({ status: 'cancelled', cancelled_reason: 'Order line creation failed' } as unknown as never)
       .eq('id', order.id)
       .eq('status', 'pending');
-    return { error: itemsError.message };
+    return { error: orderCreationErrorMessage(itemsError.message) };
   }
 
-  // Coupon redemption (0051): claim the redemption ATOMICALLY in the database
-  // (row-locked limit checks) BEFORE the wallet is debited. A concurrent
-  // checkout that exhausted the coupon between the quote and this claim
-  // fails here and the order is cancelled — the retailer never pays a
-  // discount the database refused.
+  // Coupon redemption (0051): claim the redemption atomically before the
+  // wallet is debited. A failed claim cancels the order, whose status trigger
+  // restores each simple-pack deduction exactly once.
   if (quote.coupon) {
     const { error: redeemError, data: redeemed } = await (
       supabase as unknown as {
@@ -151,16 +230,15 @@ export async function createOrderForRetailer({
         } as unknown as never)
         .eq('id', order.id)
         .eq('status', 'pending');
+      if (redeemError) await releaseOrderCoupon(supabase, order.id);
       return redeemError
         ? { error: redeemError.message }
         : { error: 'This coupon could not be redeemed (limit reached or no longer eligible). Please remove it and try again.' };
     }
   }
 
-  // 🪙 COINS: the server decides the deduction from the LIVE balance — the
-  // browser never sends an amount, and an order is never refused for a low
-  // balance. The ledger write is atomic and idempotent (order:<id>), so a
-  // retried checkout cannot spend the same coins twice.
+  // 🪙 Coins remain server-computed from the live balance and idempotent on
+  // order:<id>. A debit failure cancels the order and restores pack stock.
   const debit = await debitCoinsForOrder(supabase, {
     retailerId,
     orderId: order.id,
@@ -170,14 +248,31 @@ export async function createOrderForRetailer({
   });
 
   if (!debit.ok) {
-    // Coins could not be spent: cancel the order rather than create one whose
-    // balance movement is unknown, and tell the caller exactly what happened.
     await supabase
       .from('orders')
       .update({ status: 'cancelled', cancelled_reason: `Coin debit failed: ${debit.error}` } as unknown as never)
       .eq('id', order.id)
       .eq('status', 'pending');
+    if (quote.coupon) await releaseOrderCoupon(supabase, order.id);
     return { error: `Your coins could not be applied: ${debit.error}` };
+  }
+
+  if (requestKey) {
+    try {
+      const finalizer = createServiceRoleClient() as unknown as {
+        rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+      };
+      const { data: completed, error: completionError } = await finalizer.rpc('complete_order_request', {
+        p_order_id: order.id,
+        p_request_key: requestKey,
+        p_actor_id: collectedBy!,
+      });
+      if (completionError || completed !== true) {
+        return { error: 'Your order could not be fully confirmed. Refresh your orders before trying again.' };
+      }
+    } catch {
+      return { error: 'Your order could not be fully confirmed. Refresh your orders before trying again.' };
+    }
   }
 
   return {

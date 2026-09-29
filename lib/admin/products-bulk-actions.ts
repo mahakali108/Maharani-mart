@@ -230,7 +230,7 @@ async function bulkAdjustPrice(formData: FormData): Promise<BulkResult> {
 
   const { data: packs, error: packError } = await supabase
     .from('product_packs')
-    .select('id, product_id, pack_name, case_price, units_per_case, cost_price')
+    .select('id, product_id, pack_name, case_price, units_per_case')
     .in('product_id', selected.ids)
     .eq('is_active', true)
     .returns<{
@@ -239,11 +239,21 @@ async function bulkAdjustPrice(formData: FormData): Promise<BulkResult> {
       pack_name: string;
       case_price: number;
       units_per_case: number;
-      cost_price: number | null;
     }[]>();
   if (packError) return { ok: false, error: packError.message };
 
-  const rows = packs ?? [];
+  // Purchase cost remains Admin-only at the database column boundary. Resolve
+  // pack costs through the SECURITY DEFINER accessor instead of selecting the
+  // protected column alongside public pack prices.
+  const costResults = await Promise.all(selected.ids.map(async (productId) => {
+    const { data, error } = await supabase.rpc('admin_pack_costs' as never, { p_product_id: productId } as never);
+    return { productId, data: data as unknown as { pack_id: string; cost_price: number | null }[] | null, error };
+  }));
+  const failedCost = costResults.find((result) => result.error);
+  if (failedCost?.error) return { ok: false, error: `Purchase costs could not be verified. No prices were changed: ${failedCost.error.message}` };
+  const costByPack = new Map(costResults.flatMap((result) => (result.data ?? []).map((row) => [row.pack_id, row.cost_price] as const)));
+
+  const rows = (packs ?? []).map((pack) => ({ ...pack, cost_price: costByPack.get(pack.id) ?? null }));
   if (rows.length === 0) {
     return { ok: false, error: 'The selected products have no active variants to reprice.' };
   }

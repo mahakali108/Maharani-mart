@@ -26,7 +26,7 @@ const orderActions = read('lib/retailer/order-actions.ts');
 describe('availability display mapping (shared, sanctioned)', () => {
   it('normalises only known states; everything else is unknown', () => {
     expect(normalizeAvailabilityState('in_stock')).toBe('in_stock');
-    expect(normalizeAvailabilityState('low_stock')).toBe('low_stock');
+    expect(normalizeAvailabilityState('low_stock')).toBe('unknown');
     expect(normalizeAvailabilityState('out_of_stock')).toBe('out_of_stock');
     expect(normalizeAvailabilityState('999999')).toBe('unknown');
     expect(normalizeAvailabilityState(null)).toBe('unknown');
@@ -37,17 +37,17 @@ describe('availability display mapping (shared, sanctioned)', () => {
     expect(isOutOfStock('unknown')).toBe(false);
   });
 
-  it('out-of-stock is unambiguous', () => {
+  it('shows customers only the binary stock status', () => {
     expect(isOutOfStock('out_of_stock')).toBe(true);
-    expect(availabilityBadge('out_of_stock')?.label).toMatch(/Unavailable/i);
-    expect(availabilityBadge('in_stock')?.label).toMatch(/Available/i);
+    expect(availabilityBadge('out_of_stock')?.label).toBe('Out of stock');
+    expect(availabilityBadge('in_stock')?.label).toBe('In Stock');
   });
 });
 
 describe('reorder page guards', () => {
   it('fetches CURRENT stock via the sanctioned retailer availability RPC', () => {
     expect(reorderPage).toContain('loadCatalogAvailability');
-    expect(reorderPage).toContain('availability:');
+    expect(reorderPage).toContain('availability,');
   });
 
   it('keeps the stored previous price available for change display', () => {
@@ -84,10 +84,11 @@ describe('reorder form guards', () => {
     expect(reorderForm).toMatch(/Math\.abs\(line\.previousPiecePrice - pricing\.unitPrice\) >= 0\.005/);
   });
 
-  it('out-of-stock lines stay orderable with an honest note (stock confirmed at processing)', () => {
-    expect(reorderForm).toContain('isOutOfStock');
-    expect(reorderForm).toMatch(/Out of stock right now/);
-    expect(reorderForm).toMatch(/confirmed when the order is processed/i);
+  it('out-of-stock lines show only the binary status and stay locked', () => {
+    expect(reorderPage).toMatch(/availability === 'out_of_stock'/);
+    expect(reorderForm).toContain('availabilityBadge(line.availability)');
+    expect(reorderForm).toContain("line.unavailable && line.availability !== 'out_of_stock'");
+    expect(reorderForm).not.toMatch(/you can still add it|confirmed when the order is processed/i);
   });
 
   it('unavailable lines remain disabled (checkbox + quantity)', () => {

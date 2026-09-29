@@ -27,7 +27,7 @@ export function HomeCartSummary({ cart }: { cart: Summary }) {
           <Link href="/retailer/cart" className="flex min-h-11 items-center justify-center rounded-xl bg-action-600 px-3 text-xs font-semibold text-white hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2">View Cart</Link>
           <Link href="/retailer/catalog" className="flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-3 text-center text-xs font-semibold text-action-700 hover:bg-action-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500">Continue Shopping</Link>
         </div>
-        <p className="mt-3 text-[10px] leading-4 text-slate-500">Current item totals. Prices are checked again at checkout; stock is reserved on order confirmation.</p>
+        <p className="mt-3 text-[10px] leading-4 text-slate-500">Prices and availability are checked again when you place the order.</p>
       </>}
     </section>
   );

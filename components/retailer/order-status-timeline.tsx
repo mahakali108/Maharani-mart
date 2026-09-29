@@ -21,7 +21,7 @@ export interface StatusHistoryEntry {
 const STAGES = [
   { key: 'pending', label: 'Order placed', reachesRank: 0, icon: Clock3 },
   { key: 'confirmed', label: 'Admin confirmed', reachesRank: 1, icon: Check },
-  { key: 'packed', label: 'Warehouse packed', reachesRank: 3, icon: PackageCheck },
+  { key: 'packed', label: 'Packed', reachesRank: 3, icon: PackageCheck },
   { key: 'dispatched', label: 'Dispatched', reachesRank: 4, icon: Truck },
   { key: 'delivered', label: 'Delivered', reachesRank: 5, icon: Check },
 ];

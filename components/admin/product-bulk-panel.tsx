@@ -27,6 +27,7 @@ export interface BulkPanelProduct {
   gst_percent: number;
   hsn_code: string | null;
   barcode: string | null;
+  stockUnit: string;
   is_active: boolean;
   is_new_launch: boolean;
   updated_at: string;
@@ -34,9 +35,15 @@ export interface BulkPanelProduct {
   categories: { name: string } | null;
   imageUrl: string | null;
   moq: number | null;
-  casePrice: number | null;
-  stockStatus: 'healthy' | 'low_stock' | 'out_of_stock' | null;
-  available: number | null;
+  packStocks: {
+    packId: string;
+    packName: string;
+    skuCode: string;
+    price: number;
+    quantity: number | null;
+    status: 'in_stock' | 'out_of_stock' | 'unknown';
+    active: boolean;
+  }[];
   units30d: number | null;
   margin: number | null;
 }
@@ -50,6 +57,7 @@ export function toBulkPanelProduct(row: ResolvedAdminProduct): BulkPanelProduct 
     gst_percent: row.gst_percent,
     hsn_code: row.hsn_code,
     barcode: row.barcode,
+    stockUnit: row.unit,
     is_active: row.is_active,
     is_new_launch: row.is_new_launch,
     updated_at: row.updated_at,
@@ -57,18 +65,15 @@ export function toBulkPanelProduct(row: ResolvedAdminProduct): BulkPanelProduct 
     categories: row.categories,
     imageUrl: row.product_images[0]?.image_url ?? null,
     moq: row.moq,
-    casePrice: row.casePrice,
-    stockStatus: row.stock?.status ?? null,
-    available: row.stock?.available ?? null,
+    packStocks: row.packStocks,
     units30d: row.sales?.units30d ?? null,
     margin: row.margin,
   };
 }
 
-const STOCK_BADGE: Record<NonNullable<BulkPanelProduct['stockStatus']>, { label: string; className: string }> = {
-  healthy: { label: 'In stock', className: 'bg-emerald-50 text-emerald-700' },
-  low_stock: { label: 'Low', className: 'bg-amber-50 text-amber-700' },
-  out_of_stock: { label: 'Out', className: 'bg-rose-50 text-rose-700' },
+const STOCK_BADGE: Record<'in_stock' | 'out_of_stock', { label: string; className: string }> = {
+  in_stock: { label: 'In Stock', className: 'bg-emerald-50 text-emerald-700' },
+  out_of_stock: { label: 'Out of Stock', className: 'bg-rose-50 text-rose-700' },
 };
 
 type BulkKind = 'activate' | 'deactivate' | 'category' | 'brand' | 'gst' | 'moq' | 'price';
@@ -348,14 +353,17 @@ export function ProductBulkPanel({
                   <th className="px-4 py-3 font-medium">GST</th>
                   <th className="px-4 py-3 font-medium">HSN</th>
                   <th className="px-4 py-3 font-medium">MOQ</th>
+                  <th className="px-4 py-3 font-medium">Pack</th>
+                  <th className="px-4 py-3 font-medium">SKU</th>
+                  <th className="px-4 py-3 font-medium">Price</th>
                   <th className="px-4 py-3 font-medium">Stock</th>
                   <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Product status</th>
                   <th className="px-4 py-3 font-medium" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
                 {rows.map((row) => {
-                  const badge = row.stockStatus ? STOCK_BADGE[row.stockStatus] : null;
                   return (
                     <tr key={row.id} className={cn(selected.has(row.id) && 'bg-primary-50/40')}>
                       <td className="px-3 py-3">
@@ -396,17 +404,51 @@ export function ProductBulkPanel({
                       <td className="px-4 py-3 font-mono text-xs text-ink-500">{row.hsn_code ?? '—'}</td>
                       <td className="px-4 py-3 text-ink-600">{row.moq ?? '—'}</td>
                       <td className="px-4 py-3">
-                        {badge ? (
-                          <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', badge.className)}>
-                            {badge.label}
-                            {row.available !== null ? ` · ${row.available}` : ''}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-ink-300">Unknown</span>
-                        )}
-                        {row.units30d !== null ? (
-                          <p className="mt-0.5 text-[10px] text-ink-400">{row.units30d} sold / 30d</p>
-                        ) : null}
+                        <div className="space-y-3">
+                          {row.packStocks.length > 0 ? row.packStocks.map((pack) => (
+                            <div key={pack.packId} className="min-w-[7rem]">
+                              <p className="font-semibold text-ink-800">{pack.packName}</p>
+                              {!pack.active ? <span className="text-[10px] text-ink-400">Inactive pack</span> : null}
+                            </div>
+                          )) : <span className="text-ink-300">No packs</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-3">
+                          {row.packStocks.length > 0 ? row.packStocks.map((pack) => (
+                            <p key={pack.packId} className="whitespace-nowrap font-mono text-xs text-ink-600">{pack.skuCode || '—'}</p>
+                          )) : <span className="text-ink-300">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-3">
+                          {row.packStocks.length > 0 ? row.packStocks.map((pack) => (
+                            <p key={pack.packId} className="whitespace-nowrap text-xs text-ink-600">₹{pack.price.toFixed(2)}</p>
+                          )) : <span className="text-ink-300">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-3">
+                          {row.packStocks.length > 0 ? row.packStocks.map((pack) => (
+                            <p key={pack.packId} className="whitespace-nowrap font-semibold text-ink-800">
+                              {pack.quantity !== null ? `${pack.quantity} ${row.stockUnit.trim().toUpperCase() || 'PCS'}` : 'Admin-only count'}
+                            </p>
+                          )) : <span className="text-ink-300">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-3">
+                          {row.packStocks.length > 0 ? row.packStocks.map((pack) => {
+                            const badge = pack.status === 'unknown' ? null : STOCK_BADGE[pack.status];
+                            return (
+                              <p key={pack.packId} className="whitespace-nowrap">
+                                {badge ? (
+                                  <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', badge.className)}>{badge.label}</span>
+                                ) : <span className="text-xs text-ink-300">—</span>}
+                              </p>
+                            );
+                          }) : <span className="text-ink-300">—</span>}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -466,7 +508,6 @@ export function ProductBulkPanel({
         */}
         <ul className="space-y-2.5 lg:hidden">
           {rows.map((row) => {
-            const badge = row.stockStatus ? STOCK_BADGE[row.stockStatus] : null;
             const isSelected = selected.has(row.id);
             return (
               <li
@@ -494,7 +535,7 @@ export function ProductBulkPanel({
                     <p className="mt-0.5 truncate text-xs text-ink-500">
                       {row.brands?.name ?? 'No brand'} · {row.categories?.name ?? 'No category'}
                     </p>
-                    {row.barcode ? <p className="mt-0.5 font-mono text-[11px] text-ink-400">{row.barcode}</p> : null}
+                    {row.barcode ? <p className="mt-0.5 font-mono text-[11px] text-ink-400">EAN {row.barcode}</p> : null}
                   </div>
                   <span
                     className={cn(
@@ -531,20 +572,32 @@ export function ProductBulkPanel({
                       </dd>
                     </div>
                   ) : null}
-                  <div>
-                    <dt className="text-ink-400">Stock</dt>
-                    <dd>
-                      {badge ? (
-                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', badge.className)}>
-                          {badge.label}
-                          {row.available !== null ? ` · ${row.available}` : ''}
-                        </span>
-                      ) : (
-                        <span className="text-ink-300">Unknown</span>
-                      )}
-                    </dd>
-                  </div>
                 </dl>
+
+                <section aria-label={`Pack stock for ${row.name}`} className="mt-3 space-y-2">
+                  <h3 className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Pack stock</h3>
+                  {row.packStocks.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-ink-200 p-2 text-xs text-ink-400">No packs configured.</p>
+                  ) : row.packStocks.map((pack) => {
+                    const badge = pack.status === 'unknown' ? null : STOCK_BADGE[pack.status];
+                    return (
+                      <div key={pack.packId} className="rounded-lg border border-ink-100 bg-ink-50/50 p-2.5">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-semibold text-ink-800">{pack.packName}</p>
+                          <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold', pack.active ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500')}>
+                            {pack.active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px] sm:grid-cols-4">
+                          <div><dt className="text-ink-400">SKU</dt><dd className="truncate font-mono font-semibold text-ink-700">{pack.skuCode || '—'}</dd></div>
+                          <div><dt className="text-ink-400">Price</dt><dd className="font-semibold text-ink-700">₹{pack.price.toFixed(2)}</dd></div>
+                          <div><dt className="text-ink-400">Stock</dt><dd className="font-semibold text-ink-700">{pack.quantity !== null ? `${pack.quantity} ${row.stockUnit.trim().toUpperCase() || 'PCS'}` : 'Admin-only count'}</dd></div>
+                          <div><dt className="text-ink-400">Status</dt><dd>{badge ? <span className={cn('rounded-full px-1.5 py-0.5 font-bold', badge.className)}>{badge.label}</span> : <span className="text-ink-300">—</span>}</dd></div>
+                        </dl>
+                      </div>
+                    );
+                  })}
+                </section>
 
                 {row.units30d !== null ? (
                   <p className="mt-2 text-[10px] text-ink-400">{row.units30d} sold in the last 30 days</p>

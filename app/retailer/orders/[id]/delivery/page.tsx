@@ -96,7 +96,7 @@ export default async function RetailerDeliveryPage({ params }: { params: { id: s
             <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">
               <p className="font-medium">Last attempt could not be completed</p>
               <p>{delivery.failure_reason}</p>
-              <p className="mt-1 text-xs">Your order is back in the warehouse queue and will be re-attempted.</p>
+              <p className="mt-1 text-xs">Your order is being prepared for another delivery attempt.</p>
             </div>
           ) : null}
         </Card>

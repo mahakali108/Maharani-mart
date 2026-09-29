@@ -66,19 +66,28 @@ describe('order creation revalidates and records the coupon server-side', () => 
     expect(source).toContain('coupon_discount: quote.coupon?.discount ?? 0');
   });
 
-  it('claims the redemption atomically via the database and cancels the order if the database refuses', () => {
+  it('claims the redemption atomically before coins and completes the request only after both steps', () => {
     const source = createOrder();
     expect(source).toContain("rpc('redeem_coupon'");
     expect(source).toContain('p_coupon_id: quote.coupon.id');
     expect(source).toContain('p_order_id: order.id');
     expect(source).toMatch(/redeemError \|\| redeemed === false/);
-    // The redemption claim happens before the coin debit: the coupon is
-    // claimed (row-locked) first, so a discounted order never spends coins
-    // against a discount the database then refuses.
+    // The redemption claim happens before the coin debit: a discounted order
+    // never spends coins against a discount the database then refuses.
     const redeemIndex = source.indexOf("rpc('redeem_coupon'");
     const debitIndex = source.indexOf('debitCoinsForOrder(supabase, {');
+    const completionIndex = source.indexOf("rpc('complete_order_request'");
     expect(redeemIndex).toBeGreaterThan(-1);
     expect(debitIndex).toBeGreaterThan(redeemIndex);
+    expect(completionIndex).toBeGreaterThan(debitIndex);
+  });
+
+  it('releases an order coupon when coupon confirmation or coin debit fails', () => {
+    const source = createOrder();
+    const redeemFailure = source.slice(source.indexOf('if (redeemError || redeemed === false)'));
+    const debitFailure = source.slice(source.indexOf('if (!debit.ok)'));
+    expect(redeemFailure).toContain('releaseOrderCoupon(supabase, order.id)');
+    expect(debitFailure).toContain('releaseOrderCoupon(supabase, order.id)');
   });
 
   it('clears the consumed coupon from the cart after a successful order', () => {

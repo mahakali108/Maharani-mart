@@ -28,7 +28,8 @@ export default async function BannersPage() {
     supabase
       .from('banners')
       .select('id, title, image_url, link_url, area_id, sort_order, is_active, starts_at, ends_at')
-      .order('sort_order'),
+      .order('sort_order')
+      .order('id'),
     supabase.from('areas').select('id, name'),
   ]);
 
@@ -48,7 +49,7 @@ export default async function BannersPage() {
         <CardHeader>
           <CardTitle>Add a new banner</CardTitle>
         </CardHeader>
-        <BannerForm areas={areaRows ?? []} />
+        <BannerForm areas={areaRows ?? []} priority={banners.length * 10} />
       </Card>
 
       {banners.length === 0 ? (
@@ -65,7 +66,8 @@ export default async function BannersPage() {
                 <th className="px-5 py-3 font-medium">Preview</th>
                 <th className="px-5 py-3 font-medium">Title</th>
                 <th className="px-5 py-3 font-medium">Area</th>
-                <th className="px-5 py-3 font-medium">Schedule</th>
+                <th className="px-5 py-3 font-medium">Priority</th>
+                <th className="px-5 py-3 font-medium">Schedule (IST)</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium" />
               </tr>
@@ -88,6 +90,7 @@ export default async function BannersPage() {
                     )}
                   </td>
                   <td className="px-5 py-3 text-ink-600">{b.area_id ? areaById.get(b.area_id) ?? '—' : 'All areas'}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-ink-500">{b.sort_order}</td>
                   <td className="px-5 py-3 text-xs text-ink-500">
                     {b.starts_at ? formatIndiaDateTime(b.starts_at) : 'Any time'}
                     {b.ends_at ? ` – ${formatIndiaDateTime(b.ends_at)}` : ''}

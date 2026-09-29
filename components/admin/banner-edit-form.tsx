@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useFormState } from 'react-dom';
 import { MediaUploadField } from '@/components/media/media-upload-field';
-import { StoredImage } from '@/components/media/stored-image';
+import { BannerPreview } from '@/components/admin/banner-preview';
+import { toBannerDateTimeLocal } from '@/lib/retailer/banner-target';
 import { updateBannerAction, type BannerFormState } from '@/lib/admin/banners-actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +26,7 @@ export function BannerEditForm({
   subtitle,
   ctaLabel,
   areaId,
+  sortOrder,
   startsAt,
   endsAt,
   areas,
@@ -36,15 +38,20 @@ export function BannerEditForm({
   subtitle?: string | null;
   ctaLabel?: string | null;
   areaId: string | null;
+  sortOrder: number;
   startsAt: string | null;
   endsAt: string | null;
   areas: Option[];
 }) {
   const boundAction = updateBannerAction.bind(null, bannerId);
   const [state, formAction] = useFormState(boundAction, initialState);
-  // Starts as the existing value — a Supabase public URL — and is replaced
-  // with a new public URL only if a new file is uploaded.
   const [imageRef, setImageRef] = useState(initialImageUrl);
+  const [titleValue, setTitleValue] = useState(title);
+  const [subtitleValue, setSubtitleValue] = useState(subtitle ?? '');
+  const [ctaValue, setCtaValue] = useState(ctaLabel ?? '');
+  const [linkValue, setLinkValue] = useState(linkUrl ?? '');
+  const [startsAtValue, setStartsAtValue] = useState(toBannerDateTimeLocal(startsAt, 'start'));
+  const [endsAtValue, setEndsAtValue] = useState(toBannerDateTimeLocal(endsAt, 'end'));
 
   return (
     <form action={formAction} className="space-y-4">
@@ -61,9 +68,6 @@ export function BannerEditForm({
         <p className="mb-2 text-[11px] leading-4 text-ink-400">
           Recommended {`1080 × 360 px`} (3:1). The image is cropped to 3:1 on the storefront — never stretched.
         </p>
-        <div className="relative mb-2 aspect-[3/1] w-full max-w-md overflow-hidden rounded-xl border border-ink-100">
-          <StoredImage src={imageRef} alt="" size="banner" fill className="object-cover" />
-        </div>
         <MediaUploadField
           kind="banner"
           ownerId={bannerId}
@@ -75,19 +79,19 @@ export function BannerEditForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="title">Title</Label>
-          <Input id="title" name="title" defaultValue={title} required />
+          <Input id="title" name="title" value={titleValue} onChange={(event) => setTitleValue(event.target.value)} maxLength={140} required />
         </div>
         <div>
           <Label htmlFor="subtitle">Subtitle (optional)</Label>
-          <Input id="subtitle" name="subtitle" maxLength={300} defaultValue={subtitle ?? ''} />
+          <Input id="subtitle" name="subtitle" value={subtitleValue} onChange={(event) => setSubtitleValue(event.target.value)} maxLength={300} />
         </div>
         <div>
           <Label htmlFor="ctaLabel">Button label (optional)</Label>
-          <Input id="ctaLabel" name="ctaLabel" maxLength={60} defaultValue={ctaLabel ?? ''} />
+          <Input id="ctaLabel" name="ctaLabel" value={ctaValue} onChange={(event) => setCtaValue(event.target.value)} maxLength={60} />
         </div>
         <div>
           <Label htmlFor="linkUrl">Target route or URL (optional)</Label>
-          <Input id="linkUrl" name="linkUrl" defaultValue={linkUrl ?? ''} placeholder="/retailer/catalog or https://…" />
+          <Input id="linkUrl" name="linkUrl" value={linkValue} onChange={(event) => setLinkValue(event.target.value)} placeholder="/retailer/catalog or https://…" />
         </div>
         <div>
           <Label htmlFor="areaId">Area</Label>
@@ -100,18 +104,23 @@ export function BannerEditForm({
             ))}
           </Select>
         </div>
+        <div>
+          <Label htmlFor="sortOrder">Priority (lower number displays first)</Label>
+          <Input id="sortOrder" name="sortOrder" type="number" min={0} max={1000000} step={1} defaultValue={sortOrder} required />
+        </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>
-            <Label htmlFor="startsAt">Starts</Label>
-            <Input id="startsAt" name="startsAt" type="date" defaultValue={startsAt ? startsAt.slice(0, 10) : ''} />
+            <Label htmlFor="startsAt">Starts at (IST)</Label>
+            <Input id="startsAt" name="startsAt" type="datetime-local" step={60} value={startsAtValue} onChange={(event) => setStartsAtValue(event.target.value)} />
           </div>
           <div>
-            <Label htmlFor="endsAt">Ends</Label>
-            <Input id="endsAt" name="endsAt" type="date" defaultValue={endsAt ? endsAt.slice(0, 10) : ''} />
+            <Label htmlFor="endsAt">Ends at (IST)</Label>
+            <Input id="endsAt" name="endsAt" type="datetime-local" step={60} value={endsAtValue} onChange={(event) => setEndsAtValue(event.target.value)} />
           </div>
         </div>
       </div>
 
+      <BannerPreview title={titleValue} subtitle={subtitleValue} ctaLabel={ctaValue} imageUrl={imageRef} linkUrl={linkValue} />
       <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
     </form>
   );

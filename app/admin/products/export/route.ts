@@ -111,21 +111,21 @@ async function loadRows(
 
   const limit = explicitIds ? explicitIds.length : Math.min(ADMIN_DERIVED_LOOKUP_LIMIT, MAX_EXPORT_ROWS);
   const { data } = (await query.order('name').limit(limit)) as unknown as { data: AdminProductRow[] | null };
-  let rows = data ?? [];
+  const rows = data ?? [];
 
   // Derived filters/sorts have to be resolved in memory for the same reason the
   // list page does it: stock, sales and margin are not columns on `products`.
   const derived = !explicitIds && needsDerivedLookup(params);
-  const [stock, sales, costs] = await Promise.all([
-    loadStockMap(supabase),
+  const [packStock, sales, costs] = await Promise.all([
+    loadStockMap(supabase, rows.map((row) => row.id), includeCost),
     loadSalesMap(supabase),
     includeCost ? loadCostMap(supabase) : Promise.resolve(new Map<string, number | null>()),
   ]);
 
-  const resolved = resolveAdminProducts(rows, { stock, sales, costs, includeCost });
-  rows = (derived ? resolved.filter((row) => matchesDerivedFilters(row, params)) : resolved) as unknown as AdminProductRow[];
+  const resolved = resolveAdminProducts(rows, { packStock, sales, costs, includeCost });
+  const filtered = derived ? resolved.filter((row) => matchesDerivedFilters(row, params)) : resolved;
 
-  return { resolved, includeCost };
+  return { resolved: filtered, includeCost };
 }
 
 function respond({
@@ -137,30 +137,35 @@ function respond({
 }) {
   const csv = toCsv(
     PRODUCT_EXPORT_HEADER,
-    resolved.map((row) => {
-      const active = row.product_packs.filter((pack) => pack.is_active);
-      const cheapest = active.length > 0
-        ? active.reduce((best, pack) => (pack.case_price < best.case_price ? pack : best), active[0]!)
-        : null;
-      return productExportCells({
-        name: row.name,
-        brandName: row.brands?.name ?? null,
-        categoryName: row.categories?.name ?? null,
-        unit: row.unit,
-        unitsPerCase: cheapest?.units_per_case ?? 1,
-        mrp: row.base_price,
-        casePrice: productCasePrice(row),
-        // Never written for a caller without cost permission — an empty cell,
-        // not a zero, so a re-import cannot mistake it for "costs nothing".
-        costPrice: includeCost ? (row.costPrice ?? null) : null,
-        gstPercent: row.gst_percent,
-        hsnCode: row.hsn_code,
-        barcode: row.barcode,
-        leadTimeDays: row.lead_time_days,
-        moq: productMoq(row) ?? 1,
-        isNewLaunch: row.is_new_launch,
-        stockStatus: row.stock?.status ?? null,
-        availableStock: row.stock?.available ?? null,
+    resolved.flatMap((row) => {
+      const packRows = row.packStocks.length > 0 ? row.packStocks : [null];
+      return packRows.map((pack) => {
+        const productPack = pack ? row.product_packs.find((candidate) => candidate.id === pack.packId) : null;
+        return productExportCells({
+          name: row.name,
+          brandName: row.brands?.name ?? null,
+          categoryName: row.categories?.name ?? null,
+          unit: row.unit,
+          unitsPerCase: productPack?.units_per_case ?? 1,
+          mrp: row.base_price,
+          casePrice: pack?.price ?? productCasePrice(row),
+          // Never written for a caller without cost permission — an empty cell,
+          // not a zero, so a re-import cannot mistake it for "costs nothing".
+          costPrice: includeCost ? (row.costPrice ?? null) : null,
+          gstPercent: row.gst_percent,
+          hsnCode: row.hsn_code,
+          barcode: row.barcode,
+          leadTimeDays: row.lead_time_days,
+          moq: productPack?.moq ?? productMoq(row) ?? 1,
+          isNewLaunch: row.is_new_launch,
+          packName: pack?.packName ?? null,
+          packSku: pack?.skuCode ?? null,
+          packPrice: pack?.price ?? null,
+          stockQuantity: pack?.quantity ?? null,
+          stockStatus: pack?.status === 'unknown' || !pack
+            ? null
+            : pack.status === 'in_stock' ? 'In Stock' : 'Out of Stock',
+        });
       });
     })
   );

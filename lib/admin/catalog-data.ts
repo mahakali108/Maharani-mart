@@ -17,7 +17,7 @@ import {
  *   total. This is the default path.
  *
  *   MODE 2 — BOUNDED WORKING SET. Stock status, sales, margin and MOQ are not
- *   columns on `products`: stock comes from `inventory_product_totals` (0017),
+ *   columns on `products`: per-pack stock comes from the Admin-only accessor,
  *   sales from `catalog_product_sales` (0050) and cost from `admin_product_costs()`
  *   (0050 — 0025 revokes direct `SELECT (cost_price)`). Pushing those into the
  *   product query is not possible through PostgREST, so the working set is
@@ -34,7 +34,7 @@ type SupabaseClient = ReturnType<typeof createClient>;
 export const ADMIN_PRODUCT_SELECT =
   'id, name, unit, lead_time_days, base_price, gst_percent, hsn_code, barcode, is_active, is_new_launch, updated_at, created_at, brand_id, category_id, ' +
   'brands ( id, name ), categories ( id, name ), product_images ( image_url ), ' +
-  'product_packs ( id, moq, case_price, units_per_case, is_active )';
+  'product_packs ( id, pack_name, pack_sku_code, sort_order, moq, case_price, units_per_case, is_active )';
 
 export interface AdminProductRow {
   id: string;
@@ -56,6 +56,9 @@ export interface AdminProductRow {
   product_images: { image_url: string }[];
   product_packs: {
     id: string;
+    pack_name: string;
+    pack_sku_code: string;
+    sort_order: number;
     moq: number;
     case_price: number;
     units_per_case: number;
@@ -64,8 +67,21 @@ export interface AdminProductRow {
 }
 
 export interface StockInfo {
-  status: 'healthy' | 'low_stock' | 'out_of_stock';
+  status: 'in_stock' | 'out_of_stock';
   available: number;
+  packId: string;
+  packName: string;
+  skuCode: string;
+}
+
+export interface AdminPackStockInfo {
+  packId: string;
+  packName: string;
+  skuCode: string;
+  price: number;
+  quantity: number | null;
+  status: 'in_stock' | 'out_of_stock' | 'unknown';
+  active: boolean;
 }
 
 export interface SalesInfo {
@@ -107,33 +123,29 @@ export function marginPercent(
   return Math.round(((piece - costPrice) / piece) * 10000) / 100;
 }
 
-/**
- * Stock status per product, from the existing `inventory_product_totals` view
- * (0017). That view already applies the healthy / low_stock / out_of_stock
- * classification against `products.reorder_level`, so this module does not
- * re-implement the rule.
- *
- * Returns an empty map if the view is unavailable — the caller then shows "—"
- * rather than claiming every product is in stock.
- */
-export async function loadStockMap(
-  supabase: SupabaseClient,
-  limit: number = ADMIN_DERIVED_LOOKUP_LIMIT
-): Promise<Map<string, StockInfo>> {
-  const map = new Map<string, StockInfo>();
-  const { data, error } = await supabase
-    .from('inventory_product_totals' as never)
-    .select('product_id, stock_status, available_quantity')
-    .limit(limit)
-    .returns<{ product_id: string; stock_status: string; available_quantity: number }[]>();
-  if (error) return map;
-  for (const row of data ?? []) {
-    if (row.stock_status !== 'healthy' && row.stock_status !== 'low_stock' && row.stock_status !== 'out_of_stock') {
-      continue;
-    }
-    map.set(row.product_id, { status: row.stock_status, available: row.available_quantity ?? 0 });
-  }
-  return map;
+/** The first active pack is the product's default sellable row for list stock/SKU. */
+export function defaultActivePack(row: Pick<AdminProductRow, 'product_packs'>) {
+  return [...row.product_packs]
+    .filter((pack) => pack.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))[0] ?? null;
+}
+
+/** Stock comes from the Admin-only pack-count RPC, never a warehouse aggregate. */
+export function productStock(
+  row: Pick<AdminProductRow, 'product_packs'>,
+  stockByPackId: Map<string, number>
+): StockInfo | null {
+  const pack = defaultActivePack(row);
+  if (!pack) return null;
+  const available = stockByPackId.get(pack.id);
+  if (available === undefined) return null;
+  return {
+    status: available > 0 ? 'in_stock' : 'out_of_stock',
+    available,
+    packId: pack.id,
+    packName: pack.pack_name,
+    skuCode: pack.pack_sku_code,
+  };
 }
 
 /**
@@ -173,6 +185,27 @@ export async function loadCostMap(supabase: SupabaseClient): Promise<Map<string,
   if (error) return map;
   for (const row of (data ?? []) as { product_id: string; cost_price: number | null }[]) {
     map.set(row.product_id, row.cost_price);
+  }
+  return map;
+}
+
+/** Exact pack counts are available only to Admin/super_admin via the guarded RPC. */
+export async function loadStockMap(
+  supabase: SupabaseClient,
+  productIds: string[],
+  canViewStock: boolean
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!canViewStock) return map;
+  const ids = [...new Set(productIds)];
+  for (let i = 0; i < ids.length; i += 1000) {
+    const { data, error } = await supabase.rpc('admin_product_pack_stock' as never, {
+      p_product_ids: ids.slice(i, i + 1000),
+    } as never);
+    if (error) continue;
+    for (const row of (data ?? []) as { product_id: string; pack_id: string; stock_quantity: number }[]) {
+      map.set(row.pack_id, Number(row.stock_quantity));
+    }
   }
   return map;
 }
@@ -283,6 +316,8 @@ export interface ResolvedAdminProduct extends AdminProductRow {
   moq: number | null;
   casePrice: number | null;
   stock: StockInfo | null;
+  /** Full, pack-scoped stock rows for Admin display and CSV export. */
+  packStocks: AdminPackStockInfo[];
   sales: SalesInfo | null;
   costPrice: number | null;
   margin: number | null;
@@ -291,9 +326,10 @@ export interface ResolvedAdminProduct extends AdminProductRow {
 export function resolveAdminProducts(
   rows: AdminProductRow[],
   data: {
-    stock: Map<string, StockInfo>;
     sales: Map<string, SalesInfo>;
     costs: Map<string, number | null>;
+    /** Pack quantities are supplied only to an Admin-authorized caller. */
+    packStock: Map<string, number>;
     /** false hides cost and margin entirely — the map is not even loaded. */
     includeCost: boolean;
   }
@@ -311,7 +347,22 @@ export function resolveAdminProducts(
       ...row,
       moq,
       casePrice,
-      stock: data.stock.get(row.id) ?? null,
+      stock: productStock(row, data.packStock),
+      packStocks: packs
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))
+        .map((pack) => {
+          const quantity = data.packStock.get(pack.id) ?? null;
+          return {
+            packId: pack.id,
+            packName: pack.pack_name,
+            skuCode: pack.pack_sku_code,
+            price: pack.case_price,
+            quantity,
+            status: quantity === null ? 'unknown' : quantity > 0 ? 'in_stock' : 'out_of_stock',
+            active: pack.is_active,
+          };
+        }),
       sales: data.sales.get(row.id) ?? null,
       costPrice,
       margin: marginPercent(casePrice, cheapest?.units_per_case ?? null, costPrice),

@@ -199,12 +199,18 @@ describe('template and export', () => {
     expect(report.validCount).toBe(1);
   });
 
-  it('export header is the template plus read-only stock context', () => {
+  it('export header is the template plus one-row-per-pack stock context', () => {
     expect(PRODUCT_EXPORT_HEADER.slice(0, PRODUCT_CSV_COLUMNS.length)).toEqual([
       ...PRODUCT_CSV_COLUMNS,
     ]);
-    expect(PRODUCT_EXPORT_HEADER).toContain('stock_status');
-    expect(PRODUCT_EXPORT_HEADER).toContain('available_stock');
+    expect(PRODUCT_EXPORT_HEADER).toEqual([
+      ...PRODUCT_CSV_COLUMNS,
+      'pack_name',
+      'pack_sku',
+      'pack_price',
+      'stock_quantity',
+      'stock_status',
+    ]);
   });
 
   it('exports a row whose cell count matches the header', () => {
@@ -223,8 +229,11 @@ describe('template and export', () => {
       leadTimeDays: 3,
       moq: 12,
       isNewLaunch: true,
-      stockStatus: 'healthy',
-      availableStock: 40,
+      packName: 'Tea Gold 1kg',
+      packSku: 'TEA-1KG',
+      packPrice: 6600,
+      stockQuantity: 40,
+      stockStatus: 'In Stock',
     });
     expect(cells).toHaveLength(PRODUCT_EXPORT_HEADER.length);
   });

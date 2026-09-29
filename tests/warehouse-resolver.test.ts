@@ -202,6 +202,22 @@ describe('warehouse surfaces', () => {
     }
   });
 
+  it('removes the pending-order warehouse selector but keeps legacy order operations', () => {
+    const panel = read('components/admin/order-actions-panel.tsx');
+    const detailPage = read('app/admin/orders/[id]/page.tsx');
+    expect(panel).not.toMatch(/assignWarehouseAction|selectedWarehouse|warehouse_id|warehouseId/i);
+    expect(panel).not.toMatch(/<select/i);
+    expect(detailPage).not.toMatch(/from\(['"]warehouses['"]\)/);
+    expect(detailPage).not.toMatch(/warehouse_id|warehouseId/);
+
+    const actions = read('lib/admin/orders-actions.ts');
+    expect(actions).toContain('assignWarehouseAction');
+    expect(actions).toContain("if (!order.simple_stock_mode)");
+    expect(actions).toContain("rpc('reserve_order_stock'");
+    expect(actions).toContain("rpc('release_order_stock'");
+    expect(read('lib/staff/dispatch-actions.ts')).toContain("rpc('consume_order_stock'");
+  });
+
   it('keeps the warehouse schema future-compatible (nothing dropped, columns kept)', async () => {
     const { readdirSync } = await import('node:fs');
     const migrations = readdirSync('supabase/migrations');

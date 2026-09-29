@@ -42,7 +42,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Warehouses', href: '/admin/warehouses', icon: Warehouse },
   { label: 'Pricing & Schemes', href: '/admin/pricing', icon: Tag },
   { label: 'Coupons', href: '/admin/coupons', icon: Ticket },
-  { label: 'Inventory', href: '/admin/inventory', icon: Warehouse },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
   { label: 'Delivered Orders', href: '/admin/delivered', icon: PackageCheck },
   { label: 'Wallets', href: '/admin/wallets', icon: Wallet },

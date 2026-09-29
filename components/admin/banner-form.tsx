@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useFormState } from 'react-dom';
 import { MediaUploadField } from '@/components/media/media-upload-field';
-import { StoredImage } from '@/components/media/stored-image';
+import { BannerPreview } from '@/components/admin/banner-preview';
 import { createBannerAction, type BannerFormState } from '@/lib/admin/banners-actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,11 +17,13 @@ interface Option {
   name: string;
 }
 
-export function BannerForm({ areas }: { areas: Option[] }) {
+export function BannerForm({ areas, priority = 0 }: { areas: Option[]; priority?: number }) {
   const [state, formAction] = useFormState(createBannerAction, initialState);
-  // Holds the storage reference returned by the upload Server Action; it is
-  // submitted with the form and persisted to `banners.image_url`.
   const [imageRef, setImageRef] = useState('');
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
+  const [ctaLabel, setCtaLabel] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
 
   return (
     <form action={formAction} className="space-y-4">
@@ -38,11 +40,6 @@ export function BannerForm({ areas }: { areas: Option[] }) {
         <p className="mb-2 text-[11px] leading-4 text-ink-400">
           Recommended {`1080 × 360 px`} (3:1). The image is cropped to 3:1 on the storefront — never stretched.
         </p>
-        {imageRef ? (
-          <div className="relative mb-2 aspect-[3/1] w-full max-w-md overflow-hidden rounded-xl border border-ink-100">
-            <StoredImage src={imageRef} alt="" size="banner" fill className="object-cover" />
-          </div>
-        ) : null}
         <MediaUploadField
           kind="banner"
           ownerId={null}
@@ -54,19 +51,19 @@ export function BannerForm({ areas }: { areas: Option[] }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="title">Title</Label>
-          <Input id="title" name="title" placeholder="e.g. Diwali Offer" required />
+          <Input id="title" name="title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={140} placeholder="e.g. Diwali Offer" required />
         </div>
         <div>
           <Label htmlFor="subtitle">Subtitle (optional)</Label>
-          <Input id="subtitle" name="subtitle" maxLength={300} />
+          <Input id="subtitle" name="subtitle" value={subtitle} onChange={(event) => setSubtitle(event.target.value)} maxLength={300} />
         </div>
         <div>
           <Label htmlFor="ctaLabel">Button label (optional)</Label>
-          <Input id="ctaLabel" name="ctaLabel" maxLength={60} />
+          <Input id="ctaLabel" name="ctaLabel" value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} maxLength={60} />
         </div>
         <div>
           <Label htmlFor="linkUrl">Target route or URL (optional)</Label>
-          <Input id="linkUrl" name="linkUrl" placeholder="/retailer/catalog or https://…" />
+          <Input id="linkUrl" name="linkUrl" value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="/retailer/catalog or https://…" />
         </div>
         <div>
           <Label htmlFor="areaId">Area</Label>
@@ -79,18 +76,23 @@ export function BannerForm({ areas }: { areas: Option[] }) {
             ))}
           </Select>
         </div>
+        <div>
+          <Label htmlFor="sortOrder">Priority (lower number displays first)</Label>
+          <Input id="sortOrder" name="sortOrder" type="number" min={0} max={1000000} step={1} defaultValue={priority} required />
+        </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>
-            <Label htmlFor="startsAt">Starts</Label>
-            <Input id="startsAt" name="startsAt" type="date" />
+            <Label htmlFor="startsAt">Starts at (IST)</Label>
+            <Input id="startsAt" name="startsAt" type="datetime-local" step={60} />
           </div>
           <div>
-            <Label htmlFor="endsAt">Ends</Label>
-            <Input id="endsAt" name="endsAt" type="date" />
+            <Label htmlFor="endsAt">Ends at (IST)</Label>
+            <Input id="endsAt" name="endsAt" type="datetime-local" step={60} />
           </div>
         </div>
       </div>
 
+      <BannerPreview title={title} subtitle={subtitle} ctaLabel={ctaLabel} imageUrl={imageRef} linkUrl={linkUrl} />
       <SubmitButton pendingLabel="Creating…">Create banner</SubmitButton>
     </form>
   );

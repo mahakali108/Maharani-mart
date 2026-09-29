@@ -13,11 +13,10 @@
 /**
  * Sorts the admin product list offers.
  *
- * `stock`, `sales` and `margin` are NOT plain columns: stock comes from
- * `inventory_product_totals` (0017), sales from `catalog_product_sales` (0050)
- * and margin needs `admin_product_costs()` (0050) because 0025 revokes direct
- * `SELECT (cost_price)`. Those three are resolved into an ordered id list
- * before the page query runs — see `resolveDerivedOrder` in the page.
+ * `stock`, `sales` and `margin` are not plain `products` columns: the list
+ * resolves stock from each row's default active product-pack, sales from
+ * `catalog_product_sales` (0050), and margin from Admin-only cost accessors.
+ * Those derived values are filtered/sorted over a bounded working set.
  */
 export const ADMIN_PRODUCT_SORTS = [
   'newest',
@@ -66,14 +65,13 @@ export function isDbSortableAdminSort(sort: AdminProductSort): boolean {
 export const ADMIN_STATUS_FILTERS = ['all', 'active', 'inactive'] as const;
 export type AdminStatusFilter = (typeof ADMIN_STATUS_FILTERS)[number];
 
-/** Stock states as computed by `inventory_product_totals.stock_status` (0017). */
-export const ADMIN_STOCK_FILTERS = ['all', 'healthy', 'low_stock', 'out_of_stock'] as const;
+/** Stock is a direct quantity on each sellable pack: zero or positive. */
+export const ADMIN_STOCK_FILTERS = ['all', 'in_stock', 'out_of_stock'] as const;
 export type AdminStockFilter = (typeof ADMIN_STOCK_FILTERS)[number];
 
 export const ADMIN_STOCK_LABELS: Record<AdminStockFilter, string> = {
   all: 'Any stock',
-  healthy: 'In stock',
-  low_stock: 'Low stock',
+  in_stock: 'In stock',
   out_of_stock: 'Out of stock',
 };
 

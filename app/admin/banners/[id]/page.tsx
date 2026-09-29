@@ -12,6 +12,7 @@ interface BannerDetail {
   image_url: string;
   link_url: string | null;
   area_id: string | null;
+  sort_order: number;
   starts_at: string | null;
   ends_at: string | null;
 }
@@ -49,6 +50,7 @@ export default async function EditBannerPage({ params }: { params: { id: string 
           imageUrl={banner.image_url}
           linkUrl={banner.link_url}
           areaId={banner.area_id}
+          sortOrder={banner.sort_order}
           startsAt={banner.starts_at}
           endsAt={banner.ends_at}
           areas={areas ?? []}

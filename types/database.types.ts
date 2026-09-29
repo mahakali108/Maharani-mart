@@ -395,6 +395,8 @@ export interface Database {
           allow_loose_pieces: boolean;
           is_active: boolean;
           sort_order: number;
+          /** 0054: Admin-managed piece count for this sellable pack. */
+          stock_quantity: number;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -418,6 +420,7 @@ export interface Database {
           allow_loose_pieces?: boolean;
           is_active?: boolean;
           sort_order?: number;
+          stock_quantity?: number;
           created_by?: string | null;
         };
         Update: Partial<Database['public']['Tables']['product_packs']['Insert']>;
@@ -1023,6 +1026,12 @@ export interface Database {
           order_number: string;
           retailer_id: string;
           warehouse_id: string | null;
+          /** 0054: true only for orders created against product-pack counts. */
+          simple_stock_mode: boolean;
+          /** 0054: optional retry key for internal salesman order capture. */
+          request_key: string | null;
+          /** 0054: non-null only after order-side effects have completed. */
+          request_completed_at: string | null;
           status: OrderStatusEnum;
           collected_by: string | null;
           subtotal: number;
@@ -1048,6 +1057,9 @@ export interface Database {
           order_number?: string;
           retailer_id: string;
           warehouse_id?: string | null;
+          simple_stock_mode?: boolean;
+          request_key?: string | null;
+          request_completed_at?: string | null;
           status?: OrderStatusEnum;
           collected_by?: string | null;
           subtotal?: number;
@@ -1103,6 +1115,9 @@ export interface Database {
           quantity_pieces: number | null;
           /** Pack case size at order time (snapshot). */
           units_per_case: number | null;
+          /** 0054: database-written pack stock counters. */
+          stock_deducted_quantity: number;
+          stock_restored_quantity: number;
         };
         Insert: {
           id?: string;
@@ -1116,6 +1131,8 @@ export interface Database {
           quantity_unit?: 'packs' | 'cases' | 'pieces';
           quantity_pieces?: number | null;
           units_per_case?: number | null;
+          stock_deducted_quantity?: number;
+          stock_restored_quantity?: number;
         };
         Update: Partial<Database['public']['Tables']['order_items']['Insert']>;
         Relationships: [
@@ -2156,7 +2173,23 @@ export interface Database {
       };
       get_retailer_product_availability: {
         Args: { p_product_ids: string[] };
-        Returns: { product_id: string; available_quantity: number; stock_status: string }[];
+        Returns: { product_id: string; stock_status: string }[];
+      };
+      complete_order_request: {
+        Args: { p_order_id: string; p_request_key: string; p_actor_id: string };
+        Returns: boolean;
+      };
+      get_retailer_pack_availability: {
+        Args: { p_pack_ids: string[] };
+        Returns: { pack_id: string; stock_status: string }[];
+      };
+      admin_product_pack_stock: {
+        Args: { p_product_ids: string[] };
+        Returns: { product_id: string; pack_id: string; stock_quantity: number }[];
+      };
+      admin_set_product_pack_stock: {
+        Args: { p_pack_id: string; p_quantity: number };
+        Returns: number;
       };
       get_effective_price: {
         Args: { p_product_id: string; p_retailer_id: string };

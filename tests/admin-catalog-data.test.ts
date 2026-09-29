@@ -11,6 +11,7 @@ import {
   matchesDerivedFilters,
   productCasePrice,
   productMoq,
+  resolveAdminProducts,
   searchMatchesNothing,
   sortResolvedProducts,
   type ResolvedAdminProduct,
@@ -131,6 +132,7 @@ function product(overrides: Partial<ResolvedAdminProduct>): ResolvedAdminProduct
     moq: null,
     casePrice: null,
     stock: null,
+    packStocks: [],
     sales: null,
     costPrice: null,
     margin: null,
@@ -142,9 +144,9 @@ describe('derived value helpers', () => {
   it('takes the lowest active pack MOQ and case price, ignoring inactive packs', () => {
     const row = product({
       product_packs: [
-        { id: 'p1', moq: 24, case_price: 6600, units_per_case: 12, is_active: true },
-        { id: 'p2', moq: 6, case_price: 1800, units_per_case: 12, is_active: true },
-        { id: 'p3', moq: 1, case_price: 100, units_per_case: 12, is_active: false },
+        { id: 'p1', pack_name: 'Large', pack_sku_code: 'SKU-1', sort_order: 0, moq: 24, case_price: 6600, units_per_case: 12, is_active: true },
+        { id: 'p2', pack_name: 'Small', pack_sku_code: 'SKU-2', sort_order: 1, moq: 6, case_price: 1800, units_per_case: 12, is_active: true },
+        { id: 'p3', pack_name: 'Inactive', pack_sku_code: 'SKU-3', sort_order: 2, moq: 1, case_price: 100, units_per_case: 12, is_active: false },
       ],
     });
     expect(productMoq(row)).toBe(6);
@@ -152,7 +154,7 @@ describe('derived value helpers', () => {
   });
 
   it('returns null when a product has no active pack, rather than inventing a price', () => {
-    const row = product({ product_packs: [{ id: 'p1', moq: 1, case_price: 100, units_per_case: 1, is_active: false }] });
+    const row = product({ product_packs: [{ id: 'p1', pack_name: 'Inactive', pack_sku_code: 'SKU-1', sort_order: 0, moq: 1, case_price: 100, units_per_case: 1, is_active: false }] });
     expect(productMoq(row)).toBeNull();
     expect(productCasePrice(row)).toBeNull();
   });
@@ -173,24 +175,47 @@ describe('derived value helpers', () => {
   it('reports a negative margin instead of hiding it', () => {
     expect(marginPercent(1200, 12, 440)).toBeLessThan(0);
   });
+
+  it('resolves separate quantities, prices and statuses for every pack', () => {
+    const row = product({
+      product_packs: [
+        { id: 'p1', pack_name: 'Small', pack_sku_code: 'SKU-S', sort_order: 0, moq: 1, case_price: 100, units_per_case: 1, is_active: true },
+        { id: 'p2', pack_name: 'Large', pack_sku_code: 'SKU-L', sort_order: 1, moq: 1, case_price: 250, units_per_case: 1, is_active: true },
+        { id: 'p3', pack_name: 'Legacy', pack_sku_code: 'SKU-X', sort_order: 2, moq: 1, case_price: 60, units_per_case: 1, is_active: false },
+      ],
+    });
+    const resolved = resolveAdminProducts([row], {
+      sales: new Map(), costs: new Map(), includeCost: false,
+      packStock: new Map([['p1', 0], ['p2', 7], ['p3', 2]]),
+    })[0]!;
+
+    expect(resolved.packStocks).toEqual([
+      { packId: 'p1', packName: 'Small', skuCode: 'SKU-S', price: 100, quantity: 0, status: 'out_of_stock', active: true },
+      { packId: 'p2', packName: 'Large', skuCode: 'SKU-L', price: 250, quantity: 7, status: 'in_stock', active: true },
+      { packId: 'p3', packName: 'Legacy', skuCode: 'SKU-X', price: 60, quantity: 2, status: 'in_stock', active: false },
+    ]);
+  });
 });
 
 describe('derived filters and sorts', () => {
-  const inStock = product({ stock: { status: 'healthy', available: 100 } });
-  const low = product({ stock: { status: 'low_stock', available: 3 } });
-  const out = product({ stock: { status: 'out_of_stock', available: 0 } });
+  const stock = (status: 'in_stock' | 'out_of_stock', available: number) => ({
+    status, available, packId: 'p1', packName: 'Pack', skuCode: 'SKU-1',
+  });
+  const inStock = product({ stock: stock('in_stock', 100) });
+  const low = product({ stock: stock('in_stock', 3) });
+  const out = product({ stock: stock('out_of_stock', 0) });
   const unknown = product({ stock: null });
 
-  it('matches the requested stock status', () => {
-    expect(matchesDerivedFilters(inStock, parseAdminCatalogParams({ stock: 'healthy' }))).toBe(true);
-    expect(matchesDerivedFilters(low, parseAdminCatalogParams({ stock: 'low_stock' }))).toBe(true);
+  it('matches the requested pack status while preserving exact-count filters for Admin', () => {
+    expect(matchesDerivedFilters(inStock, parseAdminCatalogParams({ stock: 'in_stock' }))).toBe(true);
     expect(matchesDerivedFilters(out, parseAdminCatalogParams({ stock: 'out_of_stock' }))).toBe(true);
     expect(matchesDerivedFilters(inStock, parseAdminCatalogParams({ stock: 'out_of_stock' }))).toBe(false);
+    expect(matchesDerivedFilters(low, parseAdminCatalogParams({ maxStock: '5' }))).toBe(true);
   });
 
   it('excludes products with unreadable stock from a stock filter', () => {
     // An unknown number must never masquerade as "in stock".
-    expect(matchesDerivedFilters(unknown, parseAdminCatalogParams({ stock: 'healthy' }))).toBe(false);
+    expect(matchesDerivedFilters(unknown, parseAdminCatalogParams({ stock: 'in_stock' }))).toBe(false);
     expect(matchesDerivedFilters(unknown, parseAdminCatalogParams({}))).toBe(true);
   });
 

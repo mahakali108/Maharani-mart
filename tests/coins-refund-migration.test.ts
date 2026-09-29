@@ -24,11 +24,12 @@ const reversal = read('lib/orders/wallet-reversal.ts');
 const sql = migration.replace(/--.*$/gm, '');
 
 describe('0053 is a new, additive migration', () => {
-  it('is numbered after the Phase 0 head (0052) and does not reuse a number', () => {
+  it('keeps 0053 unique and places the additive 0054 migration after it', () => {
     const files = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql'));
     const numbered = files.map((f) => Number(f.slice(0, 4))).filter((n) => Number.isFinite(n));
-    expect(Math.max(...numbered)).toBe(53);
+    expect(Math.max(...numbered)).toBe(54);
     expect(files.filter((f) => f.startsWith('0053'))).toHaveLength(1);
+    expect(files.filter((f) => f.startsWith('0054'))).toHaveLength(1);
   });
 
   it('drops nothing, alters nothing and touches no policy', () => {

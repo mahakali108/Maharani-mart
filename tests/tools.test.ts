@@ -31,13 +31,58 @@ describe('typed business tool registry', () => {
     }
   });
 
-  it('isolates admin inventory tools from retailer and retailer cart tools from admin', () => {
+  it('isolates legacy inventory tools from retailer and salesman, while admins retain access', () => {
     const retailerNames = new Set(toolsForContext(context()).map((tool) => tool.name));
-    expect(retailerNames.has('get_batch_stock')).toBe(false);
+    expect(retailerNames.has('get_product_stock')).toBe(true);
+    for (const name of ['get_stock_status', 'get_product_stock_admin', 'get_batch_stock', 'get_expiring_batches', 'get_expiry_report', 'get_grns', 'get_stock_transfers']) {
+      expect(retailerNames.has(name), name).toBe(false);
+    }
+
+    const salesmanContext = { ...context(), actor: { ...actor, role: 'salesman' as const, surface: 'salesman' as const } };
+    const salesmanNames = new Set(toolsForContext(salesmanContext).map((tool) => tool.name));
+    expect(salesmanNames.has('get_product_stock')).toBe(true);
+    for (const name of ['get_stock_status', 'get_product_stock_admin', 'get_batch_stock', 'get_expiring_batches', 'get_expiry_report', 'get_grns', 'get_stock_transfers']) {
+      expect(salesmanNames.has(name), name).toBe(false);
+    }
+
     const adminContext = { ...context(), actor: { ...actor, role: 'admin' as const, surface: 'admin' as const } };
     const adminNames = new Set(toolsForContext(adminContext).map((tool) => tool.name));
     expect(adminNames.has('get_batch_stock')).toBe(true);
+    expect(adminNames.has('get_stock_transfers')).toBe(true);
     expect(adminNames.has('add_cart_item')).toBe(false);
+  });
+
+  it('returns only status-only pack availability to customer and salesman AI tools', async () => {
+    const packId = '55555555-5555-4555-8555-555555555555';
+    const query = {
+      select: () => query,
+      eq: () => query,
+      order: () => query,
+      limit: () => query,
+      maybeSingle: async () => ({ data: { id: packId }, error: null }),
+    };
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const supabase = {
+      from: (table: string) => table === 'product_packs' ? query : { insert: async () => ({ error: null }) },
+      rpc: async (name: string, args: Record<string, unknown>) => {
+        calls.push({ name, args });
+        return { data: [{ pack_id: packId, stock_status: 'in_stock' }], error: null };
+      },
+    } as never;
+    const tool = allBusinessTools.find((item) => item.name === 'get_product_stock')!;
+    const result = await tool.execute({ productId: '66666666-6666-4666-8666-666666666666' }, context(supabase));
+
+    expect(result).toMatchObject({ ok: true, data: { stockStatus: 'in_stock' } });
+    expect(calls).toEqual([{ name: 'get_retailer_pack_availability', args: { p_pack_ids: [packId] } }]);
+    expect(JSON.stringify(result)).not.toMatch(/availableQuantity|available_quantity|warehouse|batch|expiry|movement/i);
+  });
+
+  it('keeps AI cart previews on coin language', () => {
+    for (const name of ['prepare_ai_cart', 'calculate_order_preview']) {
+      const tool = allBusinessTools.find((item) => item.name === name);
+      expect(tool?.description, name).toMatch(/coin/i);
+      expect(tool?.description, name).not.toMatch(/credit/i);
+    }
   });
 
   it('rejects invalid tool arguments before a handler runs', async () => {

@@ -94,7 +94,7 @@ describe('parameter parsing', () => {
       brand: 'b1',
       category: 'c1',
       status: 'inactive',
-      stock: 'low_stock',
+      stock: 'out_of_stock',
       gst: '18',
       minPrice: '100',
       maxPrice: '500',
@@ -104,7 +104,7 @@ describe('parameter parsing', () => {
     expect(params.q).toBe('tea');
     expect(params.field).toBe('hsn');
     expect(params.status).toBe('inactive');
-    expect(params.stock).toBe('low_stock');
+    expect(params.stock).toBe('out_of_stock');
     expect(params.gst).toBe('18');
     expect(params.minPrice).toBe(100);
     expect(params.maxPrice).toBe(500);
@@ -145,7 +145,7 @@ describe('derived-lookup detection', () => {
   it('is true for a derived sort or a stock constraint', () => {
     expect(needsDerivedLookup(parseAdminCatalogParams({ sort: 'sales' }))).toBe(true);
     expect(needsDerivedLookup(parseAdminCatalogParams({ sort: 'margin-high' }))).toBe(true);
-    expect(needsDerivedLookup(parseAdminCatalogParams({ stock: 'low_stock' }))).toBe(true);
+    expect(needsDerivedLookup(parseAdminCatalogParams({ stock: 'out_of_stock' }))).toBe(true);
     expect(needsDerivedLookup(parseAdminCatalogParams({ maxStock: '5' }))).toBe(true);
   });
 });
@@ -163,8 +163,8 @@ describe('link building', () => {
   });
 
   it('keeps every filter in the shareable link', () => {
-    const params = parseAdminCatalogParams({ q: 'tea', brand: 'b1', stock: 'low_stock' });
-    expect(adminCatalogHref(params)).toBe('/admin/products?q=tea&brand=b1&stock=low_stock');
+    const params = parseAdminCatalogParams({ q: 'tea', brand: 'b1', stock: 'out_of_stock' });
+    expect(adminCatalogHref(params)).toBe('/admin/products?q=tea&brand=b1&stock=out_of_stock');
   });
 
   it('can clear one filter without touching the rest', () => {

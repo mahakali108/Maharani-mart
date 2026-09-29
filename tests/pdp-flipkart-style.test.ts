@@ -205,9 +205,10 @@ describe('loading, empty, unavailable and error states', () => {
     expect(loading).toContain('min-h-[360px]');
   });
 
-  it('empty cart, unavailable product and unknown route are all handled', () => {
+  it('empty cart, unavailable packs and unknown routes are handled without legacy stock detail', () => {
     expect(page).toContain('Your cart is empty');
-    expect(page).toContain('Currently unavailable');
+    expect(page).toContain('availabilityState === \'out_of_stock\'');
+    expect(page).toContain('Out of Stock');
     expect(page).toContain('if (!isUuidLike(params.id)) notFound();');
     expect(read('app/not-found.tsx')).toContain('Page not found');
     expect(read('app/retailer/error.tsx')).toContain('use client');

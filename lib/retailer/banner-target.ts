@@ -4,16 +4,10 @@
  * Only real navigation targets: rooted app routes or HTTP(S) URLs. Shared by
  * admin validation and the storefront; script URLs are never allowed.
  *
- * Scheduling is interpreted in INDIA time, because the admin form collects a
- * plain calendar date (`YYYY-MM-DD`) while the database stores `timestamptz`:
- *
- *   - a START date begins at 00:00 IST of that day,
- *   - an END date covers the WHOLE day (ends 23:59:59.999 IST),
- *
- * so "ends 30 Sep" still shows the banner on 30 September instead of hiding it
- * at 05:30 that morning. Rows written before this rule (a bare midnight-UTC
- * timestamp, which is what `new Date('YYYY-MM-DD')` produced) are read with the
- * same inclusive meaning, so no existing banner has to be rewritten.
+ * Scheduling is interpreted in INDIA time. New Admin forms collect explicit
+ * local date-times (`datetime-local`) and the database stores `timestamptz`;
+ * legacy date-only values keep their inclusive IST-day meaning so existing
+ * banners remain visible without rewriting stored rows.
  */
 
 export function resolveBannerTarget(value: string | null | undefined, siteUrl?: string | null): { href: string; external: boolean } | null {
@@ -32,17 +26,50 @@ export function resolveBannerTarget(value: string | null | undefined, siteUrl?: 
   }
 }
 
-/** India Standard Time offset — never a hardcoded clock, only for date-only math. */
+/** India Standard Time offset, used only to interpret admin wall-clock values. */
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** `YYYY-MM-DD`, or an ISO timestamp that is exactly midnight UTC (legacy date-only storage). */
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-const LEGACY_DATE_ONLY = /^\d{4}-\d{2}-\d{2}T00:00:00(\.000)?Z$/;
+const DATE_ONLY = /^(\d{4}-\d{2}-\d{2})$/;
+const LEGACY_DATE_ONLY = /^(\d{4}-\d{2}-\d{2})T00:00:00(?:\.000)?Z$/;
+const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
 
 function isDateOnly(value: string): boolean {
   const trimmed = value.trim();
   return DATE_ONLY.test(trimmed) || LEGACY_DATE_ONLY.test(trimmed);
+}
+
+/** Convert an Admin `datetime-local` wall-clock value to a UTC instant in IST. */
+function localDateTimeInstant(value: string): number | null {
+  const match = LOCAL_DATE_TIME.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] ?? 0);
+  const millisecond = Number((match[7] ?? '').padEnd(3, '0') || 0);
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+  const check = new Date(asUtc);
+  if (
+    check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day ||
+    hour > 23 || minute > 59 || second > 59
+  ) return null;
+  return asUtc - IST_OFFSET_MS;
+}
+
+/** Format a stored timestamp for an IST `datetime-local` field. */
+export function toBannerDateTimeLocal(value: string | null | undefined, edge: 'start' | 'end'): string {
+  const trimmed = (value ?? '').trim();
+  const dateOnly = DATE_ONLY.exec(trimmed) ?? LEGACY_DATE_ONLY.exec(trimmed);
+  if (dateOnly?.[1]) return `${dateOnly[1]}T${edge === 'start' ? '00:00' : '23:59'}`;
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed)) return '';
+  const ist = new Date(parsed + IST_OFFSET_MS);
+  const pad = (number: number) => String(number).padStart(2, '0');
+  return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())}T${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}`;
 }
 
 export interface BannerSchedule {
@@ -65,6 +92,10 @@ export function bannerScheduleInstants(startsAt: string | null | undefined, ends
 function boundedInstant(value: string | null | undefined, edge: 'start' | 'end'): string | null {
   const trimmed = (value ?? '').trim();
   if (!trimmed) return null;
+  if (LOCAL_DATE_TIME.test(trimmed)) {
+    const localInstant = localDateTimeInstant(trimmed);
+    return localInstant === null ? null : new Date(localInstant).toISOString();
+  }
   const parsed = Date.parse(trimmed);
   if (!Number.isFinite(parsed)) return null;
   if (!isDateOnly(trimmed)) return new Date(parsed).toISOString();

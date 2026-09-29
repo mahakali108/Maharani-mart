@@ -102,7 +102,7 @@ export default async function ReorderPage({ params }: { params: { id: string } }
    */
   const availabilityMap = await loadCatalogAvailability(
     supabase,
-    previousLines.map((line) => line.first.product_id).filter(Boolean) as string[]
+    previousLines.map((line) => line.first.pack_id).filter((id): id is string => !!id)
   );
 
   const lines: ReorderLineInput[] = previousLines
@@ -115,7 +115,8 @@ export default async function ReorderPage({ params }: { params: { id: string } }
         resolvePackPrice(pack, product ? overrideByProduct.get(product.id) ?? null : null),
         pack.units_per_case
       );
-      const unavailable = !pack.is_active || !product?.is_active;
+      const availability = availabilityMap.get(pack.id)?.state ?? 'unknown';
+      const unavailable = !pack.is_active || !product?.is_active || availability === 'out_of_stock';
       // What the piece LAST cost on this order (stored totals only) so a
       // changed price is visible at a glance.
       const previousPiecePrice = quantity.pieces > 0 ? Math.round((total / quantity.pieces) * 100) / 100 : null;
@@ -133,7 +134,7 @@ export default async function ReorderPage({ params }: { params: { id: string } }
         tiers: tierMap.get(pack.id) ?? [],
         allowLoosePieces: pack.allow_loose_pieces !== false,
         unavailable,
-        availability: (product?.id ? availabilityMap.get(product.id) : undefined) ?? 'unknown',
+        availability,
         previousPiecePrice,
       } satisfies ReorderLineInput;
     });

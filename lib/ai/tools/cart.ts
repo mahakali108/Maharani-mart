@@ -6,7 +6,7 @@ import { addCartLines, clearRetailerCart, removeCartLine, updateCartLine } from 
 import { quoteOrderForRetailer, type OrderQuote, type RequestedQuoteLine } from '@/lib/orders/quote-order';
 import { createConfirmationToken } from '@/lib/ai/safety/confirmation';
 import { dbFailure, inr, unavailable, verified } from '@/lib/ai/tools/helpers';
-import { stockForProducts } from '@/lib/ai/tools/products';
+import { stockForPacks } from '@/lib/ai/tools/products';
 
 /*
  * `quantity` is always a PIECE count — never a case count. A retailer orders
@@ -108,8 +108,8 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
     });
   }
 
-  const stock = await stockForProducts(context, candidates.map((candidate) => candidate.productId));
-  const available = candidates.filter((candidate) => (stock.get(candidate.productId)?.available ?? 0) > 0).slice(0, 15);
+  const stock = await stockForPacks(context, candidates.map((candidate) => candidate.packId));
+  const available = candidates.filter((candidate) => stock.get(candidate.packId) === 'in_stock').slice(0, 15);
   const { data: packRows, error: packError } = available.length
     ? await context.supabase.from('product_packs').select('id, moq').in('id', available.map((candidate) => candidate.packId)).eq('is_active', true).returns<{ id: string; moq: number }[]>()
     : { data: [] as { id: string; moq: number }[], error: null };
@@ -120,7 +120,7 @@ async function prepareBudgetCart(budget: number, context: AIToolContext): Promis
     if (!pack) return [];
     // Recent average PIECES per order, floored at the MOQ (which is in pieces).
     const usual = candidate.count > 0 ? Math.max(pack.moq, Math.round(candidate.totalQuantity / candidate.count)) : pack.moq;
-    const quantity = Math.min(usual, stock.get(candidate.productId)?.available ?? 0);
+    const quantity = usual;
     return quantity >= pack.moq ? [{ candidate, line: { packId: candidate.packId, quantity } }] : [];
   });
   // Independent one-line quotes run concurrently; the final combined quote
@@ -178,11 +178,11 @@ export const cartTools: AIToolDefinition[] = [
     name: 'get_cart', description: 'Get the authenticated retailer’s current cart and authoritative order preview.', actionClass: 'READ', roles: ['retailer'], surfaces: ['retailer'], inputSchema: z.object({}), inputJsonSchema: { type: 'object', additionalProperties: false }, execute: async (_, context) => getCurrentCart(context),
   },
   {
-    name: 'prepare_ai_cart', description: 'Prepare (but do not persist) an optimized MOQ/stock/price/GST/credit-valid suggested cart under a budget using purchase history.', actionClass: 'PREPARE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: z.object({ budget: z.number().min(100).max(10_000_000) }),
+    name: 'prepare_ai_cart', description: 'Prepare (but do not persist) an optimized MOQ/stock/price/GST/coin-valid suggested cart under a budget using purchase history.', actionClass: 'PREPARE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: z.object({ budget: z.number().min(100).max(10_000_000) }),
     inputJsonSchema: { type: 'object', additionalProperties: false, required: ['budget'], properties: { budget: { type: 'number', minimum: 100, maximum: 10000000 } } }, execute: async ({ budget }, context) => prepareBudgetCart(budget, context),
   },
   {
-    name: 'calculate_order_preview', description: 'Calculate a read-only authoritative case/loose price, MOQ, GST and credit preview for pack IDs and piece quantities.', actionClass: 'PREPARE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: linesSchema, inputJsonSchema: LINE_JSON,
+    name: 'calculate_order_preview', description: 'Calculate a read-only authoritative case/loose price, MOQ, GST and coin impact preview for pack IDs and piece quantities.', actionClass: 'PREPARE', roles: ['retailer'], surfaces: ['retailer'], inputSchema: linesSchema, inputJsonSchema: LINE_JSON,
     execute: async ({ lines }, context) => { const result = await quoteOrderForRetailer({ retailerId: context.actor.id, lines, supabase: context.supabase }); return 'error' in result ? unavailable(result.error) : verified({ quote: result.quote }, [quoteCard(result.quote)]); },
   },
   {

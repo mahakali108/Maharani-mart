@@ -52,11 +52,16 @@ export interface PricedCatalogCard extends ProductCardProps {
 }
 
 /** One batched read is shared by home discovery, reorder and cart previews. */
+export interface PackAvailability {
+  state: AvailabilityState;
+}
+
 export interface CatalogPricingData {
   overrides: Map<string, number | null>;
   offerIds: Set<string>;
   packTiers: Map<string, PricingTier[]>;
-  availability: Map<string, AvailabilityState>;
+  /** Availability is keyed by sellable pack id, never by the parent product. */
+  availability: Map<string, PackAvailability>;
 }
 
 export function priceCatalogPack(pack: CatalogPack, product: CatalogProductRow, data: CatalogPricingData, quantity: number) {
@@ -157,10 +162,12 @@ export function toPricedCard(
     tierHint?: { minQuantity: number; pricePerPiece: number; label: string } | null;
     packTiers?: Map<string, PricingTier[]>;
     availability?: AvailabilityState;
+    availabilityByPack?: Map<string, PackAvailability>;
     pricingUnavailable?: boolean;
   } = {}
 ): PricedCatalogCard {
   const best = bestPricedPack(product, override, extras.packTiers ?? new Map());
+  const stock = best ? extras.availabilityByPack?.get(best.pack.id) : undefined;
   const images = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
   const fromPrice = extras.pricingUnavailable ? null : best?.piecePrice ?? null;
   return {
@@ -175,7 +182,7 @@ export function toPricedCard(
     moq: best?.pack.moq,
     defaultPackId: best?.pack.id ?? null,
     gstPercent: product.gst_percent,
-    availability: extras.availability ?? 'unknown',
+    availability: stock?.state ?? extras.availability ?? 'unknown',
     isFavorite: extras.isFavorite ?? false,
     hasOffer: extras.hasOffer ?? false,
     nextTierHint: fromPrice === null || !best ? null : extras.tierHint ?? nextTierHint(best.tiers, best.pack.units_per_case, fromPrice, best.pack.moq),
@@ -192,33 +199,45 @@ export function toPricedCard(
   };
 }
 
-/** Sanctioned retailer RPC only. No warehouse/batch data or invented stock.
- * A missing RPC/failed read stays unknown, never “in stock”. */
-export async function loadCatalogAvailability(supabase: ReturnType<typeof createClient>, productIds: string[]) {
-  const ids = [...new Set(productIds)];
-  const states = new Map<string, AvailabilityState>();
+/** Sanctioned pack-level RPC only. Failed reads stay unknown, never “in stock”. */
+export async function loadCatalogAvailability(supabase: ReturnType<typeof createClient>, packIds: string[]) {
+  const ids = [...new Set(packIds)];
+  const availability = new Map<string, PackAvailability>();
   for (let i = 0; i < ids.length; i += 100) {
     try {
-      const { data, error } = await supabase.rpc('get_retailer_product_availability' as never, { p_product_ids: ids.slice(i, i + 100) } as never) as unknown as {
-        data: { product_id: string; stock_status: string }[] | null; error: unknown;
+      const { data, error } = await supabase.rpc(
+        'get_retailer_pack_availability' as never,
+        { p_pack_ids: ids.slice(i, i + 100) } as never
+      ) as unknown as {
+        data: { pack_id: string; stock_status: string }[] | null;
+        error: unknown;
       };
-      if (!error) for (const row of data ?? []) states.set(row.product_id, normalizeAvailabilityState(row.stock_status));
+      if (!error) {
+        for (const row of data ?? []) {
+          availability.set(row.pack_id, {
+            state: normalizeAvailabilityState(row.stock_status),
+          });
+        }
+      }
     } catch {
       // Discovery remains usable when availability cannot be checked.
     }
   }
-  return states;
+  return availability;
 }
 
 export async function loadCatalogPricing(
   supabase: ReturnType<typeof createClient>, products: CatalogProductRow[], retailerId: string, areaId: string | null
 ): Promise<CatalogPricingData> {
   const ids = products.map((product) => product.id);
+  const packIds = products.flatMap((product) =>
+    product.product_packs.filter((pack) => pack.is_active).map((pack) => pack.id)
+  );
   const [overrides, offerIds, packTiers, availability] = await Promise.all([
     getProductPriceOverrides(supabase, ids, retailerId, areaId),
     getActiveOfferProductIds(supabase, ids),
-    loadPackTiers(supabase, products.flatMap((product) => product.product_packs.map((pack) => pack.id))),
-    loadCatalogAvailability(supabase, ids),
+    loadPackTiers(supabase, packIds),
+    loadCatalogAvailability(supabase, packIds),
   ]);
   return { overrides, offerIds, packTiers, availability };
 }
@@ -231,7 +250,7 @@ export function priceCatalogRows(
     hasOffer: data.offerIds.has(product.id),
     timesOrdered: frequency.get(product.id) ?? 0,
     packTiers: data.packTiers,
-    availability: data.availability.get(product.id),
+    availabilityByPack: data.availability,
   }));
 }
 
