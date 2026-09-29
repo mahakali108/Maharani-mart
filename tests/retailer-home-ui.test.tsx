@@ -297,10 +297,12 @@ describe('product purchase, cart feedback and wholesale deal', () => {
     expect(screen.getByRole('alert').textContent).toContain('Minimum order quantity changed');
     expect(screen.queryByText('Added to your cart.')).toBeNull();
   });
-  it('unknown stock is not marked in stock, and out-of-stock/unpriced cards cannot add', () => {
+  it('shows only known binary status and blocks out-of-stock/unpriced cards', () => {
     const view = render(<ProductCard {...card()} availability="unknown" />);
-    expect(screen.getByText('Stock not confirmed')).toBeTruthy();
+    expect(screen.queryByText('In Stock')).toBeNull();
+    expect(screen.queryByText('Out of Stock')).toBeNull();
     view.rerender(<ProductCard {...card()} availability="out_of_stock" />);
+    expect(screen.getByText('Out of Stock')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /pieces to cart/ })).toBeNull();
     view.rerender(<ProductCard {...card()} fromPrice={null} />);
     expect(screen.getByText('Price unavailable')).toBeTruthy();

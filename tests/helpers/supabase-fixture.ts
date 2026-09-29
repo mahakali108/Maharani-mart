@@ -49,7 +49,11 @@ export function supabaseFixture(
       else if (query.operation === 'delete') tables[table] = all.filter((row) => !matching(row));
       rows = [...rows].sort((a, b) => {
         for (const sort of sorts) {
-          const compare = String(a[sort.column]).localeCompare(String(b[sort.column]));
+          const left = a[sort.column];
+          const right = b[sort.column];
+          const compare = typeof left === 'number' && typeof right === 'number'
+            ? left - right
+            : String(left).localeCompare(String(right));
           if (compare) return sort.asc ? compare : -compare;
         }
         return 0;

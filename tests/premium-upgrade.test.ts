@@ -212,9 +212,10 @@ describe('premium upgrade — availability vocabulary', () => {
     expect(normalizeAvailabilityState(null)).toBe('unknown');
 
     const out = availabilityBadge('out_of_stock');
-    expect(out?.label).toBe('Unavailable right now');
-    expect(availabilityBadge('in_stock')?.label).toBe('Available now');
-    expect(availabilityBadge('low_stock')?.label).toBe('Running low');
+    expect(out?.label).toBe('Out of stock');
+    expect(availabilityBadge('in_stock')?.label).toBe('In Stock');
+    expect(normalizeAvailabilityState('low_stock')).toBe('unknown');
+    expect(availabilityBadge(normalizeAvailabilityState('low_stock'))).toBeNull();
     expect(availabilityBadge('unknown')).toBeNull();
     expect(isOutOfStock('out_of_stock')).toBe(true);
     expect(isOutOfStock('in_stock')).toBe(false);

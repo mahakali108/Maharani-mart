@@ -2,12 +2,14 @@
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
+import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { createOrderForRetailer } from '@/lib/orders/create-order';
 
 const createSalesmanOrderSchema = z.object({
   retailerId: z.string().uuid(),
+  requestKey: z.string().uuid(),
   notes: z.string().max(1000).default(''),
   /*
    * `quantity` is the number of PIECES the retailer is taking — the same unit
@@ -35,13 +37,24 @@ export async function createSalesmanOrderAction(input: SalesmanOrderInput): Prom
   if (user.role !== 'salesman') return { error: 'Only a salesman can capture an order here.' };
 
   const parsed = createSalesmanOrderSchema.safeParse(input);
-  if (!parsed.success) return { error: 'Check the retailer and product quantities, then try again.' };
+  if (!parsed.success) return { error: 'Check the retailer, request key and product quantities, then try again.' };
+
+  const supabase = createClient();
+  const { data: assignedRetailer } = await supabase
+    .from('retailers')
+    .select('id')
+    .eq('id', parsed.data.retailerId)
+    .eq('assigned_salesman_id', user.id)
+    .eq('status', 'active')
+    .maybeSingle<{ id: string }>();
+  if (!assignedRetailer) return { error: 'This retailer is not assigned to your account.' };
 
   const result = await createOrderForRetailer({
     retailerId: parsed.data.retailerId,
     collectedBy: user.id,
     lines: parsed.data.lines,
     notes: parsed.data.notes,
+    requestKey: parsed.data.requestKey,
   });
 
   if ('error' in result) return result;

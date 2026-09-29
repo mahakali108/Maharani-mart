@@ -35,11 +35,11 @@ import { ShareButton } from '@/components/retailer/share-button';
 import { cn } from '@/lib/utils/cn';
 import { ProductRail } from '@/components/retailer/product-rail';
 import { RecentlyViewedRail, RecentlyViewedTracker } from '@/components/retailer/recently-viewed';
-import { loadFavoriteIds } from '@/lib/retailer/catalog';
+import { loadCatalogAvailability, loadFavoriteIds } from '@/lib/retailer/catalog';
 import { calcDiscountPercent, calcSavings, formatInr } from '@/lib/retailer/format';
 import { getCoPurchasedCards, getSimilarProductCards } from '@/lib/retailer/personalization';
 import { ProductIssueReport, StockAlertButton } from '@/components/retailer/product-feedback';
-import { availabilityBadge, isOutOfStock, normalizeAvailabilityState } from '@/lib/retailer/availability';
+import { isOutOfStock } from '@/lib/retailer/availability';
 import { formatIndiaDate } from '@/lib/datetime/india';
 import { buildCanonicalProductName, buildBreadcrumbProductName } from '@/lib/retailer/product-name';
 
@@ -218,28 +218,17 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const rawPacks = (packData ?? []) as PackRow[];
   const activePacks = rawPacks.filter((pack) => pack.is_active);
 
-  // Real availability from the sanctioned RPC plus this retailer's own
-  // availability alerts for the product's packs (owner-only rows). Used for
-  // the availability chip and the "notify me when available" control.
-  const [{ data: availabilityRows }, { data: alertRows }] = await Promise.all([
-    (
-      supabase as unknown as {
-        rpc: (name: string, args: Record<string, unknown>) => Promise<{
-          data: { product_id: string; available_quantity: number; stock_status: string }[] | null;
-          error: unknown;
-        }>;
-      }
-    ).rpc('get_retailer_product_availability', { p_product_ids: [product.id] }),
+  // Availability is fetched per sellable pack. This gives the selected size
+  // its own authoritative stock status without exposing exact counts or legacy inventory details.
+  const [availabilityByPack, { data: alertRows }] = await Promise.all([
+    loadCatalogAvailability(supabase, activePacks.map((pack) => pack.id)),
     supabase
       .from('retailer_stock_alerts')
       .select('pack_id')
       .eq('retailer_id', user.id)
       .in('pack_id', rawPacks.length > 0 ? rawPacks.map((pack) => pack.id) : ['00000000-0000-0000-0000-000000000000']),
   ]);
-  const availabilityState = normalizeAvailabilityState(availabilityRows?.[0]?.stock_status);
-  const availabilityLabel = availabilityBadge(availabilityState);
-  const subscribedAlertPackId = (alertRows ?? []).length > 0 ? activePacks[0]?.id ?? null : null;
-  const notifyTargetPackId = activePacks[0]?.id ?? null;
+  const subscribedAlertPackIds = new Set(((alertRows ?? []) as { pack_id: string }[]).map((row) => row.pack_id));
   const packTiers = await loadPackTiers(
     supabase,
     rawPacks.map((pack) => pack.id)
@@ -358,6 +347,9 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const lowestRate = packs.length > 0 ? Math.min(...packs.map((pack) => pack.unitPrice)) : null;
   const defaultPack = packs.find((pack) => pack.unitPrice === lowestRate) ?? packs[0] ?? null;
   const selectedPack = urlPack ?? defaultPack;
+  const availabilityState = selectedPack ? availabilityByPack.get(selectedPack.id)?.state ?? 'unknown' : 'unknown';
+  const subscribedAlertPackId = selectedPack && subscribedAlertPackIds.has(selectedPack.id) ? selectedPack.id : null;
+  const notifyTargetPackId = selectedPack?.id ?? null;
   const isViewingVariant = urlPack !== null;
 
   // Selected variant's authoritative retail per-piece rate (deepest selling tier
@@ -373,7 +365,6 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     .map((row) => row.schemes)
     .filter((scheme): scheme is NonNullable<SchemeLinkRow['schemes']> => !!scheme && scheme.is_active);
   const hasActiveScheme = schemes.length > 0;
-  const selectedAvailable = selectedPack?.is_active ?? false;
   const selectedTierLabel =
     selectedPiecePrice !== null
       ? selectedTiers.length
@@ -414,9 +405,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const showBestRate =
     selectedPiecePrice !== null && headlineUnit !== null && selectedPiecePrice < headlineUnit;
 
-  // Real, server-resolved per-piece numbers for every size card of the switcher.
-  // Nothing is estimated in the browser and no stock number is exposed
-  // (inventory is product-level and staff-only — see docs/warehouse-gaps.md).
+  // Real per-piece prices and simple availability state for each exact pack.
+  // Quantities are kept on the selected variant's compact status chip only.
   const variantPricing = new Map(
     rawPacks.map((pack) => [
       pack.id,
@@ -424,6 +414,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         piecePrice: pieceRateForPack(pack, packTiers.get(pack.id) ?? []),
         mrp: pack.mrp,
         hasOffer: hasActiveScheme,
+        availability: availabilityByPack.get(pack.id)?.state ?? 'unknown',
         // The variant's own resolved quantity slabs, rendered as a compact
         // "1–6 · 7–12 · 13+" hint on its size card. Display-only wording.
         tierSummary: formatVariantTierSummary(
@@ -582,15 +573,15 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   {product.brands.name}
                 </span>
               ) : null}
-              {selectedAvailable ? (
+              {availabilityState === 'in_stock' ? (
                 <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> Available
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> In Stock
                 </span>
-              ) : (
-                <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
-                  <CircleAlert className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" /> Currently unavailable
+              ) : availabilityState === 'out_of_stock' ? (
+                <span className="flex shrink-0 items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
+                  <CircleAlert className="h-3.5 w-3.5 text-rose-600" aria-hidden="true" /> Out of Stock
                 </span>
-              )}
+              ) : null}
             </div>
 
             {/* Complete real product name — universal, brand + product + variant */}
@@ -696,9 +687,6 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             aria-label="Availability and product feedback"
             className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
           >
-            {availabilityLabel ? (
-              <span className={availabilityLabel.className}>{availabilityLabel.label}</span>
-            ) : null}
             {isOutOfStock(availabilityState) && notifyTargetPackId ? (
               <StockAlertButton packId={subscribedAlertPackId ?? notifyTargetPackId} subscribed={!!subscribedAlertPackId} />
             ) : null}
@@ -752,7 +740,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               <li className="flex items-center gap-2">
                 <Package className="h-3.5 w-3.5 shrink-0 text-primary-600" aria-hidden="true" />
                 <span>
-                  <strong className="font-bold text-slate-800">Direct from warehouse</strong> · Maharani Traders
+                  <strong className="font-bold text-slate-800">Genuine products</strong> · Maharani Traders
                   dispatch
                 </span>
               </li>

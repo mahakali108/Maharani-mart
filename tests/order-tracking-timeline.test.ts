@@ -3,7 +3,7 @@
  *
  * Locks in:
  *   1. The five stages read as the retailer journey: Order placed → Admin
- *      confirmed → Warehouse packed → Dispatched → Delivered
+ *      confirmed → Packed → Dispatched → Delivered
  *   2. The estimated delivery date is shown ONLY when real data exists
  *      (company-configured estimate) — never invented per order
  *   3. Actual dispatch/delivery stamps from the order record are surfaced
@@ -23,7 +23,8 @@ describe('timeline stages', () => {
   it('labels the five stages with the retailer-facing wording', () => {
     expect(timeline).toContain("label: 'Order placed'");
     expect(timeline).toContain("label: 'Admin confirmed'");
-    expect(timeline).toContain("label: 'Warehouse packed'");
+    expect(timeline).toContain("label: 'Packed'");
+    expect(timeline).not.toMatch(/Warehouse/i);
     expect(timeline).toContain("label: 'Dispatched'");
     expect(timeline).toContain("label: 'Delivered'");
   });

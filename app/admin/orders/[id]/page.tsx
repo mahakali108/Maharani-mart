@@ -13,7 +13,6 @@ interface OrderDetailRow {
   id: string;
   order_number: string;
   status: string;
-  warehouse_id: string | null;
   subtotal: number;
   gst_total: number;
   grand_total: number;
@@ -45,19 +44,14 @@ interface HistoryRow {
   created_at: string;
 }
 
-interface WarehouseOption {
-  id: string;
-  name: string;
-}
-
 export default async function AdminOrderDetailPage({ params }: { params: { id: string } }) {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: order }, { data: itemData }, { data: historyData }, { data: warehouseData }, { data: deliveryData }, { data: staffData }] = await Promise.all([
+  const [{ data: order }, { data: itemData }, { data: historyData }, { data: deliveryData }, { data: staffData }] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, order_number, status, warehouse_id, subtotal, gst_total, grand_total, notes, cancelled_reason, placed_at, retailers ( shop_name, address )')
+      .select('id, order_number, status, subtotal, gst_total, grand_total, notes, cancelled_reason, placed_at, retailers ( shop_name, address )')
       .eq('id', params.id)
       .maybeSingle<OrderDetailRow>(),
     supabase
@@ -67,7 +61,6 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
       )
       .eq('order_id', params.id),
     supabase.from('order_status_history').select('id, status, note, created_at').eq('order_id', params.id).order('created_at'),
-    supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),
     // Phase 4: the delivery task (exists once the order has been dispatched).
     supabase
       .from('order_deliveries')
@@ -89,7 +82,6 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
   // together, and the amount shown is the sum of the stored row totals.
   const orderLines = groupOrderLines(items);
   const history = (historyData ?? []) as HistoryRow[];
-  const warehouses = (warehouseData ?? []) as WarehouseOption[];
 
   return (
     <div className="space-y-6">
@@ -99,12 +91,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
         <p className="text-xs text-ink-400">{formatIndiaDateTime(order.placed_at)}</p>
       </div>
 
-      <AdminOrderActions
-        orderId={order.id}
-        status={order.status}
-        warehouseId={order.warehouse_id}
-        warehouses={warehouses}
-      />
+      <AdminOrderActions orderId={order.id} status={order.status} />
 
       {deliveryData ? (
         <DeliveryAssignmentPanel

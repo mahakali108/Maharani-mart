@@ -414,15 +414,21 @@ export interface ProductExportRow {
   leadTimeDays: number;
   moq: number;
   isNewLaunch: boolean;
-  stockStatus: string | null;
-  availableStock: number | null;
+  packName: string | null;
+  packSku: string | null;
+  packPrice: number | null;
+  stockQuantity: number | null;
+  stockStatus: 'In Stock' | 'Out of Stock' | null;
 }
 
-/** Export header: template columns plus the read-only stock context. */
+/** Export header: template columns plus one row per sellable pack. */
 export const PRODUCT_EXPORT_HEADER: string[] = [
   ...PRODUCT_CSV_COLUMNS,
+  'pack_name',
+  'pack_sku',
+  'pack_price',
+  'stock_quantity',
   'stock_status',
-  'available_stock',
 ];
 
 export function productExportCells(row: ProductExportRow): (string | number | boolean | null)[] {
@@ -441,8 +447,11 @@ export function productExportCells(row: ProductExportRow): (string | number | bo
     row.leadTimeDays,
     row.moq,
     row.isNewLaunch,
+    row.packName,
+    row.packSku,
+    row.packPrice,
+    row.stockQuantity,
     row.stockStatus,
-    row.availableStock,
   ];
 }
 

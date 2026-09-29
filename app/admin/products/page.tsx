@@ -30,8 +30,8 @@ import {
   buildSearchClause,
   loadCostMap,
   loadSalesMap,
-  loadSearchRelatedIds,
   loadStockMap,
+  loadSearchRelatedIds,
   matchesDerivedFilters,
   searchMatchesNothing,
   resolveAdminProducts,
@@ -166,11 +166,15 @@ async function loadAdminProductBatch(
     if (error) throw new Error(error.message);
 
     const batch = toListBatch(data ?? [], ADMIN_PAGE_SIZE, (row) => keysetCursorFor(row, order));
+    const [costs, packStock] = await Promise.all([
+      view.canViewCost ? loadCostMap(supabase) : Promise.resolve(new Map<string, number | null>()),
+      loadStockMap(supabase, batch.items.map((row) => row.id), view.canViewCost),
+    ]);
     return {
       items: resolveAdminProducts(batch.items, {
-        stock: await loadStockMap(supabase),
         sales: new Map(),
-        costs: view.canViewCost ? await loadCostMap(supabase) : new Map(),
+        costs,
+        packStock,
         includeCost: view.canViewCost,
       }),
       nextCursor: batch.nextCursor,
@@ -191,13 +195,17 @@ async function loadAdminProductBatch(
   if (error) throw new Error(error.message);
   const resultCapped = (data ?? []).length >= ADMIN_DERIVED_LOOKUP_LIMIT;
 
-  const needsStock = params.stock !== 'all' || params.maxStock !== null || params.sort === 'stock-low';
   const needsSales = params.sort === 'sales';
   const needsCost = view.canViewCost && params.sort === 'margin-high';
+  const [packStock, sales, costs] = await Promise.all([
+    loadStockMap(supabase, (data ?? []).map((row) => row.id), view.canViewCost),
+    needsSales ? loadSalesMap(supabase) : Promise.resolve(new Map()),
+    needsCost ? loadCostMap(supabase) : Promise.resolve(new Map<string, number | null>()),
+  ]);
   const resolved0 = resolveAdminProducts(data ?? [], {
-    stock: needsStock ? await loadStockMap(supabase) : new Map(),
-    sales: needsSales ? await loadSalesMap(supabase) : new Map(),
-    costs: needsCost ? await loadCostMap(supabase) : new Map(),
+    sales,
+    costs,
+    packStock,
     includeCost: view.canViewCost,
   });
   const filtered = resolved0.filter((row) => matchesDerivedFilters(row, params));
@@ -205,15 +213,7 @@ async function loadAdminProductBatch(
   const batch = toOffsetBatch(ordered, ADMIN_PAGE_SIZE, offset);
 
   return {
-    items: resolveAdminProducts(
-      batch.items as unknown as AdminProductRow[],
-      {
-        stock: needsStock ? await loadStockMap(supabase) : new Map(),
-        sales: needsSales ? await loadSalesMap(supabase) : new Map(),
-        costs: view.canViewCost ? await loadCostMap(supabase) : new Map(),
-        includeCost: view.canViewCost,
-      }
-    ),
+    items: batch.items,
     nextCursor: batch.nextCursor,
     resultCapped,
   };

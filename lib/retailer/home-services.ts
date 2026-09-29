@@ -15,7 +15,14 @@ export function homeServices(config: {
   hasWholesalePrices: boolean;
 }): HomeService[] {
   const services: HomeService[] = [];
-  if (config.dispatch?.trim()) services.push({ id: 'dispatch', title: 'Warehouse dispatch', detail: config.dispatch.trim() });
+  // Keep legacy config wired for backwards compatibility, but never render its
+  // operator-authored text: it may contain an internal warehouse/location name.
+  if (config.dispatch?.trim()) services.push({
+    id: 'dispatch',
+    title: 'Order dispatch',
+    detail: 'Track order progress from your Orders page.',
+    href: '/retailer/orders',
+  });
   if (config.deliveryEstimate?.trim()) services.push({ id: 'delivery', title: 'Estimated delivery', detail: config.deliveryEstimate.trim() });
   if (config.gstin?.trim()) services.push({ id: 'invoice', title: 'GST invoice', detail: `GSTIN ${config.gstin.trim()}`, href: '/retailer/orders' });
   services.push({ id: 'moq', title: 'MOQ-protected ordering', detail: 'Pack minimums checked before ordering.' });

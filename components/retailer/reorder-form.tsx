@@ -7,7 +7,7 @@ import { ImageOff, Loader2, ShoppingCart } from 'lucide-react';
 import { addReorderLinesToCartAction } from '@/lib/retailer/order-actions';
 import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
-import { availabilityBadge, isOutOfStock, type AvailabilityState } from '@/lib/retailer/availability';
+import { availabilityBadge, type AvailabilityState } from '@/lib/retailer/availability';
 import { formatQuantitySummary, summarizeQuantityRows } from '@/lib/orders/item-display';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -143,7 +143,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
           const quantity = Math.max(line.moq, lineState?.quantity ?? line.moq);
           const pricing = priceLine(line, quantity);
           const lineTotal = pricing.lineTotal;
-          const stockBadge = line.unavailable ? null : availabilityBadge(line.availability);
+          const stockBadge = availabilityBadge(line.availability);
           return (
             <Card
               key={line.packId}
@@ -204,13 +204,8 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                     {pricing.lineTotal.toFixed(2)}
                   </p>
                 ) : null}
-                {line.unavailable ? (
+                {line.unavailable && line.availability !== 'out_of_stock' ? (
                   <p className="text-xs font-medium text-primary-600">No longer available</p>
-                ) : null}
-                {!line.unavailable && isOutOfStock(line.availability) ? (
-                  <p className="text-[11px] font-medium text-rose-600">
-                    Out of stock right now — you can still add it; stock is confirmed when the order is processed.
-                  </p>
                 ) : null}
               </div>
               <div className="flex w-20 flex-col items-end gap-1.5">

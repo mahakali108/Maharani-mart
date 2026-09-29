@@ -20,14 +20,10 @@
  * numbers the caller already resolved server-side from the pack's own selling
  * tiers; the internal case_price / units_per_case and any product-level
  * override stay in the pricing layer and are never surfaced to a retailer.
- * Pricing remains server-authoritative. No availability is invented: a variant
- * is "available" only when its `is_active` flag (and its parent product's)
- * is true, exactly what RLS already exposes to retailers.
- *
- * Stock quantities are deliberately NOT surfaced here: inventory lives at
- * product level (not per pack) and is staff-only under RLS
- * (`inventory_staff`), so a retailer-facing per-variant stock number would be
- * both invented and a data leak. See docs/warehouse-gaps.md.
+ * Pricing and pack availability remain server-authoritative. Active status
+ * controls whether a size can be opened; stock status is separately supplied
+ * by the narrow pack-availability RPC. Retailers see only In Stock/Out of
+ * Stock; exact counts are not sent to the product detail view or size switcher.
  */
 
 import { round2, tierRangeLabel, type PricingTier } from '@/lib/retailer/case-pricing';
@@ -61,6 +57,7 @@ export interface VariantPricingInput {
   piecePrice: number;
   mrp?: number | null;
   hasOffer?: boolean;
+  availability?: 'in_stock' | 'out_of_stock' | 'unknown';
   /** Optional pre-computed slab summary (display only). */
   tierSummary?: string | null;
 }
@@ -103,6 +100,8 @@ export interface VariantSwitcherItem {
    * still re-validates every cart/order line.
    */
   isAvailable: boolean;
+  /** Server-reported stock for this exact pack; quantity is not included. */
+  availability: 'in_stock' | 'out_of_stock' | 'unknown';
   /**
    * Real, server-resolved pricing for this variant, present only when the
    * caller supplied it. Never estimated and never computed in the browser —
@@ -155,6 +154,7 @@ export function buildVariantSwitcher(
       href: variantHref(pack.id),
       isSelected: pack.id === selectedPackId,
       isAvailable: pack.is_active,
+      availability: input?.availability ?? 'unknown',
       pricing,
       isBestValue: false,
     };
@@ -177,7 +177,9 @@ export function buildVariantSwitcher(
  * arbitrary winner. Ties keep the first (lowest sort_order) variant.
  */
 function markBestValueVariant(variants: VariantSwitcherItem[]): void {
-  const priced = variants.filter((variant) => variant.isAvailable && variant.pricing !== null);
+  const priced = variants.filter((variant) =>
+    variant.isAvailable && variant.availability !== 'out_of_stock' && variant.pricing !== null
+  );
   if (priced.length < 2) return;
 
   let best = priced[0]!;

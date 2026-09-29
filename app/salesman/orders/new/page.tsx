@@ -5,6 +5,7 @@ import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { getRetailerCoinPosition } from '@/lib/coins/server';
+import { loadCatalogAvailability } from '@/lib/retailer/catalog';
 import { SalesmanOrderBuilder } from '@/components/salesman/order-builder';
 import { Card } from '@/components/ui/card';
 
@@ -35,6 +36,7 @@ interface CatalogProduct {
     allow_loose_pieces: boolean;
     is_active: boolean;
     sort_order: number;
+    availability?: 'in_stock' | 'out_of_stock' | 'unknown';
   }[];
 }
 
@@ -89,12 +91,12 @@ export default async function NewSalesmanOrderPage({
     .returns<CatalogProduct[]>();
 
   const catalog = productData ?? [];
-  // The salesman's copy of the pricing rule is the canonical engine, so each
-  // pack needs its own loose-piece tiers loaded from the database.
-  const tierMap = await loadPackTiers(
-    supabase,
-    catalog.flatMap((product) => product.product_packs.map((pack) => pack.id))
-  );
+  const activePackIds = catalog.flatMap((product) => product.product_packs.filter((pack) => pack.is_active).map((pack) => pack.id));
+  // Pricing and exact-pack availability both come from server-side reads.
+  const [tierMap, availabilityByPack] = await Promise.all([
+    loadPackTiers(supabase, activePackIds),
+    loadCatalogAvailability(supabase, activePackIds),
+  ]);
   const overrides = await Promise.all(
     catalog.map((product) =>
       getProductPriceOverride(supabase, product.id, selectedRetailer.id, selectedRetailer.area_id)
@@ -114,6 +116,7 @@ export default async function NewSalesmanOrderPage({
           moq: pack.moq,
           unitsPerCase: pack.units_per_case,
           allowLoosePieces: pack.allow_loose_pieces !== false,
+          availability: availabilityByPack.get(pack.id)?.state ?? 'unknown',
           tiers: tierMap.get(pack.id) ?? [],
           effectivePrice: resolvePackPrice(pack, overrides[index] ?? null),
         }));

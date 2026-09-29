@@ -209,10 +209,12 @@ describe('compact redesign: ordering behaviour unchanged', () => {
 // ---------------------------------------------------------------------------
 
 describe('compact redesign: delivery, details, layout', () => {
-  it('delivery is two compact lines (lead time + dispatch source)', () => {
+  it('delivery is two compact lines without exposing warehouse details', () => {
     expect(page).toContain('aria-label="Delivery information"');
     expect(page).toContain('Typical delivery:');
-    expect(page).toContain('Direct from warehouse');
+    expect(page).toContain('Maharani Traders');
+    expect(page).toContain('dispatch');
+    expect(page).not.toContain('Direct from warehouse');
     expect(page).not.toContain('MOQ protected');
     expect(page).not.toContain('GST on every invoice');
   });

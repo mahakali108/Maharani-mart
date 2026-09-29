@@ -25,14 +25,26 @@ const mediaRefSchema = z
   .refine((value) => isRenderableMediaRef(value), 'Upload an image first.');
 
 const bannerSchema = z.object({
-  title: z.string().min(2, 'Enter a title.'),
+  title: z.string().trim().min(2, 'Enter a title.').max(140, 'Keep the title under 140 characters.'),
   imageUrl: mediaRefSchema,
   subtitle: z.string().trim().max(300, 'Keep the subtitle under 300 characters.').optional(),
   ctaLabel: z.string().trim().max(60, 'Keep the button label under 60 characters.').optional(),
   linkUrl: z.string().trim().refine((value) => !value || !!resolveBannerTarget(value), 'Use an app route or an http(s) URL.').optional(),
   areaId: z.string().uuid().optional().or(z.literal('')),
+  sortOrder: z.coerce.number().int().min(0, 'Priority must be zero or higher.').max(1000000, 'Priority is too large.'),
   startsAt: z.string().optional().or(z.literal('')),
   endsAt: z.string().optional().or(z.literal('')),
+}).superRefine((data, context) => {
+  const schedule = bannerScheduleInstants(data.startsAt, data.endsAt);
+  if (data.startsAt && !schedule.startsAt) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['startsAt'], message: 'Choose a valid start date and time.' });
+  }
+  if (data.endsAt && !schedule.endsAt) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['endsAt'], message: 'Choose a valid end date and time.' });
+  }
+  if (schedule.startsAt && schedule.endsAt && Date.parse(schedule.endsAt) <= Date.parse(schedule.startsAt)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['endsAt'], message: 'The end must be after the start.' });
+  }
 });
 
 export async function createBannerAction(_prevState: BannerFormState, formData: FormData): Promise<BannerFormState> {
@@ -45,18 +57,16 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
     ctaLabel: formData.get('ctaLabel') || undefined,
     linkUrl: formData.get('linkUrl') || undefined,
     areaId: formData.get('areaId') || undefined,
+    sortOrder: formData.get('sortOrder'),
     startsAt: formData.get('startsAt') || undefined,
     endsAt: formData.get('endsAt') || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
+  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
 
   const supabase = createClient();
-
-  // New banners go to the end of the sort order within their scope.
-  const { count } = await supabase.from('banners').select('id', { count: 'exact', head: true });
 
   const payload: BannerInsert = {
     title,
@@ -65,9 +75,7 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
     cta_label: ctaLabel || null,
     link_url: linkUrl || null,
     area_id: areaId || null,
-    sort_order: count ?? 0,
-    // A start date begins at 00:00 IST and an end date covers the whole IST
-    // day — "ends 30 Sep" keeps the banner up through 30 September.
+    sort_order: sortOrder,
     ...(() => {
       const schedule = bannerScheduleInstants(startsAt, endsAt);
       return { starts_at: schedule.startsAt, ends_at: schedule.endsAt };
@@ -97,13 +105,14 @@ export async function updateBannerAction(
     ctaLabel: formData.get('ctaLabel') || undefined,
     linkUrl: formData.get('linkUrl') || undefined,
     areaId: formData.get('areaId') || undefined,
+    sortOrder: formData.get('sortOrder'),
     startsAt: formData.get('startsAt') || undefined,
     endsAt: formData.get('endsAt') || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, startsAt, endsAt } = parsed.data;
+  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
 
   const supabase = createClient();
   const schedule = bannerScheduleInstants(startsAt, endsAt);
@@ -114,6 +123,7 @@ export async function updateBannerAction(
     cta_label: ctaLabel || null,
     link_url: linkUrl || null,
     area_id: areaId || null,
+    sort_order: sortOrder,
     starts_at: schedule.startsAt,
     ends_at: schedule.endsAt,
   };
@@ -140,27 +150,21 @@ export async function reorderBannerAction(bannerId: string, direction: 'up' | 'd
   await requirePermission('banners.manage');
   const supabase = createClient();
 
-  const { data } = await supabase.from('banners').select('id, sort_order').order('sort_order');
+  const { data } = await supabase.from('banners').select('id, sort_order').order('sort_order').order('id');
   const rows = (data ?? []) as unknown as { id: string; sort_order: number }[];
   const index = rows.findIndex((r) => r.id === bannerId);
   if (index === -1) return;
 
   const swapIndex = direction === 'up' ? index - 1 : index + 1;
   if (swapIndex < 0 || swapIndex >= rows.length) return;
+  const reordered = [...rows];
+  [reordered[index], reordered[swapIndex]] = [reordered[swapIndex]!, reordered[index]!];
 
-  const a = rows[index];
-  const b = rows[swapIndex];
-  // With `noUncheckedIndexedAccess` enabled, TypeScript can't infer
-  // from the bounds check above that these are defined — the check
-  // guards the *numeric* indices, not the array-access expressions
-  // themselves. This guard makes that guarantee explicit for the
-  // compiler (same pattern as swapSortOrder in products-actions.ts).
-  if (!a || !b) return;
-
-  await Promise.all([
-    supabase.from('banners').update({ sort_order: b.sort_order } as unknown as never).eq('id', a.id),
-    supabase.from('banners').update({ sort_order: a.sort_order } as unknown as never).eq('id', b.id),
-  ]);
+  // Normalize to stable 10-point priority increments so moving banners also
+  // works when two rows previously had the same manually-entered priority.
+  await Promise.all(reordered.map((row, position) =>
+    supabase.from('banners').update({ sort_order: position * 10 } as unknown as never).eq('id', row!.id)
+  ));
 
   revalidatePath('/admin/banners');
   revalidatePath('/retailer/home');

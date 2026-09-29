@@ -20,7 +20,7 @@ function tables() {
     cart_items: [{ ...line, retailer_id: RETAILER }],
     categories: [{ id: CATEGORY, name: 'Fixture category', image_url: null, parent_id: null, is_active: true, products: [{ count: 1 }] }],
     brands: [{ id: BRAND, name: 'Fixture brand', logo_url: null, is_active: true, products: [{ count: 1 }] }],
-    banners: [{ id: 'banner', title: 'Configured promotion', image_url: '/test.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null }],
+    banners: [{ id: 'banner', title: 'Configured promotion', image_url: '/test.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 0 }],
     retailer_favorites: [{ retailer_id: RETAILER, product_id: PRODUCT }],
   };
 }
@@ -106,7 +106,7 @@ describe('home cart summary', () => {
   it('flags changed MOQ and stock without claiming stock was reserved', () => {
     const changed = { ...product, product_packs: [{ ...product.product_packs[0]!, moq: 20 }] };
     expect(homeCartSummary([line], [changed], pricingData()).needsReview).toBe(true);
-    const data = pricingData(); data.availability.set(PRODUCT, 'out_of_stock');
+    const data = pricingData(); data.availability.set(PACK, { state: 'out_of_stock' });
     expect(homeCartSummary([line], [product], data).needsReview).toBe(true);
   });
   it('never presents a bounded read or query failure as a complete/empty cart', () => {
@@ -167,13 +167,15 @@ describe('live banners and configured services only', () => {
     expect(services.find((item) => item.id === 'support')?.href).toBe('/retailer/help');
     const configured = homeServices({ hasWholesalePrices: true, dispatch: 'Configured dispatch note', deliveryEstimate: 'Configured delivery note', gstin: 'TEST-GSTIN', supportPhone: 'TEST-PHONE' });
     expect(configured).toHaveLength(6);
+    expect(configured[0]).toMatchObject({ title: 'Order dispatch', detail: 'Track order progress from your Orders page.', href: '/retailer/orders' });
+    expect(configured[0]?.detail).not.toContain('Configured dispatch note');
     expect(configured[1]?.detail).toBe('Configured delivery note');
   });
 });
 
 describe('home Supabase query contracts (mocked, not live RLS)', () => {
   it('batches the shared product, history, tier and availability reads', async () => {
-    const db = supabaseFixture(tables(), {}, [{ product_id: PRODUCT, stock_status: 'in_stock', available_quantity: 100 }]);
+    const db = supabaseFixture(tables(), {}, [{ pack_id: PACK, stock_status: 'in_stock' }]);
     const home = await loadRetailerHome(db as never, RETAILER, AREA);
     expect(home.products[0]).toMatchObject({ fromPrice: 30, availability: 'in_stock', isFavorite: true });
     expect(home.reorders[0]).toMatchObject({ packId: PACK, previousQuantity: 12, quantity: 12, unitPrice: 28, canReorder: true });
@@ -187,6 +189,50 @@ describe('home Supabase query contracts (mocked, not live RLS)', () => {
       expect(db.queries.find((query) => query.table === table)?.filters).toContainEqual({ op: 'eq', column: 'products.is_active', value: true });
     }
     expect(home.banners[0]?.link_url).toBe('/retailer/catalog');
+  });
+  it('shows multiple scheduled active banners in admin priority order', async () => {
+    const rows = tables();
+    rows.banners = [
+      { id: 'priority-20', title: 'Second', image_url: '/second.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 20 },
+      { id: 'priority-3', title: 'First', image_url: '/first.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 3 },
+      { id: 'priority-3-b', title: 'Tie breaker', image_url: '/third.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 3 },
+    ];
+    const db = supabaseFixture(rows);
+    const home = await loadRetailerHome(db as never, RETAILER, AREA);
+    expect(home.banners.map((item) => item.id)).toEqual(['priority-3', 'priority-3-b', 'priority-20']);
+    const query = db.queries.find((item) => item.table === 'banners');
+    expect(query?.filters).toContainEqual({ op: 'eq', column: 'is_active', value: true });
+  });
+  it('does not let unscheduled priority rows hide a later scheduled banner', async () => {
+    const rows = tables();
+    const banners = [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `future-${index}`,
+        title: `Future ${index}`,
+        image_url: `/future-${index}.png`,
+        link_url: '/retailer/catalog',
+        is_active: true,
+        area_id: AREA,
+        starts_at: '2999-01-01T00:00:00+05:30',
+        ends_at: null,
+        sort_order: index,
+      })),
+      {
+        id: 'currently-scheduled',
+        title: 'Available now',
+        image_url: '/current.png',
+        link_url: '/retailer/catalog',
+        is_active: true,
+        area_id: AREA,
+        starts_at: null,
+        ends_at: null,
+        sort_order: 20,
+      },
+    ];
+    rows.banners = banners as unknown as typeof rows.banners;
+
+    const home = await loadRetailerHome(supabaseFixture(rows) as never, RETAILER, AREA);
+    expect(home.banners.map((item) => item.id)).toEqual(['currently-scheduled']);
   });
   it('keeps an inactive historic pack unavailable and links to its active parent instead of a 404', async () => {
     const rows = tables();
@@ -228,6 +274,6 @@ describe('home Supabase query contracts (mocked, not live RLS)', () => {
   it('chunks the sanctioned availability RPC at its 100-product limit', async () => {
     const db = supabaseFixture();
     await loadCatalogAvailability(db as never, Array.from({ length: 205 }, (_, i) => `product-${i}`));
-    expect(db.rpcs.map((rpc) => (rpc.args.p_product_ids as string[]).length)).toEqual([100, 100, 5]);
+    expect(db.rpcs.map((rpc) => (rpc.args.p_pack_ids as string[]).length)).toEqual([100, 100, 5]);
   });
 });

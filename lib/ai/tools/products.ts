@@ -48,7 +48,6 @@ interface ProductResult {
   mrp: number | null;
   moq: number | null;
   stockStatus: string | null;
-  availableQuantity: number | null;
   imageUrl: string | null;
 }
 
@@ -58,35 +57,38 @@ async function areaForActor(context: AIToolContext): Promise<string | null> {
   return data?.area_id ?? null;
 }
 
-async function stockForProducts(context: AIToolContext, ids: string[]) {
-  const map = new Map<string, { status: string; available: number }>();
-  if (ids.length === 0) return map;
-  if (context.actor.role === 'retailer') {
-    const { data, error } = await context.supabase.rpc('get_retailer_product_availability' as never, { p_product_ids: ids } as never);
-    if (error) return map;
-    for (const row of (data ?? []) as unknown as { product_id: string; available_quantity: number; stock_status: string }[]) {
-      map.set(row.product_id, { status: row.stock_status, available: Number(row.available_quantity) });
-    }
-  } else {
-    const { data } = await context.supabase.from('inventory_product_totals').select('product_id, available_quantity, stock_status').in('product_id', ids);
-    for (const row of (data ?? []) as { product_id: string; available_quantity: number; stock_status: string }[]) {
-      map.set(row.product_id, { status: row.stock_status, available: row.available_quantity });
-    }
+async function stockForPacks(context: AIToolContext, packIds: string[]) {
+  const map = new Map<string, string>();
+  if (packIds.length === 0) return map;
+  const { data, error } = await context.supabase.rpc(
+    'get_retailer_pack_availability' as never,
+    { p_pack_ids: packIds } as never
+  );
+  if (error) return map;
+  for (const row of (data ?? []) as unknown as { pack_id: string; stock_status: string }[]) {
+    map.set(row.pack_id, row.stock_status);
   }
   return map;
 }
 
 async function mapProducts(context: AIToolContext, rows: ProductRow[]): Promise<ProductResult[]> {
   const ids = rows.map((row) => row.id);
-  const [areaId, stock] = await Promise.all([areaForActor(context), stockForProducts(context, ids)]);
+  const defaultPackByProduct = new Map(
+    rows.map((row) => [
+      row.id,
+      [...row.product_packs].filter((item) => item.is_active).sort((a, b) => a.sort_order - b.sort_order)[0] ?? null,
+    ])
+  );
+  const packIds = [...defaultPackByProduct.values()].flatMap((pack) => pack ? [pack.id] : []);
+  const [areaId, stockByPack] = await Promise.all([areaForActor(context), stockForPacks(context, packIds)]);
   const overrides = context.actor.role === 'retailer'
     ? await getProductPriceOverrides(context.supabase, ids, context.actor.id, areaId)
     : new Map<string, number | null>();
 
   return rows.map((row) => {
-    const pack = [...row.product_packs].filter((item) => item.is_active).sort((a, b) => a.sort_order - b.sort_order)[0] ?? null;
+    const pack = defaultPackByProduct.get(row.id) ?? null;
     const price = pack ? resolvePackPrice(pack, overrides.get(row.id) ?? null) : null;
-    const stockRow = stock.get(row.id);
+    const stockStatus = pack ? stockByPack.get(pack.id) ?? null : null;
     return {
       id: row.id,
       name: row.name,
@@ -100,8 +102,7 @@ async function mapProducts(context: AIToolContext, rows: ProductRow[]): Promise<
       price,
       mrp: pack?.mrp ?? null,
       moq: pack?.moq ?? null,
-      stockStatus: stockRow?.status ?? null,
-      availableQuantity: stockRow?.available ?? null,
+      stockStatus,
       imageUrl: [...row.product_images].sort((a, b) => a.sort_order - b.sort_order)[0]?.image_url ?? null,
     };
   });
@@ -127,7 +128,7 @@ function productCards(products: ProductResult[], context: AIToolContext): AICard
       : context.actor.surface === 'admin'
         ? [{ type: 'link', label: 'View product', href: `/admin/products/${product.id}`, tone: 'primary' }]
         : context.actor.surface === 'staff'
-          ? [{ type: 'link', label: 'Open inventory', href: '/staff/inventory', tone: 'secondary' }]
+          ? [{ type: 'link', label: 'Open orders', href: '/staff/orders', tone: 'secondary' }]
           : undefined,
   }));
 }
@@ -163,7 +164,7 @@ async function searchProducts(input: z.infer<typeof productListSchema>, context:
   let products = await mapProducts(context, data ?? []);
   if (input.minPrice !== undefined) products = products.filter((p) => p.price !== null && p.price >= input.minPrice!);
   if (input.maxPrice !== undefined) products = products.filter((p) => p.price !== null && p.price <= input.maxPrice!);
-  if (input.inStockOnly) products = products.filter((p) => p.stockStatus === 'in_stock' || p.stockStatus === 'low_stock');
+  if (input.inStockOnly) products = products.filter((p) => p.stockStatus === 'in_stock');
   products = products.slice(0, limit);
   return verified({ products, page, hasMore: (data?.length ?? 0) > products.length }, productCards(products, context));
 }
@@ -202,14 +203,26 @@ export const productTools: AIToolDefinition[] = [
     },
   },
   {
-    name: 'get_product_stock', description: 'Get authorized aggregate stock availability for an active product. Retailers receive no warehouse/batch internals.', actionClass: 'READ',
+    name: 'get_product_stock', description: 'Get status-only availability for the active sellable pack of a product. Exact counts and warehouse/batch data are never returned.', actionClass: 'READ',
     roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: productIdSchema,
     inputJsonSchema: { type: 'object', additionalProperties: false, required: ['productId'], properties: { productId: { type: 'string', format: 'uuid' } } },
     execute: async ({ productId }, context) => {
-      const stock = await stockForProducts(context, [productId]);
-      const row = stock.get(productId);
-      if (!row) return unavailable('No authorized current stock record was found for this product.');
-      return verified({ productId, stockStatus: row.status, availableQuantity: row.available }, [{ type: 'inventory', id: productId, title: 'Product stock', badge: row.status.replaceAll('_', ' '), metrics: [{ label: 'Available', value: String(row.available), quality: 'verified' }], source: 'Live aggregate inventory; no warehouse or batch details exposed', quality: 'verified' }]);
+      const { data: pack, error } = await context.supabase
+        .from('product_packs')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('is_active', true)
+        .order('sort_order')
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+      if (error) return dbFailure();
+      if (!pack) return unavailable('No active sellable pack was found for this product.');
+      const status = (await stockForPacks(context, [pack.id])).get(pack.id);
+      if (!status) return unavailable('Current availability could not be verified.');
+      return verified(
+        { productId, stockStatus: status },
+        [{ type: 'inventory', id: productId, title: 'Pack availability', badge: status.replaceAll('_', ' '), metrics: [{ label: 'Stock', value: status === 'in_stock' ? 'In Stock' : 'Out of Stock', quality: 'verified' }], source: 'Status-only product-pack availability', quality: 'verified' }]
+      );
     },
   },
   {
@@ -231,4 +244,4 @@ export const productTools: AIToolDefinition[] = [
   },
 ];
 
-export { stockForProducts, mapProducts, productCards, productListSchema, type ProductResult, type ProductRow };
+export { stockForPacks, mapProducts, productCards, productListSchema, type ProductResult, type ProductRow };

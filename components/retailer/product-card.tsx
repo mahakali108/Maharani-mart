@@ -64,10 +64,9 @@ export function ProductCard({
   const savings = calcSavings(mrp, piecePrice);
   const unavailable = !defaultPackId || piecePrice === null || piecePrice <= 0 || availability === 'out_of_stock';
   const detailsHref = `/retailer/catalog/${defaultPackId ?? id}`;
-  const availabilityLabel = !defaultPackId ? 'Currently unavailable'
-    : availability === 'in_stock' ? 'In stock'
-    : availability === 'low_stock' ? 'Running low'
-    : availability === 'out_of_stock' ? 'Out of stock' : 'Stock not confirmed';
+  const availabilityLabel = defaultPackId
+    ? availability === 'in_stock' ? 'In Stock' : availability === 'out_of_stock' ? 'Out of Stock' : null
+    : null;
 
   async function handleQuickAdd() {
     if (!defaultPackId || unavailable || isPending) return;
@@ -136,10 +135,12 @@ export function ProductCard({
         <p className="mt-1 min-h-4 break-words text-[10px] text-slate-500 sm:text-[11px]">
           {packName ? <span>{packName} · </span> : null}{defaultPackId ? <>MOQ {moq} pc{moq === 1 ? '' : 's'}</> : 'No active pack'}
         </p>
-        <span className={cn('mt-2 w-fit rounded-md px-1.5 py-1 text-[10px] font-semibold',
-          availability === 'in_stock' && defaultPackId ? 'bg-emerald-50 text-emerald-800' : availability === 'low_stock' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600')}>
-          {availabilityLabel}
-        </span>
+        {availabilityLabel ? (
+          <span className={cn('mt-2 w-fit rounded-md px-1.5 py-1 text-[10px] font-semibold',
+            availability === 'in_stock' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-700')}>
+            {availabilityLabel}
+          </span>
+        ) : null}
 
         <div className="mt-3 border-t border-slate-100 pt-2.5">
           <p className="text-[9px] font-medium text-slate-500 sm:text-[10px]">Piece price · GST inclusive</p>
@@ -162,7 +163,7 @@ export function ProductCard({
               {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : added ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />}
               {isPending ? 'Adding…' : added ? 'Add again' : 'Add to Cart'}
             </button>
-          </> : <p className="py-1 text-[10px] text-slate-500">{availability === 'out_of_stock' ? 'Check details for stock updates.' : 'Check details for current terms.'}</p>}
+          </> : availability === 'out_of_stock' ? null : <p className="py-1 text-[10px] text-slate-500">Check details for current terms.</p>}
           <Link href={detailsHref} aria-label={`View details for ${name}`} className="flex min-h-10 w-full items-center justify-center rounded-lg border border-slate-200 px-1 text-[11px] font-semibold text-action-700 transition hover:border-action-300 hover:bg-action-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:text-xs">View Details</Link>
           {added ? <p role="status" className="text-[10px] font-medium text-emerald-700">Added to your cart.</p> : null}
           {error ? <p role="alert" className="text-[10px] text-rose-700">{error}</p> : null}

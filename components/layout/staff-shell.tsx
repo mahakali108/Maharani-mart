@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { LayoutDashboard, Warehouse, ShoppingCart, Sparkles, Truck } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Sparkles, Truck } from 'lucide-react';
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import type { UserRole } from '@/lib/auth/roles';
@@ -13,9 +13,6 @@ function navigationForRole(role: UserRole): NavItem[] {
     { label: 'Warehouse Copilot', href: '/staff/ai', icon: Sparkles },
   ];
 
-  if (can(role, 'inventory.view')) {
-    items.push({ label: 'Inventory', href: '/staff/inventory', icon: Warehouse });
-  }
   if (can(role, 'orders.view.all')) {
     items.push({ label: 'Orders', href: '/staff/orders', icon: ShoppingCart });
   }

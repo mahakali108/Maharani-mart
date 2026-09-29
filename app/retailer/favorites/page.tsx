@@ -6,12 +6,6 @@ import { ProductCard } from '@/components/retailer/product-card';
 import { loadFavoriteIds, loadProductsByIds, priceCatalogProducts } from '@/lib/retailer/catalog';
 import { StockAlertButton } from '@/components/retailer/product-feedback';
 
-interface AvailabilityRow {
-  product_id: string;
-  available_quantity: number;
-  stock_status: string;
-}
-
 export const metadata = { title: 'Favourites — Maharani Traders' };
 
 export default async function FavoritesPage() {
@@ -24,45 +18,13 @@ export default async function FavoritesPage() {
   const products = await loadProductsByIds(supabase, [...favoriteIds]);
   const cards = await priceCatalogProducts(supabase, products, user.id, retailer?.area_id ?? null, favoriteIds);
 
-  // Real availability for every favourite + this retailer's subscribed
-  // alerts, so out-of-stock favourites can offer "notify me" honestly.
-  const productIds = cards.map((card) => card.id);
-  const [{ data: availabilityRows }, { data: alertRows }] = await Promise.all([
-    productIds.length > 0
-      ? (
-          supabase as unknown as {
-            rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: AvailabilityRow[] | null; error: unknown }>;
-          }
-        ).rpc('get_retailer_product_availability', { p_product_ids: productIds })
-      : Promise.resolve({ data: [] as AvailabilityRow[] | null, error: null }),
-    supabase
-      .from('retailer_stock_alerts')
-      .select('pack_id, product_packs ( product_id )')
-      .eq('retailer_id', user.id),
-  ]);
-
-  const statusByProduct = new Map((availabilityRows ?? []).map((row) => [row.product_id, row.stock_status]));
-  const alertPackByProduct = new Map(
-    ((alertRows ?? []) as unknown as { pack_id: string; product_packs: { product_id: string } | null }[])
-      .filter((row) => row.product_packs?.product_id)
-      .map((row) => [row.product_packs!.product_id, row.pack_id])
-  );
-  const outOfStockFavorites = cards.filter((card) => statusByProduct.get(card.id) === 'out_of_stock');
-
-  // First active pack per out-of-stock favourite — the alert target when the
-  // retailer taps "notify me".
-  const firstPackByProduct = new Map<string, string>();
-  if (outOfStockFavorites.length > 0) {
-    const { data: packRows } = await supabase
-      .from('product_packs')
-      .select('id, product_id')
-      .in('product_id', outOfStockFavorites.map((card) => card.id))
-      .eq('is_active', true)
-      .order('sort_order');
-    for (const pack of (packRows ?? []) as unknown as { id: string; product_id: string }[]) {
-      if (!firstPackByProduct.has(pack.product_id)) firstPackByProduct.set(pack.product_id, pack.id);
-    }
-  }
+  // Availability belongs to the exact default pack shown on each card.
+  const { data: alertRows } = await supabase
+    .from('retailer_stock_alerts')
+    .select('pack_id')
+    .eq('retailer_id', user.id);
+  const subscribedPackIds = new Set(((alertRows ?? []) as { pack_id: string }[]).map((row) => row.pack_id));
+  const outOfStockFavorites = cards.filter((card) => card.availability === 'out_of_stock');
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -89,19 +51,19 @@ export default async function FavoritesPage() {
           </h2>
           <ul className="mt-3 space-y-2.5">
             {outOfStockFavorites.map((card) => {
-              const alertPackId = alertPackByProduct.get(card.id);
+              const alertPackId = card.defaultPackId;
               return (
                 <li key={card.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-3">
                   <Link href={`/retailer/catalog/${card.id}`} className="min-w-0 flex-1 text-[11px] font-bold text-slate-900 hover:text-primary-600">
                     <span className="block truncate">{card.name}</span>
                     <span className="mt-0.5 block text-[10px] font-semibold text-amber-700">Out of stock</span>
                   </Link>
-                  {alertPackId ? (
+                  {alertPackId ? subscribedPackIds.has(alertPackId) ? (
                     <span className="shrink-0 rounded-xl border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-700">
                       Notify on
                     </span>
-                  ) : firstPackByProduct.get(card.id) ? (
-                    <StockAlertButton packId={firstPackByProduct.get(card.id)!} subscribed={false} />
+                  ) : (
+                    <StockAlertButton packId={alertPackId} subscribed={false} />
                   ) : null}
                 </li>
               );

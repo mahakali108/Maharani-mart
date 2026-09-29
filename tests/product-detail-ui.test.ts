@@ -600,7 +600,7 @@ describe('retailer cannot see purchase cost or internal fields', () => {
     expect(read('app/retailer/catalog/[id]/page.tsx')).not.toMatch(/\{\s*internalCasePrice\s*\}/);
   });
 
-  it('no fake ratings, reviews or invented stock anywhere on the page', () => {
+  it('uses only verified availability status and never exposes legacy inventory detail', () => {
     const page = read('app/retailer/catalog/[id]/page.tsx');
     // Comments describing the internal model are fine — what the retailer
     // would actually READ must stay clean. Strip comment lines like the
@@ -618,8 +618,10 @@ describe('retailer cannot see purchase cost or internal fields', () => {
     expect(rendered).not.toMatch(/\bstars?\b/i);
     expect(rendered).not.toMatch(/\b\d+\.\d\s*\/\s*5\b/i); // no "4.2 / 5" style ratings
     expect(rendered).not.toMatch(/review count|customer reviews|average review/i);
-    expect(rendered).not.toMatch(/\bstock\b/i);
-    expect(rendered).not.toMatch(/\binventory\b/i);
+    expect(page).toContain("availabilityState === 'in_stock'");
+    expect(page).toContain('In Stock');
+    expect(page).toContain('Out of Stock');
+    expect(rendered).not.toMatch(/inventory_stock|inventory_batches|stock_movements|warehouse_id|batch_id|expiry_date|\bFEFO\b|\bwarehouse\b/i);
   });
 
   it('the share payload is only the real product URL (no price/stock data)', () => {

@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PromoBanner } from '@/components/retailer/promo-banner';
 import { PromoCarousel } from '@/components/retailer/promo-carousel';
+import { BannerPreview } from '@/components/admin/banner-preview';
 import {
   BANNER_STANDARD,
   bannerScheduleInstants,
   isBannerVisible,
   resolveBannerTarget,
+  toBannerDateTimeLocal,
 } from '@/lib/retailer/banner-target';
 
 /**
@@ -92,6 +94,19 @@ describe('banner schedule', () => {
     expect(schedule.startsAt).toBe('2026-01-01T09:30:00.000Z');
     expect(schedule.endsAt).toBeNull();
   });
+
+  it('interprets datetime-local values as IST wall-clock time and round-trips edit values', () => {
+    const schedule = bannerScheduleInstants('2026-09-30T09:15', '2026-10-01T18:45');
+    expect(schedule).toEqual({ startsAt: '2026-09-30T03:45:00.000Z', endsAt: '2026-10-01T13:15:00.000Z' });
+    expect(toBannerDateTimeLocal(schedule.startsAt, 'start')).toBe('2026-09-30T09:15');
+    expect(toBannerDateTimeLocal(schedule.endsAt, 'end')).toBe('2026-10-01T18:45');
+  });
+
+  it('displays legacy date-only bounds as inclusive IST day limits when editing', () => {
+    expect(toBannerDateTimeLocal('2026-01-10T00:00:00.000Z', 'start')).toBe('2026-01-10T00:00');
+    expect(toBannerDateTimeLocal('2026-01-10', 'end')).toBe('2026-01-10T23:59');
+    expect(bannerScheduleInstants('2026-02-30T09:00', null).startsAt).toBeNull();
+  });
 });
 
 describe('banner visibility', () => {
@@ -168,6 +183,18 @@ describe('banner artwork', () => {
     unsafe.unmount();
     render(<PromoBanner title="Linked" imageUrl="/banner.png" linkUrl="/retailer/catalog" />);
     expect(screen.getByRole('link').getAttribute('href')).toBe('/retailer/catalog');
+  });
+});
+
+describe('admin preview', () => {
+  it('uses the same 3:1 storefront banner treatment before publishing', () => {
+    const { container } = render(
+      <BannerPreview title="Summer offer" subtitle="Fresh deals" ctaLabel="Shop now" imageUrl="/preview.png" linkUrl="/retailer/catalog" />
+    );
+    expect(screen.getByRole('region', { name: 'Storefront banner preview' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Summer offer' }).className).toContain('object-cover');
+    expect(screen.getByRole('link', { name: 'Shop now' }).getAttribute('href')).toBe('/retailer/catalog');
+    expect(container.querySelector('.aspect-\\[3\\/1\\]')).toBeTruthy();
   });
 });
 

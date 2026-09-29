@@ -54,14 +54,9 @@ export async function assignWarehouseAction(orderId: string, warehouseId: string
 }
 
 /**
- * Approves a pending order. Stock reservation is done ATOMICALLY and
- * SERVER-SIDE by the reserve_order_stock RPC (FEFO across the order's
- * warehouse): expired batches are excluded, allocations are recorded per
- * batch, and concurrent approvals/orders can never oversell. If there is
- * not enough stock the approval fails cleanly and the order stays pending.
- *
- * Pricing/GST/MOQ/coin validation remain untouched in the order
- * creation path (lib/orders/create-order.ts).
+ * New simple-stock orders already deducted the selected pack quantity at
+ * creation; approval must not reserve that stock a second time. Historical
+ * orders remain on their original warehouse/FEFO reservation path.
  */
 export async function approveOrderAction(orderId: string): Promise<OrderActionResult> {
   await requirePermission('orders.approve');
@@ -69,9 +64,9 @@ export async function approveOrderAction(orderId: string): Promise<OrderActionRe
 
   const { data: order } = await supabase
     .from('orders')
-    .select('status, warehouse_id, retailer_id, order_number')
+    .select('status, warehouse_id, retailer_id, order_number, simple_stock_mode')
     .eq('id', orderId)
-    .maybeSingle<{ status: OrderStatusEnum; warehouse_id: string | null; retailer_id: string; order_number: string }>();
+    .maybeSingle<{ status: OrderStatusEnum; warehouse_id: string | null; retailer_id: string; order_number: string; simple_stock_mode: boolean }>();
 
   if (!order) return { error: 'Order not found.' };
   if (order.status !== 'pending') return { error: 'Only pending orders can be approved.' };
@@ -87,22 +82,25 @@ export async function approveOrderAction(orderId: string): Promise<OrderActionRe
     order.warehouse_id = resolved.warehouse.id;
   }
 
-  const { data: reservation, error: reservationError } = await supabase.rpc('reserve_order_stock' as never, {
-    p_order_id: orderId,
-  } as never);
+  if (!order.simple_stock_mode) {
+    const { data: reservation, error: reservationError } = await supabase.rpc('reserve_order_stock' as never, {
+      p_order_id: orderId,
+    } as never);
 
-  if (reservationError) {
-    const msg = reservationError.message;
-    const match = msg.match(/INSUFFICIENT_STOCK:\s*(.+)$/);
-    return { error: match?.[1] ? match[1].trim() : `Stock could not be reserved: ${msg}` };
+    if (reservationError) {
+      const msg = reservationError.message;
+      const match = msg.match(/INSUFFICIENT_STOCK:\s*(.+)$/);
+      return { error: match?.[1] ? match[1].trim() : `Stock could not be reserved: ${msg}` };
+    }
+    void reservation;
   }
-  void reservation; // { status: 'reserved' | 'already_reserved', ... }
 
   const { error } = await supabase.from('orders').update({ status: 'confirmed' } as unknown as never).eq('id', orderId);
   if (error) {
-    // The reservation succeeded but the status flip failed — release the
-    // reservation so stock is not held hostage by a half-approved order.
-    await supabase.rpc('release_order_stock' as never, { p_order_id: orderId } as never);
+    // Only a historical order has a legacy reservation to release.
+    if (!order.simple_stock_mode) {
+      await supabase.rpc('release_order_stock' as never, { p_order_id: orderId } as never);
+    }
     return { error: error.message };
   }
 

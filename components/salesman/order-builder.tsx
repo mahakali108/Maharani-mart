@@ -30,6 +30,7 @@ interface OrderPack {
   moq: number;
   unitsPerCase: number;
   allowLoosePieces: boolean;
+  availability: 'in_stock' | 'out_of_stock' | 'unknown';
   /** Loose-piece tiers of THIS pack, straight from the database. */
   tiers: PricingTier[];
   /** GST-inclusive CASE price. */
@@ -61,6 +62,7 @@ export function SalesmanOrderBuilder({
   const [query, setQuery] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
+  const [requestKey, setRequestKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -121,6 +123,7 @@ export function SalesmanOrderBuilder({
 
   function setPackQuantity(pack: OrderPack, nextQuantity: number) {
     const normalized = nextQuantity <= 0 ? 0 : Math.max(pack.moq, Math.floor(nextQuantity));
+    setRequestKey(null);
     setQuantities((current) => ({ ...current, [pack.id]: normalized }));
   }
 
@@ -132,9 +135,12 @@ export function SalesmanOrderBuilder({
       setError(blockedLine);
       return;
     }
+    const stableRequestKey = requestKey ?? globalThis.crypto.randomUUID();
+    setRequestKey(stableRequestKey);
     startTransition(async () => {
       const result = await createSalesmanOrderAction({
         retailerId: selectedRetailerId,
+        requestKey: stableRequestKey,
         notes,
         lines: selectedLines.map(([packId, quantity]) => ({ packId, quantity })),
       });
@@ -158,6 +164,7 @@ export function SalesmanOrderBuilder({
             disabled={isPending}
             onChange={(event) => {
               setQuantities({});
+              setRequestKey(null);
               router.push(`/salesman/orders/new?retailer=${event.target.value}`);
             }}
           >
@@ -243,6 +250,11 @@ export function SalesmanOrderBuilder({
                           {' · MOQ '}
                           {pack.moq} pcs · {pack.skuCode}
                         </p>
+                        {pack.availability !== 'unknown' ? (
+                          <p className={`mt-1 text-xs font-semibold ${pack.availability === 'in_stock' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {pack.availability === 'in_stock' ? 'In stock' : 'Out of stock'}
+                          </p>
+                        ) : null}
                         {pricing ? (
                           <p
                             className={`text-xs ${pricing.orderable ? 'text-ink-600' : 'font-medium text-primary-700'}`}
@@ -261,7 +273,7 @@ export function SalesmanOrderBuilder({
                         ) : null}
                       </div>
                       {quantity === 0 ? (
-                        <Button type="button" size="sm" variant="outline" onClick={() => setPackQuantity(pack, pack.moq)}>
+                        <Button type="button" size="sm" variant="outline" disabled={pack.availability === 'out_of_stock'} onClick={() => setPackQuantity(pack, pack.moq)}>
                           <Plus className="h-3.5 w-3.5" /> Add
                         </Button>
                       ) : (
@@ -316,7 +328,10 @@ export function SalesmanOrderBuilder({
           <textarea
             id="order-notes"
             value={notes}
-            onChange={(event) => setNotes(event.target.value)}
+            onChange={(event) => {
+              setRequestKey(null);
+              setNotes(event.target.value);
+            }}
             maxLength={1000}
             rows={2}
             className="w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-600"

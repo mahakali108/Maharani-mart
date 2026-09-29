@@ -1230,3 +1230,34 @@ export async function duplicatePackAction(packId: string, productId: string) {
 
   revalidatePath(`/admin/products/${productId}`);
 }
+
+/** Admin-only edit of one sellable pack's piece count (simplified stock). */
+export async function setProductPackStockAction(
+  packId: string,
+  rawQuantity: number
+): Promise<{ error: string } | { success: true; quantity: number }> {
+  await requirePermission('pricing.manage');
+  const id = z.string().uuid().safeParse(packId);
+  const quantity = z.number().int().min(0).max(2_000_000_000).safeParse(rawQuantity);
+  if (!id.success || !quantity.success) {
+    return { error: 'Enter a whole stock quantity from 0 to 2,000,000,000.' };
+  }
+
+  const supabase = createClient();
+  const { data: pack } = await supabase
+    .from('product_packs')
+    .select('product_id')
+    .eq('id', id.data)
+    .maybeSingle<{ product_id: string }>();
+  if (!pack) return { error: 'Pack not found.' };
+
+  const { data, error } = await supabase.rpc('admin_set_product_pack_stock' as never, {
+    p_pack_id: id.data,
+    p_quantity: quantity.data,
+  } as never);
+  if (error) return { error: error.message };
+
+  revalidatePath('/admin/products');
+  revalidatePath(`/admin/products/${pack.product_id}`);
+  return { success: true, quantity: Number(data) };
+}

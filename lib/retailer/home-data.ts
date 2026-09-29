@@ -133,7 +133,7 @@ export function homeCartSummary(
     subtotalPaise += toPaise(pricing.lineTotal);
     if (pack.mrp == null || pack.mrp <= 0) savingsKnown = false;
     else savingsPaise += toPaise(calcSavings(pack.mrp, pricing.unitPrice, line.quantity));
-    needsReview ||= !pricing.orderable || pricingData.availability.get(product.id) === 'out_of_stock';
+    needsReview ||= !pricing.orderable || pricingData.availability.get(pack.id)?.state === 'out_of_stock';
   }
   return {
     itemCount: count,
@@ -162,7 +162,7 @@ export async function loadRetailerHome(
   bannerQuery = areaId ? bannerQuery.or(`area_id.is.null,area_id.eq.${areaId}`) : bannerQuery.is('area_id', null);
 
   const [bannerResult, categoryResult, brandResult, productResult, schemeResult, historyResult, cartResult, favoriteIds] = await Promise.all([
-    bannerQuery.order('sort_order').limit(12).returns<BannerRow[]>(),
+    bannerQuery.order('sort_order').order('id').returns<BannerRow[]>(),
     supabase.from('categories').select('id, name, image_url, parent_id, products(count)')
       .eq('is_active', true).eq('products.is_active', true).order('sort_order').returns<HomeCategoryRow[]>(),
     supabase.from('brands').select('id, name, logo_url, products(count)')
@@ -212,7 +212,7 @@ export async function loadRetailerHome(
     const pack = product?.product_packs.find((candidate) => candidate.id === line.packId && candidate.is_active);
     const quantity = Math.max(line.previousQuantity, pack?.moq ?? line.previousQuantity);
     const pricing = product && pack && pricingData ? priceCatalogPack(pack, product, pricingData, quantity) : null;
-    const availability = pricingData?.availability.get(line.productId) ?? 'unknown';
+    const availability = pricingData?.availability.get(line.packId ?? '')?.state ?? 'unknown';
     const hasPrice = !!pricing?.orderable && Number.isFinite(pricing.unitPrice) && pricing.unitPrice > 0;
     return {
       ...line, quantity, name: product?.name ?? null, packName: pack?.pack_name ?? null,
