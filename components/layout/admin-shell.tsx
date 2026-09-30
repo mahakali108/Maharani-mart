@@ -13,6 +13,7 @@ import {
   Users,
   UserCog,
   BarChart3,
+  Database,
   Image as ImageIcon,
   Bell,
   BellRing,
@@ -55,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },
+  { label: 'Data Retention', href: '/admin/cleanup', icon: Database, roles: ['admin', 'super_admin'] },
   { label: 'Audit Log', href: '/admin/audit-logs', icon: ScrollText },
 ];
 

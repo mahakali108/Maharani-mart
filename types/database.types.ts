@@ -733,6 +733,62 @@ export interface Database {
         ];
       };
 
+      // ─── 0055_data_retention_cleanup.sql ───
+      data_retention_rules: {
+        Row: {
+          target_key: string;
+          category: 'temporary_90' | 'business_120';
+          table_name: string;
+          retention_days: number;
+          cutoff_column: string;
+          deletion_order: number;
+          enabled: boolean;
+          description: string;
+        };
+        Insert: {
+          target_key: string;
+          category: 'temporary_90' | 'business_120';
+          table_name: string;
+          retention_days: number;
+          cutoff_column: string;
+          deletion_order: number;
+          enabled?: boolean;
+          description: string;
+        };
+        Update: Partial<Database['public']['Tables']['data_retention_rules']['Insert']>;
+        Relationships: [];
+      };
+      cleanup_runs: {
+        Row: {
+          id: string;
+          run_id: string;
+          dry_run: boolean;
+          triggered_by: 'cron' | 'manual' | 'test';
+          status: 'running' | 'completed' | 'completed_with_errors' | 'failed';
+          batch_size: number;
+          max_rows_per_target: number;
+          started_at: string;
+          completed_at: string | null;
+          summary: Record<string, unknown>;
+          errors: unknown[];
+        };
+        Insert: {
+          id?: string;
+          run_id: string;
+          dry_run?: boolean;
+          triggered_by: 'cron' | 'manual' | 'test';
+          status: 'running' | 'completed' | 'completed_with_errors' | 'failed';
+          batch_size: number;
+          max_rows_per_target: number;
+          started_at?: string;
+          completed_at?: string | null;
+          summary?: Record<string, unknown>;
+          errors?: unknown[];
+        };
+        Update: Partial<Database['public']['Tables']['cleanup_runs']['Insert']>;
+        Relationships: [];
+      };
+
       retailer_favorites: {
         Row: {
           id: string;
@@ -2190,6 +2246,16 @@ export interface Database {
       admin_set_product_pack_stock: {
         Args: { p_pack_id: string; p_quantity: number };
         Returns: number;
+      };
+      // 0055_data_retention_cleanup.sql — service-role-only cleanup engine.
+      run_data_cleanup: {
+        Args: {
+          p_dry_run?: boolean;
+          p_triggered_by?: string;
+          p_batch_size?: number;
+          p_max_rows_per_target?: number;
+        };
+        Returns: Record<string, unknown>;
       };
       get_effective_price: {
         Args: { p_product_id: string; p_retailer_id: string };
