@@ -22,8 +22,8 @@ live sources** rather than assumed:
 | `compileSdk` / `targetSdk` | **36** / **36** | Google Play requires new apps **and updates** to target API 36 from 2026-08-31 (extension to 2026-11-01); AGP 9.0.1 supports up to 36.1 |
 | `minSdk` | **24** | reasonably modern floor; no business need for lower |
 | JDK | **17** (source/target 17) | AGP 9 requirement; Gradle 9 supports it |
-| Kotlin (+ Compose compiler plugin) | **2.3.10** | `skydoves/pokedex-compose` version catalog (AGP 9.0.1 project that builds in CI) |
-| KSP | **2.3.5** | same catalog (KSP now has its own version line) |
+| Kotlin (+ Compose compiler plugin) | **2.4.20** | [JetBrains KGP compatibility table](https://kotlinlang.org/docs/gradle-configure-project.html): supports Gradle through 9.7.0 and AGP through 9.3.1, covering this project's 9.1.0 / 9.0.1 pins |
+| KSP | **2.3.10** | [Kotlin KSP quickstart](https://kotlinlang.org/docs/ksp-quickstart.html) pairs KSP 2.3.10 with Kotlin 2.4.20 |
 | Hilt (DI) | **2.59.1** (`hilt-android`, `hilt-compiler`, `hilt-android-testing`, plugin) | same catalog |
 | Compose | UI/foundation/runtime **1.10.3**, Material 3 **1.4.0** | same catalog (deliberately **not** the newest BOM: Compose 1.12/BOM 2026.08+ raises `compileSdk` to 37, which AGP 9.0.1 does not support) |
 | Navigation Compose | **2.9.7** | same catalog |
@@ -35,10 +35,13 @@ live sources** rather than assumed:
 | Tests | JUnit 4.13.2, Turbine 1.2.1, `kotlinx-coroutines-test`, MockWebServer (`com.squareup.okhttp3:mockwebserver`), AndroidX test ext-junit 1.2.1, espresso 3.5.1 | same catalog |
 | Image loading | Coil **3.6.3** (`coil-compose` + `coil-network-okhttp`) | `openclaw/openclaw` Android catalog (AGP 9.4.1 project) — introduced in Phase D |
 
-**AGP 9 note (deliberate, documented opt-out):** AGP 9 introduces a new DSL; the app sets
-`android.newDsl=false` in `android/gradle.properties` to stay on the classic DSL while
-AGP 10 migration work is planned (this mirrors what the reference AGP 9 project does).
-Removing the opt-out is a tracked follow-up before AGP 10.
+**AGP 9 opt-outs (deliberate and separate):** `android.newDsl=false` keeps the classic
+Android DSL while AGP 10 migration work is planned. AGP 9 also enables built-in Kotlin by
+default, which conflicts with this project's explicitly versioned
+`org.jetbrains.kotlin.android` plugin; `android.builtInKotlin=false` opts out of that
+built-in plugin as documented in [Android's migration guide](https://developer.android.com/build/migrate-to-built-in-kotlin#opt-out-of-built-in-kotlin).
+Both properties are pinned in `android/gradle.properties`; the Kotlin plugin remains at
+2.4.20, within its published AGP/Gradle compatibility range.
 
 **Gradle wrapper JAR:** committed in this change. It was fetched from the official
 `gradle/gradle` tag `v9.1.0` via the GitHub contents API because
@@ -59,7 +62,7 @@ dependency stay exactly as they are on `main`.
 android/
 ├── settings.gradle.kts                 # module graph + repositories
 ├── build.gradle.kts                    # plugin aliases (apply false)
-├── gradle.properties                   # AGP 9 classic-DSL opt-out, JVM args
+├── gradle.properties                   # AGP 9 DSL/Kotlin opt-outs, JVM args
 ├── gradle/libs.versions.toml           # single pinned version catalog
 ├── gradle/wrapper/…, gradlew, gradlew.bat
 ├── app/                                # application module: manifest, Application, MainActivity, navigation host, splash
@@ -103,7 +106,7 @@ android/
 | Phase | Deliverable | Exit criteria (evidence) | Status now |
 | --- | --- | --- | --- |
 | **A** | Audit, API contract, plan (these three documents) | Documents committed; classification covers every existing page area; security register complete | **Done in this change** |
-| **B** | Mobile API foundation (`lib/mobile/*`, `GET /health`, `GET /session`) + native Android foundation (Gradle project, modules, theme, splash, navigation shell, Keystore session storage, CI job) | Backend tests green in vitest; Android CI job runs unit tests + lint + `assembleDebug`; web suite still 1 780/1 780 | **Done in this change** (CI result recorded in the PR) |
+| **B** | Mobile API foundation (`lib/mobile/*`, `GET /health`, `GET /session`) + native Android foundation (Gradle project, modules, theme, splash, navigation shell, Keystore session storage, CI job) | Backend/web checks green; native wrapper validation, Android unit tests, lint, and `assembleDebug` pass in an actual GitHub Actions run with the APK artifact uploaded | **In progress** — native Android CI is not active or verified yet |
 | **C** | Authentication: login (phone/email), refresh, logout, password reset, registration, pending-approval, suspended/expired screens, role-aware routing wired to real data | Endpoint tests (auth boundary matrix) + Android session tests; manual verification against the deployed API recorded honestly | Next |
 | **D** | Catalog, categories, brands, search, filtering, infinite scroll, compact PDP with packs/MOQ/tier pricing, favorites, image caching | Endpoint tests + Compose UI tests; PDP keeps the compact design (no duplicate price blocks / Buy Now) | Pending |
 | **E** | Cart, quote, checkout, orders, cancellation/returns/reorder, invoices, delivery view; idempotency + atomic stock end-to-end | Order idempotency, insufficient-stock, cancellation-restoration and coin tests; no client-calculated totals anywhere | Pending |
@@ -142,65 +145,49 @@ Rules:
 
 ## 5. CI plan
 
-The native pipeline is written, reviewed and stored as
-**`docs/android-workflow-native.yml`**. It is not yet active in
-`.github/workflows/android-apk.yml`, because the GitHub App that pushes this branch is not
-granted the `workflows` permission — GitHub rejects any commit that touches
-`.github/workflows/**`:
-
-```
-! [remote rejected] arena/01a0f75c-maharani-mart -> arena/01a0f75c-maharani-mart
-  (refusing to allow a GitHub App to create or update workflow
-   `.github/workflows/android-apk.yml` without `workflows` permission)
-```
-
-Activating it is one command (this mirrors how `docs/android-workflow-apk-aab.yml` was
-kept before being promoted):
+The native pipeline template is stored as **`docs/android-workflow-native.yml`**. It is not
+active in `.github/workflows/android-apk.yml`: the repository records that the GitHub App
+for this branch lacks the `workflows` permission, and GitHub rejected a prior attempt to
+update a workflow file. A maintainer with that permission can promote it with:
 
 ```bash
 cp docs/android-workflow-native.yml .github/workflows/android-apk.yml
-git add .github/workflows/android-apk.yml && git commit -m "ci(android): native pipeline"
+git add .github/workflows/android-apk.yml && git commit -m "ci(android): activate native Android checks"
 ```
 
-Until then, CI continues to build the legacy Capacitor wrapper; **that path is untouched by
-this change** and the committed native project is unaffected. The active workflow still
-lacks the native job, so the first Android compile has not run yet — see §10.
+The checked-in active workflow still runs `npx cap add android` and builds the legacy
+Capacitor/WebView wrapper. It does not validate `android/`; it is deliberately not dispatched
+for this task because that would not test the native app and would conflict with the native-UI
+requirement. No native CI result or APK artifact exists yet.
 
-The pipeline has two independent jobs, both triggered by PRs and pushes that touch
-`android/**`, `lib/mobile/**`, `lib/permissions/**`, `app/api/mobile/**`, `package.json`,
-`pnpm-lock.yaml` or the workflow itself.
+The template runs web quality gates first, then Android; the Android job depends on the web
+job so the APK is uploaded only after both sets of checks succeed. Pushes and pull requests
+are filtered to Android, mobile API, test, package manifest/lockfile, and workflow-template paths.
 
-**Job `android`** (as implemented and reviewed in this change):
+**Job `web`** uses pinned Node.js 22 and the repository-pinned pnpm version, then runs frozen
+install, typecheck, lint, the complete Vitest suite, and the Next.js production build. It needs
+no production credentials.
 
-1. `actions/checkout@v7.0.1`
-2. `actions/setup-java@v6.0.1` — temurin **17**
-3. `android-actions/setup-android@v4.0.4` — provides the SDK used by `compileSdk`/`targetSdk` 36
-4. `gradle/actions/setup-gradle@v6.4.0` — caching + the wrapper for every later step
-5. `chmod +x android/gradlew`
-6. `./gradlew --no-daemon testDebugUnitTest` — JVM unit tests for all modules
-7. `./gradlew --no-daemon lintDebug` — Android Lint (non-fatal while the shell is growing;
-   flipped to `abortOnError = true` in Phase H)
-8. `./gradlew --no-daemon assembleDebug` — debug APK (Gradle's auto-generated debug
-   keystore; no secret involved)
-9. `actions/upload-artifact@v7.0.1` — `app-debug.apk`, plus test/lint reports (`if: always()`)
-10. **Optional signed release bundle**: when the four `RELEASE_*` secrets are present, the
-    keystore is decoded into `$RUNNER_TEMP`, `bundleRelease` runs and the AAB is uploaded.
-    When they are absent the step is skipped and the job prints an explicit notice — the
-    absence is never reported as a release.
+**Job `android`** performs these checks in order:
 
-All action versions above were verified against their published tags (see the evidence list
-in §1) rather than copied from an older workflow.
+1. `gradle/actions/wrapper-validation@v6.3.0` (pinned to commit
+   `9c971963bec38e04b3d30dcc455b5382be2fdbfb`);
+2. JDK **17** (Temurin) and Android SDK packages `platforms;android-36` and
+   `build-tools;36.0.0`;
+3. `./gradlew --version`, confirming the wrapper runs the pinned **Gradle 9.1.0**;
+4. `./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug`;
+5. APK existence and application ID verification using Build Tools `aapt`;
+6. `actions/upload-artifact@v7.0.1` for the debug APK. The upload step has no `always()`
+   condition and follows all checks, so failures do not produce an artifact.
 
-**Job `backend`**: `corepack enable` (pnpm is pinned by `packageManager`),
-`pnpm install --frozen-lockfile`, `pnpm run typecheck`, `pnpm exec vitest run` — the full
-web suite **plus** the mobile API contract tests. This is the guard that the migration
-never breaks the existing web application.
+All GitHub Actions references are pinned to published patch versions or, for wrapper
+validation, an immutable commit SHA. The Phase B workflow contains no signing secrets, release
+AAB, deployment or production operation.
 
 Honest CI caveats to be stated in every phase report:
 
 - A green CI build is not device verification. Real-device checks (splash, back
   navigation, keyboard/insets, process death) are manual and must be reported as such.
-- The release bundle requires secrets that only the repository owner can provide.
 - Live-service behaviour (real Supabase project, real Vercel deployment, deployment
   protection) cannot be exercised by CI without credentials; unverified items are listed
   explicitly instead of being assumed.
@@ -211,8 +198,8 @@ Honest CI caveats to be stated in every phase report:
 
 | Setting | Where | Notes |
 | --- | --- | --- |
-| API base URL | `android/app/build.gradle.kts`: `BuildConfig.API_BASE_URL`, overridable with `-PmaharaniApiBaseUrl=https://host/` | **Not a secret.** Default is the deployed HTTPS API. `ApiBaseUrlContract` rejects anything that is not absolute https (plain http is allowed only for `localhost`/`127.0.0.1`/`10.0.2.2`, which only the debug network security config permits) and normalises the trailing `/` Retrofit requires. No datastore project URL/key is compiled in — all auth flows through the API (see contract §1). |
-| Release signing | CI secrets only (`RELEASE_KEYSTORE_BASE64`, …) | Keystores/`local.properties` stay git-ignored |
+| API base URL | `android/app/build.gradle.kts`: `BuildConfig.API_BASE_URL`, overridable with `-PmaharaniApiBaseUrl=https://host/` | **Not a secret.** Default is the existing deployed HTTPS API. `ApiBaseUrlContract` requires HTTPS by default and receives `BuildConfig.DEBUG` before allowing only local loopback/emulator HTTP; release network security config also denies all cleartext. Credentials, query strings, and fragments are rejected. No Supabase URL/key is compiled into the app. |
+| Release signing | Not used by the Phase B workflow | Keystores/`local.properties` stay git-ignored; signed release output is a separately authorized later phase |
 | Server env | Existing deployment env (`NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, …) | Unchanged; never duplicated into the app |
 | Local development | `cd android && ./gradlew …` after installing JDK 17 + Android SDK 36 | The Gradle wrapper is committed, so no `gradle wrapper` step is needed |
 
@@ -223,24 +210,25 @@ Honest CI caveats to be stated in every phase report:
 **Backend / web (this repository):**
 
 ```bash
-corepack enable pnpm && pnpm install --frozen-lockfile
-pnpm typecheck                                  # tsc --noEmit
-pnpm test                                       # full vitest suite (Phase B result: 95 files / 1 821 tests)
-node_modules/.bin/vitest run tests/mobile-api-foundation.test.ts   # new Phase B contract tests
-pnpm build                                      # Next.js production build
+corepack pnpm install --frozen-lockfile
+corepack pnpm run typecheck                     # tsc --noEmit
+corepack pnpm run lint
+corepack pnpm test                               # 96 files / 1,826 tests in this verification run
+corepack pnpm exec vitest run tests/android-project-integrity.test.ts tests/mobile-api-foundation.test.ts
+NEXT_TELEMETRY_DISABLED=1 corepack pnpm run build  # Next.js production build
 ```
 
 **Android (CI, or locally with JDK 17 + SDK 36):** the wrapper runs every module's unit
-tests; this sandbox has no JDK/Android SDK, so these commands were NOT executed locally and
-must be read as the CI contract, not as a local result.
+tests. This sandbox has no JDK/Android SDK, so the Android Gradle tasks have NOT been
+executed locally and the commands below are the verification contract, not a result.
 
 ```bash
 cd android
-./gradlew --no-daemon testDebugUnitTest   # model, common, network, auth, datastore, designsystem, app
-./gradlew --no-daemon lintDebug           # Android Lint
-./gradlew --no-daemon assembleDebug       # debug APK
-./gradlew --no-daemon bundleRelease       # only with signing configured (RELEASE_* env vars)
+./gradlew --version
+./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug
 ```
+
+A signed release AAB is deliberately outside Phase B and is not part of this workflow.
 
 **Security assertions that must keep passing (static, in the existing suite):**
 
@@ -248,7 +236,9 @@ cd android
   `service_role`, `SERVICE_ROLE`, private keys) — new test in `tests/mobile-api-foundation.test.ts`;
 - no `WebView`/`android.webkit` usage in the Android sources except the documented
   absence note (asserted by the same test);
-- cleartext traffic disabled in the release manifest;
+- release `ApiBaseUrlContract` requires HTTPS and the main network-security config disables cleartext; debug-only local HTTP is explicitly gated by `BuildConfig.DEBUG`;
+- normal system CA validation only (no custom trust manager/hostname verifier), with no cookies, redirect following, automatic connection retries, or HTTP logging interceptor;
+- no auth token or service-role credential is placed in a URL, request log, or APK configuration;
 - exported components limited to the launcher activity.
 
 ---
@@ -277,8 +267,9 @@ cd android
   Material 3 theme, native splash + launcher icons from existing brand assets, role-aware
   navigation shell, Keystore-backed session storage, Retrofit/OkHttp network layer with
   typed errors, DataStore preferences, and unit tests for model/session/routing logic.
-- Replace the Capacitor CI workflow with a native build/test/lint workflow, add a backend
-  verification job, and repoint the `android:build:*` npm scripts at the native project.
+- Add a native build/test/lint workflow template under `docs/` and document its promotion
+  requirement; the active legacy workflow cannot be changed by this GitHub App. Repoint the
+  `android:build:*` npm scripts at the native project.
 
 **Does not (yet) claim:**
 
@@ -295,33 +286,37 @@ cd android
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| Mobile API contract tests | `node_modules/.bin/vitest run tests/mobile-api-foundation.test.ts` | **41 / 41 passed** |
-| Android project static integrity | `node_modules/.bin/vitest run tests/android-project-integrity.test.ts` | **4 / 4 passed** — every project `import` resolves to a declared symbol, every Gradle module has a build script, every referenced resource exists. Verified by mutation: a deliberately wrong import fails the check. |
-| Existing web suite | `node_modules/.bin/vitest run` | **96 files / 1 825 tests passed** (baseline was 94 / 1 780; the delta is this change's two new files and 45 tests) |
-| Type checking | `pnpm run typecheck` (`tsc --noEmit`) | clean |
-| Android unit tests | `cd android && ./gradlew testDebugUnitTest` | **not run here** — no JDK/Android SDK in the working environment; executed by CI (job `android`) |
-| Android lint / APK | `./gradlew lintDebug`, `./gradlew assembleDebug` | **not run here** — same reason; executed by CI |
+| Dependency install | `corepack pnpm install --frozen-lockfile` | **passed** — lockfile up to date |
+| Focused web/mobile/static checks | `corepack pnpm exec vitest run tests/android-project-integrity.test.ts tests/mobile-api-foundation.test.ts tests/mobile-safety.test.ts tests/production-readiness.test.ts` | **4 files / 75 tests passed** |
+| Android project integrity/security assertions | Included above | **5 / 5 passed** — imports, module/build-script mapping, resources, and release transport/retry/logging invariants |
+| Full web suite | `corepack pnpm test` | **96 files / 1,826 tests passed** |
+| Type checking | `corepack pnpm run typecheck` (`tsc --noEmit`) | **passed** |
+| Web lint | `corepack pnpm run lint` | **passed** with the existing `<img>` optimization warning in `components/admin/product-image-manager.tsx:110` |
+| Next.js production build | `NEXT_TELEMETRY_DISABLED=1 corepack pnpm run build` | **passed**; same existing `<img>` warning |
+| Android wrapper / unit tests / lint / APK | `cd android && ./gradlew --version` and `./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug` | **not run** — Java/JDK, Gradle, adb, and Android SDK tools are unavailable locally. The native workflow template is not active and no native GitHub Actions run exists; no APK artifact is available. |
 
-Files added by this change (for review):
+Phase A/B baseline files already present on the branch:
 
 - `docs/NATIVE_ANDROID_{MIGRATION_AUDIT,API_CONTRACT,MIGRATION_PLAN}.md`
-- `lib/mobile/{http,supabase,auth,pagination,rate-limit,index}.ts` (server-only helpers)
-- `app/api/mobile/v1/{health,session}/route.ts`
+- `lib/mobile/{http,supabase,auth,pagination,rate-limit,index}.ts` and
+  `app/api/mobile/v1/{health,session}/route.ts`
 - `tests/mobile-api-foundation.test.ts`, `tests/android-project-integrity.test.ts`
-- `android/**` (Gradle wrapper + catalog, 7 modules, 57 Kotlin files of which 14 are tests,
-  brand resources copied from `resources/android-res/`)
-- modified: `lib/permissions/permissions.ts` (`permissionsForRole`, additive only),
-  `.github/workflows/android-apk.yml`, `.gitignore`, `package.json` (Android scripts repointed)
+- `android/**` (Gradle wrapper + catalog, 7 modules, 57 Kotlin files; the current follow-up
+  adds the network-policy unit test)
+- `docs/android-workflow-native.yml` (native template). The active
+  `.github/workflows/android-apk.yml` remains the legacy workflow because this integration
+  lacks permission to update GitHub workflow files.
+- Other baseline changes include `lib/permissions/permissions.ts`, `.gitignore`, and
+  `package.json` (Android scripts repointed).
 
 Blockers and unverified items carried forward (stated, not hidden):
 
-1. **Nothing under `android/` has been compiled yet** in this environment — CI is the first
-   compile. Expect the first CI run to surface Kotlin/Gradle nits (type inference, Compose
-   API details, dependency coordinates); treat them as Phase B follow-ups, not as a silent
-   pass. `tests/android-project-integrity.test.ts` narrows the gap (it already caught two
-   wrong `IoDispatcher` imports), but it is not a compiler.
-2. **Sign-in does not exist yet** (Phase C), so the signed-in shell can only be reached by
-   restoring a session created elsewhere. The gate screens say exactly that.
+1. **Nothing under `android/` has been compiled yet** — local Android tooling is absent and
+   the native workflow template still needs promotion by a maintainer with workflow-write
+   permission. The first real CI build may surface Kotlin/Gradle/API issues; static checks
+   narrow that gap but do not replace compilation.
+2. **Credential sign-in is not implemented** (Phase C); the current shell/session foundation
+   must not be represented as a completed login flow.
 3. **Live-service behaviour is unverified**: no request has been made against the deployed
    API or the Supabase project from this environment.
 4. **No device/emulator run**: splash, insets, back navigation and process death are

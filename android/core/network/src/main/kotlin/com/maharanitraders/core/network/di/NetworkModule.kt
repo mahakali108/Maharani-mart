@@ -15,7 +15,6 @@ import javax.inject.Singleton
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
@@ -26,11 +25,6 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ApiBaseUrl
-
-/** True in debug builds; enables BASIC HTTP logging (never headers or bodies). */
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class HttpLoggingEnabled
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -52,30 +46,19 @@ object NetworkModule {
 
   @Provides
   @Singleton
-  fun provideOkHttpClient(
-    tokenProvider: TokenProvider,
-    @HttpLoggingEnabled httpLoggingEnabled: Boolean,
-  ): OkHttpClient {
-    val builder = OkHttpClient.Builder()
+  fun provideOkHttpClient(tokenProvider: TokenProvider): OkHttpClient =
+    OkHttpClient.Builder()
       .addInterceptor(AuthInterceptor(tokenProvider))
       .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
       .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
       .callTimeout(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-      .retryOnConnectionFailure(true)
-
-    if (httpLoggingEnabled) {
-      // BASIC = method, URL and status only. Headers and bodies are never
-      // logged, so an access token cannot leak into logcat or a crash report.
-      builder.addInterceptor(
-        HttpLoggingInterceptor().apply {
-          level = HttpLoggingInterceptor.Level.BASIC
-          redactHeader("Authorization")
-        }
-      )
-    }
-
-    return builder.build()
-  }
+      // A transport failure is ambiguous for a mutation. Do not replay requests
+      // automatically; mutations need explicit, server-enforced idempotency.
+      .retryOnConnectionFailure(false)
+      // API calls must not silently move to a different host or downgrade HTTPS.
+      .followRedirects(false)
+      .followSslRedirects(false)
+      .build()
 
   @Provides
   @Singleton

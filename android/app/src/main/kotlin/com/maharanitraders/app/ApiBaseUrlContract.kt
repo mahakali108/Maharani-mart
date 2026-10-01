@@ -12,15 +12,14 @@ package com.maharanitraders.app
  *
  * Rules enforced for EVERY build:
  *   • absolute URL;
- *   • `https`, except plain-`http` local development hosts (loopback and the
- *     Android emulator host alias), which the debug network security config
- *     permits and the release config does not;
+ *   • `https` for every non-debug build; plain `http` may only be explicitly
+ *     enabled for local development hosts by a debug build;
  *   • normalized to end with `/` so Retrofit resolves `api/mobile/v1/…`
  *     correctly;
  *   • no credentials in the URL, no query string, no fragment.
  *
  * It NEVER supplies a default: an unusable value is an error, because silently
- * pointing the app at some other host would be worse than failing.
+ * pointing the app at some other host would be worse.
  */
 object ApiBaseUrlContract {
 
@@ -29,10 +28,10 @@ object ApiBaseUrlContract {
     data class Invalid(val reason: String) : Validation
   }
 
-  /** Hosts allowed to use plain http: the emulator loopback alias and localhost. */
+  /** Hosts allowed to use plain http in debug builds: loopback and emulator alias. */
   private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2", "[::1]")
 
-  fun validate(raw: String?): Validation {
+  fun validate(raw: String?, allowLocalHttp: Boolean = false): Validation {
     val value = raw?.trim().orEmpty()
     if (value.isEmpty()) return Validation.Invalid("API base URL is empty")
 
@@ -50,10 +49,17 @@ object ApiBaseUrlContract {
     val authority = remainder.substringBefore('/')
     if (authority.isEmpty()) return Validation.Invalid("API base URL has no host")
     if (authority.contains('@')) return Validation.Invalid("API base URL must not contain credentials")
+    if (authority.contains('?') || authority.contains('#')) {
+      return Validation.Invalid("API base URL must not contain a query or fragment")
+    }
 
-    val host = authority.substringBefore(':').lowercase()
-    if (scheme == "http" && host !in LOCAL_HOSTS) {
-      return Validation.Invalid("Plain http is only allowed for local development hosts")
+    val host = (if (authority.startsWith("[")) {
+      authority.substringBefore(']') + "]"
+    } else {
+      authority.substringBefore(':')
+    }).lowercase()
+    if (scheme == "http" && (!allowLocalHttp || host !in LOCAL_HOSTS)) {
+      return Validation.Invalid("Plain http is only allowed for local debug builds and development hosts")
     }
 
     val pathAndBeyond = remainder.substring(authority.length)
@@ -74,8 +80,9 @@ object ApiBaseUrlContract {
    * Normalizes [raw] or throws with the reason. Used by the DI provider so a bad
    * build configuration fails loudly at startup instead of mid-checkout.
    */
-  fun requireValid(raw: String?): String = when (val result = validate(raw)) {
-    is Validation.Valid -> result.normalized
-    is Validation.Invalid -> error("Invalid API base URL: ${result.reason}")
-  }
+  fun requireValid(raw: String?, allowLocalHttp: Boolean = false): String =
+    when (val result = validate(raw, allowLocalHttp)) {
+      is Validation.Valid -> result.normalized
+      is Validation.Invalid -> error("Invalid API base URL: ${result.reason}")
+    }
 }

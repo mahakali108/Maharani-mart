@@ -194,4 +194,29 @@ describe('Android project integrity', () => {
     expect(theme).toContain('windowSplashScreenAnimatedIcon');
     expect(theme).toContain('postSplashScreenTheme');
   });
+
+  it('keeps release HTTP transport HTTPS-only, non-logging and non-retrying', () => {
+    const networkModule = readFileSync(
+      join(ANDROID, 'core', 'network', 'src', 'main', 'kotlin', 'com', 'maharanitraders', 'core', 'network', 'di', 'NetworkModule.kt'),
+      'utf8',
+    );
+    const appModule = readFileSync(
+      join(APP, 'src', 'main', 'kotlin', 'com', 'maharanitraders', 'app', 'di', 'AppModule.kt'),
+      'utf8',
+    );
+    const manifest = readFileSync(join(APP, 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+    const releaseNetworkConfig = readFileSync(
+      join(APP, 'src', 'main', 'res', 'xml', 'network_security_config.xml'),
+      'utf8',
+    );
+
+    expect(appModule).toContain('allowLocalHttp = BuildConfig.DEBUG');
+    expect(manifest).toContain('android:usesCleartextTraffic="false"');
+    expect(releaseNetworkConfig).toContain('cleartextTrafficPermitted="false"');
+    expect(releaseNetworkConfig).toContain('<certificates src="system" />');
+    expect(networkModule).toContain('.retryOnConnectionFailure(false)');
+    expect(networkModule).toContain('.followRedirects(false)');
+    expect(networkModule).toContain('.followSslRedirects(false)');
+    expect(networkModule).not.toMatch(/HttpLoggingInterceptor|sslSocketFactory|hostnameVerifier/);
+  });
 });

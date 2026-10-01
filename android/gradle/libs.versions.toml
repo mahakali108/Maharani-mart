@@ -3,10 +3,12 @@
 # Every version here is traceable in docs/NATIVE_ANDROID_MIGRATION_PLAN.md §1:
 #  - AGP 9.0.1 / Gradle 9.1.0 / JDK 17 / compileSdk+targetSdk 36 come from the
 #    AGP 9.0.1 compatibility table plus Google Play's 2026 API-36 requirement.
-#  - Kotlin 2.3.10, KSP 2.3.5, Hilt 2.59.1, Retrofit 3.0.0, OkHttp 5.3.2,
-#    Compose 1.10.3 / Material3 1.4.0, coroutines 1.10.2, serialization 1.10.0
-#    mirror a maintained AGP 9.0.1 reference project (skydoves/pokedex-compose)
-#    whose CI builds this combination.
+#  - Kotlin 2.4.20 is within JetBrains' published Gradle/AGP compatibility range
+#    for Gradle 9.1.0 and AGP 9.0.1; KSP 2.3.10 is its published quickstart pairing.
+#    `android.builtInKotlin=false` opts out of AGP 9's built-in plugin while this
+#    project continues to use the explicitly versioned Kotlin Android plugin.
+#  - Hilt 2.59.1, Retrofit 3.0.0, OkHttp 5.3.2, Compose 1.10.3 / Material3
+#    1.4.0, coroutines 1.10.2, and serialization 1.10.0 are pinned below.
 #  - Compose is intentionally NOT on the newest BOM: Compose 1.12 / BOM 2026.08+
 #    raises compileSdk to 37, which AGP 9.0.1 (max API 36.1) does not support.
 #
@@ -14,8 +16,8 @@
 
 [versions]
 agp = "9.0.1"
-kotlin = "2.3.10"
-ksp = "2.3.5"
+kotlin = "2.4.20"
+ksp = "2.3.10"
 hilt = "2.59.1"
 
 coreKtx = "1.17.0"
@@ -76,7 +78,6 @@ retrofit = { module = "com.squareup.retrofit2:retrofit" }
 retrofit-converter-kotlinx-serialization = { module = "com.squareup.retrofit2:converter-kotlinx-serialization" }
 okhttp-bom = { module = "com.squareup.okhttp3:okhttp-bom", version.ref = "okhttp" }
 okhttp = { module = "com.squareup.okhttp3:okhttp" }
-okhttp-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor" }
 okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver" }
 
 # Dependency injection

@@ -12,15 +12,15 @@ import org.junit.Test
  *     with `/` (Retrofit throws otherwise);
  *   • the URL that Retrofit would produce for the Phase B endpoints must be the
  *     real `/api/mobile/v1/...` path;
- *   • the validator must reject cleartext (except explicit local development
- *     hosts), credentials in the URL, query strings and fragments.
+ *   • cleartext is allowed only when a debug build explicitly enables local
+ *     development hosts; credentials, query strings and fragments are rejected.
  */
 class ApiBaseUrlContractTest {
 
   @Test
   fun `the compiled-in base url is valid, https and normalised`() {
     val raw = BuildConfig.API_BASE_URL
-    val validated = ApiBaseUrlContract.validate(raw)
+    val validated = ApiBaseUrlContract.validate(raw, allowLocalHttp = BuildConfig.DEBUG)
 
     assertTrue("expected a valid base url, got $validated", validated is ApiBaseUrlContract.Validation.Valid)
     val normalized = (validated as ApiBaseUrlContract.Validation.Valid).normalized
@@ -31,7 +31,10 @@ class ApiBaseUrlContractTest {
 
   @Test
   fun `retrofit resolves the phase b endpoints against the compiled-in base url`() {
-    val base = ApiBaseUrlContract.requireValid(BuildConfig.API_BASE_URL).toHttpUrl()
+    val base = ApiBaseUrlContract.requireValid(
+      BuildConfig.API_BASE_URL,
+      allowLocalHttp = BuildConfig.DEBUG,
+    ).toHttpUrl()
 
     // Same resolution rule Retrofit applies to `@GET("api/mobile/v1/session")`.
     assertEquals(
@@ -65,35 +68,43 @@ class ApiBaseUrlContractTest {
   }
 
   @Test
-  fun `allows plain http only for local development hosts`() {
+  fun `allows plain http only for explicitly enabled local debug hosts`() {
     listOf(
       "http://localhost:3000",
       "http://127.0.0.1:3000",
+      "http://[::1]:3000",
       "http://10.0.2.2:3000",
     ).forEach { local ->
-      val result = ApiBaseUrlContract.validate(local)
+      val result = ApiBaseUrlContract.validate(local, allowLocalHttp = true)
       assertTrue(
-        "expected $local to be allowed for local development",
+        "expected $local to be allowed in debug development",
         result is ApiBaseUrlContract.Validation.Valid,
       )
     }
 
-    // A public host over cleartext is always rejected.
-    val remote = ApiBaseUrlContract.validate("http://maharani.example.com")
+    // The release/default path rejects even loopback cleartext.
+    val releaseLocal = ApiBaseUrlContract.validate("http://localhost:3000")
+    assertTrue(releaseLocal is ApiBaseUrlContract.Validation.Invalid)
+
+    // A public host over cleartext is rejected even if local development is enabled.
+    val remote = ApiBaseUrlContract.validate("http://maharani.example.com", allowLocalHttp = true)
     assertTrue(remote is ApiBaseUrlContract.Validation.Invalid)
   }
 
   @Test
-  fun `rejects anything that is not an absolute https url`() {
+  fun `rejects anything that is not an absolute https url by default`() {
     val rejected = listOf(
       "",
       "   ",
       "maharani.example.com",
       "ftp://maharani.example.com",
+      "http://localhost:3000",
       "https://",
       "https://user:secret@maharani.example.com/",
       "https://maharani.example.com/?token=abc",
+      "https://maharani.example.com?token=abc",
       "https://maharani.example.com/#fragment",
+      "https://maharani.example.com#fragment",
     )
 
     rejected.forEach { raw ->
