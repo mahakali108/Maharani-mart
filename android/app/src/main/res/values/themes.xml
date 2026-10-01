@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!--
+    Native splash (androidx.core:core-splashscreen). The splash uses the brand
+    red background from the EXISTING launcher asset
+    (resources/android-res/values/ic_launcher_background.xml → #C8102E) and the
+    app's own foreground icon — no invented mark.
+  -->
+  <style name="Theme.MaharaniTraders" parent="Theme.SplashScreen">
+    <item name="windowSplashScreenBackground">@color/brand_red</item>
+    <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+    <item name="postSplashScreenTheme">@style/Theme.MaharaniTraders.Main</item>
+  </style>
+
+  <!-- Compose-only UI: no AppCompat action bar; edge-to-edge is applied by the Activity. -->
+  <style name="Theme.MaharaniTraders.Main" parent="android:Theme.Material.Light.NoActionBar">
+    <item name="android:windowBackground">@color/window_background_light</item>
+  </style>
+</resources>

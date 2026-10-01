@@ -38,14 +38,22 @@ next-env.d.ts
 supabase/.branches
 supabase/.temp
 
-# Capacitor / Android — the native project is generated fresh by the
-# GitHub Actions workflow on every run (npx cap add android), not
-# committed, so a partially-generated or stale copy can never get
-# checked in by accident. Also blocks any keystore/signing secrets
-# from ever being committed if someone generates a release build
-# locally.
-/android
+# Android — the NATIVE project (android/) is committed: Kotlin sources,
+# Gradle build files, version catalog and brand resources. Only generated
+# output and machine-specific files are ignored.
+#
+# Signing material never belongs in the repository: release keystores are
+# supplied to CI through secrets (docs/NATIVE_ANDROID_MIGRATION_PLAN.md §9) and
+# locally through environment variables.
 /ios
 *.keystore
 *.jks
 local.properties
+
+/android/.gradle/
+/android/.kotlin/
+/android/.idea/
+/android/build/
+/android/**/build/
+/android/local.properties
+/android/captures/

@@ -1,5 +1,15 @@
 # Maharani Traders — Android app
 
+> **⚠️ Historical document (Capacitor era).** The Android app is being migrated to a
+> fully native Kotlin/Compose implementation under `android/` — see
+> [`NATIVE_ANDROID_MIGRATION_AUDIT.md`](NATIVE_ANDROID_MIGRATION_AUDIT.md),
+> [`NATIVE_ANDROID_API_CONTRACT.md`](NATIVE_ANDROID_API_CONTRACT.md) and
+> [`NATIVE_ANDROID_MIGRATION_PLAN.md`](NATIVE_ANDROID_MIGRATION_PLAN.md).
+> Everything below describes the **legacy remote-URL wrapper**, which is no longer the
+> delivery path. `capacitor.config.ts` and the `cap:*` scripts still exist because existing
+> tests assert them; they are retired at the end of Phase G. `.github/workflows/android-apk.yml`
+> now builds the native project.
+
 Documentation for the native Android wrapper around the existing
 **Maharani Traders** web application.
 

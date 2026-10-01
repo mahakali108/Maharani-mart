@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release/default network security configuration.
+
+  Cleartext is forbidden everywhere and trust anchors are limited to the system
+  store, so a user-installed certificate cannot silently intercept API traffic.
+  The debug source set overrides this file to allow plain http for local
+  development hosts only (see app/src/debug/res/xml/network_security_config.xml).
+-->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors>
+      <certificates src="system" />
+    </trust-anchors>
+  </base-config>
+</network-security-config>

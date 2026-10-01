@@ -1,0 +1,133 @@
+# Ready-to-promote native Android CI workflow.
+#
+# This stays under docs/ because the GitHub App for this branch is not granted
+# the `workflows` permission. A maintainer with that permission must promote it:
+#   cp docs/android-workflow-native.yml .github/workflows/android-apk.yml
+#   git add .github/workflows/android-apk.yml
+#   git commit -m "ci(android): activate native Android checks"
+#
+# The current active workflow is the legacy Capacitor/WebView builder; do not
+# dispatch it to validate this native project. No release signing/AAB is included.
+
+name: Native Android Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android/**'
+      - 'app/api/mobile/**'
+      - 'lib/mobile/**'
+      - 'lib/permissions/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'docs/android-workflow-native.yml'
+      - '.github/workflows/android-apk.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'app/api/mobile/**'
+      - 'lib/mobile/**'
+      - 'lib/permissions/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'docs/android-workflow-native.yml'
+      - '.github/workflows/android-apk.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web typecheck, lint, tests, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install web dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: corepack pnpm run typecheck
+
+      - name: Lint
+        run: corepack pnpm run lint
+
+      - name: Run web tests
+        run: corepack pnpm test
+
+      - name: Build Next.js production app
+        run: corepack pnpm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+  android:
+    name: Android unit tests, lint, and debug APK
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.4
+
+      - name: Install pinned Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle and build cache
+        uses: gradle/actions/setup-gradle@v6.4.0
+
+      - name: Verify the Gradle wrapper distribution
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon --version | tee /tmp/gradle-version.txt
+          grep -F 'Gradle 9.1.0' /tmp/gradle-version.txt
+
+      - name: Run Android unit tests, lint, and assemble debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug
+
+      - name: Verify debug APK identity
+        run: |
+          set -euo pipefail
+          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          test -f "$APK_PATH"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.maharanitraders.app'"
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: maharani-traders-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
