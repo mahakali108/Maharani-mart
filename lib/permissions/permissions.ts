@@ -65,6 +65,8 @@ export type Permission =
   | 'routes.manage.all'
   | 'command_center.view'
   | 'dashboard.view'
+  /** Admin-only data-retention status page (/admin/cleanup). Dry-run only. */
+  | 'cleanup.view'
   | 'support.manage';
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
@@ -77,7 +79,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet', 'coins.manage',
     'team.manage', 'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all',
-    'command_center.view', 'dashboard.view', 'support.manage',
+    'command_center.view', 'dashboard.view', 'cleanup.view', 'support.manage',
   ],
   admin: [
     'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
@@ -87,7 +89,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'deliveries.view.all', 'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record', 'collections.verify',
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet', 'coins.manage',
     'targets.manage', 'commissions.manage', 'notifications.broadcast',
-    'reports.view.all', 'banners.manage', 'routes.manage.all', 'dashboard.view', 'support.manage',
+    'reports.view.all', 'banners.manage', 'routes.manage.all', 'dashboard.view', 'cleanup.view', 'support.manage',
   ],
   staff: [
     // No 'products.create' / 'pricing.manage': creating a product or pack
