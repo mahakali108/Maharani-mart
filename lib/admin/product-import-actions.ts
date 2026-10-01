@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { can } from '@/lib/permissions/permissions';
 import { analyzeProductCsv, describeImportResult, derivedPiecePrice } from '@/lib/admin/product-csv';
-import { seedDefaultPackForProduct } from '@/lib/admin/products-actions';
+import { seedDefaultPackForProduct } from '@/lib/admin/pack-seed';
 
 /**
  * CSV catalog import.

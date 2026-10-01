@@ -1,12 +1,12 @@
 import { Settings, ShieldCheck } from 'lucide-react';
-import { requireSuperAdmin } from '@/lib/admin/control-center/guard';
+import { requireSuperAdminPage } from '@/lib/admin/control-center/guard';
 import { getControlCenterOverview, getFeatures, getAllUsers, getSuperAdminAuditLogs, getPlatformSettings } from '@/lib/admin/control-center/actions';
 import { ControlCenterClient } from './client';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ControlCenterPage() {
-  const user = await requireSuperAdmin();
+  const user = await requireSuperAdminPage();
 
   const [overview, features, users, auditLogs, settings] = await Promise.all([
     getControlCenterOverview(),

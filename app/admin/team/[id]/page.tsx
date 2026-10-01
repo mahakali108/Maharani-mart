@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { StaffEditForm } from '@/components/admin/staff-edit-form';
 import { computeTargetActual, formatMetricValue, metricLabel, type TargetRow } from '@/lib/admin/target-actuals';
@@ -21,7 +21,7 @@ interface AssignmentRow {
 }
 
 export default async function EditStaffPage({ params }: { params: { id: string } }) {
-  await requirePermission('team.manage');
+  await requirePagePermission('team.manage');
 
   const supabase = createClient();
   const { data: staffMember } = await supabase

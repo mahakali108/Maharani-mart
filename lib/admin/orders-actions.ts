@@ -14,10 +14,6 @@ type OrderStatusEnum = Database['public']['Enums']['order_status'];
 
 export type OrderActionResult = { error?: string } | { success: true };
 
-interface OrderItemForNotification {
-  product_id: string;
-}
-
 export async function assignWarehouseAction(orderId: string, warehouseId: string): Promise<OrderActionResult> {
   await requirePermission('orders.assign');
   const supabase = createClient();
@@ -188,14 +184,4 @@ export async function updateOrderStatusAction(orderId: string, status: OrderStat
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
   return { success: true };
-}
-
-/**
- * Helper for other actions: reads the product ids of an order's items so
- * low-stock alerts can be raised after stock-decreasing operations.
- */
-export async function productIdsForOrder(orderId: string): Promise<string[]> {
-  const supabase = createClient();
-  const { data } = await supabase.from('order_items').select('product_id').eq('order_id', orderId);
-  return ((data ?? []) as unknown as OrderItemForNotification[]).map((i) => i.product_id);
 }

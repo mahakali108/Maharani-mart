@@ -1,8 +1,8 @@
 import { MaharaniAIChat } from '@/components/ai/maharani-ai-chat';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 
 export default async function SalesmanAIPage() {
-  await requirePermission('reports.view.own');
+  await requirePagePermission('reports.view.own');
   return <MaharaniAIChat surface="salesman" title="✨ Maharani Sales Copilot" subtitle="Product discovery, schemes, assigned retailer orders and your authorized sales activity." quickActions={[
     { label: 'Search Products', prompt: 'Products search karne mein help karo.' },
     { label: 'Active Schemes', prompt: 'Current active schemes dikhao.' },
