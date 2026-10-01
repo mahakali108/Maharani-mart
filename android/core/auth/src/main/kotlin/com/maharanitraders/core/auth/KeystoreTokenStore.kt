@@ -3,7 +3,7 @@ package com.maharanitraders.core.auth
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import com.maharanitraders.core.common.IoDispatcher
+import com.maharanitraders.core.common.di.IoDispatcher
 import com.maharanitraders.core.model.SessionTokens
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File

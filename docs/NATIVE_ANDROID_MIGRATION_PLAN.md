@@ -296,7 +296,8 @@ cd android
 | Gate | Command | Result |
 | --- | --- | --- |
 | Mobile API contract tests | `node_modules/.bin/vitest run tests/mobile-api-foundation.test.ts` | **41 / 41 passed** |
-| Existing web suite | `node_modules/.bin/vitest run` | **95 files / 1 821 tests passed** (baseline was 94 / 1 780; the delta is this change's new file and tests) |
+| Android project static integrity | `node_modules/.bin/vitest run tests/android-project-integrity.test.ts` | **4 / 4 passed** — every project `import` resolves to a declared symbol, every Gradle module has a build script, every referenced resource exists. Verified by mutation: a deliberately wrong import fails the check. |
+| Existing web suite | `node_modules/.bin/vitest run` | **96 files / 1 825 tests passed** (baseline was 94 / 1 780; the delta is this change's two new files and 45 tests) |
 | Type checking | `pnpm run typecheck` (`tsc --noEmit`) | clean |
 | Android unit tests | `cd android && ./gradlew testDebugUnitTest` | **not run here** — no JDK/Android SDK in the working environment; executed by CI (job `android`) |
 | Android lint / APK | `./gradlew lintDebug`, `./gradlew assembleDebug` | **not run here** — same reason; executed by CI |
@@ -306,7 +307,7 @@ Files added by this change (for review):
 - `docs/NATIVE_ANDROID_{MIGRATION_AUDIT,API_CONTRACT,MIGRATION_PLAN}.md`
 - `lib/mobile/{http,supabase,auth,pagination,rate-limit,index}.ts` (server-only helpers)
 - `app/api/mobile/v1/{health,session}/route.ts`
-- `tests/mobile-api-foundation.test.ts`
+- `tests/mobile-api-foundation.test.ts`, `tests/android-project-integrity.test.ts`
 - `android/**` (Gradle wrapper + catalog, 7 modules, 57 Kotlin files of which 14 are tests,
   brand resources copied from `resources/android-res/`)
 - modified: `lib/permissions/permissions.ts` (`permissionsForRole`, additive only),
@@ -315,8 +316,10 @@ Files added by this change (for review):
 Blockers and unverified items carried forward (stated, not hidden):
 
 1. **Nothing under `android/` has been compiled yet** in this environment — CI is the first
-   compile. Expect the first CI run to surface Kotlin/Gradle nits; treat them as Phase B
-   follow-ups, not as a silent pass.
+   compile. Expect the first CI run to surface Kotlin/Gradle nits (type inference, Compose
+   API details, dependency coordinates); treat them as Phase B follow-ups, not as a silent
+   pass. `tests/android-project-integrity.test.ts` narrows the gap (it already caught two
+   wrong `IoDispatcher` imports), but it is not a compiler.
 2. **Sign-in does not exist yet** (Phase C), so the signed-in shell can only be reached by
    restoring a session created elsewhere. The gate screens say exactly that.
 3. **Live-service behaviour is unverified**: no request has been made against the deployed

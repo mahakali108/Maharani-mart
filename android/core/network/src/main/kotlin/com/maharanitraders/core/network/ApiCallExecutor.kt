@@ -1,7 +1,7 @@
 package com.maharanitraders.core.network
 
 import com.maharanitraders.core.common.AppResult
-import com.maharanitraders.core.common.IoDispatcher
+import com.maharanitraders.core.common.di.IoDispatcher
 import com.maharanitraders.core.network.dto.ApiEnvelope
 import javax.inject.Inject
 import javax.inject.Singleton
