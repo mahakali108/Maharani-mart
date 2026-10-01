@@ -153,17 +153,51 @@ middleware.ts                  # Role-based route protection (runs on every requ
 
 ---
 
-## 5b. Android app (`Maharani Traders`)
+## 5b. Android app (`Maharani Traders`) — native, in migration
 
-A Capacitor Android wrapper (package `com.maharanitraders.app`, version
-`0.1.0`) loads the deployed production site in a native WebView. It ships
-no business logic — the server stays authoritative for pricing, GST,
-orders, credit, roles and RLS.
+The Android app is being migrated from the Capacitor remote-URL wrapper to a
+**fully native Kotlin/Jetpack Compose application** (package
+`com.maharanitraders.app`) that talks to this Next.js backend over
+`/api/mobile/v1` and reuses the existing Supabase Auth/Postgres/RLS/Storage. No
+business logic is duplicated in the app — the server stays authoritative for
+pricing, GST, stock, orders, coins, roles and RLS, and the app never receives a
+database key.
 
-- Build: **Actions → Android Debug APK → Run workflow**; download the
-  `maharani-traders-debug-apk` artifact.
-- Release AAB requires the owner's upload keystore/secrets.
-- Full docs: [`docs/android.md`](docs/android.md).
+The native project is **`android/`** (committed; Gradle wrapper + version
+catalog + `app`/`core:*` modules). See:
+
+- [`docs/NATIVE_ANDROID_MIGRATION_AUDIT.md`](docs/NATIVE_ANDROID_MIGRATION_AUDIT.md) —
+  what exists today, feature-by-feature classification, security risks.
+- [`docs/NATIVE_ANDROID_API_CONTRACT.md`](docs/NATIVE_ANDROID_API_CONTRACT.md) —
+  the `/api/mobile/v1` contract (implemented and planned endpoints).
+- [`docs/NATIVE_ANDROID_MIGRATION_PLAN.md`](docs/NATIVE_ANDROID_MIGRATION_PLAN.md) —
+  phases A–H, toolchain evidence, CI, acceptance commands, honest limitations.
+
+Current state (**Phase B — foundation**): native shell, session restore +
+verification, role-aware navigation, Material 3 theme from the existing brand
+palette, and the mobile API foundation (`/api/mobile/v1/health`,
+`/api/mobile/v1/session`). Sign-in and the feature screens arrive in Phases C–G;
+the app renders explicit "planned phase" states instead of fake data, and the
+web application remains the source of truth meanwhile.
+
+```bash
+# Web (unchanged)
+pnpm install && pnpm typecheck && pnpm test
+
+# Native Android (requires JDK 17 + Android SDK 36)
+cd android && ./gradlew testDebugUnitTest lintDebug assembleDebug
+```
+
+- Build: the native CI pipeline (unit tests + lint + debug APK, plus a signed
+  release AAB only when the four `RELEASE_*` signing secrets are configured) is
+  stored at [`docs/android-workflow-native.yml`](docs/android-workflow-native.yml)
+  and activated with a single copy into `.github/workflows/android-apk.yml` — see
+  the plan §5 (the GitHub App pushing this branch may lack the `workflows`
+  permission that GitHub requires for workflow files).
+- `capacitor.config.ts` and the `cap:*` scripts still exist for the legacy
+  wrapper and are retired at the end of Phase G (existing tests assert them in
+  the meantime); until the native pipeline above is activated, CI still builds
+  that wrapper.
 
 ---
 

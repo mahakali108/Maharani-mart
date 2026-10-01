@@ -129,6 +129,17 @@ export function can(role: UserRole, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
 }
 
+/**
+ * The role's permission list, for surfaces that must REPORT capabilities
+ * instead of checking one at a time (the mobile `/session` bootstrap sends it
+ * so the Android app never keeps its own copy of the role matrix). Read-only
+ * view of the same table every `can()` call uses — the server still re-checks
+ * every operation, so a client that ignores or forges this list changes nothing.
+ */
+export function permissionsForRole(role: UserRole): Permission[] {
+  return [...(ROLE_PERMISSIONS[role] ?? [])];
+}
+
 export function canAny(role: UserRole, permissions: Permission[]): boolean {
   return permissions.some((p) => can(role, p));
 }

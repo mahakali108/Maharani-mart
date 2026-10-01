@@ -1,0 +1,198 @@
+# =============================================================================
+# TARGET CI WORKFLOW — native Android pipeline (Phase B deliverable).
+#
+# WHY THIS LIVES IN docs/ INSTEAD OF .github/workflows/:
+#   The GitHub App that pushes this branch is not granted the `workflows`
+#   permission, so any commit that creates or modifies a file under
+#   `.github/workflows/**` is rejected by GitHub:
+#
+#     ! [remote rejected] arena/... -> arena/...
+#       (refusing to allow a GitHub App to create or update workflow
+#        `.github/workflows/android-apk.yml` without `workflows` permission)
+#
+#   This follows the repository's own existing convention: docs/android.md §5.1
+#   keeps the previous target workflow at docs/android-workflow-apk-aab.yml and
+#   promotes it with one copy once CI permissions allow.
+#
+# TO ACTIVATE (single command; no other change is required):
+#     cp docs/android-workflow-native.yml .github/workflows/android-apk.yml
+#     git add .github/workflows/android-apk.yml
+#     git commit -m "ci(android): run the native pipeline"
+#
+#   It replaces the Capacitor wrapper workflow (`npx cap add android` +
+#   WebView shell) with two jobs:
+#     • android — unit tests, Android Lint, debug APK, and a signed release AAB
+#                 only when the four RELEASE_* secrets are configured;
+#     • backend — typecheck + the full existing web test suite, so an API change
+#                 made for the Android client cannot regress the web app.
+#
+#   Until it is activated, CI keeps building the legacy Capacitor wrapper; the
+#   committed native project under android/ is unaffected either way.
+# =============================================================================
+
+name: Android & Backend CI
+
+# Native Android pipeline (the historical filename is kept so existing links in
+# docs/android.md and scripts/android-resource-validation.mjs stay valid).
+#
+# Two independent jobs:
+#
+#   android — builds the NATIVE Kotlin/Compose app from android/ (no Capacitor,
+#             no web wrapper): unit tests, Android Lint and the debug APK. A
+#             signed release AAB is produced ONLY when the four release signing
+#             secrets are configured; otherwise that step is skipped and the run
+#             says so explicitly.
+#
+#   backend — installs the Next.js app and runs the existing web test suite plus
+#             type checking, so an API change made for the Android client can
+#             never silently break the web application.
+#
+# No secrets are required for the default path: `assembleDebug` is signed with
+# Gradle's own auto-generated debug keystore (created fresh in $HOME/.android on
+# the runner, never committed, never a secret).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'lib/mobile/**'
+      - 'lib/permissions/**'
+      - 'app/api/mobile/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/android-apk.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'lib/mobile/**'
+      - 'lib/permissions/**'
+      - 'app/api/mobile/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/android-apk.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  android:
+    name: Android (unit tests, lint, debug APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Secrets are surfaced through env so the `if:` conditions below can test
+      # them; GitHub masks their values in every log line.
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up JDK 17 (required by AGP 9)
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.4
+
+      - name: Set up Gradle (with build cache)
+        uses: gradle/actions/setup-gradle@v6.4.0
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x android/gradlew
+
+      - name: Unit tests (JVM)
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Android Lint
+        working-directory: android
+        run: ./gradlew --no-daemon lintDebug
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: maharani-traders-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload unit test & lint reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: android-reports
+          path: |
+            android/**/build/reports/tests/**
+            android/**/build/reports/lint-results-*.html
+          if-no-files-found: ignore
+
+      # ---------------------------------------------------------------------
+      # Optional signed release bundle.
+      #
+      # The keystore is materialised in $RUNNER_TEMP (never in the workspace,
+      # never committed) and passed to Gradle through the same RELEASE_*
+      # environment variables android/app/build.gradle.kts already reads.
+      # ---------------------------------------------------------------------
+      - name: Materialise release keystore
+        if: env.RELEASE_KEYSTORE_BASE64 != ''
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/maharani-release.keystore"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+          echo "RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Assemble signed release bundle (AAB)
+        if: env.RELEASE_KEYSTORE_PATH != ''
+        working-directory: android
+        run: ./gradlew --no-daemon bundleRelease
+
+      - name: Report skipped release bundle
+        if: env.RELEASE_KEYSTORE_PATH == ''
+        run: |
+          echo "::notice title=Release bundle skipped::Release signing secrets are not configured, so only the debug APK was built. See docs/NATIVE_ANDROID_MIGRATION_PLAN.md §9."
+
+      - name: Upload release AAB
+        if: env.RELEASE_KEYSTORE_PATH != ''
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: maharani-traders-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+  backend:
+    name: Backend (type check, web test suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack (pnpm from packageManager)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run typecheck
+
+      - name: Run the existing web test suite (includes the mobile API contract tests)
+        run: pnpm exec vitest run

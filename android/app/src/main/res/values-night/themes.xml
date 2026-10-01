@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="Theme.MaharaniTraders" parent="Theme.SplashScreen">
+    <item name="windowSplashScreenBackground">@color/brand_red</item>
+    <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+    <item name="postSplashScreenTheme">@style/Theme.MaharaniTraders.Main</item>
+  </style>
+
+  <style name="Theme.MaharaniTraders.Main" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowBackground">@color/window_background_dark</item>
+  </style>
+</resources>
