@@ -1,13 +1,13 @@
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { requireSuperAdmin } from '@/lib/admin/control-center/guard';
+import { requireSuperAdminPage } from '@/lib/admin/control-center/guard';
 import { getUserManagementView, getUserFeatureOverrides, getUserAccessPeriods, getFeatures } from '@/lib/admin/control-center/actions';
 import { UserManagementClient } from './client';
 
 export const dynamic = 'force-dynamic';
 
 export default async function UserManagementPage({ params }: { params: { id: string } }) {
-  await requireSuperAdmin();
+  await requireSuperAdminPage();
 
   const [userView, overrides, accessPeriods, features] = await Promise.all([
     getUserManagementView(params.id),

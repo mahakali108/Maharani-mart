@@ -23,8 +23,13 @@ async function clearOtherDefaults(supabase: ReturnType<typeof createClient>, ret
 /**
  * When no default exists, make the first-saved address the default so
  * checkout always has a deterministic preselected address.
+ *
+ * Intentionally NOT exported: in a `'use server'` module every exported
+ * async function becomes a remotely invocable Server Action endpoint, and
+ * this internal helper (which receives an already-authorized client) must
+ * never be one.
  */
-export async function ensureDefaultAddress(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<void> {
+async function ensureDefaultAddress(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<void> {
   const { data: rows } = await supabase
     .from('retailer_addresses')
     .select('id, is_default')

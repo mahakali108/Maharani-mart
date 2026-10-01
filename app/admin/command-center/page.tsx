@@ -1,5 +1,5 @@
 import { Gauge, ShieldCheck } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isCommandCenterTab, type SalesIntelFilters } from '@/lib/admin/command-center/types';
 import { gatherCommandCenterData, parseSalesIntelFilters } from '@/lib/admin/command-center/data';
@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  *
  * Authorization (defense-in-depth, each layer independent):
  *   1. middleware.ts — /admin/* is only reachable by super_admin/admin roles.
- *   2. requirePermission('command_center.view') — a permission granted to
+ *   2. requirePagePermission('command_center.view') — a permission granted to
  *      super_admin ONLY (lib/permissions/permissions.ts), so a normal admin
  *      is rejected here.
  *   3. Data access — the page reads exclusively through the caller's
@@ -31,7 +31,7 @@ export const dynamic = 'force-dynamic';
  *      only and are READ-only (see lib/ai/tools/super-admin.ts).
  */
 export default async function CommandCenterPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
-  await requirePermission('command_center.view');
+  await requirePagePermission('command_center.view');
 
   const rawTab = typeof searchParams.tab === 'string' ? searchParams.tab : undefined;
   const tab = isCommandCenterTab(rawTab) ? rawTab : 'overview';

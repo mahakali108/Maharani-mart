@@ -53,8 +53,16 @@ describe('SKU Code removal — product workflow', () => {
     });
 
     it('auto-generates the default pack SKU instead of mirroring the product SKU', () => {
-      expect(actions).toContain('function defaultPackSkuCode(productId: string)');
-      expect(actions).toContain('pack_sku_code: defaultPackSkuCode(productId)');
+      // The default-pack seeding (and its deterministic SKU generator) lives
+      // in lib/admin/pack-seed.ts — a server-only NON-action module shared by
+      // the product form and the CSV importer (see
+      // tests/server-action-surface.test.ts for why it must not be a Server
+      // Action). The behavior is unchanged: the SKU is derived from the
+      // product id, never entered by an admin.
+      const seed = read('lib/admin/pack-seed.ts');
+      expect(seed).toContain('function defaultPackSkuCode(productId: string)');
+      expect(seed).toContain('pack_sku_code: defaultPackSkuCode(productId)');
+      expect(actions).toContain("import { seedDefaultPackForProduct } from '@/lib/admin/pack-seed'");
     });
 
     it('resolves the auto-seeded default pack by sort order, not by SKU match', () => {

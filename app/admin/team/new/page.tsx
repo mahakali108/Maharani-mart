@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { StaffForm } from '@/components/admin/staff-form';
 
@@ -7,7 +7,7 @@ export default async function NewStaffPage() {
   // Page-level gate (not just the action) since this whole screen is
   // pointless without team.manage — same reasoning as any admin write
   // flow that isn't useful in a read-only view.
-  await requirePermission('team.manage');
+  await requirePagePermission('team.manage');
 
   const supabase = createClient();
   const [{ data: areas }, { data: warehouses }] = await Promise.all([
