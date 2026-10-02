@@ -37,15 +37,21 @@ probe("container android=${probedAndroidExtension?.javaClass?.name} identity=${S
 val maharaniApiBaseUrl: String =
   (project.findProperty("maharaniApiBaseUrl") as String?)
     ?: "https://maharani-mart-mahakali108s-projects.vercel.app/"
+probe("after maharaniApiBaseUrl")
 
 /** Release signing is read from the environment ONLY — never from the repo. */
 val releaseStorePath: String? = System.getenv("RELEASE_KEYSTORE_PATH")
+probe("after releaseStorePath")
 val releaseStorePassword: String? = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+probe("after releaseStorePassword")
 val releaseKeyAlias: String? = System.getenv("RELEASE_KEY_ALIAS")
+probe("after releaseKeyAlias")
 val releaseKeyPassword: String? = System.getenv("RELEASE_KEY_PASSWORD")
+probe("after releaseKeyPassword")
 val releaseSigningConfigured: Boolean =
   listOf(releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
     .all { !it.isNullOrBlank() }
+probe("after releaseSigningConfigured")
 
 probe("values computed, about to configure android")
 android {

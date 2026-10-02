@@ -164,6 +164,24 @@ jobs:
             }
           ] as org.gradle.api.ProjectEvaluationListener
           gradle.addProjectEvaluationListener(listener)
+          // Whatever aborts configuration - a listener, a script, a plugin - ends
+          // up here, with its cause chain, even when no step prints it.
+          gradle.buildFinished { result ->
+            def f = result?.failure
+            if (f == null) {
+              println "PROBE BUILD-FINISHED ok"
+            } else {
+              println "PROBE BUILD-FAILED ${f.class.name}: ${f.message?.readLines()?.take(12)?.join(' | ')}"
+              def c = f.cause
+              for (int i = 0; i < 8 && c != null; i++) {
+                println "PROBE   caused by ${c.class.name}: ${c.message?.readLines()?.take(6)?.join(' | ')}"
+                c = c.cause
+              }
+              f.suppressed?.each { s2 ->
+                println "PROBE   suppressed ${s2.class.name}: ${s2.message?.readLines()?.take(4)?.join(' | ')}"
+              }
+            }
+          }
           GRADLE
           rm -f /tmp/app-script-markers.txt
           ./gradlew --no-daemon --init-script /tmp/probe.init.gradle help > /tmp/probe.log 2>&1
@@ -184,6 +202,8 @@ jobs:
               | emit_block "probe: android project model"
             cat /tmp/app-script-markers.txt 2>/dev/null \
               | emit_block "probe: build-script file markers (probe run)"
+            grep -E "BUILD-FAILED|caused by|suppressed" /tmp/probe.log 2>/dev/null \
+              | emit_block "probe: final failure chain"
           else
             tail -40 /tmp/probe.log | emit_block "probe: no PROBE lines, log tail"
           fi
@@ -282,6 +302,7 @@ jobs:
             echo "=== gradle ==="; sed -n '1,10p' /tmp/gradle-version.txt 2>/dev/null
             echo "=== script markers (probe log) ==="; grep -E "script: |EVALUATION-FAILED" /tmp/probe.log 2>/dev/null
             echo "=== script markers (files) ==="; cat /tmp/app-script-markers.txt 2>/dev/null
+            echo "=== final failure chain ==="; grep -E "BUILD-FAILED|caused by|suppressed" /tmp/probe.log 2>/dev/null | head -30
             echo "=== probe model ==="; grep -E "^PROBE " /tmp/probe.log 2>/dev/null | head -80
             echo "=== configuration cache ==="
             grep -iE "configuration cache|reusing configuration|configuration-cache" /tmp/gradle.log /tmp/probe.log 2>/dev/null | head -20
