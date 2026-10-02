@@ -8,7 +8,7 @@ import com.maharanitraders.core.model.ApiErrorCode
 import com.maharanitraders.core.model.SessionTokens
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi
-import com.maharanitraders.core.network.TokenProvider
+import com.maharanitraders.core.network.ActiveTokenHolder
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -25,9 +25,10 @@ interface SessionController {
   val state: StateFlow<SessionState>
 
   /**
-   * In-memory access token for the network layer's
-   * [com.maharanitraders.core.network.TokenProvider]. Reads from memory only —
-   * never from disk — and is `null` whenever no verified session is active.
+   * In-memory access token — the value the network layer's
+   * [com.maharanitraders.core.network.ActiveTokenHolder] hands to the
+   * interceptor. Read from memory only — never from disk — and `null` whenever
+   * no verified session is active.
    */
   fun accessToken(): String?
 
@@ -70,8 +71,9 @@ interface SessionController {
  *    could not reach the server keeps the stored tokens so the next launch can
  *    try again.
  *
- * It also implements [TokenProvider], so the network layer reads the token from
- * memory only and never from disk on the request path.
+ * The token itself lives in [ActiveTokenHolder], written here and read by the
+ * interceptor, so the network layer reads memory only and never disk on the
+ * request path.
  */
 @Singleton
 class SessionManager @Inject constructor(
@@ -81,15 +83,19 @@ class SessionManager @Inject constructor(
   private val mapper: SessionMapper,
   private val timeSource: TimeSource,
   private val authRepository: AuthRepository,
-) : SessionController, TokenProvider {
+  /**
+   * The single in-memory token, shared with the interceptor. It lives in
+   * `core:network` because it is dependency-free: deriving it from this class
+   * would make SessionController → TokenProvider → OkHttpClient → Retrofit →
+   * MaharaniApi → SessionManager a dependency cycle.
+   */
+  private val tokenHolder: ActiveTokenHolder,
+) : SessionController {
 
   private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
   override val state: StateFlow<SessionState> = _state.asStateFlow()
 
-  @Volatile
-  private var activeAccessToken: String? = null
-
-  override fun accessToken(): String? = activeAccessToken
+  override fun accessToken(): String? = tokenHolder.accessToken()
 
   override suspend fun restore(): SessionState {
     _state.value = SessionState.Restoring
@@ -146,7 +152,7 @@ class SessionManager @Inject constructor(
         } else {
           // The network layer may now use the token: this is the only place the
           // in-memory token is ever set.
-          activeAccessToken = usable.accessToken
+          tokenHolder.set(usable.accessToken)
           publish(SessionState.Authenticated(snapshot))
         }
       }
@@ -165,7 +171,7 @@ class SessionManager @Inject constructor(
    * before the request completes only if revocation was skipped.
    */
   override suspend fun signOut() {
-    if (activeAccessToken != null) {
+    if (tokenHolder.accessToken() != null) {
       // Best effort; `revokeSession` already swallows its own failure by
       // returning a result this method intentionally does not branch on.
       authRepository.revokeSession()
@@ -188,7 +194,7 @@ class SessionManager @Inject constructor(
     return when (val result = authRepository.login(identifier, password)) {
       is AppResult.Success -> {
         storeQuietly(result.value.tokens)
-        activeAccessToken = result.value.tokens.accessToken
+        tokenHolder.set(result.value.tokens.accessToken)
 
         when (val verified = executor.executeEnvelope { api.session() }) {
           is AppResult.Success -> {
@@ -344,6 +350,6 @@ class SessionManager @Inject constructor(
   }
 
   private fun clearActiveToken() {
-    activeAccessToken = null
+    tokenHolder.clear()
   }
 }

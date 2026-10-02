@@ -41,7 +41,12 @@ data class RegisterUiState(
   /** True when Supabase requires the confirmation email before the first sign-in. */
   val requiresEmailConfirmation: Boolean = false,
 ) {
-  val canSubmit: Boolean get() = !submitting
+  /**
+   * A registration is submittable only when an area from the LOADED directory is
+   * selected: with no directory there is nothing honest to choose, and the form
+   * says so instead of letting the button pretend otherwise.
+   */
+  val canSubmit: Boolean get() = !submitting && areas.any { it.id == areaId }
 }
 
 /**
@@ -127,6 +132,17 @@ class RegisterViewModel @Inject constructor(
     }
     if (errors.isNotEmpty()) {
       _state.update { it.copy(fieldErrors = errors) }
+      return
+    }
+
+    // The area must be one the SERVER offered. A well-formed UUID that never
+    // appeared in a loaded list (the directory failed, the list was replaced, a
+    // stale selection) must never reach the network: the app does not invent
+    // service areas, and the server would only reject it.
+    if (current.areas.none { it.id == current.areaId.trim() }) {
+      _state.update {
+        it.copy(fieldErrors = mapOf(FIELD_AREA to "Select your area from the list."))
+      }
       return
     }
 

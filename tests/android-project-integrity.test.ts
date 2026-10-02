@@ -117,6 +117,78 @@ function commentDepthProblem(source: string, file = ''): string | null {
   return null;
 }
 
+/**
+ * Strips Kotlin comments from a fragment so that *prose* cannot be mistaken for
+ * code. Kotlin block comments nest, so the scanner tracks depth; string literals
+ * are kept (a `//` inside a URL string is not a comment) and `"""` raw strings are
+ * skipped whole. Used on constructor argument text, where a KDoc between two
+ * parameters once produced a phantom parameter named `core` — read out of the
+ * prose "`core:network`".
+ */
+function stripKotlinComments(source: string): string {
+  let out = '';
+  let depth = 0;
+  let inLine = false;
+  let inString = false;
+  let inRaw = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const c = source[i]!;
+    const next = source[i + 1];
+    if (inLine) {
+      if (c === '\n') {
+        inLine = false;
+        out += c;
+      }
+      continue;
+    }
+    if (depth > 0) {
+      if (c === '/' && next === '*') {
+        depth += 1;
+        i += 1;
+      } else if (c === '*' && next === '/') {
+        depth -= 1;
+        i += 1;
+      }
+      continue;
+    }
+    if (inRaw) {
+      if (c === '"' && source.slice(i, i + 3) === '"""') {
+        inRaw = false;
+        i += 2;
+      }
+      continue;
+    }
+    if (inString) {
+      out += c;
+      if (c === '\\') i += 1;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"' && source.slice(i, i + 3) === '"""') {
+      inRaw = true;
+      i += 2;
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      out += c;
+      continue;
+    }
+    if (c === '/' && next === '/') {
+      inLine = true;
+      i += 1;
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      depth = 1;
+      i += 1;
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
+
 /** `pkg -> set(top-level declaration names)` across every Kotlin source set. */
 function declaredSymbols(): Map<string, Set<string>> {
   const packages = new Map<string, Set<string>>();
@@ -561,7 +633,15 @@ describe('Android test doubles keep up with the main sources', () => {
         const required = args
           .map((arg) => arg.trim())
           .filter((arg) => arg.length > 0 && !arg.includes('='))
-          .map((arg) => /(?:val|var)?\s*(\w+)\s*:/.exec(arg)?.[1])
+          .map((arg) => {
+            // Comments first: an argument is `/** doc */ private val name: Type`,
+            // and the prose inside that doc is not a parameter declaration.
+            const clean = stripKotlinComments(arg).trim();
+            return (
+              /(?:\bval\b|\bvar\b)\s+(\w+)\s*:/.exec(clean)?.[1] ??
+              /^(\w+)\s*:/.exec(clean)?.[1]
+            );
+          })
           .filter((name): name is string => Boolean(name));
         const existing = found.get(className);
         found.set(className, {

@@ -3,6 +3,7 @@ package com.maharanitraders.core.auth
 import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.common.TimeSource
 import com.maharanitraders.core.model.SessionTokens
+import com.maharanitraders.core.network.ActiveTokenHolder
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.ApiErrorMapper
 import com.maharanitraders.core.network.MaharaniApi
@@ -75,6 +76,10 @@ class SessionManagerTest {
       // the refresh token server-side. This test is about the session lifecycle, so
       // the repository is wired to the same fakes and never exercised here.
       authRepository = AuthRepository(api = api, executor = executor, timeSource = timeSource),
+      // The same holder the interceptor reads: `session.accessToken()` and the
+      // Authorization header can never disagree, which is what the token tests
+      // below rely on.
+      tokenHolder = ActiveTokenHolder(),
     )
   }
 
