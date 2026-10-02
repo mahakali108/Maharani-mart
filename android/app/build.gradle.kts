@@ -11,6 +11,11 @@ plugins {
 // extension on :app reaches AGP's createAndroidTasks() completely unset even
 // though this file sets it, so the script reports its own progress.
 println("PROBE app-script: body started, plugins applied")
+run {
+  val e = extensions.findByName("android")
+  println("PROBE app-script: container android=${e?.javaClass?.name} identity=${System.identityHashCode(e)}")
+  println("PROBE app-script: configurationCacheRequested=${gradle.startParameter.isConfigurationCacheRequested}")
+}
 
 /**
  * API base URL — the ONLY compiled-in configuration value.
@@ -35,8 +40,9 @@ val releaseSigningConfigured: Boolean =
   listOf(releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
     .all { !it.isNullOrBlank() }
 
+println("PROBE app-script: values computed, about to configure android")
 android {
-  println("PROBE app-script: android block entered")
+  println("PROBE app-script: inside android block, receiver=${this.javaClass.name} identity=${System.identityHashCode(this)}")
   namespace = "com.maharanitraders.app"
   // AGP 9's new DSL expresses the SDK level as a spec. The old
   // `compileSdk = 36` assignment is a deprecated no-op there, which is
@@ -124,6 +130,7 @@ android {
     warningsAsErrors = false
     disable += listOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
   }
+  println("PROBE app-script: android block statements done")
 }
 
 println("PROBE app-script: android block done, namespace=${android.namespace} compileSdk=${android.compileSdk}")
@@ -180,3 +187,4 @@ dependencies {
   androidTestImplementation(libs.androidx.test.junit)
   androidTestImplementation(libs.androidx.test.espresso)
 }
+println("PROBE app-script: end of file reached")

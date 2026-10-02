@@ -135,7 +135,8 @@ jobs:
             beforeEvaluate: { project -> },
             afterEvaluate: { project, state ->
               def ext = project.extensions.findByName("android")
-              println "PROBE project=${project.path} androidExtension=${ext == null ? 'NONE' : ext.class.name}"
+              println "PROBE project=${project.path} androidExtension=${ext == null ? 'NONE' : ext.class.name} identity=${System.identityHashCode(ext)}"
+              println "PROBE ${project.path} configurationCacheRequested=${gradle.startParameter.isConfigurationCacheRequested}"
               println "PROBE ${project.path} buildFile=${project.buildFile} exists=${project.buildFile.exists()} bytes=${project.buildFile.exists() ? project.buildFile.length() : -1}"
               println "PROBE ${project.path} hasAgpPlugin=${project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library')}"
               if (ext != null) {
@@ -277,6 +278,8 @@ jobs:
             echo "=== gradle ==="; sed -n '1,10p' /tmp/gradle-version.txt 2>/dev/null
             echo "=== script markers ==="; grep -E "script: |EVALUATION-FAILED" /tmp/probe.log 2>/dev/null
             echo "=== probe model ==="; grep -E "^PROBE " /tmp/probe.log 2>/dev/null | head -80
+            echo "=== configuration cache ==="
+            grep -iE "configuration cache|reusing configuration|configuration-cache" /tmp/gradle.log /tmp/probe.log 2>/dev/null | head -20
             echo "=== what went wrong ==="
             awk '/^\* What went wrong:/{f=1} f{print; c++} c>30{exit}' /tmp/gradle.log 2>/dev/null
             echo "=== caused by ==="
