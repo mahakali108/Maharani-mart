@@ -131,7 +131,7 @@ jobs:
                 // the base class can miss AgpDecorated/Property-backed state.
                 ["namespace", "compileSdk", "compileSdkVersion"].each { name ->
                   try {
-                    println "PROBE ${project.path} ext.${name} = ${ext.${name}}"
+                    println "PROBE ${project.path} ext.${name} = ${ext."${name}"}"
                   } catch (Throwable t) {
                     println "PROBE ${project.path} ext.${name} THREW ${t.class.name}: ${t.message}"
                   }
@@ -139,6 +139,7 @@ jobs:
                 try {
                   println "PROBE ${project.path} defaultConfig.minSdk = ${ext.defaultConfig?.minSdk}"
                   println "PROBE ${project.path} defaultConfig.targetSdk = ${ext.defaultConfig?.targetSdk}"
+                  println "PROBE ${project.path} defaultConfig.applicationId = ${ext.defaultConfig?.applicationId}"
                 } catch (Throwable t) {
                   println "PROBE ${project.path} defaultConfig THREW ${t.class.name}: ${t.message}"
                 }
@@ -151,13 +152,17 @@ jobs:
           ] as org.gradle.api.ProjectEvaluationListener
           gradle.addProjectEvaluationListener(listener)
           GRADLE
-          ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
+          ./gradlew --no-daemon --init-script /tmp/probe.init.gradle help > /tmp/probe.log 2>&1
           echo "--- probe finished (exit $?); PROBE lines: ---"
-          grep -E "^PROBE " /tmp/probe.log | head -40
+          grep -E "^PROBE |^PROBE app-script:" /tmp/probe.log | head -40
           # Emit from THIS step: a check run has an annotation budget, and the
           # Gradle-failure step spends it on the build error.
           if grep -qE "^PROBE " /tmp/probe.log; then
-            grep -E "^PROBE " /tmp/probe.log | awk '!seen[$0]++' | head -25 | while IFS= read -r line; do
+            # The build scripts' own markers come first: they answer "did the
+            # android {} block run at all", and only about ten annotations per
+            # step survive, so the model dump must not crowd them out.
+            { grep -E "script: " /tmp/probe.log; grep -E "^PROBE " /tmp/probe.log; } \
+              | awk '!seen[$0]++' | head -12 | while IFS= read -r line; do
               echo "::error::$line"
             done
           else
@@ -167,9 +172,6 @@ jobs:
             done
           fi
           echo "::error::END OF PROBE OUTPUT"
-          ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
-          echo "--- probe finished; PROBE lines: ---"
-          grep -E "^PROBE " /tmp/probe.log | head -40
 
       - name: Run Android unit tests, lint, and assemble debug APK
         working-directory: android
@@ -240,4 +242,42 @@ jobs:
           name: maharani-traders-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 7
+
+      # Actions log files are served from a host that is not reachable from every
+      # environment, and check annotations are capped at about ten per step. On a
+      # failure that is not enough to see a Gradle stack trace, so everything the
+      # job printed is bundled here as a downloadable artifact instead.
+      - name: Bundle build diagnostics
+        if: always()
+        run: |
+          set +e
+          OUT=/tmp/diagnostics.txt
+          {
+            echo "=== HEAD ==="; git rev-parse HEAD 2>/dev/null
+            echo "=== java ==="; java -version 2>&1
+            echo "=== gradle ==="; sed -n '1,12p' /tmp/gradle-version.txt 2>/dev/null
+            echo "=== android/gradle.properties ==="; cat android/gradle.properties 2>/dev/null
+            echo "=== android/settings.gradle.kts ==="; cat android/settings.gradle.kts 2>/dev/null
+            echo "=== android/libs.versions.toml ==="; cat android/gradle/libs.versions.toml 2>/dev/null
+            echo "=== probe log (/tmp/probe.log) ==="; cat /tmp/probe.log 2>/dev/null
+            echo "=== gradle log (/tmp/gradle.log) ==="; cat /tmp/gradle.log 2>/dev/null
+          } > "$OUT" 2>&1
+          wc -l "$OUT" || true
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: android-build-diagnostics
+          path: /tmp/diagnostics.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload Gradle test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: android-reports
+          path: android/**/build/reports
+          if-no-files-found: warn
           retention-days: 7
