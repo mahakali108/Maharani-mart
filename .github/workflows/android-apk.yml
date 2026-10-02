@@ -112,108 +112,10 @@ jobs:
           ./gradlew --no-daemon --version | tee /tmp/gradle-version.txt
           grep -F 'Gradle 9.1.0' /tmp/gradle-version.txt
 
-      # The Android Gradle Plugin's project model is not visible in the web UI
-      # (Actions logs live in Azure blob storage). This step records the model
-      # itself — the `android` extension type and the compileSdk it reports —
-      # so a configuration failure can be diagnosed from check annotations
-      # instead of guessed at.
-      - name: Record the Gradle Android model (diagnostics)
-        working-directory: android
-        continue-on-error: true
-        run: |
-          set +e
-          emit_block() {
-            # One annotation per section, newlines escaped as %0A, because about
-            # ten annotations per step survive and the check-run API does not
-            # return them in emission order. Escaping happens after the cut: a
-            # byte-truncated escape sequence would leave a dangling % in the
-            # annotation. The budget is bytes, not lines - a Kotlin diagnostic
-            # block of 200 lines is roughly 30 kB and still fits inside the
-            # annotation limit, while a 100-line cut silently hid the errors
-            # belonging to every module after the first one that failed.
-            local title="$1" body
-            body=$(sed -e 's/\r//g' | cut -c1-300 | head -n 240 | head -c 24000 \
-                     | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
-            printf '::error title=%s::%s\n' "$title" "$body"
-          }
-          cat > /tmp/probe.init.gradle <<'GRADLE'
-          def listener = [
-            beforeEvaluate: { project -> },
-            afterEvaluate: { project, state ->
-              def ext = project.extensions.findByName("android")
-              println "PROBE project=${project.path} androidExtension=${ext == null ? 'NONE' : ext.class.name} identity=${System.identityHashCode(ext)}"
-              println "PROBE ${project.path} buildFile=${project.buildFile} exists=${project.buildFile.exists()} bytes=${project.buildFile.exists() ? project.buildFile.length() : -1}"
-              println "PROBE ${project.path} hasAgpPlugin=${project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library')}"
-              if (ext != null) {
-                // Groovy property access goes through Gradle's dynamic-object
-                // path, which is what a build script itself uses. Reflection on
-                // the base class can miss AgpDecorated/Property-backed state.
-                ["namespace", "compileSdk", "compileSdkVersion"].each { name ->
-                  try {
-                    println "PROBE ${project.path} ext.${name} = ${ext."${name}"}"
-                  } catch (Throwable t) {
-                    println "PROBE ${project.path} ext.${name} THREW ${t.class.name}: ${t.message}"
-                  }
-                }
-                try {
-                  println "PROBE ${project.path} defaultConfig.minSdk = ${ext.defaultConfig?.minSdk}"
-                  println "PROBE ${project.path} defaultConfig.targetSdk = ${ext.defaultConfig?.targetSdk}"
-                  println "PROBE ${project.path} defaultConfig.applicationId = ${ext.defaultConfig?.applicationId}"
-                } catch (Throwable t) {
-                  println "PROBE ${project.path} defaultConfig THREW ${t.class.name}: ${t.message}"
-                }
-              }
-              if (state != null && state.failure != null) {
-                println "PROBE ${project.path} EVALUATION-FAILED ${state.failure.class.name}"
-                state.failure.message?.readLines()?.take(6)?.each { println "PROBE ${project.path}   | ${it}" }
-              }
-            }
-          ] as org.gradle.api.ProjectEvaluationListener
-          gradle.addProjectEvaluationListener(listener)
-          // Whatever aborts configuration - a listener, a script, a plugin - ends
-          // up here, with its cause chain, even when no step prints it.
-          gradle.buildFinished { result ->
-            def f = result?.failure
-            if (f == null) {
-              println "PROBE BUILD-FINISHED ok"
-            } else {
-              println "PROBE BUILD-FAILED ${f.class.name}: ${f.message?.readLines()?.take(12)?.join(' | ')}"
-              def c = f.cause
-              for (int i = 0; i < 8 && c != null; i++) {
-                println "PROBE   caused by ${c.class.name}: ${c.message?.readLines()?.take(6)?.join(' | ')}"
-                c = c.cause
-              }
-              f.suppressed?.each { s2 ->
-                println "PROBE   suppressed ${s2.class.name}: ${s2.message?.readLines()?.take(4)?.join(' | ')}"
-              }
-            }
-          }
-          GRADLE
-          rm -f /tmp/app-script-markers.txt
-          ./gradlew --no-daemon --init-script /tmp/probe.init.gradle help > /tmp/probe.log 2>&1
-          echo "--- probe finished (exit $?); PROBE lines: ---"
-          grep -E "^PROBE |^PROBE app-script:" /tmp/probe.log | head -40
-          echo "--- file markers written by the build scripts (probe run) ---"
-          cat /tmp/app-script-markers.txt 2>/dev/null || echo "(none)"
-          # Only about ten annotations per step survive, and the check-run API
-          # does not return them in emission order, so a section of the log is
-          # emitted as ONE annotation with escaped newlines (%0A) instead of a
-          # stream of single-line ones. The build scripts' own markers come
-          # first: they answer "did the android {} block run at all".
-          if grep -qE "^PROBE " /tmp/probe.log; then
-            grep -E "script: |EVALUATION-FAILED" /tmp/probe.log | awk '!seen[$0]++' \
-              | emit_block "probe: build-script markers and evaluation failures"
-            grep -E "^PROBE " /tmp/probe.log | grep -vE "script: |EVALUATION-FAILED" \
-              | awk '!seen[$0]++' | head -60 \
-              | emit_block "probe: android project model"
-            cat /tmp/app-script-markers.txt 2>/dev/null \
-              | emit_block "probe: build-script file markers (probe run)"
-            grep -E "BUILD-FAILED|caused by|suppressed" /tmp/probe.log 2>/dev/null \
-              | emit_block "probe: final failure chain"
-          else
-            tail -40 /tmp/probe.log | emit_block "probe: no PROBE lines, log tail"
-          fi
-
+      # Tests, lint and the debug APK in one Gradle invocation. The log is teed
+      # to /tmp/gradle.log because Actions logs live in Azure blob storage, which
+      # is not reachable from every environment: the next step re-emits the
+      # failure detail as check annotations, served by api.github.com.
       - name: Run Android unit tests, lint, and assemble debug APK
         working-directory: android
         run: |
@@ -263,18 +165,6 @@ jobs:
 
           KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -200)
           [ -n "$KTERR" ] && printf '%s\n' "$KTERR" | emit_block "kotlin diagnostics"
-
-          if [ -f /tmp/probe.log ]; then
-            PROBE=$(grep -E "script: |EVALUATION-FAILED" /tmp/probe.log | awk '!seen[$0]++' | head -20)
-            [ -n "$PROBE" ] && printf '%s\n' "$PROBE" | emit_block "probe: script markers"
-            # The probe is a diagnostic: if it crashed, its own error must be
-            # visible too, or a broken probe looks like a project with no model.
-            if [ -z "$PROBE" ]; then
-              grep -v '^[[:space:]]*$' /tmp/probe.log | tail -20 | emit_block "probe: no script markers, log tail"
-            fi
-          else
-            echo "::error title=probe::probe never wrote /tmp/probe.log"
-          fi
 
           if [ -z "$WHY$CAUSES$KTERR" ]; then
             grep -v "^[[:space:]]*$" "$LOG" | tail -30 | emit_block "gradle: no known pattern, log tail"
@@ -360,20 +250,14 @@ jobs:
             echo "=== HEAD ==="; git rev-parse HEAD 2>/dev/null
             echo "=== java ==="; java -version 2>&1 | head -3
             echo "=== gradle ==="; sed -n '1,10p' /tmp/gradle-version.txt 2>/dev/null
-            echo "=== script markers (probe log) ==="; grep -E "script: |EVALUATION-FAILED" /tmp/probe.log 2>/dev/null
-            echo "=== script markers (files) ==="; cat /tmp/app-script-markers.txt 2>/dev/null
-            echo "=== final failure chain ==="; grep -E "BUILD-FAILED|caused by|suppressed" /tmp/probe.log 2>/dev/null | head -30
-            echo "=== probe model ==="; grep -E "^PROBE " /tmp/probe.log 2>/dev/null | head -80
             echo "=== configuration cache ==="
-            grep -iE "configuration cache|reusing configuration|configuration-cache" /tmp/gradle.log /tmp/probe.log 2>/dev/null | head -20
+            grep -iE "configuration cache|reusing configuration|configuration-cache" /tmp/gradle.log 2>/dev/null | head -20
             echo "=== what went wrong ==="
             awk '/^\* What went wrong:/{f=1} f{print; c++} c>30{exit}' /tmp/gradle.log 2>/dev/null
             echo "=== caused by ==="
             grep -E "Caused by:" /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -25
             echo "=== kotlin diagnostics (build) ==="
             grep -E "^(e|w): " /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -60
-            echo "=== kotlin diagnostics (probe) ==="
-            grep -E "^(e|w): " /tmp/probe.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -40
             echo "=== android unit test failures ==="; cat /tmp/test-failures.txt 2>/dev/null
             echo "=== gradle log tail ==="; tail -60 /tmp/gradle.log 2>/dev/null
           } > "$OUT" 2>&1

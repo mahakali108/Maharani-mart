@@ -1,4 +1,3 @@
-import java.io.File
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -7,22 +6,6 @@ plugins {
   alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
 }
-
-// TEMPORARY DIAGNOSTIC (removed once the build is green): the Android
-// extension on :app reaches AGP's createAndroidTasks() completely unset even
-// though this file sets it, so the script reports its own progress.
-// A marker that cannot be lost to Gradle's console handling: the file is read
-// back by the diagnostics step, so a statement that runs without printing is
-// still visible. `java.io.File` is not usable here: in a Kotlin build script
-// `java` resolves to the project's `java` extension, so the name is imported.
-fun probe(marker: String) {
-  File("/tmp/app-script-markers.txt").appendText("app-script: $marker\n")
-  println("PROBE app-script: $marker")
-}
-
-probe("body started, plugins applied")
-val probedAndroidExtension = extensions.findByName("android")
-probe("container android=${probedAndroidExtension?.javaClass?.name} identity=${System.identityHashCode(probedAndroidExtension)}")
 
 // API base URL - the ONLY compiled-in configuration value.
 //
@@ -35,25 +18,17 @@ probe("container android=${probedAndroidExtension?.javaClass?.name} identity=${S
 val maharaniApiBaseUrl: String =
   (project.findProperty("maharaniApiBaseUrl") as String?)
     ?: "https://maharani-mart-mahakali108s-projects.vercel.app/"
-probe("after maharaniApiBaseUrl")
 
 // Release signing is read from the environment ONLY - never from the repo.
 val releaseStorePath: String? = System.getenv("RELEASE_KEYSTORE_PATH")
-probe("after releaseStorePath")
 val releaseStorePassword: String? = System.getenv("RELEASE_KEYSTORE_PASSWORD")
-probe("after releaseStorePassword")
 val releaseKeyAlias: String? = System.getenv("RELEASE_KEY_ALIAS")
-probe("after releaseKeyAlias")
 val releaseKeyPassword: String? = System.getenv("RELEASE_KEY_PASSWORD")
-probe("after releaseKeyPassword")
 val releaseSigningConfigured: Boolean =
   listOf(releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
     .all { !it.isNullOrBlank() }
-probe("after releaseSigningConfigured")
 
-probe("values computed, about to configure android")
 android {
-  probe("inside android block, receiver=${this.javaClass.name} identity=${System.identityHashCode(this)}")
   namespace = "com.maharanitraders.app"
   // AGP 9 expresses the SDK level as a spec; `compileSdk = 36` also works.
   // Neither form was ever the problem - see docs/ANDROID_IMPLEMENTATION_PLAN.md
@@ -142,17 +117,14 @@ android {
     warningsAsErrors = false
     disable += listOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
   }
-  probe("android block statements done")
 }
 
-probe("android block done, namespace=${android.namespace} compileSdk=${android.compileSdk}")
 
 kotlin {
   compilerOptions {
     jvmTarget.set(JvmTarget.JVM_17)
   }
 }
-probe("body finished, before kotlin block")
 
 dependencies {
   implementation(project(":core:common"))
@@ -199,4 +171,3 @@ dependencies {
   androidTestImplementation(libs.androidx.test.junit)
   androidTestImplementation(libs.androidx.test.espresso)
 }
-probe("end of file reached")

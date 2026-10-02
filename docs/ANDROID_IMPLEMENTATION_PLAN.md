@@ -261,12 +261,13 @@ from here, and the annotations and the PR comment carry the parts of it that mat
 | **36991877797** | **`486a77a`** | **`:core:common` compile** | **the first real Kotlin compile in the project's history** |
 | 36992660600 | `1aeb13b` | `:core:designsystem` compile | the missing `:core:model` edge was one of a chain, not the chain |
 | 36993403391 | `aa1193c` | `:core:network` compile | row 5 — the same comment defect in `AuthDtos.kt` |
+| 36995772516 | `c89880b` | `:core:auth` compile | rows 5 fixed and passed: `:core:network` compiled. The project model probe came back complete for all eight modules — `:app` `namespace`, `compileSdk 36`, `compileSdkVersion android-36`, `minSdk 24`, `targetSdk 36`, `applicationId`, and every library's `compileSdk`/`minSdk`. Row 6 is the last thing standing between the project and its first compiled bytecode |
+| 36996757872 | `c3b7a02` | `:core:auth` **test** compile | rows 6 fixed and passed: `:core:auth`'s main sources compiled. The compiler moved on to the test source set for the first time — row 7 |
 | 36997894155 | `19d51a9` | `:core:auth:testDebugUnitTest` | row 7 fixed and passed. **Every source file compiled, and the first JUnit tests the project has ever run executed.** Row 8 is a Phase C behaviour bug those tests caught |
 | 36998747914 | `917d3ee` | `:core:auth:testDebugUnitTest` | row 8's code fix passed, and the failure moved outside the product: 13 of 14 tests died in the harness on "Detected use of different schedulers" — row 10 |
 | 36999776341 | `89d3651` | `:core:auth:testDebugUnitTest` | the scheduler fix passed: 13 of 14 tests now run. The last failure is row 11 — an invented wire code in a test double, which on inspection also proved a real 401-mapping hole |
 | 37000825729 | `69f67d0` | `:app:hiltJavaCompileDebug` **and** `:feature:auth:testDebugUnitTest` | row 11 fixed and passed — `:core:auth` and `:core:network` test tasks are green. Two new layers surfaced: the Phase C DI cycle (row 12) and the register-area hole (row 13) |
-| 36996757872 | `c3b7a02` | `:core:auth` **test** compile | rows 6 fixed and passed: `:core:auth`'s main sources compiled. The compiler moved on to the test source set for the first time — row 7 |
-| 36995772516 | `c89880b` | `:core:auth` compile | rows 5 fixed and passed: `:core:network` compiled. The project model probe came back complete for all eight modules — `:app` `namespace`, `compileSdk 36`, `compileSdkVersion android-36`, `minSdk 24`, `targetSdk 36`, `applicationId`, and every library's `compileSdk`/`minSdk`. Row 6 is the last thing standing between the project and its first compiled bytecode |
+| **37002008747** | **`37f974d`** | **nothing — the Android job passed** | **FIRST GREEN ANDROID RUN.** Every source file compiled, the project's JUnit suites passed, `lintDebug` ran, `assembleDebug` produced an APK, and the pipeline's own identity step (`aapt dump badging` + `grep -F "package: name='com.maharanitraders.app'"` under `set -euo pipefail`) succeeded — so the package id, the test results, and the artifact are all asserted by the build, not by this document. Artifact `maharani-traders-debug-apk` = **13,710,210 bytes** (non-empty; artifact listing read back through the Actions API). The probe scaffolding was removed afterwards in its own commit, and the run after that is the one to trust for 'green without scaffolding' |
 
 ## 2. What already works
 
@@ -508,7 +509,7 @@ No signing secret is required for a debug APK. No production key is ever printed
 | ~~B4~~ | ~~Capacitor retirement~~ | **RESOLVED** — retired in one reviewable change; two tests now guard against it coming back. | — |
 | **B5** | **No live backend credentials in CI** | RLS/authorization/stock concurrency can only be *unit*-tested, never integration-tested | a staging Supabase project + credentials, or accept unit-only evidence |
 | **B6** | **Scope** | Phases D–G are ~90 % of the product and cannot be finished in one session | acknowledged as out of scope for this session |
-| **B7** | **The Android build has still never gone green** | every claim about the Kotlin compiling, the tests passing or an APK existing rests on a pipeline that has not yet succeeded | keep iterating on CI; do not claim Phase B/C as *verified* until a run is read back green |
+| ~~B7~~ | ~~The Android build has still never gone green~~ | **RESOLVED** — run `37002008747` (head `37f974d`) passed the Android job: compile, unit tests, lint, APK, identity check. | — |
 
 ---
 
@@ -519,18 +520,28 @@ against the master prompt's criteria:
 
 | Criterion | Status |
 | --- | --- |
-| Genuine native Kotlin/Compose app | **PARTIAL** — real native source exists; compiles only once CI configuration succeeds |
-| Verified package id `com.maharanitraders.app` | **NOT VERIFIED** (declared in Gradle + manifest; never asserted by a build) |
-| Real authenticated backend integration | **PARTIAL** — the endpoints exist and are contract-tested (35 tests); the Android client is written but **never executed** |
+| Genuine native Kotlin/Compose app | **PASS (CI)** — every module compiled in run `37002008747`; no WebView, no Capacitor, no PWA shell in the final UI |
+| Verified package id `com.maharanitraders.app` | **PASS** — the green run's own step ran `aapt dump badging` on the built APK and matched `package: name='com.maharanitraders.app'` under `set -euo pipefail` |
+| Real authenticated backend integration | **PARTIAL** — the endpoints exist and are contract-tested (35 web tests); the Android client compiles and its unit tests pass, but **no Android code has ever talked to a live server** (blocker B5: no credentials in CI). NOT VERIFIED |
 | Server-enforced role permissions | **PASS (web)** — RLS + `middleware.ts` + `requireMobileSession`; Android side not started |
 | Catalog/cart/checkout/orders on Android | **NOT STARTED** |
 | Server-authoritative totals + safe stock | **PASS (backend, 0054)**; no Android client yet |
 | Staff/admin flows on Android | **NOT STARTED** |
-| Automated tests with honest limits | **PARTIAL** — 1,862 web tests pass; **zero** Kotlin tests have ever run |
-| Android lint + Gradle results | **NOT VERIFIED** |
-| Verified non-empty APK from Actions | **NOT VERIFIED** — blocked by B1/B2 |
+| Automated tests with honest limits | **PASS with limits** — 1,874 web tests pass, and the project's Kotlin unit suites now run in CI and pass. Limits stated in the same breath: nothing integration-level, nothing on a device, and the JUnit run is `testDebugUnitTest` only |
+| Android lint + Gradle results | **PARTIAL** — `lintDebug` executes and its report is uploaded (`android-reports`), but `abortOnError=false` until Phase H, so lint cannot fail the build yet |
+| Verified non-empty APK from Actions | **PASS** — `maharani-traders-debug-apk`, **13,710,210 bytes**, produced by the green run (size read back through the Actions artifacts API) |
 | Build/troubleshooting docs | **PASS** (this file + the three companion docs) |
 | No destructive changes, no exposed secrets | **PASS** — audit found none, and none will be introduced |
 
-**Next action taken after this document:** Phase B verification — promote the native CI
-workflow and get the first real compile result, subject to the blockers in §8.
+**Where this leaves Phase B and Phase C.** Phase B is verified: the native project builds,
+tests and produces an APK with the right package id, from a pipeline that also runs the web
+suite. Phase C (authentication) is *implemented and unit-tested* — sign-in, registration,
+token refresh judged on its cause, sign-out with server-side revocation, the Keystore token
+store and the role/gate states — but it is **NOT end-to-end verified**: the app has never
+signed in against a live Supabase, never been installed, and no screen has been seen by a
+human. Phases D–G remain unstarted (§8, B6).
+
+**Diagnostic scaffolding.** The CI probe machinery that located the configuration failures
+(`/tmp/probe.init.gradle`, the marker `println`s in `:app`/`:core:common`, and the steps that
+read them) was removed in its own commit once the build was green, and the pipeline was run
+again to prove the result does not depend on it.
