@@ -148,6 +148,18 @@ jobs:
           ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
           echo "--- probe finished (exit $?); PROBE lines: ---"
           grep -E "^PROBE " /tmp/probe.log | head -40
+          # Emit from THIS step: a check run has an annotation budget, and the
+          # Gradle-failure step spends it on the build error.
+          if grep -qE "^PROBE " /tmp/probe.log; then
+            grep -E "^PROBE " /tmp/probe.log | awk '!seen[$0]++' | head -25 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          else
+            echo "::error::probe produced no PROBE lines; last 12 lines of /tmp/probe.log follow"
+            tail -12 /tmp/probe.log | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::$line"
+            done
+          fi
           ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
           echo "--- probe finished; PROBE lines: ---"
           grep -E "^PROBE " /tmp/probe.log | head -40

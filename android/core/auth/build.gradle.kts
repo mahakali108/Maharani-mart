@@ -8,7 +8,13 @@ plugins {
 
 android {
   namespace = "com.maharanitraders.core.auth"
-  compileSdk = 36
+  // AGP 9's new DSL expresses the SDK level as a spec. The old
+  // `compileSdk = 36` assignment is a deprecated no-op there, which is
+  // why AGP reported "does not specify `compileSdk`" for a file that
+  // plainly set it.
+  compileSdk {
+    version = release(36)
+  }
 
   defaultConfig {
     minSdk = 24
