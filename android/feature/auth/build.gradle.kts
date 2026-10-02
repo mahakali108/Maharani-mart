@@ -7,19 +7,14 @@ plugins {
   alias(libs.plugins.hilt)
 }
 
-/**
- * Phase C — authentication.
- *
- * A feature module (not code in `:app`) so the sign-in surface can be tested
- * without the shell, and so the dependency direction stays one-way:
- * `feature:auth` → `core:*`, never the reverse.
- */
+// Phase C - authentication.
+//
+// A feature module (not code in `:app`) so the sign-in surface can be tested
+// without the shell, and so the dependency direction stays one-way:
+// feature:auth -> core:*, never the reverse.
 android {
   namespace = "com.maharanitraders.feature.auth"
-  // AGP 9's new DSL expresses the SDK level as a spec. The old
-  // `compileSdk = 36` assignment is a deprecated no-op there, which is
-  // why AGP reported "does not specify `compileSdk`" for a file that
-  // plainly set it.
+  // AGP 9 expresses the SDK level as a spec; `compileSdk = 36` also works.
   compileSdk {
     version = release(36)
   }

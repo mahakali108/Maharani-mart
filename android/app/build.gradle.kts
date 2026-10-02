@@ -24,22 +24,20 @@ probe("body started, plugins applied")
 val probedAndroidExtension = extensions.findByName("android")
 probe("container android=${probedAndroidExtension?.javaClass?.name} identity=${System.identityHashCode(probedAndroidExtension)}")
 
-/**
- * API base URL — the ONLY compiled-in configuration value.
- *
- * It is not a secret: no Supabase URL, anon key, service-role key or provider
- * credential is ever shipped in the APK (all authentication is proxied through
- * `/api/mobile/v1/auth/*`, see docs/NATIVE_ANDROID_API_CONTRACT.md §1).
- *
- * Override per build without editing this file:
- *   ./gradlew assembleDebug -PmaharaniApiBaseUrl=https://staging.example/
- */
+// API base URL - the ONLY compiled-in configuration value.
+//
+// It is not a secret: no Supabase URL, anon key, service-role key or provider
+// credential is ever shipped in the APK (all authentication is proxied through
+// /api/mobile/v1/auth/*, see docs/NATIVE_ANDROID_API_CONTRACT.md).
+//
+// Override per build without editing this file:
+//   ./gradlew assembleDebug -PmaharaniApiBaseUrl=https://staging.example/
 val maharaniApiBaseUrl: String =
   (project.findProperty("maharaniApiBaseUrl") as String?)
     ?: "https://maharani-mart-mahakali108s-projects.vercel.app/"
 probe("after maharaniApiBaseUrl")
 
-/** Release signing is read from the environment ONLY — never from the repo. */
+// Release signing is read from the environment ONLY - never from the repo.
 val releaseStorePath: String? = System.getenv("RELEASE_KEYSTORE_PATH")
 probe("after releaseStorePath")
 val releaseStorePassword: String? = System.getenv("RELEASE_KEYSTORE_PASSWORD")
@@ -57,10 +55,9 @@ probe("values computed, about to configure android")
 android {
   probe("inside android block, receiver=${this.javaClass.name} identity=${System.identityHashCode(this)}")
   namespace = "com.maharanitraders.app"
-  // AGP 9's new DSL expresses the SDK level as a spec. The old
-  // `compileSdk = 36` assignment is a deprecated no-op there, which is
-  // why AGP reported "does not specify `compileSdk`" for a file that
-  // plainly set it.
+  // AGP 9 expresses the SDK level as a spec; `compileSdk = 36` also works.
+  // Neither form was ever the problem - see docs/ANDROID_IMPLEMENTATION_PLAN.md
+  // section 1.9.
   compileSdk {
     version = release(36)
   }
@@ -129,7 +126,9 @@ android {
       excludes += listOf(
         "DebugProbesKt.bin",
         "kotlin-tooling-metadata.json",
-        "kotlin/**",
+        // Built as concatenation so the file contains no comment-opening
+        // sequence at all.
+        "kotlin/" + "**",
         "META-INF/*.kotlin_module",
       )
     }

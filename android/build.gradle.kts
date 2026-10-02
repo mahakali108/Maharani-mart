@@ -1,8 +1,13 @@
-/**
- * Root build file: declares plugin versions from the single version catalog
- * (`gradle/libs.versions.toml`) and applies nothing globally — each module
- * opts in to exactly what it needs.
- */
+// Root build file: declares plugin versions from the single version catalog
+// (gradle/libs.versions.toml) and applies nothing globally - each module opts in
+// to exactly what it needs.
+//
+// NOTE: block ("KDoc-style") comments are deliberately not used in the build
+// scripts of this project, and the sequence that opens one must not appear in a
+// string either. A script with a `plugins {}` block loses its body at the first
+// such comment (see docs/ANDROID_IMPLEMENTATION_PLAN.md section 1.9), which
+// silently dropped every `android {}` and `dependencies {}` block below the
+// comment and made AGP report a compileSdk that the file plainly sets.
 // AGP 9's built-in Kotlin has a runtime dependency on KGP 2.2.10, while the
 // Compose compiler plugin and the serialization plugin are KGP plugins that must
 // match the Kotlin compiler exactly. Raising KGP explicitly is the documented
