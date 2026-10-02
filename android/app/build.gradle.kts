@@ -1,3 +1,4 @@
+import java.io.File
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -12,17 +13,16 @@ plugins {
 // though this file sets it, so the script reports its own progress.
 // A marker that cannot be lost to Gradle's console handling: the file is read
 // back by the diagnostics step, so a statement that runs without printing is
-// still visible.
+// still visible. `java.io.File` is not usable here: in a Kotlin build script
+// `java` resolves to the project's `java` extension, so the name is imported.
 fun probe(marker: String) {
-  java.io.File("/tmp/app-script-markers.txt").appendText(marker + "\n")
+  File("/tmp/app-script-markers.txt").appendText("app-script: $marker\n")
   println("PROBE app-script: $marker")
 }
 
 probe("body started, plugins applied")
-run {
-  val e = extensions.findByName("android")
-  probe("container android=${e?.javaClass?.name} identity=${System.identityHashCode(e)}")
-}
+val probedAndroidExtension = extensions.findByName("android")
+probe("container android=${probedAndroidExtension?.javaClass?.name} identity=${System.identityHashCode(probedAndroidExtension)}")
 
 /**
  * API base URL — the ONLY compiled-in configuration value.

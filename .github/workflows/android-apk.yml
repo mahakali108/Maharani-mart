@@ -289,8 +289,10 @@ jobs:
             awk '/^\* What went wrong:/{f=1} f{print; c++} c>30{exit}' /tmp/gradle.log 2>/dev/null
             echo "=== caused by ==="
             grep -E "Caused by:" /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -25
-            echo "=== kotlin diagnostics ==="
+            echo "=== kotlin diagnostics (build) ==="
             grep -E "^(e|w): " /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -60
+            echo "=== kotlin diagnostics (probe) ==="
+            grep -E "^(e|w): " /tmp/probe.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -40
             echo "=== gradle log tail ==="; tail -60 /tmp/gradle.log 2>/dev/null
           } > "$OUT" 2>&1
           wc -l "$OUT" || true
