@@ -60,3 +60,30 @@ export {
   enforceRateLimit,
 } from '@/lib/mobile/rate-limit';
 export type { RateLimitGroup, RateLimitResult, RateLimitRule } from '@/lib/mobile/rate-limit';
+
+// Phase C — authentication. The GoTrue-facing clients live in
+// `clients.ts` rather than in `supabase.ts`, which stays strictly
+// user-scoped (see that module's doc comment).
+export {
+  createMobileAnonClient,
+  createMobileServiceRoleClient,
+  gotrueFetch,
+} from '@/lib/mobile/clients';
+export {
+  loginSchema,
+  refreshSchema,
+  passwordResetSchema,
+  passwordUpdateSchema,
+  registerRetailerSchema,
+  evaluateAccountState,
+  resolveIdentifier,
+  isEmailIdentifier,
+  toSessionTokens,
+} from '@/lib/mobile/auth-api';
+export type {
+  MobileAccountUser,
+  MobileLoginPayload,
+  MobileNextStep,
+  MobileRetailerSummary,
+  MobileSessionTokens,
+} from '@/lib/mobile/auth-api';
