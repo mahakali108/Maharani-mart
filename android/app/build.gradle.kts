@@ -7,6 +7,11 @@ plugins {
   alias(libs.plugins.hilt)
 }
 
+// TEMPORARY DIAGNOSTIC (removed once the build is green): the Android
+// extension on :app reaches AGP's createAndroidTasks() completely unset even
+// though this file sets it, so the script reports its own progress.
+println("PROBE app-script: body started, plugins applied")
+
 /**
  * API base URL — the ONLY compiled-in configuration value.
  *
@@ -31,6 +36,7 @@ val releaseSigningConfigured: Boolean =
     .all { !it.isNullOrBlank() }
 
 android {
+  println("PROBE app-script: android block entered")
   namespace = "com.maharanitraders.app"
   // AGP 9's new DSL expresses the SDK level as a spec. The old
   // `compileSdk = 36` assignment is a deprecated no-op there, which is
@@ -120,11 +126,14 @@ android {
   }
 }
 
+println("PROBE app-script: android block done, namespace=${android.namespace} compileSdk=${android.compileSdk}")
+
 kotlin {
   compilerOptions {
     jvmTarget.set(JvmTarget.JVM_17)
   }
 }
+println("PROBE app-script: body finished")
 
 dependencies {
   implementation(project(":core:common"))

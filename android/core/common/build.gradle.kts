@@ -6,7 +6,9 @@ plugins {
   alias(libs.plugins.hilt)
 }
 
+println("PROBE core-common-script: body started")
 android {
+  println("PROBE core-common-script: android block entered")
   namespace = "com.maharanitraders.core.common"
   // AGP 9's new DSL expresses the SDK level as a spec. The old
   // `compileSdk = 36` assignment is a deprecated no-op there, which is

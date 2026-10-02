@@ -3,17 +3,6 @@
  * (`gradle/libs.versions.toml`) and applies nothing globally — each module
  * opts in to exactly what it needs.
  */
-// AGP 9's built-in Kotlin has a runtime dependency on KGP 2.2.10. The Compose
-// compiler plugin and the serialization plugin are KGP plugins and must match
-// the Kotlin compiler exactly, so KGP is raised to the version pinned in the
-// catalog. This is the documented way to run built-in Kotlin on a newer KGP:
-// https://developer.android.com/build/releases/agp-9-0-0-release-notes
-buildscript {
-  dependencies {
-    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.20")
-  }
-}
-
 plugins {
   alias(libs.plugins.android.application) apply false
   alias(libs.plugins.android.library) apply false

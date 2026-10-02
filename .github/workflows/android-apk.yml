@@ -123,18 +123,24 @@ jobs:
             afterEvaluate: { project, state ->
               def ext = project.extensions.findByName("android")
               println "PROBE project=${project.path} androidExtension=${ext == null ? 'NONE' : ext.class.name}"
+              println "PROBE ${project.path} buildFile=${project.buildFile} exists=${project.buildFile.exists()} bytes=${project.buildFile.exists() ? project.buildFile.length() : -1}"
+              println "PROBE ${project.path} hasAgpPlugin=${project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library')}"
               if (ext != null) {
-                ["getCompileSdk", "getCompileSdkVersion", "getNamespace"].each { m ->
-                  def found = ext.class.methods.find { it.name == m && it.parameterCount == 0 }
-                  if (found == null) {
-                    println "PROBE ${project.path} ${m}() ABSENT"
-                  } else {
-                    try {
-                      println "PROBE ${project.path} ${m}() -> ${found.invoke(ext)}"
-                    } catch (Throwable t) {
-                      println "PROBE ${project.path} ${m}() THREW ${t.class.name}: ${t.message}"
-                    }
+                // Groovy property access goes through Gradle's dynamic-object
+                // path, which is what a build script itself uses. Reflection on
+                // the base class can miss AgpDecorated/Property-backed state.
+                ["namespace", "compileSdk", "compileSdkVersion"].each { name ->
+                  try {
+                    println "PROBE ${project.path} ext.${name} = ${ext.${name}}"
+                  } catch (Throwable t) {
+                    println "PROBE ${project.path} ext.${name} THREW ${t.class.name}: ${t.message}"
                   }
+                }
+                try {
+                  println "PROBE ${project.path} defaultConfig.minSdk = ${ext.defaultConfig?.minSdk}"
+                  println "PROBE ${project.path} defaultConfig.targetSdk = ${ext.defaultConfig?.targetSdk}"
+                } catch (Throwable t) {
+                  println "PROBE ${project.path} defaultConfig THREW ${t.class.name}: ${t.message}"
                 }
               }
               if (state != null && state.failure != null) {
@@ -155,11 +161,12 @@ jobs:
               echo "::error::$line"
             done
           else
-            echo "::error::probe produced no PROBE lines; last 12 lines of /tmp/probe.log follow"
-            tail -12 /tmp/probe.log | while IFS= read -r line; do
+            echo "::error::probe produced no PROBE lines; last 25 lines of /tmp/probe.log follow"
+            tail -25 /tmp/probe.log | while IFS= read -r line; do
               [ -n "$line" ] && echo "::error::$line"
             done
           fi
+          echo "::error::END OF PROBE OUTPUT"
           ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
           echo "--- probe finished; PROBE lines: ---"
           grep -E "^PROBE " /tmp/probe.log | head -40
