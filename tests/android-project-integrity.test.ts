@@ -305,6 +305,58 @@ describe('Android build scripts stay executable', () => {
   });
 });
 
+describe('Android design tokens resolve', () => {
+  // The first real compile rejected core/designsystem: Theme.kt referenced
+  // `MaharaniPalette.BrandRed600` while Color.kt defined `Red600`, and both
+  // Theme.kt and StateSurfaces.kt referenced an extra-colour holder that had
+  // never been written. Neither is catchable without a compiler, and neither
+  // is caught by an import check, so the member references are checked here.
+  const themeDir = join(
+    ANDROID,
+    'core',
+    'designsystem',
+    'src',
+    'main',
+    'kotlin',
+    'com',
+    'maharanitraders',
+    'core',
+    'designsystem',
+    'theme',
+  );
+  const membersOf = (file: string, pattern: RegExp) =>
+    new Set([...readFileSync(join(themeDir, file), 'utf8').matchAll(pattern)].map((m) => m[1]!));
+
+  const paletteMembers = () => membersOf('Color.kt', /^\s*val\s+(\w+)\s*=/gm);
+  const extraColorMembers = () => membersOf('ExtraColors.kt', /^\s*val\s+(\w+):/gm);
+
+  it('resolves every MaharaniPalette member reference', () => {
+    const defined = paletteMembers();
+    expect(defined.size).toBeGreaterThan(20);
+
+    const missing = new Set<string>();
+    for (const file of kotlinFiles()) {
+      for (const match of readFileSync(file, 'utf8').matchAll(/MaharaniPalette\.(\w+)/g)) {
+        if (!defined.has(match[1]!)) missing.add(`${match[1]} (${relative(ROOT, file)})`);
+      }
+    }
+    expect([...missing].sort()).toEqual([]);
+  });
+
+  it('resolves every extra-colour reference', () => {
+    const defined = extraColorMembers();
+    expect(defined.size).toBeGreaterThan(5);
+
+    const missing = new Set<string>();
+    for (const file of kotlinFiles()) {
+      for (const match of readFileSync(file, 'utf8').matchAll(/colors\.(\w+)/g)) {
+        if (!defined.has(match[1]!)) missing.add(`${match[1]} (${relative(ROOT, file)})`);
+      }
+    }
+    expect([...missing].sort()).toEqual([]);
+  });
+});
+
 describe('Android toolchain pins stay consistent', () => {
   it('pins the KGP classpath to the same Kotlin version as the catalog', () => {
     // AGP 9's built-in Kotlin brings KGP 2.2.10 unless it is raised explicitly.
