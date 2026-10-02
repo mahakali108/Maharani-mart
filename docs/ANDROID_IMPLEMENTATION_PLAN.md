@@ -44,7 +44,7 @@ sections, not their contracts):
 | Git push to this branch | **works** | `git push --dry-run origin arena/01a0fb9b-maharani-mart` → `* [new branch]` |
 | GitHub API read | works | `gh api /installation/repositories` returns the repo |
 | GitHub Actions read | works | `gh run list` returns history |
-| Write to `.github/workflows/**` | **UNKNOWN — likely blocked** | documented as blocked in `docs/NATIVE_ANDROID_MIGRATION_PLAN.md` §5; cannot be re-tested without first pushing the branch (the Contents-API probe returns `404 Branch not found`) |
+| Write to `.github/workflows/**` | **works** | the native pipeline was pushed to this branch and GitHub Actions ran it (`gh run list` shows runs triggered by these pushes), so the earlier "likely blocked" note in `docs/NATIVE_ANDROID_MIGRATION_PLAN.md` §5 does not hold for this branch |
 | Repo admin | not granted | `gh api repos/…` → `permissions: {admin:false, push:false}` (App installation tokens do not report collaborator permissions) |
 
 ### 1.3 Phased execution status as found (not as claimed by earlier docs)
@@ -221,6 +221,34 @@ Two process lessons, both now enforced in the workflow:
 2. **Version pins are not evidence.** A pin can name a version that does not exist (icons) or a
    release whose AGP integration is broken (Hilt 2.59.x). Both had to be checked against the
    publisher's own release history before being believed.
+
+### 1.10 Seeing the build from here
+
+The most expensive mistake of this phase was not a version pin — it was **not being able to read
+the failure**. Actions log files are served from `*.blob.core.windows.net`, which is unreachable
+from this environment, and `gh run view --log-failed` returns nothing. Everything learned about the
+build so far was learned through two narrow channels, both worth keeping:
+
+1. **Check annotations.** Each job re-emits its own failure detail as `::error::` annotations, which
+   are served by `api.github.com`. Annotations are capped at about ten per step and the check-run
+   listing does not preserve emission order, so a step that emits fifty lines is a step whose
+   answer is probably hidden. Anything whose output is longer than ten lines belongs in an artifact
+   instead, and a step that exists to be read must emit *only* the lines that matter.
+2. **Artifacts.** `android-build-diagnostics` now bundles the JDK/Gradle versions,
+   `android/gradle.properties`, `settings.gradle.kts`, the version catalog and both Gradle logs,
+   and it uploads with `if: always()` so it survives the failure it describes. `gh run download`
+   fetches it over `api.github.com`. The debug-APK artifact stays on `if: success()` — an APK that
+   only exists on failures would be worse than none.
+
+A probe (`--init-script`, `ProjectEvaluationListener`) records the state of the `android` extension
+after evaluation and the size of each module's build file, which is how the project model can be
+described in a run where nothing compiles. It is a diagnostic, never a gate: it runs with
+`continue-on-error: true` and it must never fail the build.
+
+**One caveat, learned the hard way:** the check-run annotation list is not in emission order, so
+*"this line is missing from the annotations"* is not evidence that the line was not printed. Only the
+log in the artifact settles that.
+
 
 ---
 

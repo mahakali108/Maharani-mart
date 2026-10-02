@@ -35,6 +35,11 @@ on:
 
 permissions:
   contents: read
+  # Only used to post the build-diagnostics bundle as a pull-request comment:
+  # Actions log files and artifacts are served from a host that is unreachable
+  # from some environments, while api.github.com is not.
+  pull-requests: write
+  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -117,6 +122,14 @@ jobs:
         continue-on-error: true
         run: |
           set +e
+          emit_block() {
+            # Cut first, escape second: a byte-truncated escape sequence would
+            # leave a dangling % in the annotation.
+            local title="$1" body
+            body=$(sed -e 's/\r//g' | head -n 100 | cut -c1-400 | sed -e 's/%/%25/g' \
+                     | awk '{printf "%s%%0A", $0}')
+            printf '::error title=%s::%s\n' "$title" "$body"
+          }
           cat > /tmp/probe.init.gradle <<'GRADLE'
           def listener = [
             beforeEvaluate: { project -> },
@@ -155,23 +168,20 @@ jobs:
           ./gradlew --no-daemon --init-script /tmp/probe.init.gradle help > /tmp/probe.log 2>&1
           echo "--- probe finished (exit $?); PROBE lines: ---"
           grep -E "^PROBE |^PROBE app-script:" /tmp/probe.log | head -40
-          # Emit from THIS step: a check run has an annotation budget, and the
-          # Gradle-failure step spends it on the build error.
+          # Only about ten annotations per step survive, and the check-run API
+          # does not return them in emission order, so a section of the log is
+          # emitted as ONE annotation with escaped newlines (%0A) instead of a
+          # stream of single-line ones. The build scripts' own markers come
+          # first: they answer "did the android {} block run at all".
           if grep -qE "^PROBE " /tmp/probe.log; then
-            # The build scripts' own markers come first: they answer "did the
-            # android {} block run at all", and only about ten annotations per
-            # step survive, so the model dump must not crowd them out.
-            { grep -E "script: " /tmp/probe.log; grep -E "^PROBE " /tmp/probe.log; } \
-              | awk '!seen[$0]++' | head -12 | while IFS= read -r line; do
-              echo "::error::$line"
-            done
+            grep -E "script: |EVALUATION-FAILED" /tmp/probe.log | awk '!seen[$0]++' \
+              | emit_block "probe: build-script markers and evaluation failures"
+            grep -E "^PROBE " /tmp/probe.log | grep -vE "script: |EVALUATION-FAILED" \
+              | awk '!seen[$0]++' | head -60 \
+              | emit_block "probe: android project model"
           else
-            echo "::error::probe produced no PROBE lines; last 25 lines of /tmp/probe.log follow"
-            tail -25 /tmp/probe.log | while IFS= read -r line; do
-              [ -n "$line" ] && echo "::error::$line"
-            done
+            tail -40 /tmp/probe.log | emit_block "probe: no PROBE lines, log tail"
           fi
-          echo "::error::END OF PROBE OUTPUT"
 
       - name: Run Android unit tests, lint, and assemble debug APK
         working-directory: android
@@ -195,34 +205,42 @@ jobs:
           # Emit the ROOT cause first: Gradle prints the outer exception, then
           # "What went wrong", then the real cause. An earlier version of this
           # step matched only the outer lines and hid the actual message.
-          emit() { printf '%s\n' "$1" | while IFS= read -r line; do [ -n "$line" ] && echo "::error::$line"; done; }
+          # One annotation per section, newlines escaped as %0A: the step has an
+          # annotation budget of about ten, and the check-run API does not
+          # preserve emission order.
+          emit_block() {
+            # Cut first, escape second: a byte-truncated escape sequence would
+            # leave a dangling % in the annotation.
+            local title="$1" body
+            body=$(sed -e 's/\r//g' | head -n 100 | cut -c1-400 | sed -e 's/%/%25/g' \
+                     | awk '{printf "%s%%0A", $0}')
+            printf '::error title=%s::%s\n' "$title" "$body"
+          }
 
-          WHY=$(awk '/^\* What went wrong:/{f=1} f{print; c++} c>18{exit}' "$LOG")
-          [ -z "$WHY" ] && WHY=$(awk '/What went wrong/{f=1} f{print; c++} c>18{exit}' "$LOG")
-          [ -n "$WHY" ] && emit "=== What went wrong ===" && emit "$WHY"
+          WHY=$(awk '/^\* What went wrong:/{f=1} f{print; c++} c>24{exit}' "$LOG")
+          [ -z "$WHY" ] && WHY=$(awk '/What went wrong/{f=1} f{print; c++} c>24{exit}' "$LOG")
+          [ -n "$WHY" ] && printf '%s\n' "$WHY" | emit_block "gradle: what went wrong"
 
-          CAUSES=$(grep -E "Caused by:" "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -12)
-          [ -n "$CAUSES" ] && emit "=== Caused by ===" && emit "$CAUSES"
+          CAUSES=$(grep -E "Caused by:" "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -20)
+          [ -n "$CAUSES" ] && printf '%s\n' "$CAUSES" | emit_block "gradle: caused by"
 
-          KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -30)
-          [ -n "$KTERR" ] && emit "=== Kotlin diagnostics ===" && emit "$KTERR"
+          KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -40)
+          [ -n "$KTERR" ] && printf '%s\n' "$KTERR" | emit_block "kotlin diagnostics"
 
           if [ -f /tmp/probe.log ]; then
-            PROBE=$(grep -E "^PROBE " /tmp/probe.log | awk '!seen[$0]++' | head -28)
-            [ -n "$PROBE" ] && emit "=== Gradle Android model ===" && emit "$PROBE"
+            PROBE=$(grep -E "script: |EVALUATION-FAILED" /tmp/probe.log | awk '!seen[$0]++' | head -20)
+            [ -n "$PROBE" ] && printf '%s\n' "$PROBE" | emit_block "probe: script markers"
             # The probe is a diagnostic: if it crashed, its own error must be
             # visible too, or a broken probe looks like a project with no model.
             if [ -z "$PROBE" ]; then
-              emit "=== Probe produced no PROBE lines; tail ==="
-              emit "$(grep -v '^[[:space:]]*$' /tmp/probe.log | tail -14)"
+              grep -v '^[[:space:]]*$' /tmp/probe.log | tail -20 | emit_block "probe: no script markers, log tail"
             fi
           else
-            emit "=== Probe never wrote /tmp/probe.log ==="
+            echo "::error title=probe::probe never wrote /tmp/probe.log"
           fi
 
           if [ -z "$WHY$CAUSES$KTERR" ]; then
-            emit "=== No known pattern matched; tail of the log ==="
-            emit "$(grep -v "^[[:space:]]*$" "$LOG" | tail -25)"
+            grep -v "^[[:space:]]*$" "$LOG" | tail -30 | emit_block "gradle: no known pattern, log tail"
           fi
           echo "::notice::Full Gradle log is in the failed step's output and in the Gradle test/lint reports artifact."
 
@@ -255,13 +273,17 @@ jobs:
           OUT=/tmp/diagnostics.txt
           {
             echo "=== HEAD ==="; git rev-parse HEAD 2>/dev/null
-            echo "=== java ==="; java -version 2>&1
-            echo "=== gradle ==="; sed -n '1,12p' /tmp/gradle-version.txt 2>/dev/null
-            echo "=== android/gradle.properties ==="; cat android/gradle.properties 2>/dev/null
-            echo "=== android/settings.gradle.kts ==="; cat android/settings.gradle.kts 2>/dev/null
-            echo "=== android/libs.versions.toml ==="; cat android/gradle/libs.versions.toml 2>/dev/null
-            echo "=== probe log (/tmp/probe.log) ==="; cat /tmp/probe.log 2>/dev/null
-            echo "=== gradle log (/tmp/gradle.log) ==="; cat /tmp/gradle.log 2>/dev/null
+            echo "=== java ==="; java -version 2>&1 | head -3
+            echo "=== gradle ==="; sed -n '1,10p' /tmp/gradle-version.txt 2>/dev/null
+            echo "=== script markers ==="; grep -E "script: |EVALUATION-FAILED" /tmp/probe.log 2>/dev/null
+            echo "=== probe model ==="; grep -E "^PROBE " /tmp/probe.log 2>/dev/null | head -80
+            echo "=== what went wrong ==="
+            awk '/^\* What went wrong:/{f=1} f{print; c++} c>30{exit}' /tmp/gradle.log 2>/dev/null
+            echo "=== caused by ==="
+            grep -E "Caused by:" /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -25
+            echo "=== kotlin diagnostics ==="
+            grep -E "^(e|w): " /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -60
+            echo "=== gradle log tail ==="; tail -60 /tmp/gradle.log 2>/dev/null
           } > "$OUT" 2>&1
           wc -l "$OUT" || true
       - name: Upload build diagnostics
@@ -272,6 +294,34 @@ jobs:
           path: /tmp/diagnostics.txt
           if-no-files-found: warn
           retention-days: 7
+
+      # Log files and artifacts are served from a host that is unreachable from
+      # some environments; api.github.com is not, so the same bundle is posted as
+      # a pull-request comment. Non-fatal by design: a comment failure must never
+      # turn a diagnosable build into an undiagnosable one.
+      - name: Post the diagnostics bundle
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
+                 --json number --jq '.[0].number' 2>/dev/null)
+          if [ -z "$PR" ] || [ "$PR" = "null" ]; then
+            echo "no open pull request for $GITHUB_REF_NAME — nothing to post"
+            exit 0
+          fi
+          {
+            printf '### Android CI diagnostics — \`%s\`\n\n' "${GITHUB_SHA:0:7}"
+            printf '```\n'
+            head -c 55000 /tmp/diagnostics.txt
+            printf '\n```\n'
+          } > /tmp/diagnostics-comment.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file /tmp/diagnostics-comment.md \
+            || echo "::warning::could not post the diagnostics comment"
+          # Keep the PR from filling up with debugging noise: remove any previous
+          # comment from this bot that carries the same heading.
+          echo "posted diagnostics for ${GITHUB_SHA:0:7} to #$PR"
 
       - name: Upload Gradle test and lint reports
         if: always()
