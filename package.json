@@ -10,18 +10,12 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "cap:add:android": "cap add android",
-    "cap:sync": "cap sync",
-    "capacitor:sync:after": "node scripts/android-postsync.mjs",
     "android:build:debug": "cd android && ./gradlew assembleDebug",
     "android:build:release": "cd android && ./gradlew bundleRelease",
     "android:test": "cd android && ./gradlew testDebugUnitTest",
     "android:lint": "cd android && ./gradlew lintDebug"
   },
   "dependencies": {
-    "@capacitor/android": "^6.1.2",
-    "@capacitor/app": "^6.0.1",
-    "@capacitor/core": "^6.1.2",
     "@fontsource/poppins": "^5.3.0",
     "@libsql/client": "^0.17.4",
     "@supabase/ssr": "^0.5.2",
@@ -37,7 +31,6 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.1.2",
     "@electric-sql/pglite": "^0.2.17",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",

@@ -14,7 +14,7 @@
  *     smallest target viewport (320px).
  *  5. Sheets/dialogs and the compare table scroll INSIDE their containers.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -118,9 +118,23 @@ describe('mobile safety of the premium upgrade surface', () => {
     expect(compare).toContain('bottom-[calc(4.75rem+env(safe-area-inset-bottom))]');
   });
 
-  it('Android/Capacitor config still targets the app shell correctly', () => {
-    const capacitor = read('capacitor.config.ts');
-    expect(capacitor).toContain('appId');
-    expect(capacitor).toContain('android');
+  it('the Android app is native Compose, not a WebView wrapper (wrapper retired)', () => {
+    // The Capacitor remote-URL wrapper was retired: the Android deliverable is
+    // the native Kotlin/Compose project under android/, so no WebView shell may
+    // come back. These files are the ones that made up the wrapper.
+    for (const retired of [
+      'capacitor.config.ts',
+      'www/index.html',
+      'www/offline.html',
+      'scripts/android-postsync.mjs',
+      'scripts/android-resource-validation.mjs',
+    ]) {
+      expect(existsSync(join(ROOT, retired)), `${retired} must stay retired`).toBe(false);
+    }
+
+    const gradle = read('android/app/build.gradle.kts');
+    expect(gradle).toContain('applicationId = "com.maharanitraders.app"');
+    const manifest = read('android/app/src/main/AndroidManifest.xml');
+    expect(manifest).not.toMatch(/android\.webkit|WebView|loadUrl\(/);
   });
 });

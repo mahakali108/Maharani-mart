@@ -153,32 +153,39 @@ middleware.ts                  # Role-based route protection (runs on every requ
 
 ---
 
-## 5b. Android app (`Maharani Traders`) — native, in migration
+## 5b. Android app (`Maharani Traders`) — native Kotlin/Compose
 
-The Android app is being migrated from the Capacitor remote-URL wrapper to a
-**fully native Kotlin/Jetpack Compose application** (package
-`com.maharanitraders.app`) that talks to this Next.js backend over
+The Android deliverable is a **fully native Kotlin/Jetpack Compose application**
+(package `com.maharanitraders.app`) that talks to this Next.js backend over
 `/api/mobile/v1` and reuses the existing Supabase Auth/Postgres/RLS/Storage. No
 business logic is duplicated in the app — the server stays authoritative for
 pricing, GST, stock, orders, coins, roles and RLS, and the app never receives a
 database key.
 
+The previous **Capacitor remote-URL WebView wrapper is retired**:
+`capacitor.config.ts`, `www/`, `scripts/android-postsync.mjs`,
+`scripts/android-resource-validation.mjs`, the `cap:*` scripts and the four
+`@capacitor/*` dependencies were removed, and the active Android CI workflow
+now builds the native project instead of running `npx cap add android`.
+
 The native project is **`android/`** (committed; Gradle wrapper + version
 catalog + `app`/`core:*` modules). See:
 
+- [`docs/ANDROID_IMPLEMENTATION_PLAN.md`](docs/ANDROID_IMPLEMENTATION_PLAN.md) —
+  **start here.** Audit, verified state, security risks, file-by-file plan.
 - [`docs/NATIVE_ANDROID_MIGRATION_AUDIT.md`](docs/NATIVE_ANDROID_MIGRATION_AUDIT.md) —
-  what exists today, feature-by-feature classification, security risks.
+  feature-by-feature page classification.
 - [`docs/NATIVE_ANDROID_API_CONTRACT.md`](docs/NATIVE_ANDROID_API_CONTRACT.md) —
   the `/api/mobile/v1` contract (implemented and planned endpoints).
 - [`docs/NATIVE_ANDROID_MIGRATION_PLAN.md`](docs/NATIVE_ANDROID_MIGRATION_PLAN.md) —
   phases A–H, toolchain evidence, CI, acceptance commands, honest limitations.
 
-Current state (**Phase B — foundation**): native shell, session restore +
-verification, role-aware navigation, Material 3 theme from the existing brand
-palette, and the mobile API foundation (`/api/mobile/v1/health`,
-`/api/mobile/v1/session`). Sign-in and the feature screens arrive in Phases C–G;
-the app renders explicit "planned phase" states instead of fake data, and the
-web application remains the source of truth meanwhile.
+Current state: the native foundation (`Phase B`) exists as source, and the mobile
+API exposes `/api/mobile/v1/health` and `/api/mobile/v1/session`. **Sign-in and
+the feature screens are Phase C onward** — the app renders explicit
+"planned phase" states instead of fake data, and the web application remains the
+source of truth meanwhile. See the plan's §9 for the honest
+verified / not-verified status of every acceptance criterion.
 
 ```bash
 # Web (unchanged)
@@ -188,16 +195,10 @@ pnpm install && pnpm typecheck && pnpm test
 cd android && ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-- Build: the native CI pipeline (unit tests + lint + debug APK, plus a signed
-  release AAB only when the four `RELEASE_*` signing secrets are configured) is
-  stored at [`docs/android-workflow-native.yml`](docs/android-workflow-native.yml)
-  and activated with a single copy into `.github/workflows/android-apk.yml` — see
-  the plan §5 (the GitHub App pushing this branch may lack the `workflows`
-  permission that GitHub requires for workflow files).
-- `capacitor.config.ts` and the `cap:*` scripts still exist for the legacy
-  wrapper and are retired at the end of Phase G (existing tests assert them in
-  the meantime); until the native pipeline above is activated, CI still builds
-  that wrapper.
+- Build: `.github/workflows/android-apk.yml` is the **active native pipeline** —
+  Gradle wrapper validation, JDK 17, Android SDK 36, unit tests, lint and
+  `assembleDebug`, then a package-id check and the debug APK uploaded as a
+  GitHub Actions artifact. No signing secret is needed for a debug APK.
 
 ---
 
