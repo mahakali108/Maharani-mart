@@ -668,3 +668,54 @@ describe('Android toolchain pins stay consistent', () => {
     expect(classpathKotlin).toBe(catalogKotlin);
   });
 });
+
+describe('Android coroutine tests share one test scheduler', () => {
+  // WHY: the first run that executed JUnit tests failed 13 of 14 cases in
+  // `:core:auth:testDebugUnitTest` with "Detected use of different schedulers".
+  // The class declared `private val dispatcher = StandardTestDispatcher()` — a
+  // scheduler of its own — while every test body ran in `runTest { }`, which quietly
+  // creates a *second* scheduler. Calling `advanceUntilIdle()` on one while work sits
+  // on the other is reported as an error rather than silently hanging, so the whole
+  // class failed at once. The rule is decidable from the source, so it is decided here
+  // instead of costing an Android CI round: a file-level test dispatcher must be handed
+  // to `runTest`, or it must be built from the ambient `testScheduler`.
+  const testSources = () => kotlinFiles().filter((f) => f.includes('/src/test/'));
+
+  /** Name of a class-level `val x = StandardTestDispatcher()` (no shared scheduler). */
+  const fileLevelDispatcherWithoutScheduler = (source: string) =>
+    /^[ \t]*(?:(?:private|internal|protected)\s+)?val\s+(\w+)\s*(?::[^=\n]+)?=\s*\w*(?:Standard|Unconfined)TestDispatcher\s*\(\s*\)/m.exec(
+      source,
+    )?.[1];
+
+  it('hands a file-level TestDispatcher to runTest instead of bare runTest { }', () => {
+    const offenders: string[] = [];
+    let filesChecked = 0;
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      const dispatcher = fileLevelDispatcherWithoutScheduler(source);
+      if (!dispatcher) continue;
+      filesChecked += 1;
+
+      const callSites = [...source.matchAll(/\brunTest\s*(?:\{|\()/g)];
+      for (const callSite of callSites) {
+        if (callSite[0].endsWith('{')) {
+          offenders.push(
+            `${relative(ROOT, file)} declares '${dispatcher}' but calls bare \`runTest { }\`` +
+              ` (line ${source.slice(0, callSite.index).split('\n').length}) — use \`runTest(${dispatcher}) { }\``,
+          );
+        }
+      }
+
+      // A file that never actually runs on the dispatcher would make this rule vacuous.
+      if (callSites.length > 0 && !new RegExp(`\\brunTest\\s*\\(\\s*${dispatcher}\\b`).test(source)) {
+        offenders.push(
+          `${relative(ROOT, file)} declares '${dispatcher}' but no \`runTest(${dispatcher})\` call uses it`,
+        );
+      }
+    }
+
+    // Guard against the rule quietly matching nothing after a refactor.
+    expect(filesChecked).toBeGreaterThan(0);
+    expect(offenders).toEqual([]);
+  });
+});

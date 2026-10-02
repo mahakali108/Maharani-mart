@@ -53,7 +53,7 @@ class RegisterViewModelTest {
   }
 
   @Test
-  fun `loads the area list from the directory`() = runTest {
+  fun `loads the area list from the directory`() = runTest(dispatcher) {
     val session = FakeSession()
     val viewModel = RegisterViewModel(session, FakeAreaDirectory(AreaDirectoryResult.Loaded(listOf(area))))
     advanceUntilIdle()
@@ -63,7 +63,7 @@ class RegisterViewModelTest {
   }
 
   @Test
-  fun `an unavailable area list is reported and blocks submission`() = runTest {
+  fun `an unavailable area list is reported and blocks submission`() = runTest(dispatcher) {
     val session = FakeSession()
     val viewModel = RegisterViewModel(
       session,
@@ -82,7 +82,7 @@ class RegisterViewModelTest {
   }
 
   @Test
-  fun `submits a normalized payload and reports pending approval`() = runTest {
+  fun `submits a normalized payload and reports pending approval`() = runTest(dispatcher) {
     val session = FakeSession(result = RegistrationResult.Registered(requiresEmailConfirmation = true))
     val viewModel = RegisterViewModel(session, FakeAreaDirectory(AreaDirectoryResult.Loaded(listOf(area))))
     advanceUntilIdle()
@@ -105,7 +105,7 @@ class RegisterViewModelTest {
   }
 
   @Test
-  fun `server field errors are attached to their inputs`() = runTest {
+  fun `server field errors are attached to their inputs`() = runTest(dispatcher) {
     val session = FakeSession(
       result = RegistrationResult.Failed(
         AppError.Api(
@@ -129,7 +129,7 @@ class RegisterViewModelTest {
   }
 
   @Test
-  fun `a non-field failure is shown as a form error`() = runTest {
+  fun `a non-field failure is shown as a form error`() = runTest(dispatcher) {
     val session = FakeSession(
       result = RegistrationResult.Failed(AppError.Network())
     )
@@ -145,7 +145,7 @@ class RegisterViewModelTest {
   }
 
   @Test
-  fun `invalid input never reaches the network`() = runTest {
+  fun `invalid input never reaches the network`() = runTest(dispatcher) {
     val session = FakeSession()
     val viewModel = RegisterViewModel(session, FakeAreaDirectory(AreaDirectoryResult.Loaded(listOf(area))))
     advanceUntilIdle()

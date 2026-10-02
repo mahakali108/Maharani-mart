@@ -22,20 +22,20 @@ class ApiCallExecutorTest {
   private val executor = ApiCallExecutor(ApiErrorMapper(Json { ignoreUnknownKeys = true }), dispatcher)
 
   @Test
-  fun `returns success values untouched`() = runTest {
+  fun `returns success values untouched`() = runTest(dispatcher) {
     val result = executor.execute { 42 }
     assertEquals(AppResult.Success(42), result)
   }
 
   @Test
-  fun `maps IO failures to a retryable network error`() = runTest {
+  fun `maps IO failures to a retryable network error`() = runTest(dispatcher) {
     val result = executor.execute<Int> { throw IOException("offline") }
     assertTrue(result is AppResult.Failure)
     assertTrue((result as AppResult.Failure).error is AppError.Network)
   }
 
   @Test
-  fun `rethrows cancellation instead of reporting a failure`() = runTest {
+  fun `rethrows cancellation instead of reporting a failure`() = runTest(dispatcher) {
     var cancelled = false
     try {
       executor.execute<Int> { throw CancellationException("screen left") }
@@ -46,7 +46,7 @@ class ApiCallExecutorTest {
   }
 
   @Test
-  fun `unwraps the standard data envelope`() = runTest {
+  fun `unwraps the standard data envelope`() = runTest(dispatcher) {
     val json = Json { ignoreUnknownKeys = true }
     val result = executor.executeEnvelope {
       json.decodeFromString(
@@ -60,7 +60,7 @@ class ApiCallExecutorTest {
   }
 
   @Test
-  fun `http failures become api errors with the mapped code`() = runTest {
+  fun `http failures become api errors with the mapped code`() = runTest(dispatcher) {
     val mapper = ApiErrorMapper(Json { ignoreUnknownKeys = true })
     val mapped = mapper.fromHttp(401, """{"error":{"code":"invalid_token","message":"Please sign in again."}}""")
     assertTrue(mapped is AppError.Api)

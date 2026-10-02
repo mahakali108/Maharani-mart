@@ -45,7 +45,7 @@ class LoginViewModelTest {
   fun tearDown() = Dispatchers.resetMain()
 
   @Test
-  fun `does not call the session layer when the form is invalid`() = runTest {
+  fun `does not call the session layer when the form is invalid`() = runTest(dispatcher) {
     val session = FakeSession()
     val viewModel = LoginViewModel(session)
 
@@ -58,7 +58,7 @@ class LoginViewModelTest {
   }
 
   @Test
-  fun `reports a submitting state before the server answers`() = runTest {
+  fun `reports a submitting state before the server answers`() = runTest(dispatcher) {
     val session = FakeSession(result = SessionState.SignedOut(SignOutReason.SIGNED_OUT))
     val viewModel = LoginViewModel(session)
 
@@ -75,7 +75,7 @@ class LoginViewModelTest {
   }
 
   @Test
-  fun `an authenticated session clears the password and signals success`() = runTest {
+  fun `an authenticated session clears the password and signals success`() = runTest(dispatcher) {
     val session = FakeSession(result = SessionState.Authenticated(snapshot()))
     val viewModel = LoginViewModel(session)
 
@@ -91,7 +91,7 @@ class LoginViewModelTest {
   }
 
   @Test
-  fun `bad credentials are shown as a form error, not a crash or a gate`() = runTest {
+  fun `bad credentials are shown as a form error, not a crash or a gate`() = runTest(dispatcher) {
     val session = FakeSession(
       result = SessionState.Unavailable("Invalid email or password. Please try again.", retryable = false)
     )
@@ -107,7 +107,7 @@ class LoginViewModelTest {
   }
 
   @Test
-  fun `a pending-approval account is explained rather than reported as a failure`() = runTest {
+  fun `a pending-approval account is explained rather than reported as a failure`() = runTest(dispatcher) {
     val session = FakeSession(result = SessionState.SignedOut(SignOutReason.PENDING_APPROVAL))
     val viewModel = LoginViewModel(session)
 
@@ -121,7 +121,7 @@ class LoginViewModelTest {
   }
 
   @Test
-  fun `a double tap produces exactly one sign-in attempt`() = runTest {
+  fun `a double tap produces exactly one sign-in attempt`() = runTest(dispatcher) {
     val session = FakeSession(result = SessionState.Authenticated(snapshot()))
     val viewModel = LoginViewModel(session)
 
@@ -136,7 +136,7 @@ class LoginViewModelTest {
   }
 
   @Test
-  fun `editing a field clears its error but keeps the other`() = runTest {
+  fun `editing a field clears its error but keeps the other`() = runTest(dispatcher) {
     val viewModel = LoginViewModel(FakeSession())
     viewModel.submit()
     advanceUntilIdle()
