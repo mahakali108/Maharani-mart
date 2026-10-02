@@ -234,7 +234,17 @@ check annotations are capped at about ten lines per step in an order the API doe
 the job dumped whole sections as single `%0A`-escaped annotations and posted the same bundle as a pull
 request comment, the answer took three runs instead of thirty.
 
-### 1.10 Seeing a run from here
+### 1.10 Commit identity is not cosmetic
+
+Vercel deploys every commit pushed to this branch, and it **refuses deployments whose Git author
+is not a member** of the project: the check reads `Vercel: failure — Deployment was blocked`,
+while the same commit graph authored as the repository owner deploys fine. The repository's local
+git identity is already correct (`mahakali108 <287183345+mahakali108@users.noreply.github.com>`),
+so commits should be made **without** overriding `user.name` / `user.email`. A handful of commits
+in this branch were made with an agent identity before this was understood; history is not
+rewritten to fix authorship, and the newest commit on the branch restores a deployable identity.
+
+### 1.11 Seeing a run from here
 
 The environment this plan is written in cannot read Actions logs: `gh run view --log`, the run's
 downloadable logs and every artifact are served from `*.blob.core.windows.net`, and TLS to that host
