@@ -719,3 +719,84 @@ describe('Android coroutine tests share one test scheduler', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('Android error vocabulary matches the mobile API contract', () => {
+  // WHY: a `SessionManagerTest` double invented the code `invalid_refresh_token`
+  // (the refresh route actually answers a dead refresh token with `401 invalid_token`).
+  // The test then asserted a transition the server can never produce, and an Android CI
+  // round was spent on it. Both directions of that agreement are decidable from the
+  // sources: every code the mobile API can emit must be understood by the app, and no
+  // test may assert on a code the app (or the server) does not know.
+  const testSources = () => kotlinFiles().filter((f) => f.includes('/src/test/'));
+  const SERVER_HTTP = join(ROOT, 'lib', 'mobile', 'http.ts');
+  const ANDROID_CODES = join(
+    ANDROID,
+    'core',
+    'model',
+    'src',
+    'main',
+    'kotlin',
+    'com',
+    'maharanitraders',
+    'core',
+    'model',
+    'ApiErrorCode.kt',
+  );
+
+  /** The server's authoritative union: `export type MobileErrorCode = 'a' | 'b' | …`. */
+  function serverErrorCodes(): Set<string> {
+    const source = readFileSync(SERVER_HTTP, 'utf8');
+    const union = /export type MobileErrorCode =([\s\S]*?);/.exec(source)?.[1] ?? '';
+    return new Set([...union.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]!));
+  }
+
+  /** Every `WIRE_NAME("wire_value", retryable)` entry in the Android enum. */
+  function androidErrorCodes(): Set<string> {
+    const source = readFileSync(ANDROID_CODES, 'utf8');
+    return new Set([...source.matchAll(/^\s*[A-Z][A-Z0-9_]*\(\s*"([a-z_]+)"/gm)].map((match) => match[1]!));
+  }
+
+  it('understands every code the mobile API can emit', () => {
+    const server = [...serverErrorCodes()].sort();
+    // Guard against a parsing change silently emptying the server list.
+    expect(server.length).toBeGreaterThan(20);
+
+    const android = androidErrorCodes();
+    const unknownToTheApp = server.filter((code) => !android.has(code));
+    expect(unknownToTheApp).toEqual([]);
+  });
+
+  it('never asserts on a code the server cannot emit', () => {
+    const android = androidErrorCodes();
+    // Codes a test deliberately pretends the server invented, to prove that an
+    // unrecognised code is handled without crashing. Anything else must be real.
+    const DELIBERATELY_INVENTED = new Set([
+      'brand_new_server_code', // proves an unknown code off a 401 stays retryable
+      'brand_new_code', // the executor's unknown-code path
+      'some_new_token_code', // proves an unknown code ON a 401 is terminal
+    ]);
+
+    const offenders: string[] = [];
+    let assertionsChecked = 0;
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      const patterns = [
+        /httpError\(\s*\d+\s*,\s*"([a-z_]+)"/g, // the shared test helper
+        /"code"\s*:\s*"([a-z_]+)"/g, // hand-written error envelopes
+      ];
+      for (const pattern of patterns) {
+        for (const match of source.matchAll(pattern)) {
+          const code = match[1]!;
+          assertionsChecked += 1;
+          if (!android.has(code) && !DELIBERATELY_INVENTED.has(code)) {
+            const line = source.slice(0, match.index).split('\n').length;
+            offenders.push(`${relative(ROOT, file)}:${line} asserts on '${code}', which no wire code declares`);
+          }
+        }
+      }
+    }
+
+    expect(assertionsChecked).toBeGreaterThan(5);
+    expect(offenders.sort()).toEqual([]);
+  });
+});

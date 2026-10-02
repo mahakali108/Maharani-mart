@@ -155,8 +155,13 @@ class SessionManagerTest {
 
   @Test
   fun `a rejected refresh wipes the session and signs the user out`() = runTest(dispatcher) {
+    // The wire code is the contract's own: the refresh route answers a dead
+    // refresh token with `401 invalid_token` ("Your session has expired. Please
+    // sign in again."), and the platform agrees — docs/NATIVE_ANDROID_API_CONTRACT.md
+    // §2.2. A test that invents a code the server never sends asserts behaviour
+    // that cannot happen in production.
     val api = FakeMaharaniApi().apply {
-      nextRefreshResult = { throw httpError(401, "invalid_refresh_token", "Please sign in again.") }
+      nextRefreshResult = { throw httpError(401, "invalid_token", "Your session has expired. Please sign in again.") }
     }
     val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
     val session = manager(api, store)
