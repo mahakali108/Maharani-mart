@@ -33,9 +33,10 @@ object GateTags {
  * problem, and a pending retailer must never be told to "try again" as if the
  * app were broken.
  *
- * Note for Phase B: this build restores and verifies an existing session but
- * does not yet sign in (Phase C adds the credential + refresh flow). The copy
- * says so plainly instead of showing a form that cannot work.
+ * Note: since Phase C the sign-in form exists, so the two "you can sign in"
+ * reasons (never signed in / signed out / session expired) are handled by
+ * `AuthFlowScreen` and never reach this composable. What remains here are the
+ * states where signing in again would not help, and the copy says which.
  */
 @Composable
 fun SessionGateScreen(
@@ -228,16 +229,15 @@ private fun gateCopy(reason: SignOutReason): GateCopy = when (reason) {
   SignOutReason.SESSION_EXPIRED -> GateCopy(
     title = "Your session has expired",
     message = "For security the app signs out when a session can no longer be verified. " +
-      "This build is the native foundation (Phase B): sign-in is delivered with the " +
-      "authentication phase, so nothing further happens here yet. Your web access is unchanged.",
-    showSignOut = false,
+      "Please sign in again.",
+    retryLabel = "Sign in again",
   )
 
+  // Handled by AuthFlowScreen; kept here so the `when` stays exhaustive and a
+  // future caller cannot fall through to a blank screen.
   SignOutReason.NEVER_SIGNED_IN, SignOutReason.SIGNED_OUT -> GateCopy(
     title = "Sign in to Maharani Traders",
-    message = "This build is the native foundation (Phase B) of the Maharani Traders app. " +
-      "It restores and verifies an existing session, but signing in is delivered with the " +
-      "authentication phase. Your web access is unchanged in the meantime.",
-    showSignOut = false,
+    message = "Please sign in to continue.",
+    retryLabel = "Sign in",
   )
 }

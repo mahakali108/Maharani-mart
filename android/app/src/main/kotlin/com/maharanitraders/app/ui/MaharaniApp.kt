@@ -7,7 +7,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.maharanitraders.app.navigation.AuthenticatedShell
 import com.maharanitraders.core.auth.SessionState
+import com.maharanitraders.core.auth.SignOutReason
 import com.maharanitraders.core.designsystem.theme.MaharaniTheme
+import com.maharanitraders.feature.auth.AuthFlowScreen
 
 /**
  * Root of the native UI: exactly one place decides what the app shows for the
@@ -21,6 +23,7 @@ fun MaharaniApp(
   sessionState: SessionState,
   onRetrySession: () -> Unit,
   onSignOut: () -> Unit,
+  onSignedIn: () -> Unit = {},
 ) {
   MaharaniTheme {
     Surface(
@@ -42,11 +45,26 @@ fun MaharaniApp(
           onSignOut = onSignOut,
         )
 
-        is SessionState.SignedOut -> SessionGateScreen(
-          reason = sessionState.reason,
-          onRetry = onRetrySession,
-          onSignOut = onSignOut,
-        )
+        is SessionState.SignedOut -> when (sessionState.reason) {
+          // These three mean "there is no session, and you can create one" —
+          // so the user gets the real sign-in / registration flow.
+          SignOutReason.NEVER_SIGNED_IN,
+          SignOutReason.SIGNED_OUT,
+          SignOutReason.SESSION_EXPIRED,
+          -> AuthFlowScreen(
+            onSignedIn = onSignedIn,
+            onSignOut = onSignOut,
+          )
+
+          // Every other reason is an account-state decision made by the server.
+          // Showing a sign-in form would be wrong: the credentials are fine, the
+          // account is not.
+          else -> SessionGateScreen(
+            reason = sessionState.reason,
+            onRetry = onRetrySession,
+            onSignOut = onSignOut,
+          )
+        }
       }
     }
   }

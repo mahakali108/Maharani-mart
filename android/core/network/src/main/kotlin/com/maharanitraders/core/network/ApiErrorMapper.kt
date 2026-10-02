@@ -31,7 +31,16 @@ class ApiErrorMapper @Inject constructor(
     val code = envelope?.error?.code?.let { ApiErrorCode.fromWire(it) }
       ?: fallbackCode(statusCode)
     val serverMessage = envelope?.error?.message?.takeIf { it.isNotBlank() }
-    return AppError.Api(code = code, message = serverMessage ?: defaultMessage(code))
+    // Only non-blank entries are kept: an empty field message would render as a
+    // blank error under an input.
+    val fieldErrors = envelope?.error?.details?.fields
+      ?.filterValues { it.isNotBlank() }
+      .orEmpty()
+    return AppError.Api(
+      code = code,
+      message = serverMessage ?: defaultMessage(code),
+      fieldErrors = fieldErrors,
+    )
   }
 
   fun fromThrowable(throwable: Throwable): AppError = when (throwable) {

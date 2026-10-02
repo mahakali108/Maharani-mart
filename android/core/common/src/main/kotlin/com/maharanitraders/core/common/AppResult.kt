@@ -31,6 +31,13 @@ sealed interface AppError {
   data class Api(
     val code: ApiErrorCode,
     override val message: String,
+    /**
+     * Field-level messages from `details.fields`, keyed by the server's field
+     * name (`phone`, `email`, `areaId`, …). Empty when the failure was not a
+     * field validation, so a form can attach messages to inputs without
+     * parsing prose, and can never invent one.
+     */
+    val fieldErrors: Map<String, String> = emptyMap(),
   ) : AppError {
     override val retryable: Boolean get() = code.retryable
 
