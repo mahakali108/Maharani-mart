@@ -107,6 +107,47 @@ jobs:
           ./gradlew --no-daemon --version | tee /tmp/gradle-version.txt
           grep -F 'Gradle 9.1.0' /tmp/gradle-version.txt
 
+      # The Android Gradle Plugin's project model is not visible in the web UI
+      # (Actions logs live in Azure blob storage). This step records the model
+      # itself — the `android` extension type and the compileSdk it reports —
+      # so a configuration failure can be diagnosed from check annotations
+      # instead of guessed at.
+      - name: Record the Gradle Android model (diagnostics)
+        working-directory: android
+        continue-on-error: true
+        run: |
+          set +e
+          cat > /tmp/probe.init.gradle <<'GRADLE'
+          gradle.addProjectEvaluationListener(new org.gradle.api.ProjectEvaluationListener() {
+            void beforeEvaluate(org.gradle.api.Project project) { }
+            void afterEvaluate(org.gradle.api.Project project, org.gradle.api.ProjectState state) {
+              def ext = project.extensions.findByName("android")
+              println "PROBE project=${project.path} androidExtension=${ext?.class?.name}"
+              if (ext != null) {
+                ["getCompileSdk", "getCompileSdkVersion", "getNamespace"].each { m ->
+                  def found = ext.class.methods.find { it.name == m && it.parameterCount == 0 }
+                  if (found == null) {
+                    println "PROBE ${project.path} ${m}() is ABSENT on ${ext.class.name}"
+                  } else {
+                    try {
+                      println "PROBE ${project.path} ${m}() -> ${found.invoke(ext)}"
+                    } catch (Exception e) {
+                      println "PROBE ${project.path} ${m}() threw ${e.class.name}: ${e.message}"
+                    }
+                  }
+                }
+              }
+              if (state != null && state.failure != null) {
+                def msg = state.failure.message?.readLines()?.take(4)?.join(" | ")
+                println "PROBE ${project.path} EVALUATION FAILED ${state.failure.class.name}: ${msg}"
+              }
+            }
+          })
+          GRADLE
+          ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
+          echo "--- probe finished; PROBE lines: ---"
+          grep -E "^PROBE " /tmp/probe.log | head -40
+
       - name: Run Android unit tests, lint, and assemble debug APK
         working-directory: android
         run: |
@@ -140,6 +181,11 @@ jobs:
 
           KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -30)
           [ -n "$KTERR" ] && emit "=== Kotlin diagnostics ===" && emit "$KTERR"
+
+          if [ -f /tmp/probe.log ]; then
+            PROBE=$(grep -E "^PROBE " /tmp/probe.log | awk '!seen[$0]++' | head -30)
+            [ -n "$PROBE" ] && emit "=== Gradle Android model ===" && emit "$PROBE"
+          fi
 
           if [ -z "$WHY$CAUSES$KTERR" ]; then
             emit "=== No known pattern matched; tail of the log ==="

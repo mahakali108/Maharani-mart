@@ -302,7 +302,7 @@ private fun RegisterField(
     value = value,
     onValueChange = onValueChange,
     label = { Text(label) },
-    singleLine = !password,
+    singleLine = true,
     isError = errors.containsKey(field),
     supportingText = errors[field]?.let { message -> { Text(message) } },
     visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,

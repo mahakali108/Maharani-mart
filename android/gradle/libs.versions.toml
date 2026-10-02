@@ -23,7 +23,12 @@
 agp = "9.0.1"
 kotlin = "2.4.20"
 ksp = "2.3.10"
-hilt = "2.59.1"
+# Hilt 2.59.0/2.59.1 shipped broken AGP 9 support: the plugin verified the
+# `hilt-android` dependency through the retired "android-classes" transform and
+# reported "no com.google.dagger:hilt-android dependency was found" for a module
+# that declares it (google/dagger#5099, #5116). 2.59.2 replaced that transform
+# with AGP attribute rules; 2.60.1 carries the follow-up fixes.
+hilt = "2.60.1"
 
 coreKtx = "1.17.0"
 activityCompose = "1.12.4"
