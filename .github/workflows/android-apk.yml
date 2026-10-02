@@ -109,7 +109,35 @@ jobs:
 
       - name: Run Android unit tests, lint, and assemble debug APK
         working-directory: android
-        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug 2>&1 | tee /tmp/gradle.log
+
+      # Azure blob storage (where Actions logs live) is not reachable from every
+      # environment, so the failure detail is re-emitted as CHECK ANNOTATIONS,
+      # which are served by api.github.com. Without this a compiler error would
+      # be invisible outside the web UI.
+      - name: Surface Gradle failures as check annotations
+        if: failure()
+        run: |
+          set +e
+          LOG=/tmp/gradle.log
+          if [ ! -f "$LOG" ]; then
+            echo "::error::Gradle produced no log file — the step failed before the build started."
+            exit 0
+          fi
+          # Kotlin/Gradle/KSP error lines, deduplicated and truncated so the
+          # annotation list stays readable.
+          MATCHES=$(grep -E "^e: |error:|FAILURE:|Execution failed for task|What went wrong:|Caused by:|> Could not|Unresolved reference|Cannot access|Unsupported class file|A problem occurred|Could not resolve|Could not find|No matching variant|requires at least|incompatible" "$LOG" \
+            | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -45)
+          if [ -z "$MATCHES" ]; then
+            echo "::error::No known error pattern matched; emitting the tail of the log instead."
+            MATCHES=$(grep -v "^[[:space:]]*$" "$LOG" | tail -25)
+          fi
+          printf '%s\n' "$MATCHES" | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          echo "::notice::Full Gradle log is in the failed step's output and in the Gradle test/lint reports artifact."
 
       - name: Verify debug APK identity
         run: |
