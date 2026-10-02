@@ -136,7 +136,6 @@ jobs:
             afterEvaluate: { project, state ->
               def ext = project.extensions.findByName("android")
               println "PROBE project=${project.path} androidExtension=${ext == null ? 'NONE' : ext.class.name} identity=${System.identityHashCode(ext)}"
-              println "PROBE ${project.path} configurationCacheRequested=${gradle.startParameter.isConfigurationCacheRequested}"
               println "PROBE ${project.path} buildFile=${project.buildFile} exists=${project.buildFile.exists()} bytes=${project.buildFile.exists() ? project.buildFile.length() : -1}"
               println "PROBE ${project.path} hasAgpPlugin=${project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library')}"
               if (ext != null) {
@@ -166,9 +165,12 @@ jobs:
           ] as org.gradle.api.ProjectEvaluationListener
           gradle.addProjectEvaluationListener(listener)
           GRADLE
+          rm -f /tmp/app-script-markers.txt
           ./gradlew --no-daemon --init-script /tmp/probe.init.gradle help > /tmp/probe.log 2>&1
           echo "--- probe finished (exit $?); PROBE lines: ---"
           grep -E "^PROBE |^PROBE app-script:" /tmp/probe.log | head -40
+          echo "--- file markers written by the build scripts (probe run) ---"
+          cat /tmp/app-script-markers.txt 2>/dev/null || echo "(none)"
           # Only about ten annotations per step survive, and the check-run API
           # does not return them in emission order, so a section of the log is
           # emitted as ONE annotation with escaped newlines (%0A) instead of a
@@ -180,6 +182,8 @@ jobs:
             grep -E "^PROBE " /tmp/probe.log | grep -vE "script: |EVALUATION-FAILED" \
               | awk '!seen[$0]++' | head -60 \
               | emit_block "probe: android project model"
+            cat /tmp/app-script-markers.txt 2>/dev/null \
+              | emit_block "probe: build-script file markers (probe run)"
           else
             tail -40 /tmp/probe.log | emit_block "probe: no PROBE lines, log tail"
           fi
@@ -276,7 +280,8 @@ jobs:
             echo "=== HEAD ==="; git rev-parse HEAD 2>/dev/null
             echo "=== java ==="; java -version 2>&1 | head -3
             echo "=== gradle ==="; sed -n '1,10p' /tmp/gradle-version.txt 2>/dev/null
-            echo "=== script markers ==="; grep -E "script: |EVALUATION-FAILED" /tmp/probe.log 2>/dev/null
+            echo "=== script markers (probe log) ==="; grep -E "script: |EVALUATION-FAILED" /tmp/probe.log 2>/dev/null
+            echo "=== script markers (files) ==="; cat /tmp/app-script-markers.txt 2>/dev/null
             echo "=== probe model ==="; grep -E "^PROBE " /tmp/probe.log 2>/dev/null | head -80
             echo "=== configuration cache ==="
             grep -iE "configuration cache|reusing configuration|configuration-cache" /tmp/gradle.log /tmp/probe.log 2>/dev/null | head -20
