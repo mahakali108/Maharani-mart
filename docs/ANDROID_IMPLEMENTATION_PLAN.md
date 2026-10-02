@@ -153,6 +153,35 @@ duplicate project, it is the real one. No second Android project was created.
 
 ---
 
+### 1.9 What activating CI actually found (each root cause, in order)
+
+The native project had never been compiled once. Turning the pipeline on produced a
+different failure each time a cause was removed — recorded here because **none of these were
+discoverable by reading the source**:
+
+| # | Symptom | Root cause | Fix |
+| --- | --- | --- | --- |
+| 1 | Dependency resolution failed in every module using the icon library | `androidx.compose.material:material-icons-*` was **deprecated and stopped being published** after 1.7.x, so `version.ref = "composeUi"` (1.10.3) pointed at a version that does not exist. Material3 1.4.0 no longer pulls `material-icons-core` in implicitly. | catalog entry deleted, dependency removed from `:app` and `:feature:auth`; the single glyph is now a locally drawn `MenuIcon` (48 dp target, TalkBack label) |
+| 2 | `A problem occurred configuring project ':app'` → `Failed to notify project evaluation listener` → **`project ':app' does not specify compileSdk`** + **`no com.google.dagger:hilt-android dependency was found`** | both messages were **false** — `compileSdk = 36` and `implementation(libs.hilt.android)` are both in `android/app/build.gradle.kts`. The real cause was `android.newDsl=false` in `gradle.properties`: under AGP 9's legacy DSL, `createAndroidTasks()` did not see the value the legacy extension had been given, and Hilt's dependency check then cascaded off the same broken model. | the legacy-DSL opt-out is **removed** (AGP 9's new DSL is the supported path; every module already used the property-style DSL). Hilt was also raised 2.59.1 → **2.60.1**, because 2.59.x verified the dependency through the retired `android-classes` transform (`google/dagger#5099`, `#5116`) — a genuine second bug, but **not** the cause of this message |
+
+| 3 | `Failed to apply plugin 'org.jetbrains.kotlin.android'` → *"The plugin is not compatible with AGP's 9.0 new DSL"* | AGP 9's new DSL (the default) **cannot host the `kotlin-android` plugin at all**. The two `gradle.properties` flags are coupled: `newDsl=true` forces built-in Kotlin, while `newDsl=false` + `kotlin-android` was the combination that produced the false `compileSdk` error in row 2 — i.e. **neither opt-out combination works with AGP 9**. | migrated to **built-in Kotlin**: `org.jetbrains.kotlin.android` removed from all 8 modules, the root build file and the catalog; AGP compiles Kotlin itself. `kotlin { compilerOptions { jvmTarget } }` stays (it is the documented replacement for `android.kotlinOptions`), and KGP is raised from AGP's default 2.2.10 to the catalog's 2.4.20 via the documented `buildscript` classpath, because the Compose and serialization plugins are KGP plugins and must match the compiler exactly |
+
+`android.builtInKotlin` and `android.newDsl` are now both absent: the project follows AGP 9's
+defaults rather than opting out of them. `tests/android-project-integrity.test.ts` asserts the
+KGP classpath pin and the catalog's Kotlin version cannot drift apart.
+
+Two process lessons, both now enforced in the workflow:
+
+1. **A failure that cannot be read is a failure that cannot be fixed.** Actions logs live in
+   Azure blob storage, unreachable from here, so the job re-emits Gradle's own
+   `What went wrong` block, all `Caused by` lines, all `e:` diagnostics and an AGP project-model
+   probe as check annotations (`api.github.com`).
+2. **Version pins are not evidence.** A pin can name a version that does not exist (icons) or a
+   release whose AGP integration is broken (Hilt 2.59.x). Both had to be checked against the
+   publisher's own release history before being believed.
+
+---
+
 ## 2. What already works
 
 **Backend / web (high confidence — 1,826 passing tests + 130 pages):**
@@ -279,25 +308,25 @@ Legend: **C** = create, **M** = modify, **D** = delete (retirement, only with ap
 | M | `.github/workflows/android-apk.yml` | **replaced** the Capacitor build with the native pipeline: wrapper validation → JDK 17 → SDK 36 → `testDebugUnitTest lintDebug assembleDebug` → aapt package check → APK artifact | ✅ done (activate/verify pending push) |
 | D | Capacitor wrapper files | see §1.8 | ✅ done |
 | M | `android/app/build.gradle.kts` | lint `abortOnError` stays false until lint is clean, then flipped in Phase H | pending |
-| M | `android/**` | fix whatever the first real compile reports | **pending — this is the critical unknown** |
+| M | `android/**` | fix whatever the first real compile reports | **in progress** — see §1.9; two configuration blockers found and fixed so far |
 
 ### Phase C — Authentication & roles
 
-| Action | Path | Purpose |
-| --- | --- | --- |
-| C | `app/api/mobile/v1/auth/login/route.ts` | phone/email → GoTrue `signInWithPassword`, generic `401`, `nextStep` |
-| C | `app/api/mobile/v1/auth/refresh/route.ts` | refresh-token rotation |
-| C | `app/api/mobile/v1/auth/logout/route.ts` | server-side refresh-token revocation |
-| C | `app/api/mobile/v1/auth/password-reset/route.ts` | no-enumeration reset |
-| C | `app/api/mobile/v1/auth/password-update/route.ts` | authenticated password change |
-| C | `app/api/mobile/v1/retailers/register/route.ts` | registration mirroring `lib/auth/actions.ts` validation |
-| M | `lib/mobile/{auth,http,index}.ts` | shared helpers for the above (no behaviour change to `session`) |
-| C | `tests/mobile-auth.test.ts` | auth boundary matrix: anonymous, wrong role, pending, suspended, inactive, expired |
-| C | `android/core/auth/.../AuthRepository.kt` | login/refresh/logout against the contract |
-| M | `android/core/network/.../MaharaniApi.kt` | +5 auth calls |
-| C | `android/feature/auth/**` | login, register, pending-approval, suspended, reset screens + ViewModels |
-| M | `android/app/.../MaharaniRouter.kt`, `MaharaniDestinations.kt` | real role-aware routing |
-| C | `android/feature/auth/src/test/**` | ViewModel loading/success/empty/error + duplicate-submit guard |
+| Action | Path | Purpose | Status |
+| --- | --- | --- | --- |
+| C | `app/api/mobile/v1/auth/login/route.ts` | phone/email → GoTrue `signInWithPassword`, generic `401`, `nextStep` | ✅ written |
+| C | `app/api/mobile/v1/auth/refresh/route.ts` | refresh-token rotation | ✅ written |
+| C | `app/api/mobile/v1/auth/logout/route.ts` | server-side refresh-token revocation | ✅ written |
+| C | `app/api/mobile/v1/auth/password-reset/route.ts` | no-enumeration reset | ✅ written |
+| C | `app/api/mobile/v1/auth/password-update/route.ts` | authenticated password change | ✅ written |
+| C | `app/api/mobile/v1/retailers/register/route.ts` | registration mirroring `lib/auth/actions.ts` validation | ✅ written |
+| C | `app/api/mobile/v1/areas/route.ts` | the registration area picker; no invented area ids | ✅ written |
+| M | `lib/mobile/{auth,http,index}.ts` | shared helpers for the above (no behaviour change to `session`) | ✅ written |
+| C | `tests/mobile-auth.test.ts` | auth boundary matrix: anonymous, wrong role, pending, suspended, inactive, expired | ✅ **35 tests pass** |
+| C | `android/core/auth/.../AuthRepository.kt` | login/refresh/logout against the contract | written, **uncompiled** |
+| M | `android/core/network/.../MaharaniApi.kt` | +5 auth calls | written, **uncompiled** |
+| C | `android/feature/auth/**` | login, register, pending-approval, reset screens + ViewModels | written, **uncompiled** |
+| C | `android/feature/auth/src/test/**` | validation + ViewModel tests: duplicate-submit guard, field errors, area-load failure | 18 written, **never executed** |
 
 ### Phase D — Retailer commerce (catalog)
 
@@ -355,15 +384,23 @@ cannot prove and that will be listed as **NOT VERIFIED** every time: device beha
 (splash, back nav, insets, process death), real Supabase/Vercel behaviour (no credentials in
 CI), and real order placement against production.
 
-**Native CI job order** (from `docs/android-workflow-native.yml`, to be promoted):
+**Native CI job order** (this is `.github/workflows/android-apk.yml`, which replaced
+the Capacitor build and is the active pipeline):
 
 1. `gradle/actions/wrapper-validation` (pinned SHA) — wrapper integrity;
 2. JDK 17 Temurin; Android SDK `platforms;android-36` + `build-tools;36.0.0`;
 3. `./gradlew --version` — confirms Gradle 9.1.0 actually runs;
-4. `./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug`;
-5. `aapt` package-id assertion = `com.maharanitraders.app`, APK non-empty;
-6. `actions/upload-artifact` — debug APK, **no `always()`**, so a failed build uploads nothing;
-7. test/lint reports uploaded on failure for diagnosis.
+4. a diagnostic probe that records the AGP project model (see §1.9);
+5. `./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug`;
+6. `aapt` package-id assertion = `com.maharanitraders.app`, APK non-empty;
+7. `actions/upload-artifact` — debug APK, **no `always()`**, so a failed build uploads nothing;
+8. test/lint reports uploaded on failure for diagnosis.
+
+Because Actions logs live in Azure blob storage and are not readable from every
+environment, the job re-emits the root cause — Gradle's `What went wrong` block, every
+`Caused by`, every `e:` Kotlin diagnostic and the Android model probe — as **check
+annotations**, which `api.github.com` serves. That is what turned an invisible failure into
+the two root causes in §1.9.
 
 No signing secret is required for a debug APK. No production key is ever printed.
 
@@ -374,11 +411,12 @@ No signing secret is required for a debug APK. No production key is ever printed
 | # | Blocker | Why it matters | What is needed |
 | --- | --- | --- | --- |
 | **B1** | **No JDK/Android SDK here, and Maven/Google hosts are blocked** | the APK cannot be built or verified locally — CI is the only path | accept CI-as-verification, or provide a runner with SDK access |
-| **B2** | **`.github/workflows/**` write permission** — the App installation is documented as lacking `workflows`; GitHub rejected a prior attempt | without it the native pipeline cannot be activated, so **no verified APK is possible at all** | a maintainer promotes `docs/android-workflow-native.yml` (one `cp` + commit), or grants the App `Workflows: write` |
-| **B3** | **Push authorization** | the master prompt says do not push without explicit authorization | explicit go-ahead to push this branch and open a PR |
-| **B4** | **Capacitor wrapper retirement** | it is the current "Android app" and violates the prohibition on WebView wrappers, but retiring it touches 6+ files and 5 tests | approval to retire it now, later (Phase G end), or never |
+| ~~B2~~ | ~~workflow write permission~~ | **RESOLVED** — the workflow permission claim was wrong (the underlying error was a branch-not-found 404). The native pipeline was pushed and runs. | — |
+| ~~B3~~ | ~~push authorization~~ | **RESOLVED** — the user authorized pushing this branch and opening a PR ([#77](https://github.com/mahakali108/Maharani-mart/pull/77)). | — |
+| ~~B4~~ | ~~Capacitor retirement~~ | **RESOLVED** — retired in one reviewable change; two tests now guard against it coming back. | — |
 | **B5** | **No live backend credentials in CI** | RLS/authorization/stock concurrency can only be *unit*-tested, never integration-tested | a staging Supabase project + credentials, or accept unit-only evidence |
-| **B6** | **Scope** | Phases C–G are ~90 % of the product and cannot be finished in one session | prioritisation of which phase(s) this session should carry |
+| **B6** | **Scope** | Phases D–G are ~90 % of the product and cannot be finished in one session | acknowledged as out of scope for this session |
+| **B7** | **The Android build has still never gone green** | every claim about the Kotlin compiling, the tests passing or an APK existing rests on a pipeline that has not yet succeeded | keep iterating on CI; do not claim Phase B/C as *verified* until a run is read back green |
 
 ---
 
@@ -389,14 +427,14 @@ against the master prompt's criteria:
 
 | Criterion | Status |
 | --- | --- |
-| Genuine native Kotlin/Compose app | **PARTIAL** — real native source exists, never compiled |
+| Genuine native Kotlin/Compose app | **PARTIAL** — real native source exists; compiles only once CI configuration succeeds |
 | Verified package id `com.maharanitraders.app` | **NOT VERIFIED** (declared in Gradle + manifest; never asserted by a build) |
-| Real authenticated backend integration | **NOT STARTED** on Android (auth endpoints are Phase C) |
+| Real authenticated backend integration | **PARTIAL** — the endpoints exist and are contract-tested (35 tests); the Android client is written but **never executed** |
 | Server-enforced role permissions | **PASS (web)** — RLS + `middleware.ts` + `requireMobileSession`; Android side not started |
 | Catalog/cart/checkout/orders on Android | **NOT STARTED** |
 | Server-authoritative totals + safe stock | **PASS (backend, 0054)**; no Android client yet |
 | Staff/admin flows on Android | **NOT STARTED** |
-| Automated tests with honest limits | **PARTIAL** — 1,826 web tests pass; **zero** Kotlin tests have ever run |
+| Automated tests with honest limits | **PARTIAL** — 1,862 web tests pass; **zero** Kotlin tests have ever run |
 | Android lint + Gradle results | **NOT VERIFIED** |
 | Verified non-empty APK from Actions | **NOT VERIFIED** — blocked by B1/B2 |
 | Build/troubleshooting docs | **PASS** (this file + the three companion docs) |

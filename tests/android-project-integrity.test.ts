@@ -220,3 +220,21 @@ describe('Android project integrity', () => {
     expect(networkModule).not.toMatch(/HttpLoggingInterceptor|sslSocketFactory|hostnameVerifier/);
   });
 });
+
+describe('Android toolchain pins stay consistent', () => {
+  it('pins the KGP classpath to the same Kotlin version as the catalog', () => {
+    // AGP 9's built-in Kotlin brings KGP 2.2.10 unless it is raised explicitly.
+    // The Compose compiler plugin and the serialization plugin are KGP plugins
+    // and must match the compiler exactly, so the two declarations of the Kotlin
+    // version have to agree or the build fails in a confusing way.
+    const catalog = readFileSync(join(ANDROID, 'gradle', 'libs.versions.toml'), 'utf8');
+    const rootBuild = readFileSync(join(ANDROID, 'build.gradle.kts'), 'utf8');
+
+    const catalogKotlin = /^kotlin = "([^"]+)"/m.exec(catalog)?.[1];
+    expect(catalogKotlin).toBeTruthy();
+
+    const classpathKotlin =
+      /classpath\("org\.jetbrains\.kotlin:kotlin-gradle-plugin:([^"]+)"\)/.exec(rootBuild)?.[1];
+    expect(classpathKotlin).toBe(catalogKotlin);
+  });
+});

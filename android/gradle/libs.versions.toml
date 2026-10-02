@@ -5,9 +5,11 @@
 #    AGP 9.0.1 compatibility table plus Google Play's 2026 API-36 requirement.
 #  - Kotlin 2.4.20 is within JetBrains' published Gradle/AGP compatibility range
 #    for Gradle 9.1.0 and AGP 9.0.1; KSP 2.3.10 is its published quickstart pairing.
-#    `android.builtInKotlin=false` opts out of AGP 9's built-in plugin while this
-#    project continues to use the explicitly versioned Kotlin Android plugin.
-#  - Hilt 2.59.1, Retrofit 3.0.0, OkHttp 5.3.2, Compose 1.10.3 / Material3
+#    AGP 9's built-in Kotlin is used (the `org.jetbrains.kotlin.android` plugin is
+#    NOT compatible with AGP 9's new DSL), so this version is also pinned as the
+#    KGP classpath in `android/build.gradle.kts` — the two must stay in step
+#    (asserted by tests/android-project-integrity.test.ts).
+#  - Hilt 2.60.1, Retrofit 3.0.0, OkHttp 5.3.2, Compose 1.10.3 / Material3
 #    1.4.0, coroutines 1.10.2, and serialization 1.10.0 are pinned below.
 #  - Compose is intentionally NOT on the newest BOM: Compose 1.12 / BOM 2026.08+
 #    raises compileSdk to 37, which AGP 9.0.1 (max API 36.1) does not support.
@@ -109,7 +111,6 @@ androidx-test-espresso = { module = "androidx.test.espresso:espresso-core", vers
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
