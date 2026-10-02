@@ -14,6 +14,7 @@ sections, not their contracts):
 - `docs/NATIVE_ANDROID_MIGRATION_AUDIT.md` — endpoint-by-endpoint page classification
 - `docs/NATIVE_ANDROID_API_CONTRACT.md` — the `/api/mobile/v1` contract
 - `docs/NATIVE_ANDROID_MIGRATION_PLAN.md` — the Phase A–H plan from the earlier session
+- `docs/ANDROID_RELEASE_CHECKLIST.md` — the Phase H release gate list (nothing in it is done yet)
 
 ---
 
@@ -268,6 +269,7 @@ from here, and the annotations and the PR comment carry the parts of it that mat
 | 36999776341 | `89d3651` | `:core:auth:testDebugUnitTest` | the scheduler fix passed: 13 of 14 tests now run. The last failure is row 11 — an invented wire code in a test double, which on inspection also proved a real 401-mapping hole |
 | 37000825729 | `69f67d0` | `:app:hiltJavaCompileDebug` **and** `:feature:auth:testDebugUnitTest` | row 11 fixed and passed — `:core:auth` and `:core:network` test tasks are green. Two new layers surfaced: the Phase C DI cycle (row 12) and the register-area hole (row 13) |
 | **37002008747** | **`37f974d`** | **nothing — the Android job passed** | **FIRST GREEN ANDROID RUN.** Every source file compiled, the project's JUnit suites passed, `lintDebug` ran, `assembleDebug` produced an APK, and the pipeline's own identity step (`aapt dump badging` + `grep -F "package: name='com.maharanitraders.app'"` under `set -euo pipefail`) succeeded — so the package id, the test results, and the artifact are all asserted by the build, not by this document. Artifact `maharani-traders-debug-apk` = **13,710,210 bytes** (non-empty; artifact listing read back through the Actions API). The probe scaffolding was removed afterwards in its own commit, and the run after that is the one to trust for 'green without scaffolding' |
+| **37003248313** | **`4b2fe64`** | **nothing — the Android job passed with the scaffolding removed** | Green *without* the probes: same compile, same JUnit suites, same `aapt` package-id assertion, `maharani-traders-debug-apk` again 13,710,210 bytes, and the check annotations now carry only Gradle's own notices. This is the run the project's green status rests on |
 
 ## 2. What already works
 
@@ -453,7 +455,7 @@ and a safe fallback when no banner is active.
 ### Phase H — Hardening & release
 
 Compose UI tests, offline/timeout/timeout-unknown matrix, accessibility pass, performance
-pass, `abortOnError = true`, release checklist, signing guidance, Play Store prerequisites.
+pass, `abortOnError = true`, signing guidance, Play Store prerequisites. The gate list itself is `docs/ANDROID_RELEASE_CHECKLIST.md`, written now so the distance to a release is stated rather than implied.
 
 ### Retirement (only with explicit approval, in one reviewable change)
 
