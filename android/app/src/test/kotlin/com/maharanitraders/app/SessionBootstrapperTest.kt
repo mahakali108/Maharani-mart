@@ -1,5 +1,7 @@
 package com.maharanitraders.app
 
+import com.maharanitraders.core.auth.RegistrationRequest
+import com.maharanitraders.core.auth.RegistrationResult
 import com.maharanitraders.core.auth.SessionController
 import com.maharanitraders.core.auth.SessionState
 import com.maharanitraders.core.auth.SignOutReason
@@ -70,4 +72,13 @@ internal class FakeSessionController : SessionController {
   }
 
   override fun accessToken(): String? = null
+
+  // Phase C added these to SessionController. This double is used by the bootstrap
+  // test only, so they throw rather than pretend: an unqualified success would let a
+  // future test depend on a stub that never touched the server.
+  override suspend fun signIn(identifier: String, password: String): SessionState =
+    throw UnsupportedOperationException("the bootstrap test never signs in")
+
+  override suspend fun registerRetailer(request: RegistrationRequest): RegistrationResult =
+    throw UnsupportedOperationException("the bootstrap test never registers a retailer")
 }

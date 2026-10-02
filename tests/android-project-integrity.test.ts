@@ -364,7 +364,7 @@ describe('Android build scripts stay executable', () => {
       const mapOnAppResult = /executeEnvelope\s*\{[^{}]*\}\s*\.\s*map\s*[({]/.test(source);
       const needsImport = [
         ...(mapOnAppResult ? ['map'] : []),
-        ...helpers.filter((h) => new RegExp(`\\.${h}\\s*[({]`).test(source)),
+        ...helpers.filter((h) => [`.${h}(`, `.${h} {`].some((call) => source.includes(call))),
       ];
       for (const helper of needsImport) {
         if (!source.includes(`com.maharanitraders.core.common.${helper}`)) {
@@ -473,6 +473,181 @@ describe('Android design tokens resolve', () => {
       }
     }
     expect([...missing].sort()).toEqual([]);
+  });
+});
+
+describe('Android test doubles keep up with the main sources', () => {
+  // WHY: the first run that compiled test sources failed twice in the same way.
+  // `SessionManager` gained an `authRepository` constructor parameter and
+  // `SessionController` gained `signIn`/`registerRetailer`; `:core:auth` reported
+  // "No value passed for parameter 'authRepository'" and "Class 'FakeMaharaniApi'
+  // is not abstract and does not implement abstract members". `:app`'s
+  // FakeSessionController was one compile away from the identical failure. Both are
+  // decidable from the sources, so they are decided here rather than in CI.
+  const mainSources = () => kotlinFiles().filter((f) => f.includes('/src/main/'));
+  const testSources = () => kotlinFiles().filter((f) => f.includes('/src/test/'));
+
+  /** Every project interface declared in main sources: name -> required members. */
+  function projectInterfaces(): Map<string, { members: string[]; file: string }> {
+    const found = new Map<string, { members: string[]; file: string }>();
+    for (const file of mainSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/\binterface\s+(\w+)/g)) {
+        const braceAt = source.indexOf('{', match.index);
+        if (braceAt === -1) continue;
+        let depth = 0;
+        let end = braceAt;
+        for (; end < source.length; end += 1) {
+          if (source[end] === '{') depth += 1;
+          else if (source[end] === '}') {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+        }
+        const body = source.slice(braceAt + 1, end);
+        const members = [
+          ...body.matchAll(/^\s*(?:suspend\s+|override\s+)*(?:val|var|fun)\s+(\w+)/gm),
+        ].map((m) => m[1]!);
+        found.set(match[1]!, { members: [...new Set(members)], file: relative(ROOT, file) });
+      }
+    }
+    return found;
+  }
+
+  /** Splits an argument list on top-level commas only. */
+  function splitArguments(source: string, open: number): string[] | null {
+    let depth = 0;
+    const parts: string[] = [];
+    let current = '';
+    for (let i = open; i < source.length; i += 1) {
+      const char = source[i];
+      // A comment is not an argument: skip it entirely, or its text (and the
+      // commas inside it) would end up glued to the argument that follows.
+      if (char === '/' && source[i + 1] === '/') {
+        const eol = source.indexOf('\n', i);
+        i = (eol === -1 ? source.length : eol) - 1;
+        continue;
+      }
+      if (char === '(' || char === '[' || char === '{') {
+        depth += 1;
+        if (depth === 1) continue; // the call's own opening bracket
+      } else if (char === ')' || char === ']' || char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          parts.push(current);
+          return parts;
+        }
+      } else if (char === ',' && depth === 1) {
+        parts.push(current);
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+    return null;
+  }
+
+  /** Required (no-default) constructor parameters of every main-source class. */
+  function requiredConstructorParameters(): Map<string, { params: string[]; file: string }> {
+    const found = new Map<string, { params: string[]; file: string }>();
+    for (const file of mainSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/\bconstructor\s*\(/g)) {
+        const head = source.slice(Math.max(0, match.index - 400), match.index);
+        const className = [...head.matchAll(/class\s+(\w+)/g)].pop()?.[1];
+        if (!className) continue;
+        const args = splitArguments(source, source.indexOf('(', match.index));
+        if (!args) continue;
+        const required = args
+          .map((arg) => arg.trim())
+          .filter((arg) => arg.length > 0 && !arg.includes('='))
+          .map((arg) => /(?:val|var)?\s*(\w+)\s*:/.exec(arg)?.[1])
+          .filter((name): name is string => Boolean(name));
+        const existing = found.get(className);
+        found.set(className, {
+          params: [...new Set([...(existing?.params ?? []), ...required])],
+          file: existing?.file ?? relative(ROOT, file),
+        });
+      }
+    }
+    return found;
+  }
+
+  it('implements every member of every project interface a test double claims', () => {
+    const interfaces = projectInterfaces();
+    expect(interfaces.size).toBeGreaterThan(5);
+
+    const offenders: string[] = [];
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/class\s+(\w+)\s*(?:\([^)]*\))?\s*:\s*([\w.]+)/g)) {
+        const className = match[1]!;
+        const interfaceName = match[2]!.split('.').pop()!;
+        const declaration = interfaces.get(interfaceName);
+        if (!declaration) continue;
+        const missing = declaration.members.filter(
+          (member) =>
+            !(
+              source.includes(`fun ${member}(`) ||
+              source.includes(`fun ${member} (`) ||
+              source.includes(`val ${member}:`) ||
+              source.includes(`val ${member} `) ||
+              source.includes(`var ${member}:`)
+            ),
+        );
+        if (missing.length > 0) {
+          offenders.push(
+            `${className} : ${interfaceName} — missing ${missing.join(', ')} (interface in ${declaration.file}; double in ${relative(ROOT, file)})`,
+          );
+        }
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it('passes every required constructor parameter at every test call site', () => {
+    const constructors = requiredConstructorParameters();
+    expect(constructors.size).toBeGreaterThan(5);
+
+    const offenders: string[] = [];
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const [className, { params, file: declarationFile }] of constructors) {
+        if (params.length === 0) continue;
+        let from = 0;
+        for (;;) {
+          const at = source.indexOf(`${className}(`, from);
+          if (at === -1) break;
+          from = at + 1;
+          // A class name inside a longer identifier is not a call.
+          const before = at === 0 ? ' ' : source[at - 1]!;
+          if (/[A-Za-z0-9_]/.test(before)) continue;
+          const args = splitArguments(source, at + className.length);
+          if (!args) continue;
+          // A trailing comma leaves an empty final part, and a comment between
+          // arguments is not an argument at all; neither should stop the check.
+          const effective = args
+            .map((arg) => arg.trim())
+            .filter((arg) => arg.length > 0 && !arg.startsWith('//'));
+          // Only judge argument lists that use named arguments throughout: a call
+          // that passes positionally is not decidable without types.
+          const named = effective.map((arg) => {
+            const eq = arg.indexOf('=');
+            if (eq <= 0) return undefined;
+            const name = arg.slice(0, eq).trim();
+            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : undefined;
+          });
+          if (named.some((name) => !name)) continue;
+          const missing = params.filter((param) => !named.includes(param));
+          if (missing.length > 0) {
+            offenders.push(
+              `${className}(…) omits ${missing.join(', ')} (class in ${declarationFile}; call in ${relative(ROOT, file)})`,
+            );
+          }
+        }
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
   });
 });
 

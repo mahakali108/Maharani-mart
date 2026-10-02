@@ -6,10 +6,20 @@ import com.maharanitraders.core.model.SessionTokens
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.ApiErrorMapper
 import com.maharanitraders.core.network.MaharaniApi
-import com.maharanitraders.core.network.dto.ApiEnvelope
 import com.maharanitraders.core.network.dto.AccessDto
+import com.maharanitraders.core.network.dto.AckDto
+import com.maharanitraders.core.network.dto.ApiEnvelope
+import com.maharanitraders.core.network.dto.AreasDto
+import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.HealthDto
+import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.NavigationDto
+import com.maharanitraders.core.network.dto.PasswordResetRequestDto
+import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
+import com.maharanitraders.core.network.dto.RefreshRequestDto
+import com.maharanitraders.core.network.dto.RefreshSessionDto
+import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
+import com.maharanitraders.core.network.dto.RegisterRetailerResponseDto
 import com.maharanitraders.core.network.dto.RetailerDto
 import com.maharanitraders.core.network.dto.SessionDto
 import com.maharanitraders.core.network.dto.SessionUserDto
@@ -47,13 +57,21 @@ class SessionManagerTest {
     api: FakeMaharaniApi,
     store: FakeTokenStore,
     now: Long = 1_000_000,
-  ): SessionManager = SessionManager(
-    api = api,
-    tokenStore = store,
-    executor = ApiCallExecutor(ApiErrorMapper(Json { ignoreUnknownKeys = true }), dispatcher),
-    mapper = SessionMapper(),
-    timeSource = FakeTimeSource(now),
-  )
+  ): SessionManager {
+    val executor = ApiCallExecutor(ApiErrorMapper(Json { ignoreUnknownKeys = true }), dispatcher)
+    val timeSource = FakeTimeSource(now)
+    return SessionManager(
+      api = api,
+      tokenStore = store,
+      executor = executor,
+      mapper = SessionMapper(),
+      timeSource = timeSource,
+      // Phase C gave SessionManager an AuthRepository so that sign-out can revoke
+      // the refresh token server-side. This test is about the session lifecycle, so
+      // the repository is wired to the same fakes and never exercised here.
+      authRepository = AuthRepository(api = api, executor = executor, timeSource = timeSource),
+    )
+  }
 
   private fun validTokens(expiresAt: Long = 2_000_000) = SessionTokens(
     accessToken = "access-token-1",
@@ -348,4 +366,29 @@ class FakeMaharaniApi : MaharaniApi {
     sessionCalls += 1
     return nextResult()
   }
+
+  // Phase C added these endpoints to MaharaniApi. Only `session()` is reachable
+  // from the code under test; the rest exist because an interface implementation
+  // has to name every member, and they throw rather than return a fabricated
+  // envelope so that a test which accidentally depends on one fails loudly.
+  override suspend fun login(body: LoginRequestDto): ApiEnvelope<AuthSessionDto> = unsupported("login")
+
+  override suspend fun refresh(body: RefreshRequestDto): ApiEnvelope<RefreshSessionDto> = unsupported("refresh")
+
+  override suspend fun logout(): ApiEnvelope<AckDto> = unsupported("logout")
+
+  override suspend fun requestPasswordReset(body: PasswordResetRequestDto): ApiEnvelope<AckDto> =
+    unsupported("requestPasswordReset")
+
+  override suspend fun updatePassword(body: PasswordUpdateRequestDto): ApiEnvelope<AckDto> =
+    unsupported("updatePassword")
+
+  override suspend fun areas(): ApiEnvelope<AreasDto> = unsupported("areas")
+
+  override suspend fun registerRetailer(
+    body: RegisterRetailerRequestDto,
+  ): ApiEnvelope<RegisterRetailerResponseDto> = unsupported("registerRetailer")
+
+  private fun unsupported(endpoint: String): Nothing =
+    throw UnsupportedOperationException("$endpoint is not used by the session layer")
 }
