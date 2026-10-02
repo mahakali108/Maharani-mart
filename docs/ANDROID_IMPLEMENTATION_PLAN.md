@@ -162,17 +162,55 @@ discoverable by reading the source**:
 | # | Symptom | Root cause | Fix |
 | --- | --- | --- | --- |
 | 1 | Dependency resolution failed in every module using the icon library | `androidx.compose.material:material-icons-*` was **deprecated and stopped being published** after 1.7.x, so `version.ref = "composeUi"` (1.10.3) pointed at a version that does not exist. Material3 1.4.0 no longer pulls `material-icons-core` in implicitly. | catalog entry deleted, dependency removed from `:app` and `:feature:auth`; the single glyph is now a locally drawn `MenuIcon` (48 dp target, TalkBack label) |
-| 2 | `A problem occurred configuring project ':app'` → `Failed to notify project evaluation listener` → **`project ':app' does not specify compileSdk`** + **`no com.google.dagger:hilt-android dependency was found`** | both messages were **false** — `compileSdk` and `implementation(libs.hilt.android)` are both in `android/app/build.gradle.kts`. **AGP 9's new DSL expresses the SDK level as a spec (`compileSdk { version = release(36) }`); the older `compileSdk = 36` assignment is a deprecated no-op there**, so AGP genuinely saw no SDK level and Hilt's dependency check cascaded off the same broken model. | every module moved to the spec form. Hilt was also raised 2.59.1 → **2.60.1**, because 2.59.x verified the dependency through the retired `android-classes` transform (`google/dagger#5099`, `#5116`) — a real second bug, but **not** the cause of this message |
+| 2 | `A problem occurred configuring project ':app'` → `Failed to notify project evaluation listener` → **`project ':app' does not specify compileSdk`** + **`no com.google.dagger:hilt-android dependency was found`** | both messages are **false** — `compileSdk` and `implementation(libs.hilt.android)` are both in `android/app/build.gradle.kts`. AGP's own API reference documents `compileSdk` as a plain settable `Int?` property *and* as a `compileSdk(action)` overload, so neither spelling can be rejected by the DSL; the module script is valid Kotlin either way. AGP nevertheless reads an unset extension at the end of evaluation and Hilt's dependency check cascades off the same broken model. **Root cause unidentified** — see “Row 2 is still open”. | **still open** — see “Row 2 is still open” below. Hilt was raised 2.59.1 → **2.60.1** independently, because 2.59.x verified the dependency through the retired `android-classes` transform (`google/dagger#5099`, `#5116`): a real second bug, and one worth fixing on its own, but not the cause of this message |
 | 3 | `Failed to apply plugin 'org.jetbrains.kotlin.android'` → *"not compatible with AGP's 9.0 new DSL"* | AGP 9's new DSL (the default) **cannot host the `kotlin-android` plugin at all**. | migrated to **built-in Kotlin**: `org.jetbrains.kotlin.android` removed from all 8 modules, the root build file and the catalog; AGP compiles Kotlin itself. `kotlin { compilerOptions { jvmTarget } }` stays (it is the documented replacement for `android.kotlinOptions`), and KGP is raised from AGP's default 2.2.10 to the catalog's 2.4.20 via the documented `buildscript` classpath, because the Compose and serialization plugins are KGP plugins and must match the compiler exactly |
 
 **A correction worth recording.** Row 2 was first attributed to `android.newDsl=false`, and the legacy
-opt-out was removed on that basis. It was the wrong diagnosis: the same error came back with
-`newDsl` at its default, which is what pointed at the `compileSdk` *syntax* instead. `newDsl=false`
-was still not the right setting — it just was not this bug.
+opt-out was removed on that basis. That was wrong: the same error came back with `newDsl` at its
+default. It was then attributed to the `compileSdk` *syntax* — the assumption that AGP 9's new DSL
+rejects `compileSdk = 36` and needs `compileSdk { version = release(36) }`. **That was wrong too.**
+The spec form is what the modules carry today and the message arrived unchanged; AGP's own API
+reference has `compileSdk` as a plain settable `Int?` property *and* a `compileSdk(action)` overload,
+so neither spelling is a syntax error. Both diagnoses are retracted. Nothing about `newDsl`,
+`builtInKotlin`, `kotlin-android` or the `compileSdk` spelling explains this message.
+
+### Row 2 is still open (as of 2026-10-02)
+
+What is actually known, all of it from CI rather than from reading source:
+
+- The message is **behavioural, not syntactic**. Four configurations produce it identically:
+  `newDsl=false` + `kotlin-android`; default new DSL + `kotlin-android` (which additionally fails to
+  apply); built-in Kotlin with the KGP classpath pin; built-in Kotlin with the `compileSdk` spec form.
+- It is a **cascade**, not the root failure: `A problem occurred configuring project ':app'` →
+  `Failed to notify project evaluation listener` → the `compileSdk` line → the Hilt
+  “no hilt-android dependency” line. In the AGP 9 migration reports of other projects
+  (e.g. `flutter/flutter#181383`, `fluttercommunity/plus_plugins#3745`) the same `compileSdk`
+  message appears *after* an unrelated plugin fails to apply, in projects where `compileSdk` is
+  demonstrably set. It reads as a follow-on error from a broken evaluation, not a description of
+  the script.
+- A project-model probe running in CI (`inspectExtension`, emitted as annotations from its own
+  step, because Actions caps `::error::` annotations at about ten per step) reports
+  `PROBE project=:app androidExtension=…ApplicationExtensionImpl$AgpDecorated_Decorated` — AGP **is**
+  applied to `:app` — while `getCompileSdk()`, `getCompileSdkVersion()` and `getNamespace()` all
+  return `null` for it. The extension exists; the `android {}` block's effects are not on it.
+- The Groovy-shadow-file theory is dead: there is no `build.gradle`/`settings.gradle` anywhere under
+  `android/`, no BOM, no CRLF, and `android/app/build.gradle.kts` braces balance.
+- `android/gradle.properties` carries neither `android.newDsl` nor `android.builtInKotlin`, and there
+  is no `org.jetbrains.kotlin.android` plugin left in any module: the project follows AGP 9 defaults.
+
+The next measurement is script-level: `println` markers at the top of the `android {}` block and
+around it in `android/app/build.gradle.kts` and `android/core/common/build.gradle.kts`. If the
+markers appear, the block runs and the value is being lost afterwards; if they do not, the module
+script is not being evaluated at all. Until that is answered, no further version or flag changes are
+justified — eight consecutive CI runs have now failed this way and none of them produced a single
+Kotlin diagnostic.
 
 `android.builtInKotlin` and `android.newDsl` are now both absent: the project follows AGP 9's
 defaults rather than opting out of them. `tests/android-project-integrity.test.ts` asserts the
-KGP classpath pin and the catalog's Kotlin version cannot drift apart.
+KGP classpath pin and the catalog's Kotlin version cannot drift apart — worth knowing, because
+dropping the pin as an experiment fails that test and takes the whole web job down with it, which
+skips the Android job behind it (`needs: web`) and produces a green-looking no-op instead of a
+signal. Never remove the pin to test a hypothesis.
 
 Two process lessons, both now enforced in the workflow:
 
