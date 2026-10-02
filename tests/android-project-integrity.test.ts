@@ -44,6 +44,78 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const allFiles = () => walk(ANDROID);
 const kotlinFiles = () => allFiles().filter((f) => f.endsWith('.kt'));
+const kotlinOrScriptFiles = () => allFiles().filter((f) => f.endsWith('.kt') || f.endsWith('.kts'));
+
+/**
+ * Lex just enough Kotlin to answer one question: are the block comments in this file
+ * balanced, and does any of them open a *nested* comment?
+ *
+ * Kotlin nests block comments — `/* /* *\/ *\/` — while Java, JavaScript and C# do not.
+ * A doc comment containing a glob such as `/api/mobile/v1/auth/*` therefore does not end
+ * at its own `*\/`: it swallows the rest of the file. The compiler then reports one
+ * "Unclosed comment" at EOF and, far more loudly, an "Unresolved reference" for every
+ * name that file used to declare, which points at innocent importers instead of at the
+ * comment. String and character literals have to be skipped, or a `/*` inside a string
+ * would be counted.
+ */
+function commentDepthProblem(source: string, file = ''): string | null {
+  let i = 0;
+  let line = 1;
+  let depth = 0;
+  let openedAtLine = 0;
+  const newlines = (from: number, to: number) => (source.slice(from, to).match(/\n/g) ?? []).length;
+
+  const skip = (from: number, until: number) => {
+    line += newlines(from, until);
+    return until;
+  };
+
+  while (i < source.length) {
+    const char = source[i]!;
+    const next = source[i + 1] ?? '';
+    if (char === '\n') {
+      line += 1;
+      i += 1;
+      continue;
+    }
+    if (depth === 0) {
+      if (char === '/' && next === '/') {
+        const eol = source.indexOf('\n', i);
+        i = eol === -1 ? source.length : eol;
+      } else if (source.startsWith('"""', i)) {
+        const end = source.indexOf('"""', i + 3);
+        i = skip(i, end === -1 ? source.length : end + 3);
+      } else if (char === '"' || char === "'") {
+        let j = i + 1;
+        while (j < source.length && source[j] !== char && source[j] !== '\n') {
+          if (source[j] === '\\') j += 1;
+          j += 1;
+        }
+        i = skip(i, j + 1);
+      } else if (char === '/' && next === '*') {
+        depth = 1;
+        openedAtLine = line;
+        i += 2;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      return `${file} line ${line}: block comment (opened line ${openedAtLine}) opens another comment — Kotlin nests them, so it will not close here`;
+    }
+    if (char === '*' && next === '/') {
+      depth -= 1;
+      i += 2;
+      continue;
+    }
+    i += 1;
+  }
+  if (depth !== 0) {
+    return `${file} line ${openedAtLine}: block comment is never closed (reaches end of file)`;
+  }
+  return null;
+}
 
 /** `pkg -> set(top-level declaration names)` across every Kotlin source set. */
 function declaredSymbols(): Map<string, Set<string>> {
@@ -222,23 +294,29 @@ describe('Android project integrity', () => {
 });
 
 describe('Android build scripts stay executable', () => {
-  // WHY THESE TWO CHECKS EXIST
+  // WHY THIS CHECK EXISTS
   // Every Android CI run failed with "project ':app' does not specify `compileSdk`"
-  // for a file that sets it, while AGP's model probe showed the extension complete-
-  // ly unset. The build script's body was being cut at its first block comment:
-  // the statements before it ran, everything after it - the whole android {} block,
-  // defaultConfig and dependencies {} - never did, silently. Only :app and
-  // :feature:auth had such a comment before their configuration code, and they
-  // were the two modules that failed.
+  // for a file that plainly sets it, while AGP's own model probe printed the extension
+  // object as non-null with `namespace` and `compileSdk` both null: the script's
+  // `android {}` block had never run, and neither had anything after it. The cause was
+  // in the file's first doc comment, whose text was `/api/mobile/v1/auth/*` — Kotlin
+  // nests block comments, so that `/*` opened a second comment and the outer `*/`
+  // closed the inner one, leaving the comment open to the end of the file. The whole
+  // body became comment text. The statements before the comment still ran — the script
+  // printed its own "plugins applied" marker — which is why the failure looked like an
+  // AGP problem rather than a parse problem.
   const buildScripts = () => walk(ANDROID).filter((f) => f.endsWith('.gradle.kts'));
 
-  it('does not use block comments in a build script that has a plugins block', () => {
+  it('has no Kotlin or Gradle-script block comment that nests or never closes', () => {
+    // The check is a lexer rather than a "no block comments" rule: a normal doc comment
+    // is fine, a doc comment containing `/*` is not, and only a lexer can tell them
+    // apart. It covers sources as well as scripts — `:core:network`'s `AuthDtos.kt` had
+    // the identical defect, which surfaced as twenty-two "Unresolved reference" errors
+    // in `MaharaniApi.kt` and one "Unclosed comment" at its own end of file.
     const offenders: string[] = [];
-    for (const file of buildScripts()) {
-      if (file.endsWith('settings.gradle.kts')) continue; // no plugins block; evaluated today
-      const source = readFileSync(file, 'utf8');
-      if (!/^\s*plugins\s*\{/m.test(source)) continue;
-      if (source.includes('/**') || source.includes('*/')) offenders.push(relative(ROOT, file));
+    for (const file of kotlinOrScriptFiles()) {
+      const problem = commentDepthProblem(readFileSync(file, 'utf8'), relative(ROOT, file));
+      if (problem) offenders.push(problem);
     }
     expect(offenders).toEqual([]);
   });

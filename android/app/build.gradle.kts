@@ -28,7 +28,7 @@ probe("container android=${probedAndroidExtension?.javaClass?.name} identity=${S
 //
 // It is not a secret: no Supabase URL, anon key, service-role key or provider
 // credential is ever shipped in the APK (all authentication is proxied through
-// /api/mobile/v1/auth/*, see docs/NATIVE_ANDROID_API_CONTRACT.md).
+// /api/mobile/v1/auth/…, see docs/NATIVE_ANDROID_API_CONTRACT.md).
 //
 // Override per build without editing this file:
 //   ./gradlew assembleDebug -PmaharaniApiBaseUrl=https://staging.example/

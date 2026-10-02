@@ -165,6 +165,7 @@ discoverable by reading the source**:
 | 2 | `A problem occurred configuring project ':app'` → `Failed to notify project evaluation listener` → **`project ':app' does not specify compileSdk`** + **`no com.google.dagger:hilt-android dependency was found`** | the **build script's body was being cut at its first block comment**. `:app` has a `plugins {}` block, and from the first `/** … */` KDoc onwards nothing executed: not `android {}`, not `defaultConfig`, not `dependencies {}`. Both messages were therefore literally true of the project model — the file sets a namespace, a `compileSdk` and a hilt dependency, and none of them had been applied. `:app` and `:feature:auth` were the only two modules with a block comment before their configuration code, and the only two that failed | block comments in `android/build.gradle.kts`, `android/app/build.gradle.kts` and `android/feature/auth/build.gradle.kts` became line comments, including one place where the comment-opening sequence appeared inside a string literal |
 | 3 | `Failed to apply plugin 'org.jetbrains.kotlin.android'` → *"not compatible with AGP's 9.0 new DSL"* | AGP 9's new DSL (the default) **cannot host the `kotlin-android` plugin at all**. | migrated to **built-in Kotlin**: `org.jetbrains.kotlin.android` removed from all 8 modules, the root build file and the catalog; AGP compiles Kotlin itself. `kotlin { compilerOptions { jvmTarget } }` stays (it is the documented replacement for `android.kotlinOptions`), and KGP is raised from AGP's default 2.2.10 to the catalog's 2.4.20 via the documented `buildscript` classpath, because the Compose and serialization plugins are KGP plugins and must match the compiler exactly |
 | 4 | `:core:common:compileDebugKotlin` → `Unresolved reference 'model'` (7 diagnostics in `AppResult.kt`) | `:core:common` imports `com.maharanitraders.core.model.{ApiErrorCode, AccountGate}` but never declared `implementation(project(":core:model"))`. Nothing had ever compiled this module, so the missing edge was invisible | dependency declared; `tests/android-project-integrity.test.ts` now asserts every cross-module import has a declared project dependency |
+| 5 | `:core:network:compileDebugKotlin` → 22 × `Unresolved reference 'AckDto' / 'AreasDto' / 'LoginRequestDto' / …` in `MaharaniApi.kt`, plus one lone `AuthDtos.kt:117:1 Syntax error: Unclosed comment` | the **same nested-comment defect as row 2, in a source file**: a KDoc in `AuthDtos.kt` contained `/api/mobile/v1/auth/*`, whose `/*` opens a comment inside the comment and never closes. Every declaration in the file became comment text, so the file contributed no symbols and its importer reported the damage | the sentence now reads `/api/mobile/v1/auth/…`; the lexer check added for row 2 covers sources as well as scripts |
 
 **A correction worth recording.** Row 2 was first attributed to `android.newDsl=false`, and the legacy
 opt-out was removed on that basis. That was wrong: the same error came back with `newDsl` at its
@@ -197,11 +198,25 @@ This took twelve CI runs and both earlier diagnoses - `android.newDsl=false`, th
    script run to its last statement - `namespace=com.maharanitraders.app compileSdk=36`, printed by the
    script itself - and the pipeline moved on to a real Kotlin compile for the first time.
 
-The underlying Gradle/Kotlin-DSL mechanism is **not established** - only the observed rule and its fix.
-The two candidate triggers are the block-comment form itself and the non-ASCII characters it
-contained (an em dash and a section sign); both are now absent from every build script, which is cheap
-insurance either way, and `tests/android-project-integrity.test.ts` asserts that no build script with a
-`plugins {}` block contains a block comment again.
+**The mechanism, established one step later** (it cost one more compile to see, because it is the same
+bug in a Kotlin source rather than in a script). Kotlin **nests block comments**, unlike Java, C# and
+JavaScript. `:app`'s KDoc contained the API path `/api/mobile/v1/auth/*`; that `/*` opened a second
+comment, so the closing `*/` ended the *inner* one and the comment stayed open to the end of the file.
+Everything after it - `android {}`, `defaultConfig`, `dependencies {}` - was comment text. A script
+whose body is comment text is not an error: it is a script that declares and does nothing, which is why
+the statements before the comment still ran and their markers still printed. Both messages were
+therefore accurate reports about the project model.
+
+The same defect was still present in `:core:network`'s `AuthDtos.kt`, where the identical sentence
+appears in a KDoc. Kotlin compiles it to *nothing at all*: the file's 8 data classes vanish, and the
+only diagnostic naming the file is `AuthDtos.kt:117:1 Syntax error: Unclosed comment` - the other
+twenty-two are `Unresolved reference` errors in its innocent importer `MaharaniApi.kt`, which is where
+the eye goes first.
+
+So the rule is not "no block comments" (they are fine) and not "no non-ASCII" (an em dash was a
+bystander). It is: **`/*` inside a comment**. `tests/android-project-integrity.test.ts` now lexes every
+`android/**` `.kt` and `.kts` file, skipping string literals, and fails on a nested opener or an
+unclosed comment, naming file and line.
 
 **The real cost of this bug was not the bug.** It was that the failure could not be read. Actions logs
 and artifacts are both served from `*.blob.core.windows.net`, which this environment cannot reach, and
@@ -209,7 +224,34 @@ check annotations are capped at about ten lines per step in an order the API doe
 the job dumped whole sections as single `%0A`-escaped annotations and posted the same bundle as a pull
 request comment, the answer took three runs instead of thirty.
 
----
+### 1.10 Seeing a run from here
+
+The environment this plan is written in cannot read Actions logs: `gh run view --log`, the run's
+downloadable logs and every artifact are served from `*.blob.core.windows.net`, and TLS to that host
+fails here (`SSL_ERROR_SYSCALL`). `api.github.com` is reachable, so the pipeline is instrumented to
+push information through channels that *are* readable:
+
+| Channel | What it carries | Limit |
+| --- | --- | --- |
+| Check annotations (`::error title=…::`) | whole log sections, one annotation each, newlines as `%0A` | ~10 per step; the API does not return them in emission order |
+| Pull-request comment | the same bundle, whole | one comment per run |
+| `android-diagnostics` artifact | the full Gradle log, the probe log, the scripts' own marker file, the environment | only on a green run today (the upload step is `if: success()`) |
+| The build scripts themselves | `PROBE app-script: …` markers after every top-level declaration, written to stdout *and* to `/tmp/app-script-markers.txt` | — |
+
+The `--info`/`--stacktrace` Gradle log inside the job's step output is the only thing not reachable
+from here, and the annotations and the PR comment carry the parts of it that matter.
+
+**Run ledger.** Every run's conclusion, in order, because "it failed" is not a diagnosis:
+
+| Run | HEAD | Where it stopped | What that proved |
+| --- | --- | --- | --- |
+| 8 runs | `1752484` and before | configuration, always the same message | the `compileSdk`/Hilt messages were real reports about an unconfigured model (row 2) |
+| 36989196070 | `14d7f86` | the probe itself | a deprecated API called inside `ProjectEvaluationListener` aborts configuration — the instrument can become the failure |
+| 36990416078 | `c72cc4d` | build-script compile | the marker statements ran but AGP's model was still unset |
+| 36991080306 | `d2d6b58` | build-script compile (markers) | markers stopped at the script's first block comment |
+| **36991877797** | **`486a77a`** | **`:core:common` compile** | **the first real Kotlin compile in the project's history** |
+| 36992660600 | `1aeb13b` | `:core:designsystem` compile | the missing `:core:model` edge was one of a chain, not the chain |
+| 36993403391 | `aa1193c` | `:core:network` compile | row 5 — the same comment defect in `AuthDtos.kt` |
 
 ## 2. What already works
 

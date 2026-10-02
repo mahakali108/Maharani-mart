@@ -7,10 +7,9 @@ plugins {
 
 android {
   namespace = "com.maharanitraders.core.designsystem"
-  // AGP 9's new DSL expresses the SDK level as a spec. The old
-  // `compileSdk = 36` assignment is a deprecated no-op there, which is
-  // why AGP reported "does not specify `compileSdk`" for a file that
-  // plainly set it.
+  // AGP 9's new DSL expresses the SDK level as a spec; it is the documented
+  // replacement for the deprecated `compileSdkVersion(...)`. A CI-only error
+  // once looked like a verdict on this spelling - it was not (plan doc, 1.9).
   compileSdk {
     version = release(36)
   }

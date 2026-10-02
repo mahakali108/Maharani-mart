@@ -3,7 +3,7 @@ package com.maharanitraders.core.network.dto
 import kotlinx.serialization.Serializable
 
 /**
- * Wire models for `/api/mobile/v1/auth/*` and `/api/mobile/v1/retailers/register`
+ * Wire models for `/api/mobile/v1/auth/…` and `/api/mobile/v1/retailers/register`
  * (contract §2.2).
  *
  * Same rules as [SessionDto]: transport shapes only, every optional field
