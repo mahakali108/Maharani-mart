@@ -16,7 +16,9 @@ import retrofit2.HttpException
  * Rules that matter for the migration:
  *  - the server's `error.code` is authoritative (never inferred from the UI);
  *  - an unrecognised code becomes [ApiErrorCode.UNKNOWN] (retryable), so a new
- *    server code can never be mistaken for success;
+ *    server code can never be mistaken for success — except on a 401, where the
+ *    status itself proves the session is dead and UNKNOWN would be a lie that
+ *    keeps a rejected token retrying;
  *  - when the body cannot be parsed, a conservative code for the HTTP status is
  *    used and the raw body is DISCARDED. Server internals (SQL text, hostnames)
  *    must not reach the UI or the logs.
@@ -28,10 +30,29 @@ class ApiErrorMapper @Inject constructor(
 
   fun fromHttp(statusCode: Int, body: String?): AppError {
     val envelope = parseEnvelope(body)
-    val code = envelope?.error?.code?.let { ApiErrorCode.fromWire(it) }
-      ?: fallbackCode(statusCode)
+    val declared = envelope?.error?.code?.let { ApiErrorCode.fromWire(it) }
+    // An UNKNOWN code is retryable by design, so that a newer server can add codes
+    // without an older app treating them as a dead end. A 401 is the one status where
+    // that default is unsafe: the credential material was rejected, whatever the
+    // server chose to call it, and a retryable session error leaves a dead token on
+    // disk (see SessionManager's refresh path). The transport answer is decisive here;
+    // the server's own message is still the one shown.
+    val code = when {
+      declared == ApiErrorCode.UNKNOWN && statusCode == 401 -> ApiErrorCode.INVALID_TOKEN
+      declared != null -> declared
+      else -> fallbackCode(statusCode)
+    }
     val serverMessage = envelope?.error?.message?.takeIf { it.isNotBlank() }
-    return AppError.Api(code = code, message = serverMessage ?: defaultMessage(code))
+    // Only non-blank entries are kept: an empty field message would render as a
+    // blank error under an input.
+    val fieldErrors = envelope?.error?.details?.fields
+      ?.filterValues { it.isNotBlank() }
+      .orEmpty()
+    return AppError.Api(
+      code = code,
+      message = serverMessage ?: defaultMessage(code),
+      fieldErrors = fieldErrors,
+    )
   }
 
   fun fromThrowable(throwable: Throwable): AppError = when (throwable) {

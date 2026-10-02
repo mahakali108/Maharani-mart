@@ -10,8 +10,8 @@
  *   core/datastore            DataStore for NON-SENSITIVE preferences only
  *   core/designsystem         Material 3 theme (brand tokens), state surfaces, money formatting
  *
- * Feature modules are added one per migration phase (feature/auth in Phase C, …),
- * each together with the API endpoints it needs — never as empty scaffolding.
+ * Feature modules are added one per migration phase, each together with the API
+ * endpoints it needs — never as empty scaffolding. Phase C adds :feature:auth.
  */
 pluginManagement {
   repositories {
@@ -38,3 +38,4 @@ include(":core:network")
 include(":core:auth")
 include(":core:datastore")
 include(":core:designsystem")
+include(":feature:auth")

@@ -1,62 +1,49 @@
-# Android/Capacitor compatibility audit
+# Android/Capacitor compatibility audit — SUPERSEDED
 
-Performed before any files were changed, per the request. Findings:
+> **This document is obsolete and is kept only for history.**
+>
+> It concluded that a **Capacitor remote-URL WebView wrapper** was the correct
+> Android approach. That conclusion has been **reversed**: the project
+> requirement is a real native Android application, and a WebView shell that
+> loads the production website is explicitly not acceptable as the app.
+>
+> The wrapper has now been **retired** — `capacitor.config.ts`, `www/`,
+> `scripts/android-postsync.mjs`, `scripts/android-resource-validation.mjs`,
+> the `cap:*` npm scripts and the `@capacitor/*` dependencies are gone, and the
+> active CI workflow builds the native project.
 
-## 1. Static export is not viable
+**Read instead:**
 
-`next.config.mjs` has no `output: 'export'`, and this project makes
-heavy, structural use of things that cannot run as static files with
-no server behind them:
+| Document | Purpose |
+| --- | --- |
+| [`docs/ANDROID_IMPLEMENTATION_PLAN.md`](docs/ANDROID_IMPLEMENTATION_PLAN.md) | current audit, verified state, risks, file-by-file plan, honest status |
+| [`docs/NATIVE_ANDROID_API_CONTRACT.md`](docs/NATIVE_ANDROID_API_CONTRACT.md) | the `/api/mobile/v1` contract the app uses |
+| [`docs/NATIVE_ANDROID_MIGRATION_AUDIT.md`](docs/NATIVE_ANDROID_MIGRATION_AUDIT.md) | feature-by-feature page classification |
+| [`docs/NATIVE_ANDROID_MIGRATION_PLAN.md`](docs/NATIVE_ANDROID_MIGRATION_PLAN.md) | phases A–H and toolchain evidence |
 
-- **Server Actions** — every `'use server'` file under `lib/**`
-  (`lib/auth/actions.ts`, `lib/retailer/checkout-actions.ts`,
-  `lib/admin/*-actions.ts`, etc.) — these execute on the server, not
-  in the browser.
-- **`middleware.ts`** — runs on every request to enforce role-based
-  routing, retailer approval gating, and session refresh. Middleware
-  does not run at all in a static export.
-- **`lib/supabase/server.ts`** — cookie-based session handling via
-  `next/headers`, plus a service-role admin client used for
-  server-only operations (e.g. staff account creation). Both require
-  a live Node server process.
-- Numerous Server Components doing live Supabase queries per request
-  (e.g. `app/retailer/catalog/page.tsx`, all of `app/admin/**`).
+---
 
-Attempting `output: 'export'` on this codebase would either fail the
-build outright or silently break authentication, all server actions,
-and most data fetching.
+## Why the original analysis was still partly right
 
-## 2. Conclusion: remote-URL Capacitor wrapper
+Three findings in this file remain valid and are preserved:
 
-Since the app is already deployed and working at
-`https://maharani-mart-one.vercel.app`, the correct approach is a
-Capacitor **remote-URL wrapper** — a native Android shell whose
-WebView loads that live URL directly, via `server.url` in
-`capacitor.config.ts`. This:
+1. **`next.config.mjs` has no `output: 'export'`, and the app is structurally
+   server-dependent** — Server Components, 40+ `'use server'` modules,
+   `middleware.ts`, and `lib/supabase/server.ts`'s cookie sessions plus a
+   service-role admin client. A *bundled static export inside a WebView* is not
+   viable. That is still true, and it is exactly why the native app uses the
+   server's HTTP API (`/api/mobile/v1`) rather than bundling the site.
+2. **No brand logo/icon asset existed at the time.** The launcher icons now
+   committed under `android/app/src/main/res/mipmap-*` are the app's real icons.
+3. **Back-button behaviour must be handled natively.** In the native app this is
+   ordinary Navigation Compose back handling — no `WebView.canGoBack()` shim.
 
-- Requires zero changes to the Next.js app, its routes, Supabase
-  usage, or the Vercel deployment.
-- Gets every feature "for free" exactly as it works on the web
-  (login, RLS-governed queries, server actions, etc.) since it's
-  literally the same server-rendered site, just inside a native app
-  shell instead of a mobile browser tab.
+## What was wrong
 
-## 3. No existing logo/icon asset
-
-Searched the entire repository (`find . -iname "*.svg" -o -iname
-"*.png" -o -iname "*.jpg" -o -iname "*.ico"`, excluding
-`node_modules`) — **zero image assets exist anywhere**, including
-`public/logos/` (contains only a `.gitkeep`). Per instruction, no
-brand logo was invented. The debug APK will use Capacitor's default
-placeholder launcher icon until a real logo file is provided — see
-the main report for what's needed to wire in a real one.
-
-## 4. Everything else already works via the live site
-
-Login, Supabase auth, retailer/admin/staff role routing, catalog,
-product detail, cart, checkout, orders, alerts, and banners are all
-existing, already-deployed features of the production site — since
-the wrapper loads that site directly, none of them needed any
-Android-specific code. What *did* need Android-specific handling
-(back-button behavior) is implemented natively in `MainActivity.java`
-by the GitHub Actions workflow — see `.github/workflows/android-apk.yml`.
+The jump from "static export is not viable" to "therefore embed the live website
+in a WebView" treated *the website in a shell* as equivalent to *a native app*.
+It is not: it ships a browser chrome experience, cannot use native navigation,
+notifications, camera or file pickers properly, and cannot be reviewed as a real
+Android application. The correct path — a native client over a versioned,
+authenticated HTTP API, reusing the same Supabase database, RLS policies and
+server-side business rules — is what the project now does.

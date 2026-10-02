@@ -3,13 +3,24 @@ package com.maharanitraders.core.auth
 import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.common.TimeSource
 import com.maharanitraders.core.model.SessionTokens
+import com.maharanitraders.core.network.ActiveTokenHolder
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.ApiErrorMapper
 import com.maharanitraders.core.network.MaharaniApi
-import com.maharanitraders.core.network.dto.ApiEnvelope
 import com.maharanitraders.core.network.dto.AccessDto
+import com.maharanitraders.core.network.dto.AckDto
+import com.maharanitraders.core.network.dto.ApiEnvelope
+import com.maharanitraders.core.network.dto.AreasDto
+import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.HealthDto
+import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.NavigationDto
+import com.maharanitraders.core.network.dto.PasswordResetRequestDto
+import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
+import com.maharanitraders.core.network.dto.RefreshRequestDto
+import com.maharanitraders.core.network.dto.RefreshSessionDto
+import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
+import com.maharanitraders.core.network.dto.RegisterRetailerResponseDto
 import com.maharanitraders.core.network.dto.RetailerDto
 import com.maharanitraders.core.network.dto.SessionDto
 import com.maharanitraders.core.network.dto.SessionUserDto
@@ -28,16 +39,21 @@ import retrofit2.HttpException
 import retrofit2.Response
 
 /**
- * Session lifecycle contract for Phase B.
+ * Session lifecycle contract (Phase C).
  *
  * What is asserted:
  *  - no network call at all without a stored, unexpired token;
+ *  - an expired access token is refreshed exactly once and the session re-verified;
+ *  - a refresh the server rejects clears storage and signs the user out, while a
+ *    transient (network/5xx) failure keeps the stored tokens for the next launch;
  *  - a 401 clears stored tokens (the app can never keep retrying a dead session);
  *  - account gates keep tokens (recoverable) while suspension clears them;
  *  - transient failures keep the session and surface a retryable state;
  *  - the in-memory token handed to the interceptor is cleared on sign-out.
  *
- * Token REFRESH is deliberately absent: it is Phase C, together with sign-in.
+ * Every test passes the shared `dispatcher` to `runTest` so the test body and the
+ * code under test run on ONE TestCoroutineScheduler; two schedulers would make
+ * `advanceUntilIdle()` throw "Detected use of different schedulers".
  */
 class SessionManagerTest {
 
@@ -47,13 +63,25 @@ class SessionManagerTest {
     api: FakeMaharaniApi,
     store: FakeTokenStore,
     now: Long = 1_000_000,
-  ): SessionManager = SessionManager(
-    api = api,
-    tokenStore = store,
-    executor = ApiCallExecutor(ApiErrorMapper(Json { ignoreUnknownKeys = true }), dispatcher),
-    mapper = SessionMapper(),
-    timeSource = FakeTimeSource(now),
-  )
+  ): SessionManager {
+    val executor = ApiCallExecutor(ApiErrorMapper(Json { ignoreUnknownKeys = true }), dispatcher)
+    val timeSource = FakeTimeSource(now)
+    return SessionManager(
+      api = api,
+      tokenStore = store,
+      executor = executor,
+      mapper = SessionMapper(),
+      timeSource = timeSource,
+      // Phase C gave SessionManager an AuthRepository so that sign-out can revoke
+      // the refresh token server-side. This test is about the session lifecycle, so
+      // the repository is wired to the same fakes and never exercised here.
+      authRepository = AuthRepository(api = api, executor = executor, timeSource = timeSource),
+      // The same holder the interceptor reads: `session.accessToken()` and the
+      // Authorization header can never disagree, which is what the token tests
+      // below rely on.
+      tokenHolder = ActiveTokenHolder(),
+    )
+  }
 
   private fun validTokens(expiresAt: Long = 2_000_000) = SessionTokens(
     accessToken = "access-token-1",
@@ -93,7 +121,7 @@ class SessionManagerTest {
     )
 
   @Test
-  fun `never calls the network when there is no stored session`() = runTest {
+  fun `never calls the network when there is no stored session`() = runTest(dispatcher) {
     val api = FakeMaharaniApi()
     val store = FakeTokenStore(initial = null)
     val session = manager(api, store)
@@ -106,20 +134,75 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `an expired stored token is cleared without a network call`() = runTest {
-    val api = FakeMaharaniApi()
+  fun `an expired access token is refreshed once, then the session is verified`() = runTest(dispatcher) {
+    // Phase B cleared an expired token on sight. Phase C refreshes it, so the
+    // user keeps working through an ordinary access-token expiry.
+    val api = FakeMaharaniApi().apply {
+      nextRefreshResult = {
+        ApiEnvelope(RefreshSessionDto(accessToken = "access-token-2", refreshToken = "refresh-token-2"))
+      }
+      nextResult = { ApiEnvelope(sessionDto()) }
+    }
+    val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
+    val session = manager(api, store)
+
+    val state = session.restore()
+
+    assertTrue(state is SessionState.Authenticated)
+    assertEquals(1, api.refreshCalls)
+    assertEquals(1, api.sessionCalls)
+    // The rotated tokens are what the next launch reads, and the interceptor
+    // carries the new access token rather than the expired one.
+    assertEquals("access-token-2", store.stored?.accessToken)
+    assertEquals("refresh-token-2", store.stored?.refreshToken)
+    assertEquals("access-token-2", session.accessToken())
+  }
+
+  @Test
+  fun `a rejected refresh wipes the session and signs the user out`() = runTest(dispatcher) {
+    // The wire code is the contract's own: the refresh route answers a dead
+    // refresh token with `401 invalid_token` ("Your session has expired. Please
+    // sign in again."), and the platform agrees — docs/NATIVE_ANDROID_API_CONTRACT.md
+    // §2.2. A test that invents a code the server never sends asserts behaviour
+    // that cannot happen in production.
+    val api = FakeMaharaniApi().apply {
+      nextRefreshResult = { throw httpError(401, "invalid_token", "Your session has expired. Please sign in again.") }
+    }
     val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
     val session = manager(api, store)
 
     val state = session.restore()
 
     assertEquals(SessionState.SignedOut(SignOutReason.SESSION_EXPIRED), state)
+    assertEquals(1, api.refreshCalls)
+    // Terminal: the rejected token is not retried against the session endpoint,
+    // and nothing is left on disk to retry with.
     assertEquals(0, api.sessionCalls)
     assertNull(store.stored)
+    assertNull(session.accessToken())
   }
 
   @Test
-  fun `restores a verified session with the server navigation policy`() = runTest {
+  fun `an unreachable server during refresh keeps the stored tokens`() = runTest(dispatcher) {
+    val api = FakeMaharaniApi().apply {
+      nextRefreshResult = { throw IOException("offline") }
+    }
+    val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
+    val session = manager(api, store)
+
+    val state = session.restore()
+
+    assertTrue(state is SessionState.Unavailable)
+    assertTrue((state as SessionState.Unavailable).retryable)
+    assertEquals(0, api.sessionCalls)
+    // Being offline says nothing about the refresh token: the user is offered a
+    // retry, and the next launch still has something to retry with.
+    assertEquals("refresh-token-1", store.stored?.refreshToken)
+    assertNull(session.accessToken())
+  }
+
+  @Test
+  fun `restores a verified session with the server navigation policy`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply { nextResult = { ApiEnvelope(sessionDto()) } }
     val store = FakeTokenStore(initial = validTokens())
     val session = manager(api, store)
@@ -137,7 +220,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `a rejected token clears the session and requires sign-in`() = runTest {
+  fun `a rejected token clears the session and requires sign-in`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply {
       nextResult = { throw httpError(401, "invalid_token", "Please sign in again.") }
     }
@@ -152,7 +235,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `pending approval keeps the tokens so the shop can retry after approval`() = runTest {
+  fun `pending approval keeps the tokens so the shop can retry after approval`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply {
       nextResult = { throw httpError(403, "retailer_pending_approval", "Your shop is still awaiting approval.") }
     }
@@ -166,7 +249,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `a lapsed access period keeps the tokens`() = runTest {
+  fun `a lapsed access period keeps the tokens`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply {
       nextResult = { throw httpError(403, "access_expired", "Your access period has ended.") }
     }
@@ -180,7 +263,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `suspension and deactivation clear the session`() = runTest {
+  fun `suspension and deactivation clear the session`() = runTest(dispatcher) {
     val suspended = FakeMaharaniApi().apply {
       nextResult = { throw httpError(403, "account_suspended", "This account is suspended.") }
     }
@@ -199,7 +282,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `offline keeps the session and offers retry instead of signing the user out`() = runTest {
+  fun `offline keeps the session and offers retry instead of signing the user out`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply { nextResult = { throw IOException("no network") } }
     val store = FakeTokenStore(initial = validTokens())
     val session = manager(api, store)
@@ -212,7 +295,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `a server outage is retryable and never treated as success`() = runTest {
+  fun `a server outage is retryable and never treated as success`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply {
       nextResult = { throw httpError(503, "database_unavailable", "The service is temporarily unavailable.") }
     }
@@ -226,7 +309,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `an unusable payload signs out instead of routing somewhere arbitrary`() = runTest {
+  fun `an unusable payload signs out instead of routing somewhere arbitrary`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply {
       nextResult = { ApiEnvelope(sessionDto(role = "regional_manager")) }
     }
@@ -240,7 +323,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `sign out wipes storage and the in-memory token`() = runTest {
+  fun `sign out wipes storage and the in-memory token`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply { nextResult = { ApiEnvelope(sessionDto()) } }
     val store = FakeTokenStore(initial = validTokens())
     val session = manager(api, store)
@@ -255,7 +338,7 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `restore publishes Restoring first so the shell keeps the splash up`() = runTest {
+  fun `restore publishes Restoring first so the shell keeps the splash up`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply { nextResult = { ApiEnvelope(sessionDto()) } }
     val session = manager(api, FakeTokenStore(initial = validTokens()))
     assertEquals(SessionState.Restoring, session.state.value)
@@ -348,4 +431,39 @@ class FakeMaharaniApi : MaharaniApi {
     sessionCalls += 1
     return nextResult()
   }
+
+  var refreshCalls: Int = 0
+    private set
+
+  /** Left unconfigured by default so a test that refreshes must say so. */
+  var nextRefreshResult: () -> ApiEnvelope<RefreshSessionDto> =
+    { throw UnsupportedOperationException("refresh() is not configured for this test") }
+
+  // Phase C added these endpoints to MaharaniApi. Only `session()` is reachable
+  // from the code under test; the rest exist because an interface implementation
+  // has to name every member, and they throw rather than return a fabricated
+  // envelope so that a test which accidentally depends on one fails loudly.
+  override suspend fun login(body: LoginRequestDto): ApiEnvelope<AuthSessionDto> = unsupported("login")
+
+  override suspend fun refresh(body: RefreshRequestDto): ApiEnvelope<RefreshSessionDto> {
+    refreshCalls += 1
+    return nextRefreshResult()
+  }
+
+  override suspend fun logout(): ApiEnvelope<AckDto> = unsupported("logout")
+
+  override suspend fun requestPasswordReset(body: PasswordResetRequestDto): ApiEnvelope<AckDto> =
+    unsupported("requestPasswordReset")
+
+  override suspend fun updatePassword(body: PasswordUpdateRequestDto): ApiEnvelope<AckDto> =
+    unsupported("updatePassword")
+
+  override suspend fun areas(): ApiEnvelope<AreasDto> = unsupported("areas")
+
+  override suspend fun registerRetailer(
+    body: RegisterRetailerRequestDto,
+  ): ApiEnvelope<RegisterRetailerResponseDto> = unsupported("registerRetailer")
+
+  private fun unsupported(endpoint: String): Nothing =
+    throw UnsupportedOperationException("$endpoint is not used by the session layer")
 }

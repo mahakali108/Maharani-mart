@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
   alias(libs.plugins.android.library)
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
@@ -10,7 +9,12 @@ plugins {
 
 android {
   namespace = "com.maharanitraders.core.network"
-  compileSdk = 36
+  // AGP 9's new DSL expresses the SDK level as a spec; it is the documented
+  // replacement for the deprecated `compileSdkVersion(...)`. A CI-only error
+  // once looked like a verdict on this spelling - it was not (plan doc, 1.9).
+  compileSdk {
+    version = release(36)
+  }
 
   defaultConfig {
     minSdk = 24

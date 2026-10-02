@@ -44,15 +44,161 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const allFiles = () => walk(ANDROID);
 const kotlinFiles = () => allFiles().filter((f) => f.endsWith('.kt'));
+const kotlinOrScriptFiles = () => allFiles().filter((f) => f.endsWith('.kt') || f.endsWith('.kts'));
+
+/**
+ * Lex just enough Kotlin to answer one question: are the block comments in this file
+ * balanced, and does any of them open a *nested* comment?
+ *
+ * Kotlin nests block comments — `/* /* *\/ *\/` — while Java, JavaScript and C# do not.
+ * A doc comment containing a glob such as `/api/mobile/v1/auth/*` therefore does not end
+ * at its own `*\/`: it swallows the rest of the file. The compiler then reports one
+ * "Unclosed comment" at EOF and, far more loudly, an "Unresolved reference" for every
+ * name that file used to declare, which points at innocent importers instead of at the
+ * comment. String and character literals have to be skipped, or a `/*` inside a string
+ * would be counted.
+ */
+function commentDepthProblem(source: string, file = ''): string | null {
+  let i = 0;
+  let line = 1;
+  let depth = 0;
+  let openedAtLine = 0;
+  const newlines = (from: number, to: number) => (source.slice(from, to).match(/\n/g) ?? []).length;
+
+  const skip = (from: number, until: number) => {
+    line += newlines(from, until);
+    return until;
+  };
+
+  while (i < source.length) {
+    const char = source[i]!;
+    const next = source[i + 1] ?? '';
+    if (char === '\n') {
+      line += 1;
+      i += 1;
+      continue;
+    }
+    if (depth === 0) {
+      if (char === '/' && next === '/') {
+        const eol = source.indexOf('\n', i);
+        i = eol === -1 ? source.length : eol;
+      } else if (source.startsWith('"""', i)) {
+        const end = source.indexOf('"""', i + 3);
+        i = skip(i, end === -1 ? source.length : end + 3);
+      } else if (char === '"' || char === "'") {
+        let j = i + 1;
+        while (j < source.length && source[j] !== char && source[j] !== '\n') {
+          if (source[j] === '\\') j += 1;
+          j += 1;
+        }
+        i = skip(i, j + 1);
+      } else if (char === '/' && next === '*') {
+        depth = 1;
+        openedAtLine = line;
+        i += 2;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      return `${file} line ${line}: block comment (opened line ${openedAtLine}) opens another comment — Kotlin nests them, so it will not close here`;
+    }
+    if (char === '*' && next === '/') {
+      depth -= 1;
+      i += 2;
+      continue;
+    }
+    i += 1;
+  }
+  if (depth !== 0) {
+    return `${file} line ${openedAtLine}: block comment is never closed (reaches end of file)`;
+  }
+  return null;
+}
+
+/**
+ * Strips Kotlin comments from a fragment so that *prose* cannot be mistaken for
+ * code. Kotlin block comments nest, so the scanner tracks depth; string literals
+ * are kept (a `//` inside a URL string is not a comment) and `"""` raw strings are
+ * skipped whole. Used on constructor argument text, where a KDoc between two
+ * parameters once produced a phantom parameter named `core` — read out of the
+ * prose "`core:network`".
+ */
+function stripKotlinComments(source: string): string {
+  let out = '';
+  let depth = 0;
+  let inLine = false;
+  let inString = false;
+  let inRaw = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const c = source[i]!;
+    const next = source[i + 1];
+    if (inLine) {
+      if (c === '\n') {
+        inLine = false;
+        out += c;
+      }
+      continue;
+    }
+    if (depth > 0) {
+      if (c === '/' && next === '*') {
+        depth += 1;
+        i += 1;
+      } else if (c === '*' && next === '/') {
+        depth -= 1;
+        i += 1;
+      }
+      continue;
+    }
+    if (inRaw) {
+      if (c === '"' && source.slice(i, i + 3) === '"""') {
+        inRaw = false;
+        i += 2;
+      }
+      continue;
+    }
+    if (inString) {
+      out += c;
+      if (c === '\\') i += 1;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"' && source.slice(i, i + 3) === '"""') {
+      inRaw = true;
+      i += 2;
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      out += c;
+      continue;
+    }
+    if (c === '/' && next === '/') {
+      inLine = true;
+      i += 1;
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      depth = 1;
+      i += 1;
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
 
 /** `pkg -> set(top-level declaration names)` across every Kotlin source set. */
 function declaredSymbols(): Map<string, Set<string>> {
   const packages = new Map<string, Set<string>>();
   const declarationPatterns = [
-    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:internal\s+|private\s+|public\s+)?(?:annotation\s+class|fun\s+interface|enum\s+class|sealed\s+interface|sealed\s+class|data\s+class|class|object|interface|typealias)\s+([A-Za-z_]\w*)/,
-    // extension functions: `fun UserRole.label(...)`
-    /^fun\s+[\w.<>?,\s]+\.\s*([A-Za-z_]\w*)\s*\(/,
-    /^fun\s+(?:<[^>]+>\s*)?([A-Za-z_]\w*)\s*\(/,
+    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:\w+\s+)*(?:annotation\s+class|fun\s+interface|enum\s+class|sealed\s+interface|sealed\s+class|data\s+class|class|object|interface|typealias)\s+([A-Za-z_]\w*)/,
+    // extension functions, including the modified and generic forms:
+    //   `fun UserRole.label(...)`, `inline fun <T, R> AppResult<T>.map(...)`
+    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:\w+\s+)*fun\s+(?:<[^>]*>\s*)?[\w.]+(?:<[^>]*>)?\.([A-Za-z_]\w*)\s*\(/,
+    // top-level functions: `fun health()`, `suspend fun login(...)`
+    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:\w+\s+)*fun\s+(?:<[^>]*>\s*)?([A-Za-z_]\w*)\s*\(/,
   ];
 
   for (const file of kotlinFiles()) {
@@ -218,5 +364,519 @@ describe('Android project integrity', () => {
     expect(networkModule).toContain('.followRedirects(false)');
     expect(networkModule).toContain('.followSslRedirects(false)');
     expect(networkModule).not.toMatch(/HttpLoggingInterceptor|sslSocketFactory|hostnameVerifier/);
+  });
+});
+
+describe('Android build scripts stay executable', () => {
+  // WHY THIS CHECK EXISTS
+  // Every Android CI run failed with "project ':app' does not specify `compileSdk`"
+  // for a file that plainly sets it, while AGP's own model probe printed the extension
+  // object as non-null with `namespace` and `compileSdk` both null: the script's
+  // `android {}` block had never run, and neither had anything after it. The cause was
+  // in the file's first doc comment, whose text was `/api/mobile/v1/auth/*` — Kotlin
+  // nests block comments, so that `/*` opened a second comment and the outer `*/`
+  // closed the inner one, leaving the comment open to the end of the file. The whole
+  // body became comment text. The statements before the comment still ran — the script
+  // printed its own "plugins applied" marker — which is why the failure looked like an
+  // AGP problem rather than a parse problem.
+  const buildScripts = () => walk(ANDROID).filter((f) => f.endsWith('.gradle.kts'));
+
+  it('has no Kotlin or Gradle-script block comment that nests or never closes', () => {
+    // The check is a lexer rather than a "no block comments" rule: a normal doc comment
+    // is fine, a doc comment containing `/*` is not, and only a lexer can tell them
+    // apart. It covers sources as well as scripts — `:core:network`'s `AuthDtos.kt` had
+    // the identical defect, which surfaced as twenty-two "Unresolved reference" errors
+    // in `MaharaniApi.kt` and one "Unclosed comment" at its own end of file.
+    const offenders: string[] = [];
+    for (const file of kotlinOrScriptFiles()) {
+      const problem = commentDepthProblem(readFileSync(file, 'utf8'), relative(ROOT, file));
+      if (problem) offenders.push(problem);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('declares the android extension in every module that applies an android plugin', () => {
+    const missing: string[] = [];
+    for (const file of buildScripts()) {
+      const source = readFileSync(file, 'utf8');
+      // `apply false` at the root only puts the plugin on the classpath.
+      if (!/alias\(libs\.plugins\.android\.[\w.]+\)(?!\s*apply false)/.test(source)) continue;
+      const hasNamespace = /namespace\s*=\s*"/.test(source);
+      const hasSdk = /compileSdk\s*\{|compileSdk\s*=\s*\d+|compileSdkVersion/.test(source);
+      if (!hasNamespace || !hasSdk) missing.push(relative(ROOT, file));
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('imports the AppResult extension functions wherever it uses them', () => {
+    // `AppResult.map`, `.getOrNull`, `.onSuccess` and friends are top-level
+    // extensions in `com.maharanitraders.core.common` — they have to be, because a
+    // member `map` would put `T` in an `in` position and break the covariance that
+    // lets `Failure : AppResult<Nothing>` stand in for any `AppResult<T>`. The
+    // consequence is that importing the *interface* does not bring them in, and
+    // `:core:auth`'s `AuthRepository.kt` failed to compile with eight
+    // "Unresolved reference 'map' on receiver of type 'AppResult<…>'" errors for
+    // exactly that reason.
+    //
+    // Deliverable-evidence for this check: reintroducing the missing import line
+    // makes it fail with that file named.
+    const helpers = ['getOrNull', 'errorOrNull', 'onSuccess', 'onFailure'];
+    const offenders: string[] = [];
+    for (const file of kotlinFiles()) {
+      const rel = relative(ROOT, file);
+      if (rel.includes('core/common/src/main')) continue; // same package as the declarations
+      const source = readFileSync(file, 'utf8');
+      if (!source.includes('com.maharanitraders.core.common.')) continue;
+
+      // `.map` is also the stdlib collection function, so it only counts when it is
+      // chained straight onto the call that produces an AppResult.
+      // no braces inside the lambda: `executeEnvelope { api.login(...) }.map {}`.
+      // Allowing nesting would also match `list.filter { … }.map { … }`, which is
+      // the stdlib function and needs no import.
+      const mapOnAppResult = /executeEnvelope\s*\{[^{}]*\}\s*\.\s*map\s*[({]/.test(source);
+      const needsImport = [
+        ...(mapOnAppResult ? ['map'] : []),
+        ...helpers.filter((h) => [`.${h}(`, `.${h} {`].some((call) => source.includes(call))),
+      ];
+      for (const helper of needsImport) {
+        if (!source.includes(`com.maharanitraders.core.common.${helper}`)) {
+          offenders.push(`${rel}: calls .${helper}(…) without importing com.maharanitraders.core.common.${helper}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('backs every cross-module import with a declared project dependency', () => {
+    // A module that imports another module's package without depending on it
+    // compiles only by accident. `:core:common` did exactly this with
+    // `com.maharanitraders.core.model`, which the first real compile rejected.
+    const modules = new Map<string, string>(); // ':core:model' -> directory
+    for (const file of buildScripts()) {
+      const dir = file.slice(0, file.lastIndexOf('/'));
+      if (dir === ANDROID) continue;
+      modules.set(':' + relative(ANDROID, dir).replace(/\//g, ':'), dir);
+    }
+
+    const packageOwner = new Map<string, string>();
+    for (const [module, dir] of modules) {
+      for (const file of walk(dir).filter((f) => f.endsWith('.kt'))) {
+        const pkg = /^package\s+([\w.]+)/m.exec(readFileSync(file, 'utf8'))?.[1];
+        if (pkg?.startsWith('com.maharanitraders')) packageOwner.set(pkg, module);
+      }
+    }
+
+    const missing = new Set<string>();
+    for (const [module, dir] of modules) {
+      const declared = new Set(
+        [...readFileSync(join(dir, 'build.gradle.kts'), 'utf8').matchAll(/project\("(:[\w:]+)"\)/g)].map(
+          (m) => m[1]!,
+        ),
+      );
+      for (const file of walk(dir).filter((f) => f.endsWith('.kt'))) {
+        for (const line of readFileSync(file, 'utf8').split('\n')) {
+          const imported = /^\s*import\s+(com\.maharanitraders[\w.]*)/.exec(line)?.[1];
+          if (!imported) continue;
+          const parts = imported.split('.');
+          let owner: string | undefined;
+          for (let i = parts.length; i > 2; i--) {
+            const candidate = parts.slice(0, i).join('.');
+            if (packageOwner.has(candidate)) {
+              owner = packageOwner.get(candidate);
+              break;
+            }
+          }
+          if (owner && owner !== module && !declared.has(owner)) {
+            missing.add(`${module} imports ${owner} (${relative(ROOT, file)})`);
+          }
+        }
+      }
+    }
+    expect([...missing].sort()).toEqual([]);
+  });
+});
+
+describe('Android design tokens resolve', () => {
+  // The first real compile rejected core/designsystem: Theme.kt referenced
+  // `MaharaniPalette.BrandRed600` while Color.kt defined `Red600`, and both
+  // Theme.kt and StateSurfaces.kt referenced an extra-colour holder that had
+  // never been written. Neither is catchable without a compiler, and neither
+  // is caught by an import check, so the member references are checked here.
+  const themeDir = join(
+    ANDROID,
+    'core',
+    'designsystem',
+    'src',
+    'main',
+    'kotlin',
+    'com',
+    'maharanitraders',
+    'core',
+    'designsystem',
+    'theme',
+  );
+  const membersOf = (file: string, pattern: RegExp) =>
+    new Set([...readFileSync(join(themeDir, file), 'utf8').matchAll(pattern)].map((m) => m[1]!));
+
+  const paletteMembers = () => membersOf('Color.kt', /^\s*val\s+(\w+)\s*=/gm);
+  const extraColorMembers = () => membersOf('ExtraColors.kt', /^\s*val\s+(\w+):/gm);
+
+  it('resolves every MaharaniPalette member reference', () => {
+    const defined = paletteMembers();
+    expect(defined.size).toBeGreaterThan(20);
+
+    const missing = new Set<string>();
+    for (const file of kotlinFiles()) {
+      for (const match of readFileSync(file, 'utf8').matchAll(/MaharaniPalette\.(\w+)/g)) {
+        if (!defined.has(match[1]!)) missing.add(`${match[1]} (${relative(ROOT, file)})`);
+      }
+    }
+    expect([...missing].sort()).toEqual([]);
+  });
+
+  it('resolves every extra-colour reference', () => {
+    const defined = extraColorMembers();
+    expect(defined.size).toBeGreaterThan(5);
+
+    const missing = new Set<string>();
+    for (const file of kotlinFiles()) {
+      for (const match of readFileSync(file, 'utf8').matchAll(/colors\.(\w+)/g)) {
+        if (!defined.has(match[1]!)) missing.add(`${match[1]} (${relative(ROOT, file)})`);
+      }
+    }
+    expect([...missing].sort()).toEqual([]);
+  });
+});
+
+describe('Android test doubles keep up with the main sources', () => {
+  // WHY: the first run that compiled test sources failed twice in the same way.
+  // `SessionManager` gained an `authRepository` constructor parameter and
+  // `SessionController` gained `signIn`/`registerRetailer`; `:core:auth` reported
+  // "No value passed for parameter 'authRepository'" and "Class 'FakeMaharaniApi'
+  // is not abstract and does not implement abstract members". `:app`'s
+  // FakeSessionController was one compile away from the identical failure. Both are
+  // decidable from the sources, so they are decided here rather than in CI.
+  const mainSources = () => kotlinFiles().filter((f) => f.includes('/src/main/'));
+  const testSources = () => kotlinFiles().filter((f) => f.includes('/src/test/'));
+
+  /** Every project interface declared in main sources: name -> required members. */
+  function projectInterfaces(): Map<string, { members: string[]; file: string }> {
+    const found = new Map<string, { members: string[]; file: string }>();
+    for (const file of mainSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/\binterface\s+(\w+)/g)) {
+        const braceAt = source.indexOf('{', match.index);
+        if (braceAt === -1) continue;
+        let depth = 0;
+        let end = braceAt;
+        for (; end < source.length; end += 1) {
+          if (source[end] === '{') depth += 1;
+          else if (source[end] === '}') {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+        }
+        const body = source.slice(braceAt + 1, end);
+        const members = [
+          ...body.matchAll(/^\s*(?:suspend\s+|override\s+)*(?:val|var|fun)\s+(\w+)/gm),
+        ].map((m) => m[1]!);
+        found.set(match[1]!, { members: [...new Set(members)], file: relative(ROOT, file) });
+      }
+    }
+    return found;
+  }
+
+  /** Splits an argument list on top-level commas only. */
+  function splitArguments(source: string, open: number): string[] | null {
+    let depth = 0;
+    const parts: string[] = [];
+    let current = '';
+    for (let i = open; i < source.length; i += 1) {
+      const char = source[i];
+      // A comment is not an argument: skip it entirely, or its text (and the
+      // commas inside it) would end up glued to the argument that follows.
+      if (char === '/' && source[i + 1] === '/') {
+        const eol = source.indexOf('\n', i);
+        i = (eol === -1 ? source.length : eol) - 1;
+        continue;
+      }
+      if (char === '(' || char === '[' || char === '{') {
+        depth += 1;
+        if (depth === 1) continue; // the call's own opening bracket
+      } else if (char === ')' || char === ']' || char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          parts.push(current);
+          return parts;
+        }
+      } else if (char === ',' && depth === 1) {
+        parts.push(current);
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+    return null;
+  }
+
+  /** Required (no-default) constructor parameters of every main-source class. */
+  function requiredConstructorParameters(): Map<string, { params: string[]; file: string }> {
+    const found = new Map<string, { params: string[]; file: string }>();
+    for (const file of mainSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/\bconstructor\s*\(/g)) {
+        const head = source.slice(Math.max(0, match.index - 400), match.index);
+        const className = [...head.matchAll(/class\s+(\w+)/g)].pop()?.[1];
+        if (!className) continue;
+        const args = splitArguments(source, source.indexOf('(', match.index));
+        if (!args) continue;
+        const required = args
+          .map((arg) => arg.trim())
+          .filter((arg) => arg.length > 0 && !arg.includes('='))
+          .map((arg) => {
+            // Comments first: an argument is `/** doc */ private val name: Type`,
+            // and the prose inside that doc is not a parameter declaration.
+            const clean = stripKotlinComments(arg).trim();
+            return (
+              /(?:\bval\b|\bvar\b)\s+(\w+)\s*:/.exec(clean)?.[1] ??
+              /^(\w+)\s*:/.exec(clean)?.[1]
+            );
+          })
+          .filter((name): name is string => Boolean(name));
+        const existing = found.get(className);
+        found.set(className, {
+          params: [...new Set([...(existing?.params ?? []), ...required])],
+          file: existing?.file ?? relative(ROOT, file),
+        });
+      }
+    }
+    return found;
+  }
+
+  it('implements every member of every project interface a test double claims', () => {
+    const interfaces = projectInterfaces();
+    expect(interfaces.size).toBeGreaterThan(5);
+
+    const offenders: string[] = [];
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/class\s+(\w+)\s*(?:\([^)]*\))?\s*:\s*([\w.]+)/g)) {
+        const className = match[1]!;
+        const interfaceName = match[2]!.split('.').pop()!;
+        const declaration = interfaces.get(interfaceName);
+        if (!declaration) continue;
+        const missing = declaration.members.filter(
+          (member) =>
+            !(
+              source.includes(`fun ${member}(`) ||
+              source.includes(`fun ${member} (`) ||
+              source.includes(`val ${member}:`) ||
+              source.includes(`val ${member} `) ||
+              source.includes(`var ${member}:`)
+            ),
+        );
+        if (missing.length > 0) {
+          offenders.push(
+            `${className} : ${interfaceName} — missing ${missing.join(', ')} (interface in ${declaration.file}; double in ${relative(ROOT, file)})`,
+          );
+        }
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it('passes every required constructor parameter at every test call site', () => {
+    const constructors = requiredConstructorParameters();
+    expect(constructors.size).toBeGreaterThan(5);
+
+    const offenders: string[] = [];
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      for (const [className, { params, file: declarationFile }] of constructors) {
+        if (params.length === 0) continue;
+        let from = 0;
+        for (;;) {
+          const at = source.indexOf(`${className}(`, from);
+          if (at === -1) break;
+          from = at + 1;
+          // A class name inside a longer identifier is not a call.
+          const before = at === 0 ? ' ' : source[at - 1]!;
+          if (/[A-Za-z0-9_]/.test(before)) continue;
+          const args = splitArguments(source, at + className.length);
+          if (!args) continue;
+          // A trailing comma leaves an empty final part, and a comment between
+          // arguments is not an argument at all; neither should stop the check.
+          const effective = args
+            .map((arg) => arg.trim())
+            .filter((arg) => arg.length > 0 && !arg.startsWith('//'));
+          // Only judge argument lists that use named arguments throughout: a call
+          // that passes positionally is not decidable without types.
+          const named = effective.map((arg) => {
+            const eq = arg.indexOf('=');
+            if (eq <= 0) return undefined;
+            const name = arg.slice(0, eq).trim();
+            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : undefined;
+          });
+          if (named.some((name) => !name)) continue;
+          const missing = params.filter((param) => !named.includes(param));
+          if (missing.length > 0) {
+            offenders.push(
+              `${className}(…) omits ${missing.join(', ')} (class in ${declarationFile}; call in ${relative(ROOT, file)})`,
+            );
+          }
+        }
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+});
+
+describe('Android toolchain pins stay consistent', () => {
+  it('pins the KGP classpath to the same Kotlin version as the catalog', () => {
+    // AGP 9's built-in Kotlin brings KGP 2.2.10 unless it is raised explicitly.
+    // The Compose compiler plugin and the serialization plugin are KGP plugins
+    // and must match the compiler exactly, so the two declarations of the Kotlin
+    // version have to agree or the build fails in a confusing way.
+    const catalog = readFileSync(join(ANDROID, 'gradle', 'libs.versions.toml'), 'utf8');
+    const rootBuild = readFileSync(join(ANDROID, 'build.gradle.kts'), 'utf8');
+
+    const catalogKotlin = /^kotlin = "([^"]+)"/m.exec(catalog)?.[1];
+    expect(catalogKotlin).toBeTruthy();
+
+    const classpathKotlin =
+      /classpath\("org\.jetbrains\.kotlin:kotlin-gradle-plugin:([^"]+)"\)/.exec(rootBuild)?.[1];
+    expect(classpathKotlin).toBe(catalogKotlin);
+  });
+});
+
+describe('Android coroutine tests share one test scheduler', () => {
+  // WHY: the first run that executed JUnit tests failed 13 of 14 cases in
+  // `:core:auth:testDebugUnitTest` with "Detected use of different schedulers".
+  // The class declared `private val dispatcher = StandardTestDispatcher()` — a
+  // scheduler of its own — while every test body ran in `runTest { }`, which quietly
+  // creates a *second* scheduler. Calling `advanceUntilIdle()` on one while work sits
+  // on the other is reported as an error rather than silently hanging, so the whole
+  // class failed at once. The rule is decidable from the source, so it is decided here
+  // instead of costing an Android CI round: a file-level test dispatcher must be handed
+  // to `runTest`, or it must be built from the ambient `testScheduler`.
+  const testSources = () => kotlinFiles().filter((f) => f.includes('/src/test/'));
+
+  /** Name of a class-level `val x = StandardTestDispatcher()` (no shared scheduler). */
+  const fileLevelDispatcherWithoutScheduler = (source: string) =>
+    /^[ \t]*(?:(?:private|internal|protected)\s+)?val\s+(\w+)\s*(?::[^=\n]+)?=\s*\w*(?:Standard|Unconfined)TestDispatcher\s*\(\s*\)/m.exec(
+      source,
+    )?.[1];
+
+  it('hands a file-level TestDispatcher to runTest instead of bare runTest { }', () => {
+    const offenders: string[] = [];
+    let filesChecked = 0;
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      const dispatcher = fileLevelDispatcherWithoutScheduler(source);
+      if (!dispatcher) continue;
+      filesChecked += 1;
+
+      const callSites = [...source.matchAll(/\brunTest\s*(?:\{|\()/g)];
+      for (const callSite of callSites) {
+        if (callSite[0].endsWith('{')) {
+          offenders.push(
+            `${relative(ROOT, file)} declares '${dispatcher}' but calls bare \`runTest { }\`` +
+              ` (line ${source.slice(0, callSite.index).split('\n').length}) — use \`runTest(${dispatcher}) { }\``,
+          );
+        }
+      }
+
+      // A file that never actually runs on the dispatcher would make this rule vacuous.
+      if (callSites.length > 0 && !new RegExp(`\\brunTest\\s*\\(\\s*${dispatcher}\\b`).test(source)) {
+        offenders.push(
+          `${relative(ROOT, file)} declares '${dispatcher}' but no \`runTest(${dispatcher})\` call uses it`,
+        );
+      }
+    }
+
+    // Guard against the rule quietly matching nothing after a refactor.
+    expect(filesChecked).toBeGreaterThan(0);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('Android error vocabulary matches the mobile API contract', () => {
+  // WHY: a `SessionManagerTest` double invented the code `invalid_refresh_token`
+  // (the refresh route actually answers a dead refresh token with `401 invalid_token`).
+  // The test then asserted a transition the server can never produce, and an Android CI
+  // round was spent on it. Both directions of that agreement are decidable from the
+  // sources: every code the mobile API can emit must be understood by the app, and no
+  // test may assert on a code the app (or the server) does not know.
+  const testSources = () => kotlinFiles().filter((f) => f.includes('/src/test/'));
+  const SERVER_HTTP = join(ROOT, 'lib', 'mobile', 'http.ts');
+  const ANDROID_CODES = join(
+    ANDROID,
+    'core',
+    'model',
+    'src',
+    'main',
+    'kotlin',
+    'com',
+    'maharanitraders',
+    'core',
+    'model',
+    'ApiErrorCode.kt',
+  );
+
+  /** The server's authoritative union: `export type MobileErrorCode = 'a' | 'b' | …`. */
+  function serverErrorCodes(): Set<string> {
+    const source = readFileSync(SERVER_HTTP, 'utf8');
+    const union = /export type MobileErrorCode =([\s\S]*?);/.exec(source)?.[1] ?? '';
+    return new Set([...union.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]!));
+  }
+
+  /** Every `WIRE_NAME("wire_value", retryable)` entry in the Android enum. */
+  function androidErrorCodes(): Set<string> {
+    const source = readFileSync(ANDROID_CODES, 'utf8');
+    return new Set([...source.matchAll(/^\s*[A-Z][A-Z0-9_]*\(\s*"([a-z_]+)"/gm)].map((match) => match[1]!));
+  }
+
+  it('understands every code the mobile API can emit', () => {
+    const server = [...serverErrorCodes()].sort();
+    // Guard against a parsing change silently emptying the server list.
+    expect(server.length).toBeGreaterThan(20);
+
+    const android = androidErrorCodes();
+    const unknownToTheApp = server.filter((code) => !android.has(code));
+    expect(unknownToTheApp).toEqual([]);
+  });
+
+  it('never asserts on a code the server cannot emit', () => {
+    const android = androidErrorCodes();
+    // Codes a test deliberately pretends the server invented, to prove that an
+    // unrecognised code is handled without crashing. Anything else must be real.
+    const DELIBERATELY_INVENTED = new Set([
+      'brand_new_server_code', // proves an unknown code off a 401 stays retryable
+      'brand_new_code', // the executor's unknown-code path
+      'some_new_token_code', // proves an unknown code ON a 401 is terminal
+    ]);
+
+    const offenders: string[] = [];
+    let assertionsChecked = 0;
+    for (const file of testSources()) {
+      const source = readFileSync(file, 'utf8');
+      const patterns = [
+        /httpError\(\s*\d+\s*,\s*"([a-z_]+)"/g, // the shared test helper
+        /"code"\s*:\s*"([a-z_]+)"/g, // hand-written error envelopes
+      ];
+      for (const pattern of patterns) {
+        for (const match of source.matchAll(pattern)) {
+          const code = match[1]!;
+          assertionsChecked += 1;
+          if (!android.has(code) && !DELIBERATELY_INVENTED.has(code)) {
+            const line = source.slice(0, match.index).split('\n').length;
+            offenders.push(`${relative(ROOT, file)}:${line} asserts on '${code}', which no wire code declares`);
+          }
+        }
+      }
+    }
+
+    expect(assertionsChecked).toBeGreaterThan(5);
+    expect(offenders.sort()).toEqual([]);
   });
 });

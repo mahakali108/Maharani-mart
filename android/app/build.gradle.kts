@@ -2,27 +2,24 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
   alias(libs.plugins.android.application)
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
 }
 
-/**
- * API base URL — the ONLY compiled-in configuration value.
- *
- * It is not a secret: no Supabase URL, anon key, service-role key or provider
- * credential is ever shipped in the APK (all authentication is proxied through
- * `/api/mobile/v1/auth/*`, see docs/NATIVE_ANDROID_API_CONTRACT.md §1).
- *
- * Override per build without editing this file:
- *   ./gradlew assembleDebug -PmaharaniApiBaseUrl=https://staging.example/
- */
+// API base URL - the ONLY compiled-in configuration value.
+//
+// It is not a secret: no Supabase URL, anon key, service-role key or provider
+// credential is ever shipped in the APK (all authentication is proxied through
+// /api/mobile/v1/auth/…, see docs/NATIVE_ANDROID_API_CONTRACT.md).
+//
+// Override per build without editing this file:
+//   ./gradlew assembleDebug -PmaharaniApiBaseUrl=https://staging.example/
 val maharaniApiBaseUrl: String =
   (project.findProperty("maharaniApiBaseUrl") as String?)
     ?: "https://maharani-mart-mahakali108s-projects.vercel.app/"
 
-/** Release signing is read from the environment ONLY — never from the repo. */
+// Release signing is read from the environment ONLY - never from the repo.
 val releaseStorePath: String? = System.getenv("RELEASE_KEYSTORE_PATH")
 val releaseStorePassword: String? = System.getenv("RELEASE_KEYSTORE_PASSWORD")
 val releaseKeyAlias: String? = System.getenv("RELEASE_KEY_ALIAS")
@@ -33,7 +30,12 @@ val releaseSigningConfigured: Boolean =
 
 android {
   namespace = "com.maharanitraders.app"
-  compileSdk = 36
+  // AGP 9 expresses the SDK level as a spec; `compileSdk = 36` also works.
+  // Neither form was ever the problem - see docs/ANDROID_IMPLEMENTATION_PLAN.md
+  // section 1.9.
+  compileSdk {
+    version = release(36)
+  }
 
   defaultConfig {
     applicationId = "com.maharanitraders.app"
@@ -99,7 +101,9 @@ android {
       excludes += listOf(
         "DebugProbesKt.bin",
         "kotlin-tooling-metadata.json",
-        "kotlin/**",
+        // Built as concatenation so the file contains no comment-opening
+        // sequence at all.
+        "kotlin/" + "**",
         "META-INF/*.kotlin_module",
       )
     }
@@ -115,6 +119,7 @@ android {
   }
 }
 
+
 kotlin {
   compilerOptions {
     jvmTarget.set(JvmTarget.JVM_17)
@@ -128,6 +133,7 @@ dependencies {
   implementation(project(":core:auth"))
   implementation(project(":core:datastore"))
   implementation(project(":core:designsystem"))
+  implementation(project(":feature:auth"))
 
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)
@@ -143,7 +149,6 @@ dependencies {
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.foundation)
   implementation(libs.androidx.compose.material3)
-  implementation(libs.androidx.compose.material.icons.extended)
 
   implementation(libs.kotlinx.coroutines.android)
 

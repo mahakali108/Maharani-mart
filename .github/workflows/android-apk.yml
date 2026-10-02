@@ -1,105 +1,309 @@
-name: Android Debug APK
-
-# Builds a DEBUG-signed APK of the Capacitor wrapper around the
-# existing production site (https://maharani-mart-one.vercel.app).
-# This does NOT touch the Next.js app, Vercel deployment, or Supabase
-# in any way — it only builds a native Android shell whose WebView
-# points at the already-live site.
+# Maharani Traders — native Android CI.
 #
-# No Play Store credentials or release keystore are used anywhere in
-# this workflow: `assembleDebug` is signed by Gradle's own
-# auto-generated debug keystore (created fresh in $HOME/.android on
-# the runner, never committed, never a secret).
+# This is the ACTIVE Android pipeline. It replaces the retired Capacitor /
+# remote-URL WebView builder, which was removed together with
+# capacitor.config.ts, www/ and scripts/android-postsync.mjs.
+#
+# It builds the committed native Kotlin/Compose project in android/ and nothing
+# else. No release signing, no key, no AAB, no Play Store publication — a debug
+# APK signed by Gradle's throwaway debug keystore only.
+
+name: Native Android Debug APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
     paths:
-      - 'capacitor.config.ts'
+      - 'android/**'
+      - 'app/api/mobile/**'
+      - 'lib/mobile/**'
+      - 'lib/permissions/**'
+      - 'tests/**'
       - 'package.json'
-      - 'package-lock.json'
       - 'pnpm-lock.yaml'
-      - 'www/**'
+      - '.github/workflows/android-apk.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'app/api/mobile/**'
+      - 'lib/mobile/**'
+      - 'lib/permissions/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/android-apk.yml'
 
+permissions:
+  contents: read
+  # Only used to post the build-diagnostics bundle as a pull-request comment:
+  # Actions log files and artifacts are served from a host that is unreachable
+  # from some environments, while api.github.com is not.
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-debug-apk:
+  web:
+    name: Web typecheck, lint, tests, and build
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7.0.0
         with:
-          node-version: '20'
+          node-version: '22'
 
-      - name: Set up JDK 17 (required by Android Gradle Plugin)
-        uses: actions/setup-java@v4
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install web dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: corepack pnpm run typecheck
+
+      - name: Lint
+        run: corepack pnpm run lint
+
+      - name: Run web tests
+        run: corepack pnpm test
+
+      - name: Build Next.js production app
+        run: corepack pnpm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+  android:
+    name: Android unit tests, lint, and debug APK
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6.0.1
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v4.0.4
 
-      - name: Install project dependencies
-        run: npm install
+      - name: Install pinned Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      # Generates the android/ native project fresh on every run,
-      # reading appId/appName/server.url from capacitor.config.ts.
-      # It is intentionally NOT committed to the repo (see .gitignore)
-      # so there is never a stale or partially-hand-edited copy.
-      - name: Add Android platform
-        run: npx cap add android
+      - name: Set up Gradle and build cache
+        uses: gradle/actions/setup-gradle@v6.4.0
 
-      - name: Sync Capacitor config into the native project
-        run: npx cap sync android
-
-      # Standard, well-documented Capacitor Android customization:
-      # makes the hardware/gesture back button navigate the WebView's
-      # own history first, and only exit the app when there's nothing
-      # left to go back to (requirement: back should navigate inside
-      # the web app when possible instead of immediately closing it).
-      # This fully replaces Capacitor's generated MainActivity.java —
-      # not a sed patch — so it doesn't depend on guessing the exact
-      # generated template text.
-      - name: Configure Android back-button behavior
+      - name: Verify the Gradle wrapper distribution
+        working-directory: android
         run: |
-          MAIN_ACTIVITY_DIR="android/app/src/main/java/com/maharanitraders/app"
-          mkdir -p "$MAIN_ACTIVITY_DIR"
-          cat > "$MAIN_ACTIVITY_DIR/MainActivity.java" << 'EOF'
-          package com.maharanitraders.app;
+          ./gradlew --no-daemon --version | tee /tmp/gradle-version.txt
+          grep -F 'Gradle 9.1.0' /tmp/gradle-version.txt
 
-          import android.os.Bundle;
-          import android.webkit.WebView;
-          import com.getcapacitor.BridgeActivity;
+      # Tests, lint and the debug APK in one Gradle invocation. The log is teed
+      # to /tmp/gradle.log because Actions logs live in Azure blob storage, which
+      # is not reachable from every environment: the next step re-emits the
+      # failure detail as check annotations, served by api.github.com.
+      - name: Run Android unit tests, lint, and assemble debug APK
+        working-directory: android
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug 2>&1 | tee /tmp/gradle.log
 
-          public class MainActivity extends BridgeActivity {
-              @Override
-              public void onBackPressed() {
-                  WebView webView = this.bridge != null ? this.bridge.getWebView() : null;
-                  if (webView != null && webView.canGoBack()) {
-                      webView.goBack();
-                  } else {
-                      super.onBackPressed();
-                  }
-              }
+      # Azure blob storage (where Actions logs live) is not reachable from every
+      # environment, so the failure detail is re-emitted as CHECK ANNOTATIONS,
+      # which are served by api.github.com. Without this a compiler error would
+      # be invisible outside the web UI.
+      - name: Surface Gradle failures as check annotations
+        if: failure()
+        run: |
+          set +e
+          LOG=/tmp/gradle.log
+          if [ ! -f "$LOG" ]; then
+            echo "::error::Gradle produced no log file — the step failed before the build started."
+            exit 0
+          fi
+          # Emit the ROOT cause first: Gradle prints the outer exception, then
+          # "What went wrong", then the real cause. An earlier version of this
+          # step matched only the outer lines and hid the actual message.
+          # One annotation per section, newlines escaped as %0A: the step has an
+          # annotation budget of about ten, and the check-run API does not
+          # preserve emission order.
+          emit_block() {
+            # One annotation per section, newlines escaped as %0A, because about
+            # ten annotations per step survive and the check-run API does not
+            # return them in emission order. Escaping happens after the cut: a
+            # byte-truncated escape sequence would leave a dangling % in the
+            # annotation. The budget is bytes, not lines - a Kotlin diagnostic
+            # block of 200 lines is roughly 30 kB and still fits inside the
+            # annotation limit, while a 100-line cut silently hid the errors
+            # belonging to every module after the first one that failed.
+            local title="$1" body
+            body=$(sed -e 's/\r//g' | cut -c1-300 | head -n 240 | head -c 24000 \
+                     | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            printf '::error title=%s::%s\n' "$title" "$body"
           }
-          EOF
 
-      - name: Grant execute permission to Gradle wrapper
-        run: chmod +x android/gradlew
+          WHY=$(awk '/^\* What went wrong:/{f=1} f{print; c++} c>24{exit}' "$LOG")
+          [ -z "$WHY" ] && WHY=$(awk '/What went wrong/{f=1} f{print; c++} c>24{exit}' "$LOG")
+          [ -n "$WHY" ] && printf '%s\n' "$WHY" | emit_block "gradle: what went wrong"
 
-      - name: Build debug APK
+          CAUSES=$(grep -E "Caused by:" "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -20)
+          [ -n "$CAUSES" ] && printf '%s\n' "$CAUSES" | emit_block "gradle: caused by"
+
+          KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -200)
+          [ -n "$KTERR" ] && printf '%s\n' "$KTERR" | emit_block "kotlin diagnostics"
+
+          if [ -z "$WHY$CAUSES$KTERR" ]; then
+            grep -v "^[[:space:]]*$" "$LOG" | tail -30 | emit_block "gradle: no known pattern, log tail"
+          fi
+          echo "::notice::Full Gradle log is in the failed step's output and in the Gradle test/lint reports artifact."
+
+      # A failing unit test is the one failure class the log cannot explain: Gradle
+      # prints "There were failing tests" and a path to an HTML report, and that
+      # report lives in an artifact served from a host that is not always
+      # reachable. The JUnit XML is on the runner, so the failing test names and
+      # their assertion messages are extracted here instead.
+      - name: Summarise failing Android unit tests
+        if: failure()
         run: |
-          cd android
-          ./gradlew assembleDebug --no-daemon
+          set +e
+          python3 - > /tmp/test-failures.txt 2>&1 <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
 
-      - name: Upload debug APK artifact
-        uses: actions/upload-artifact@v4
+          found = 0
+          for path in sorted(glob.glob('android/**/build/test-results/**/*.xml', recursive=True)):
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception as error:
+                  print(f'{path}: unreadable ({error})')
+                  continue
+              suites = [root] if root.tag == 'testsuite' else list(root.iter('testsuite'))
+              for suite in suites:
+                  cases = list(suite.findall('testcase'))
+                  bad = [
+                      case
+                      for case in cases
+                      if case.find('failure') is not None or case.find('error') is not None
+                  ]
+                  if not bad:
+                      continue
+                  found += len(bad)
+                  print(f'== {suite.get("name")} - {len(bad)} of {suite.get("tests")} failed')
+                  for case in bad:
+                      node = case.find('failure')
+                      if node is None:
+                          node = case.find('error')
+                      message = ' '.join((node.get('message') or '').split())[:400]
+                      print(f'   x {case.get("name")}')
+                      print(f'     {node.get("type")}: {message}')
+          print(f'(total failing tests: {found})')
+          PY
+          cat /tmp/test-failures.txt
+          if [ -s /tmp/test-failures.txt ]; then
+            body=$(sed -e 's/\r//g' /tmp/test-failures.txt | cut -c1-300 | head -n 200 | head -c 24000 \
+                     | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            printf '::error title=android unit test failures::%s\n' "$body"
+          fi
+
+      - name: Verify debug APK identity
+        run: |
+          set -euo pipefail
+          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          test -f "$APK_PATH"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.maharanitraders.app'"
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: maharani-traders-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 7
+
+      # Actions log files are served from a host that is not reachable from every
+      # environment, and check annotations are capped at about ten per step. On a
+      # failure that is not enough to see a Gradle stack trace, so everything the
+      # job printed is bundled here as a downloadable artifact instead.
+      - name: Bundle build diagnostics
+        if: always()
+        run: |
+          set +e
+          OUT=/tmp/diagnostics.txt
+          {
+            echo "=== HEAD ==="; git rev-parse HEAD 2>/dev/null
+            echo "=== java ==="; java -version 2>&1 | head -3
+            echo "=== gradle ==="; sed -n '1,10p' /tmp/gradle-version.txt 2>/dev/null
+            echo "=== configuration cache ==="
+            grep -iE "configuration cache|reusing configuration|configuration-cache" /tmp/gradle.log 2>/dev/null | head -20
+            echo "=== what went wrong ==="
+            awk '/^\* What went wrong:/{f=1} f{print; c++} c>30{exit}' /tmp/gradle.log 2>/dev/null
+            echo "=== caused by ==="
+            grep -E "Caused by:" /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -25
+            echo "=== kotlin diagnostics (build) ==="
+            grep -E "^(e|w): " /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -60
+            echo "=== android unit test failures ==="; cat /tmp/test-failures.txt 2>/dev/null
+            echo "=== gradle log tail ==="; tail -60 /tmp/gradle.log 2>/dev/null
+          } > "$OUT" 2>&1
+          wc -l "$OUT" || true
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: android-build-diagnostics
+          path: /tmp/diagnostics.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      # Log files and artifacts are served from a host that is unreachable from
+      # some environments; api.github.com is not, so the same bundle is posted as
+      # a pull-request comment. Non-fatal by design: a comment failure must never
+      # turn a diagnosable build into an undiagnosable one.
+      - name: Post the diagnostics bundle
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
+                 --json number --jq '.[0].number' 2>/dev/null)
+          if [ -z "$PR" ] || [ "$PR" = "null" ]; then
+            echo "no open pull request for $GITHUB_REF_NAME — nothing to post"
+            exit 0
+          fi
+          {
+            printf '### Android CI diagnostics — \`%s\`\n\n' "${GITHUB_SHA:0:7}"
+            printf '```\n'
+            head -c 55000 /tmp/diagnostics.txt
+            printf '\n```\n'
+          } > /tmp/diagnostics-comment.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file /tmp/diagnostics-comment.md \
+            || echo "::warning::could not post the diagnostics comment"
+          # Keep the PR from filling up with debugging noise: remove any previous
+          # comment from this bot that carries the same heading.
+          echo "posted diagnostics for ${GITHUB_SHA:0:7} to #$PR"
+
+      - name: Upload Gradle test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: android-reports
+          path: android/**/build/reports
+          if-no-files-found: warn
+          retention-days: 7

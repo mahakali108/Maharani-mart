@@ -15,29 +15,29 @@ import androidx.compose.ui.graphics.Color
 object MaharaniPalette {
 
   // Brand red — chrome, wordmark, primary actions on brand surfaces.
-  val Red50 = Color(0xFFFDF2F3)
-  val Red100 = Color(0xFFFCE4E6)
-  val Red200 = Color(0xFFF9CCD1)
-  val Red300 = Color(0xFFF4A3AC)
-  val Red400 = Color(0xFFEC6F7D)
-  val Red500 = Color(0xFFDD3D4F)
-  val Red600 = Color(0xFFC8102E) // brand core, matches ic_launcher_background
-  val Red700 = Color(0xFFA80C26)
-  val Red800 = Color(0xFF8C0F24)
-  val Red900 = Color(0xFF771023)
-  val Red950 = Color(0xFF41040F)
+  val BrandRed50 = Color(0xFFFDF2F3)
+  val BrandRed100 = Color(0xFFFCE4E6)
+  val BrandRed200 = Color(0xFFF9CCD1)
+  val BrandRed300 = Color(0xFFF4A3AC)
+  val BrandRed400 = Color(0xFFEC6F7D)
+  val BrandRed500 = Color(0xFFDD3D4F)
+  val BrandRed600 = Color(0xFFC8102E) // brand core, matches ic_launcher_background
+  val BrandRed700 = Color(0xFFA80C26)
+  val BrandRed800 = Color(0xFF8C0F24)
+  val BrandRed900 = Color(0xFF771023)
+  val BrandRed950 = Color(0xFF41040F)
 
   // Action blue — the retailer "buy" colour on the web (Add to cart, Place order).
-  val Action50 = Color(0xFFF0F6FF)
-  val Action100 = Color(0xFFDCEBFF)
-  val Action200 = Color(0xFFB9D8FF)
-  val Action300 = Color(0xFF8CBDFF)
-  val Action400 = Color(0xFF5C9AF8)
-  val Action500 = Color(0xFF2874F0)
-  val Action600 = Color(0xFF1E5FD8)
-  val Action700 = Color(0xFF1A4DB4)
-  val Action800 = Color(0xFF1A4394)
-  val Action900 = Color(0xFF1A3C78)
+  val ActionBlue50 = Color(0xFFF0F6FF)
+  val ActionBlue100 = Color(0xFFDCEBFF)
+  val ActionBlue200 = Color(0xFFB9D8FF)
+  val ActionBlue300 = Color(0xFF8CBDFF)
+  val ActionBlue400 = Color(0xFF5C9AF8)
+  val ActionBlue500 = Color(0xFF2874F0)
+  val ActionBlue600 = Color(0xFF1E5FD8)
+  val ActionBlue700 = Color(0xFF1A4DB4)
+  val ActionBlue800 = Color(0xFF1A4394)
+  val ActionBlue900 = Color(0xFF1A3C78)
 
   // Ink — text and neutral surfaces.
   val Ink50 = Color(0xFFF6F6F6)
@@ -67,6 +67,13 @@ object MaharaniPalette {
   val Danger600 = Color(0xFFE11D48)
   val Danger700 = Color(0xFFBE123C)
   val Danger900 = Color(0xFF4C0519)
+
+  // Rose - the web's "out of stock" / failure tone. The dark pair matches the
+  // values Theme.kt already uses for Material's `error` role in the dark scheme.
+  val OutOfStockRose = Color(0xFFE11D48)
+  val OutOfStockRoseSurface = Color(0xFFFFF1F2)
+  val OutOfStockRoseDark = Color(0xFFFB7185)
+  val OutOfStockRoseSurfaceDark = Color(0xFF4C0519)
 
   val White = Color(0xFFFFFFFF)
   val Black = Color(0xFF000000)

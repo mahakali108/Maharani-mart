@@ -2,14 +2,18 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
   alias(libs.plugins.android.library)
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
 }
 
 android {
   namespace = "com.maharanitraders.core.common"
-  compileSdk = 36
+  // AGP 9's new DSL expresses the SDK level as a spec; it is the documented
+  // replacement for the deprecated `compileSdkVersion(...)`. A CI-only error
+  // once looked like a verdict on this spelling - it was not (plan doc, 1.9).
+  compileSdk {
+    version = release(36)
+  }
 
   defaultConfig {
     minSdk = 24
@@ -32,6 +36,10 @@ kotlin {
 }
 
 dependencies {
+  // AppResult/AppError speak in the shared vocabulary that :core:model owns
+  // (ApiErrorCode, AccountGate), so the edge is real and must be declared.
+  implementation(project(":core:model"))
+
   implementation(libs.androidx.core.ktx)
   implementation(libs.kotlinx.coroutines.android)
 

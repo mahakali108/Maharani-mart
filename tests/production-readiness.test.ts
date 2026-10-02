@@ -6,7 +6,7 @@
  * from the code. Browser-based row-level tests need a live Supabase project;
  * what CAN be verified statically is verified here.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -272,18 +272,52 @@ describe('5. saved-cart restoration revalidation', () => {
   });
 });
 
-describe('6. APK/Capacitor deployment prerequisites', () => {
-  it('capacitor config points at the Maharani Traders app with an Android platform and keeps server logic untouched', () => {
-    const config = read('capacitor.config.ts');
-    expect(config).toContain('Maharani Traders');
-    expect(config).toContain('androidScheme');
-    expect(config).not.toMatch(/supabase\.co|SUPABASE_URL/); // no env baked into the client bundle config
+describe('6. Native Android APK build prerequisites', () => {
+  it('the Android deliverable is the native Kotlin project, with the wrapper fully retired', () => {
+    // Native project must exist and declare the shipped identity.
+    const gradle = read('android/app/build.gradle.kts');
+    expect(gradle).toContain('applicationId = "com.maharanitraders.app"');
+    expect(read('android/settings.gradle.kts')).toContain('include(":app")');
+    expect(read('android/gradle/wrapper/gradle-wrapper.properties')).toContain('gradle-9.1.0-bin.zip');
+
+    // No WebView wrapper may be reintroduced.
+    for (const retired of [
+      'capacitor.config.ts',
+      'www/index.html',
+      'www/offline.html',
+      'scripts/android-postsync.mjs',
+      'scripts/android-resource-validation.mjs',
+    ]) {
+      expect(existsSync(join(ROOT, retired)), `${retired} must stay retired`).toBe(false);
+    }
+    const pkg = JSON.parse(read('package.json')) as {
+      scripts: Record<string, string>;
+      dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    for (const key of Object.keys(pkg.scripts)) {
+      expect(key.startsWith('cap:'), `${key} must be removed`).toBe(false);
+    }
+    expect(Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })).not.toContain(
+      '@capacitor/cli'
+    );
+    expect(read('package.json')).not.toMatch(/"@capacitor\//);
   });
 
-  it('android build scripts exist in package.json', () => {
+  it('native Android build scripts exist in package.json', () => {
     const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
-    expect(pkg.scripts['cap:sync']).toBeDefined();
     expect(pkg.scripts['android:build:debug']).toBeDefined();
     expect(pkg.scripts['android:build:release']).toBeDefined();
+    expect(pkg.scripts['android:test']).toBeDefined();
+    expect(pkg.scripts['android:lint']).toBeDefined();
+  });
+
+  it('the active CI workflow builds the native app and never runs `cap add android`', () => {
+    const workflow = read('.github/workflows/android-apk.yml');
+    expect(workflow).toContain('assembleDebug');
+    expect(workflow).toContain('testDebugUnitTest');
+    expect(workflow).toContain('lintDebug');
+    expect(workflow).toContain("com.maharanitraders.app");
+    expect(workflow).not.toMatch(/npx\s+cap\s|cap\s+add\s+android/);
   });
 });

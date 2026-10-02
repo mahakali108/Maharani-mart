@@ -60,6 +60,24 @@ class ApiErrorMapperTest {
   }
 
   @Test
+  fun `an unrecognised code on a 401 is terminal, not retryable`() {
+    // The retryable-UNKNOWN default exists so a newer server cannot turn an
+    // unknown answer into success. A 401 is the exception: the credential
+    // material was rejected, so treating it as retryable would keep a dead
+    // token on disk and show "try again" for something that can never work.
+    // The server's own message is still shown.
+    val error = mapper.fromHttp(
+      401,
+      """{"error":{"code":"some_new_token_code","message":"Your session has expired. Please sign in again."}}"""
+    ) as AppError.Api
+
+    assertEquals(ApiErrorCode.INVALID_TOKEN, error.code)
+    assertTrue(error.requiresSignIn)
+    assertFalse(error.retryable)
+    assertEquals("Your session has expired. Please sign in again.", error.message)
+  }
+
+  @Test
   fun `falls back to a conservative code when the body is unusable`() {
     assertEquals(ApiErrorCode.DATABASE_UNAVAILABLE, (mapper.fromHttp(503, null) as AppError.Api).code)
     assertEquals(ApiErrorCode.RATE_LIMITED, (mapper.fromHttp(429, "<html>nope</html>") as AppError.Api).code)
