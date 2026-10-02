@@ -221,6 +221,90 @@ describe('Android project integrity', () => {
   });
 });
 
+describe('Android build scripts stay executable', () => {
+  // WHY THESE TWO CHECKS EXIST
+  // Every Android CI run failed with "project ':app' does not specify `compileSdk`"
+  // for a file that sets it, while AGP's model probe showed the extension complete-
+  // ly unset. The build script's body was being cut at its first block comment:
+  // the statements before it ran, everything after it - the whole android {} block,
+  // defaultConfig and dependencies {} - never did, silently. Only :app and
+  // :feature:auth had such a comment before their configuration code, and they
+  // were the two modules that failed.
+  const buildScripts = () => walk(ANDROID).filter((f) => f.endsWith('.gradle.kts'));
+
+  it('does not use block comments in a build script that has a plugins block', () => {
+    const offenders: string[] = [];
+    for (const file of buildScripts()) {
+      if (file.endsWith('settings.gradle.kts')) continue; // no plugins block; evaluated today
+      const source = readFileSync(file, 'utf8');
+      if (!/^\s*plugins\s*\{/m.test(source)) continue;
+      if (source.includes('/**') || source.includes('*/')) offenders.push(relative(ROOT, file));
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('declares the android extension in every module that applies an android plugin', () => {
+    const missing: string[] = [];
+    for (const file of buildScripts()) {
+      const source = readFileSync(file, 'utf8');
+      // `apply false` at the root only puts the plugin on the classpath.
+      if (!/alias\(libs\.plugins\.android\.[\w.]+\)(?!\s*apply false)/.test(source)) continue;
+      const hasNamespace = /namespace\s*=\s*"/.test(source);
+      const hasSdk = /compileSdk\s*\{|compileSdk\s*=\s*\d+|compileSdkVersion/.test(source);
+      if (!hasNamespace || !hasSdk) missing.push(relative(ROOT, file));
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('backs every cross-module import with a declared project dependency', () => {
+    // A module that imports another module's package without depending on it
+    // compiles only by accident. `:core:common` did exactly this with
+    // `com.maharanitraders.core.model`, which the first real compile rejected.
+    const modules = new Map<string, string>(); // ':core:model' -> directory
+    for (const file of buildScripts()) {
+      const dir = file.slice(0, file.lastIndexOf('/'));
+      if (dir === ANDROID) continue;
+      modules.set(':' + relative(ANDROID, dir).replace(/\//g, ':'), dir);
+    }
+
+    const packageOwner = new Map<string, string>();
+    for (const [module, dir] of modules) {
+      for (const file of walk(dir).filter((f) => f.endsWith('.kt'))) {
+        const pkg = /^package\s+([\w.]+)/m.exec(readFileSync(file, 'utf8'))?.[1];
+        if (pkg?.startsWith('com.maharanitraders')) packageOwner.set(pkg, module);
+      }
+    }
+
+    const missing = new Set<string>();
+    for (const [module, dir] of modules) {
+      const declared = new Set(
+        [...readFileSync(join(dir, 'build.gradle.kts'), 'utf8').matchAll(/project\("(:[\w:]+)"\)/g)].map(
+          (m) => m[1]!,
+        ),
+      );
+      for (const file of walk(dir).filter((f) => f.endsWith('.kt'))) {
+        for (const line of readFileSync(file, 'utf8').split('\n')) {
+          const imported = /^\s*import\s+(com\.maharanitraders[\w.]*)/.exec(line)?.[1];
+          if (!imported) continue;
+          const parts = imported.split('.');
+          let owner: string | undefined;
+          for (let i = parts.length; i > 2; i--) {
+            const candidate = parts.slice(0, i).join('.');
+            if (packageOwner.has(candidate)) {
+              owner = packageOwner.get(candidate);
+              break;
+            }
+          }
+          if (owner && owner !== module && !declared.has(owner)) {
+            missing.add(`${module} imports ${owner} (${relative(ROOT, file)})`);
+          }
+        }
+      }
+    }
+    expect([...missing].sort()).toEqual([]);
+  });
+});
+
 describe('Android toolchain pins stay consistent', () => {
   it('pins the KGP classpath to the same Kotlin version as the catalog', () => {
     // AGP 9's built-in Kotlin brings KGP 2.2.10 unless it is raised explicitly.

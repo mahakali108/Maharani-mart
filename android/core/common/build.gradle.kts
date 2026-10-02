@@ -39,6 +39,10 @@ kotlin {
 }
 
 dependencies {
+  // AppResult/AppError speak in the shared vocabulary that :core:model owns
+  // (ApiErrorCode, AccountGate), so the edge is real and must be declared.
+  implementation(project(":core:model"))
+
   implementation(libs.androidx.core.ktx)
   implementation(libs.kotlinx.coroutines.android)
 

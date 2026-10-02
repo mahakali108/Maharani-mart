@@ -162,8 +162,9 @@ discoverable by reading the source**:
 | # | Symptom | Root cause | Fix |
 | --- | --- | --- | --- |
 | 1 | Dependency resolution failed in every module using the icon library | `androidx.compose.material:material-icons-*` was **deprecated and stopped being published** after 1.7.x, so `version.ref = "composeUi"` (1.10.3) pointed at a version that does not exist. Material3 1.4.0 no longer pulls `material-icons-core` in implicitly. | catalog entry deleted, dependency removed from `:app` and `:feature:auth`; the single glyph is now a locally drawn `MenuIcon` (48 dp target, TalkBack label) |
-| 2 | `A problem occurred configuring project ':app'` → `Failed to notify project evaluation listener` → **`project ':app' does not specify compileSdk`** + **`no com.google.dagger:hilt-android dependency was found`** | both messages are **false** — `compileSdk` and `implementation(libs.hilt.android)` are both in `android/app/build.gradle.kts`. AGP's own API reference documents `compileSdk` as a plain settable `Int?` property *and* as a `compileSdk(action)` overload, so neither spelling can be rejected by the DSL; the module script is valid Kotlin either way. AGP nevertheless reads an unset extension at the end of evaluation and Hilt's dependency check cascades off the same broken model. **Root cause unidentified** — see “Row 2 is still open”. | **still open** — see “Row 2 is still open” below. Hilt was raised 2.59.1 → **2.60.1** independently, because 2.59.x verified the dependency through the retired `android-classes` transform (`google/dagger#5099`, `#5116`): a real second bug, and one worth fixing on its own, but not the cause of this message |
+| 2 | `A problem occurred configuring project ':app'` → `Failed to notify project evaluation listener` → **`project ':app' does not specify compileSdk`** + **`no com.google.dagger:hilt-android dependency was found`** | the **build script's body was being cut at its first block comment**. `:app` has a `plugins {}` block, and from the first `/** … */` KDoc onwards nothing executed: not `android {}`, not `defaultConfig`, not `dependencies {}`. Both messages were therefore literally true of the project model — the file sets a namespace, a `compileSdk` and a hilt dependency, and none of them had been applied. `:app` and `:feature:auth` were the only two modules with a block comment before their configuration code, and the only two that failed | block comments in `android/build.gradle.kts`, `android/app/build.gradle.kts` and `android/feature/auth/build.gradle.kts` became line comments, including one place where the comment-opening sequence appeared inside a string literal |
 | 3 | `Failed to apply plugin 'org.jetbrains.kotlin.android'` → *"not compatible with AGP's 9.0 new DSL"* | AGP 9's new DSL (the default) **cannot host the `kotlin-android` plugin at all**. | migrated to **built-in Kotlin**: `org.jetbrains.kotlin.android` removed from all 8 modules, the root build file and the catalog; AGP compiles Kotlin itself. `kotlin { compilerOptions { jvmTarget } }` stays (it is the documented replacement for `android.kotlinOptions`), and KGP is raised from AGP's default 2.2.10 to the catalog's 2.4.20 via the documented `buildscript` classpath, because the Compose and serialization plugins are KGP plugins and must match the compiler exactly |
+| 4 | `:core:common:compileDebugKotlin` → `Unresolved reference 'model'` (7 diagnostics in `AppResult.kt`) | `:core:common` imports `com.maharanitraders.core.model.{ApiErrorCode, AccountGate}` but never declared `implementation(project(":core:model"))`. Nothing had ever compiled this module, so the missing edge was invisible | dependency declared; `tests/android-project-integrity.test.ts` now asserts every cross-module import has a declared project dependency |
 
 **A correction worth recording.** Row 2 was first attributed to `android.newDsl=false`, and the legacy
 opt-out was removed on that basis. That was wrong: the same error came back with `newDsl` at its
@@ -174,81 +175,39 @@ reference has `compileSdk` as a plain settable `Int?` property *and* a `compileS
 so neither spelling is a syntax error. Both diagnoses are retracted. Nothing about `newDsl`,
 `builtInKotlin`, `kotlin-android` or the `compileSdk` spelling explains this message.
 
-### Row 2 is still open (as of 2026-10-02)
+### Row 2, resolved: the build script's body was cut at a comment
 
-What is actually known, all of it from CI rather than from reading source:
+This took twelve CI runs and both earlier diagnoses - `android.newDsl=false`, then the `compileSdk`
+*spelling* - were wrong. They are retracted. What the runs established, in order:
 
-- The message is **behavioural, not syntactic**. Four configurations produce it identically:
-  `newDsl=false` + `kotlin-android`; default new DSL + `kotlin-android` (which additionally fails to
-  apply); built-in Kotlin with the KGP classpath pin; built-in Kotlin with the `compileSdk` spec form.
-- It is a **cascade**, not the root failure: `A problem occurred configuring project ':app'` →
-  `Failed to notify project evaluation listener` → the `compileSdk` line → the Hilt
-  “no hilt-android dependency” line. In the AGP 9 migration reports of other projects
-  (e.g. `flutter/flutter#181383`, `fluttercommunity/plus_plugins#3745`) the same `compileSdk`
-  message appears *after* an unrelated plugin fails to apply, in projects where `compileSdk` is
-  demonstrably set. It reads as a follow-on error from a broken evaluation, not a description of
-  the script.
-- A project-model probe running in CI (`inspectExtension`, emitted as annotations from its own
-  step, because Actions caps `::error::` annotations at about ten per step) reports
-  `PROBE project=:app androidExtension=…ApplicationExtensionImpl$AgpDecorated_Decorated` — AGP **is**
-  applied to `:app` — while `getCompileSdk()`, `getCompileSdkVersion()` and `getNamespace()` all
-  return `null` for it. The extension exists; the `android {}` block's effects are not on it.
-- The Groovy-shadow-file theory is dead: there is no `build.gradle`/`settings.gradle` anywhere under
-  `android/`, no BOM, no CRLF, and `android/app/build.gradle.kts` braces balance.
-- `android/gradle.properties` carries neither `android.newDsl` nor `android.builtInKotlin`, and there
-  is no `org.jetbrains.kotlin.android` plugin left in any module: the project follows AGP 9 defaults.
+1. The message was **behavioural, not syntactic**, and it came back identically under four different
+   configurations (legacy opt-out + `kotlin-android`; default new DSL + `kotlin-android`; built-in
+   Kotlin with the KGP pin; built-in Kotlin with the `compileSdk` spec form). AGP's own API reference
+   documents `compileSdk` as a plain settable `Int?` property *and* the `compileSdk(action)` overload,
+   so neither spelling can be rejected by the DSL.
+2. A probe (`ProjectEvaluationListener` from an init script, emitted as check annotations) showed AGP
+   **was** applied to `:app` while `namespace`, `compileSdk`, `compileSdkVersion`, `defaultConfig.minSdk`
+   and `applicationId` were all `null` - the extension object existed and was completely unset.
+3. Build-script markers (written to a file as well as to stdout, because Gradle's console output was
+   itself under suspicion) showed `:app`'s script executing its **first two statements and nothing
+   after them**, with no compile error and no evaluation failure.
+4. The executed prefix ended exactly where the script's first block comment began. `:app` and
+   `:feature:auth` were the only modules with `/** … */` before their configuration code, and the only
+   two modules whose configuration never ran. Converting those comments to line comments made the
+   script run to its last statement - `namespace=com.maharanitraders.app compileSdk=36`, printed by the
+   script itself - and the pipeline moved on to a real Kotlin compile for the first time.
 
-The next measurement is script-level: `println` markers at the top of the `android {}` block and
-around it in `android/app/build.gradle.kts` and `android/core/common/build.gradle.kts`. If the
-markers appear, the block runs and the value is being lost afterwards; if they do not, the module
-script is not being evaluated at all. Until that is answered, no further version or flag changes are
-justified — eight consecutive CI runs have now failed this way and none of them produced a single
-Kotlin diagnostic.
+The underlying Gradle/Kotlin-DSL mechanism is **not established** - only the observed rule and its fix.
+The two candidate triggers are the block-comment form itself and the non-ASCII characters it
+contained (an em dash and a section sign); both are now absent from every build script, which is cheap
+insurance either way, and `tests/android-project-integrity.test.ts` asserts that no build script with a
+`plugins {}` block contains a block comment again.
 
-`android.builtInKotlin` and `android.newDsl` are now both absent: the project follows AGP 9's
-defaults rather than opting out of them. `tests/android-project-integrity.test.ts` asserts the
-KGP classpath pin and the catalog's Kotlin version cannot drift apart — worth knowing, because
-dropping the pin as an experiment fails that test and takes the whole web job down with it, which
-skips the Android job behind it (`needs: web`) and produces a green-looking no-op instead of a
-signal. Never remove the pin to test a hypothesis.
-
-Two process lessons, both now enforced in the workflow:
-
-1. **A failure that cannot be read is a failure that cannot be fixed.** Actions logs live in
-   Azure blob storage, unreachable from here, so the job re-emits Gradle's own
-   `What went wrong` block, all `Caused by` lines, all `e:` diagnostics and an AGP project-model
-   probe as check annotations (`api.github.com`).
-2. **Version pins are not evidence.** A pin can name a version that does not exist (icons) or a
-   release whose AGP integration is broken (Hilt 2.59.x). Both had to be checked against the
-   publisher's own release history before being believed.
-
-### 1.10 Seeing the build from here
-
-The most expensive mistake of this phase was not a version pin — it was **not being able to read
-the failure**. Actions log files are served from `*.blob.core.windows.net`, which is unreachable
-from this environment, and `gh run view --log-failed` returns nothing. Everything learned about the
-build so far was learned through two narrow channels, both worth keeping:
-
-1. **Check annotations.** Each job re-emits its own failure detail as `::error::` annotations, which
-   are served by `api.github.com`. Annotations are capped at about ten per step and the check-run
-   listing does not preserve emission order, so a step that emits fifty lines is a step whose
-   answer is probably hidden. Anything whose output is longer than ten lines belongs in an artifact
-   instead, and a step that exists to be read must emit *only* the lines that matter.
-2. **Artifacts.** `android-build-diagnostics` now bundles the JDK/Gradle versions,
-   `android/gradle.properties`, `settings.gradle.kts`, the version catalog and both Gradle logs,
-   and it uploads with `if: always()` so it survives the failure it describes. `gh run download`
-   fetches it over `api.github.com`. The debug-APK artifact stays on `if: success()` — an APK that
-   only exists on failures would be worse than none.
-
-A probe (`--init-script`, `ProjectEvaluationListener`) records the state of the `android` extension
-after evaluation and the size of each module's build file, which is how the project model can be
-described in a run where nothing compiles. It is a diagnostic, never a gate: it runs with
-`continue-on-error: true` and it must never fail the build.
-
-**One caveat, learned the hard way:** the check-run annotation list is not in emission order, so
-*"this line is missing from the annotations"* is not evidence that the line was not printed. Only the
-log in the artifact settles that.
-
+**The real cost of this bug was not the bug.** It was that the failure could not be read. Actions logs
+and artifacts are both served from `*.blob.core.windows.net`, which this environment cannot reach, and
+check annotations are capped at about ten lines per step in an order the API does not preserve. Once
+the job dumped whole sections as single `%0A`-escaped annotations and posted the same bundle as a pull
+request comment, the answer took three runs instead of thirty.
 
 ---
 
