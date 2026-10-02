@@ -11,6 +11,11 @@
 #    1.4.0, coroutines 1.10.2, and serialization 1.10.0 are pinned below.
 #  - Compose is intentionally NOT on the newest BOM: Compose 1.12 / BOM 2026.08+
 #    raises compileSdk to 37, which AGP 9.0.1 (max API 36.1) does not support.
+#  - androidx.compose.material:material-icons-* is NOT a dependency. Google
+#    deprecated those artifacts and STOPPED PUBLISHING them after 1.7.x, so a
+#    `version.ref = "composeUi"` pin resolved to a version that does not exist
+#    and broke dependency resolution. The app draws the one icon it needs
+#    (see `MaharaniIcons.Menu`) instead of shipping a 1.4 MB deprecated enum.
 #
 # Upgrades are separate, reviewed changes — never a drive-by bump.
 
@@ -63,7 +68,6 @@ androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling", versi
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "composeUi" }
 androidx-compose-foundation = { module = "androidx.compose.foundation:foundation", version.ref = "composeUi" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "composeMaterial3" }
-androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "composeUi" }
 
 # Kotlin / coroutines / serialization
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }

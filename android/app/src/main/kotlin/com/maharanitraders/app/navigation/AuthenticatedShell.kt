@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Menu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +35,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.maharanitraders.app.ui.SessionHomeScreen
 import com.maharanitraders.app.ui.UnsupportedAccountScreen
+import com.maharanitraders.core.designsystem.components.MenuIcon
 import com.maharanitraders.core.designsystem.components.UnavailableFeatureState
 import com.maharanitraders.core.designsystem.labels.label
 import com.maharanitraders.core.model.SessionSnapshot
@@ -119,7 +118,7 @@ private fun RoutedShell(
               onClick = { scope.launch { drawerState.open() } },
               modifier = Modifier.testTag(ShellTags.OPEN_DRAWER),
             ) {
-              Icon(Icons.AutoMirrored.Filled.Menu, contentDescription = "Open navigation")
+              MenuIcon()
             }
           },
           colors = TopAppBarDefaults.topAppBarColors(
