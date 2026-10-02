@@ -281,6 +281,54 @@ jobs:
           fi
           echo "::notice::Full Gradle log is in the failed step's output and in the Gradle test/lint reports artifact."
 
+      # A failing unit test is the one failure class the log cannot explain: Gradle
+      # prints "There were failing tests" and a path to an HTML report, and that
+      # report lives in an artifact served from a host that is not always
+      # reachable. The JUnit XML is on the runner, so the failing test names and
+      # their assertion messages are extracted here instead.
+      - name: Summarise failing Android unit tests
+        if: failure()
+        run: |
+          set +e
+          python3 - > /tmp/test-failures.txt 2>&1 <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          found = 0
+          for path in sorted(glob.glob('android/**/build/test-results/**/*.xml', recursive=True)):
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception as error:
+                  print(f'{path}: unreadable ({error})')
+                  continue
+              suites = [root] if root.tag == 'testsuite' else list(root.iter('testsuite'))
+              for suite in suites:
+                  cases = list(suite.findall('testcase'))
+                  bad = [
+                      case
+                      for case in cases
+                      if case.find('failure') is not None or case.find('error') is not None
+                  ]
+                  if not bad:
+                      continue
+                  found += len(bad)
+                  print(f'== {suite.get("name")} - {len(bad)} of {suite.get("tests")} failed')
+                  for case in bad:
+                      node = case.find('failure')
+                      if node is None:
+                          node = case.find('error')
+                      message = ' '.join((node.get('message') or '').split())[:400]
+                      print(f'   x {case.get("name")}')
+                      print(f'     {node.get("type")}: {message}')
+          print(f'(total failing tests: {found})')
+          PY
+          cat /tmp/test-failures.txt
+          if [ -s /tmp/test-failures.txt ]; then
+            body=$(sed -e 's/\r//g' /tmp/test-failures.txt | cut -c1-300 | head -n 200 | head -c 24000 \
+                     | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            printf '::error title=android unit test failures::%s\n' "$body"
+          fi
+
       - name: Verify debug APK identity
         run: |
           set -euo pipefail
@@ -326,6 +374,7 @@ jobs:
             grep -E "^(e|w): " /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -60
             echo "=== kotlin diagnostics (probe) ==="
             grep -E "^(e|w): " /tmp/probe.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -40
+            echo "=== android unit test failures ==="; cat /tmp/test-failures.txt 2>/dev/null
             echo "=== gradle log tail ==="; tail -60 /tmp/gradle.log 2>/dev/null
           } > "$OUT" 2>&1
           wc -l "$OUT" || true

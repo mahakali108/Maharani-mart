@@ -65,9 +65,10 @@ interface SessionController {
  *  - clears stored tokens when the server says the token is gone;
  *  - keeps tokens for account gates (pending approval / lapsed access period)
  *    so the user can retry without retyping credentials;
- *  - does NOT refresh tokens (that is Phase C, together with sign-in) — an
- *    expired token leads to [SignOutReason.SESSION_EXPIRED] rather than a
- *    silent failure.
+ *  - refreshes an expired access token exactly ONCE at launch (Phase C): a
+ *    rejected refresh is terminal and signs the user out, while a refresh that
+ *    could not reach the server keeps the stored tokens so the next launch can
+ *    try again.
  *
  * It also implements [TokenProvider], so the network layer reads the token from
  * memory only and never from disk on the request path.
@@ -115,22 +116,21 @@ class SessionManager @Inject constructor(
           refreshed.value
         }
         is AppResult.Failure -> {
+          // Offline at launch is not proof that the session is dead: an
+          // unreachable server says nothing about the refresh token, so the
+          // stored tokens stay and the next launch can retry. Wiping them here
+          // would force a re-sign-in for a user who was merely out of signal,
+          // and would contradict the retry offered by [SessionState.Unavailable].
+          if (refreshed.error is AppError.Network || refreshed.error.retryable) {
+            clearActiveToken()
+            return publish(
+              SessionState.Unavailable(refreshed.error.message, refreshed.error.retryable)
+            )
+          }
+          // A token the server has refused is terminal: the user signs in again,
+          // and nothing is left on disk to retry with.
           clearStoredSession()
-          return publish(
-            when {
-              // Offline at launch is not proof that the session is dead: keep
-              // the stored tokens so the next launch can retry.
-              refreshed.error is AppError.Network -> SessionState.Unavailable(
-                refreshed.error.message,
-                refreshed.error.retryable,
-              )
-              refreshed.error.retryable -> SessionState.Unavailable(
-                refreshed.error.message,
-                refreshed.error.retryable,
-              )
-              else -> SessionState.SignedOut(SignOutReason.SESSION_EXPIRED)
-            }
-          )
+          return publish(SessionState.SignedOut(SignOutReason.SESSION_EXPIRED))
         }
       }
     } else {

@@ -124,16 +124,66 @@ class SessionManagerTest {
   }
 
   @Test
-  fun `an expired stored token is cleared without a network call`() = runTest {
-    val api = FakeMaharaniApi()
+  fun `an expired access token is refreshed once, then the session is verified`() = runTest {
+    // Phase B cleared an expired token on sight. Phase C refreshes it, so the
+    // user keeps working through an ordinary access-token expiry.
+    val api = FakeMaharaniApi().apply {
+      nextRefreshResult = {
+        ApiEnvelope(RefreshSessionDto(accessToken = "access-token-2", refreshToken = "refresh-token-2"))
+      }
+      nextResult = { ApiEnvelope(sessionDto()) }
+    }
+    val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
+    val session = manager(api, store)
+
+    val state = session.restore()
+
+    assertTrue(state is SessionState.Authenticated)
+    assertEquals(1, api.refreshCalls)
+    assertEquals(1, api.sessionCalls)
+    // The rotated tokens are what the next launch reads, and the interceptor
+    // carries the new access token rather than the expired one.
+    assertEquals("access-token-2", store.stored?.accessToken)
+    assertEquals("refresh-token-2", store.stored?.refreshToken)
+    assertEquals("access-token-2", session.accessToken())
+  }
+
+  @Test
+  fun `a rejected refresh wipes the session and signs the user out`() = runTest {
+    val api = FakeMaharaniApi().apply {
+      nextRefreshResult = { throw httpError(401, "invalid_refresh_token", "Please sign in again.") }
+    }
     val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
     val session = manager(api, store)
 
     val state = session.restore()
 
     assertEquals(SessionState.SignedOut(SignOutReason.SESSION_EXPIRED), state)
+    assertEquals(1, api.refreshCalls)
+    // Terminal: the rejected token is not retried against the session endpoint,
+    // and nothing is left on disk to retry with.
     assertEquals(0, api.sessionCalls)
     assertNull(store.stored)
+    assertNull(session.accessToken())
+  }
+
+  @Test
+  fun `an unreachable server during refresh keeps the stored tokens`() = runTest {
+    val api = FakeMaharaniApi().apply {
+      nextRefreshResult = { throw IOException("offline") }
+    }
+    val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
+    val session = manager(api, store)
+
+    val state = session.restore()
+
+    assertTrue(state is SessionState.Unavailable)
+    assertTrue((state as SessionState.Unavailable).retryable)
+    assertEquals(0, api.sessionCalls)
+    // Being offline says nothing about the refresh token: the user is offered a
+    // retry, and the next launch still has something to retry with.
+    assertEquals("refresh-token-1", store.stored?.refreshToken)
+    assertNull(session.accessToken())
   }
 
   @Test
@@ -367,13 +417,23 @@ class FakeMaharaniApi : MaharaniApi {
     return nextResult()
   }
 
+  var refreshCalls: Int = 0
+    private set
+
+  /** Left unconfigured by default so a test that refreshes must say so. */
+  var nextRefreshResult: () -> ApiEnvelope<RefreshSessionDto> =
+    { throw UnsupportedOperationException("refresh() is not configured for this test") }
+
   // Phase C added these endpoints to MaharaniApi. Only `session()` is reachable
   // from the code under test; the rest exist because an interface implementation
   // has to name every member, and they throw rather than return a fabricated
   // envelope so that a test which accidentally depends on one fails loudly.
   override suspend fun login(body: LoginRequestDto): ApiEnvelope<AuthSessionDto> = unsupported("login")
 
-  override suspend fun refresh(body: RefreshRequestDto): ApiEnvelope<RefreshSessionDto> = unsupported("refresh")
+  override suspend fun refresh(body: RefreshRequestDto): ApiEnvelope<RefreshSessionDto> {
+    refreshCalls += 1
+    return nextRefreshResult()
+  }
 
   override suspend fun logout(): ApiEnvelope<AckDto> = unsupported("logout")
 
