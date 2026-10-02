@@ -118,32 +118,36 @@ jobs:
         run: |
           set +e
           cat > /tmp/probe.init.gradle <<'GRADLE'
-          gradle.addProjectEvaluationListener(new org.gradle.api.ProjectEvaluationListener() {
-            void beforeEvaluate(org.gradle.api.Project project) { }
-            void afterEvaluate(org.gradle.api.Project project, org.gradle.api.ProjectState state) {
+          def listener = [
+            beforeEvaluate: { project -> },
+            afterEvaluate: { project, state ->
               def ext = project.extensions.findByName("android")
-              println "PROBE project=${project.path} androidExtension=${ext?.class?.name}"
+              println "PROBE project=${project.path} androidExtension=${ext == null ? 'NONE' : ext.class.name}"
               if (ext != null) {
                 ["getCompileSdk", "getCompileSdkVersion", "getNamespace"].each { m ->
                   def found = ext.class.methods.find { it.name == m && it.parameterCount == 0 }
                   if (found == null) {
-                    println "PROBE ${project.path} ${m}() is ABSENT on ${ext.class.name}"
+                    println "PROBE ${project.path} ${m}() ABSENT"
                   } else {
                     try {
                       println "PROBE ${project.path} ${m}() -> ${found.invoke(ext)}"
-                    } catch (Exception e) {
-                      println "PROBE ${project.path} ${m}() threw ${e.class.name}: ${e.message}"
+                    } catch (Throwable t) {
+                      println "PROBE ${project.path} ${m}() THREW ${t.class.name}: ${t.message}"
                     }
                   }
                 }
               }
               if (state != null && state.failure != null) {
-                def msg = state.failure.message?.readLines()?.take(4)?.join(" | ")
-                println "PROBE ${project.path} EVALUATION FAILED ${state.failure.class.name}: ${msg}"
+                println "PROBE ${project.path} EVALUATION-FAILED ${state.failure.class.name}"
+                state.failure.message?.readLines()?.take(6)?.each { println "PROBE ${project.path}   | ${it}" }
               }
             }
-          })
+          ] as org.gradle.api.ProjectEvaluationListener
+          gradle.addProjectEvaluationListener(listener)
           GRADLE
+          ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
+          echo "--- probe finished (exit $?); PROBE lines: ---"
+          grep -E "^PROBE " /tmp/probe.log | head -40
           ./gradlew --no-daemon --init-script /tmp/probe.init.gradle -q help > /tmp/probe.log 2>&1
           echo "--- probe finished; PROBE lines: ---"
           grep -E "^PROBE " /tmp/probe.log | head -40
@@ -183,8 +187,16 @@ jobs:
           [ -n "$KTERR" ] && emit "=== Kotlin diagnostics ===" && emit "$KTERR"
 
           if [ -f /tmp/probe.log ]; then
-            PROBE=$(grep -E "^PROBE " /tmp/probe.log | awk '!seen[$0]++' | head -30)
+            PROBE=$(grep -E "^PROBE " /tmp/probe.log | awk '!seen[$0]++' | head -28)
             [ -n "$PROBE" ] && emit "=== Gradle Android model ===" && emit "$PROBE"
+            # The probe is a diagnostic: if it crashed, its own error must be
+            # visible too, or a broken probe looks like a project with no model.
+            if [ -z "$PROBE" ]; then
+              emit "=== Probe produced no PROBE lines; tail ==="
+              emit "$(grep -v '^[[:space:]]*$' /tmp/probe.log | tail -14)"
+            fi
+          else
+            emit "=== Probe never wrote /tmp/probe.log ==="
           fi
 
           if [ -z "$WHY$CAUSES$KTERR" ]; then
