@@ -123,11 +123,17 @@ jobs:
         run: |
           set +e
           emit_block() {
-            # Cut first, escape second: a byte-truncated escape sequence would
-            # leave a dangling % in the annotation.
+            # One annotation per section, newlines escaped as %0A, because about
+            # ten annotations per step survive and the check-run API does not
+            # return them in emission order. Escaping happens after the cut: a
+            # byte-truncated escape sequence would leave a dangling % in the
+            # annotation. The budget is bytes, not lines - a Kotlin diagnostic
+            # block of 200 lines is roughly 30 kB and still fits inside the
+            # annotation limit, while a 100-line cut silently hid the errors
+            # belonging to every module after the first one that failed.
             local title="$1" body
-            body=$(sed -e 's/\r//g' | head -n 100 | cut -c1-400 | sed -e 's/%/%25/g' \
-                     | awk '{printf "%s%%0A", $0}')
+            body=$(sed -e 's/\r//g' | cut -c1-300 | head -n 240 | head -c 24000 \
+                     | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             printf '::error title=%s::%s\n' "$title" "$body"
           }
           cat > /tmp/probe.init.gradle <<'GRADLE'
@@ -234,11 +240,17 @@ jobs:
           # annotation budget of about ten, and the check-run API does not
           # preserve emission order.
           emit_block() {
-            # Cut first, escape second: a byte-truncated escape sequence would
-            # leave a dangling % in the annotation.
+            # One annotation per section, newlines escaped as %0A, because about
+            # ten annotations per step survive and the check-run API does not
+            # return them in emission order. Escaping happens after the cut: a
+            # byte-truncated escape sequence would leave a dangling % in the
+            # annotation. The budget is bytes, not lines - a Kotlin diagnostic
+            # block of 200 lines is roughly 30 kB and still fits inside the
+            # annotation limit, while a 100-line cut silently hid the errors
+            # belonging to every module after the first one that failed.
             local title="$1" body
-            body=$(sed -e 's/\r//g' | head -n 100 | cut -c1-400 | sed -e 's/%/%25/g' \
-                     | awk '{printf "%s%%0A", $0}')
+            body=$(sed -e 's/\r//g' | cut -c1-300 | head -n 240 | head -c 24000 \
+                     | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             printf '::error title=%s::%s\n' "$title" "$body"
           }
 
@@ -249,7 +261,7 @@ jobs:
           CAUSES=$(grep -E "Caused by:" "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -20)
           [ -n "$CAUSES" ] && printf '%s\n' "$CAUSES" | emit_block "gradle: caused by"
 
-          KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -40)
+          KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -200)
           [ -n "$KTERR" ] && printf '%s\n' "$KTERR" | emit_block "kotlin diagnostics"
 
           if [ -f /tmp/probe.log ]; then

@@ -166,6 +166,7 @@ discoverable by reading the source**:
 | 3 | `Failed to apply plugin 'org.jetbrains.kotlin.android'` → *"not compatible with AGP's 9.0 new DSL"* | AGP 9's new DSL (the default) **cannot host the `kotlin-android` plugin at all**. | migrated to **built-in Kotlin**: `org.jetbrains.kotlin.android` removed from all 8 modules, the root build file and the catalog; AGP compiles Kotlin itself. `kotlin { compilerOptions { jvmTarget } }` stays (it is the documented replacement for `android.kotlinOptions`), and KGP is raised from AGP's default 2.2.10 to the catalog's 2.4.20 via the documented `buildscript` classpath, because the Compose and serialization plugins are KGP plugins and must match the compiler exactly |
 | 4 | `:core:common:compileDebugKotlin` → `Unresolved reference 'model'` (7 diagnostics in `AppResult.kt`) | `:core:common` imports `com.maharanitraders.core.model.{ApiErrorCode, AccountGate}` but never declared `implementation(project(":core:model"))`. Nothing had ever compiled this module, so the missing edge was invisible | dependency declared; `tests/android-project-integrity.test.ts` now asserts every cross-module import has a declared project dependency |
 | 5 | `:core:network:compileDebugKotlin` → 22 × `Unresolved reference 'AckDto' / 'AreasDto' / 'LoginRequestDto' / …` in `MaharaniApi.kt`, plus one lone `AuthDtos.kt:117:1 Syntax error: Unclosed comment` | the **same nested-comment defect as row 2, in a source file**: a KDoc in `AuthDtos.kt` contained `/api/mobile/v1/auth/*`, whose `/*` opens a comment inside the comment and never closes. Every declaration in the file became comment text, so the file contributed no symbols and its importer reported the damage | the sentence now reads `/api/mobile/v1/auth/…`; the lexer check added for row 2 covers sources as well as scripts |
+| 6 | `:core:auth:compileDebugKotlin` → 8 × `Unresolved reference 'map' on receiver of type 'AppResult<…>'`, then `Unresolved reference 'accessToken'`/`'nextStep'`/`'session'` and `Cannot infer type for value parameter 'dto'` | `AppResult.map` is a **top-level extension function**, not a member — it has to be, because a member `map` would put `T` in an `in` position and break the covariance that lets `Failure : AppResult<Nothing>` stand in for any `AppResult<T>`. Extensions are imported by name from a package, so `import …core.common.AppResult` does not bring `map` with it. Every other error was downstream of that one: with `map` unresolved, `dto` had no type and each field of it was reported separately | `AuthRepository.kt` imports `com.maharanitraders.core.common.map`, with a comment saying why the import is load-bearing; `tests/android-project-integrity.test.ts` fails if any file chains `.map` onto `executeEnvelope` (or calls `getOrNull`/`errorOrNull`/`onSuccess`/`onFailure`) without importing it |
 
 **A correction worth recording.** Row 2 was first attributed to `android.newDsl=false`, and the legacy
 opt-out was removed on that basis. That was wrong: the same error came back with `newDsl` at its
@@ -252,10 +253,11 @@ from here, and the annotations and the PR comment carry the parts of it that mat
 | **36991877797** | **`486a77a`** | **`:core:common` compile** | **the first real Kotlin compile in the project's history** |
 | 36992660600 | `1aeb13b` | `:core:designsystem` compile | the missing `:core:model` edge was one of a chain, not the chain |
 | 36993403391 | `aa1193c` | `:core:network` compile | row 5 — the same comment defect in `AuthDtos.kt` |
+| 36995772516 | `c89880b` | `:core:auth` compile | rows 5 fixed and passed: `:core:network` compiled. The project model probe came back complete for all eight modules — `:app` `namespace`, `compileSdk 36`, `compileSdkVersion android-36`, `minSdk 24`, `targetSdk 36`, `applicationId`, and every library's `compileSdk`/`minSdk`. Row 6 is the last thing standing between the project and its first compiled bytecode |
 
 ## 2. What already works
 
-**Backend / web (high confidence — 1,826 passing tests + 130 pages):**
+**Backend / web (high confidence — 1,868 passing tests + 130 pages):**
 
 1. Phone-or-email login, registration, retailer approval workflow, suspension, access periods.
 2. Role-based routing enforced in `middleware.ts` **and** by Postgres RLS (defense in depth).
@@ -264,17 +266,23 @@ from here, and the annotations and the PR comment carry the parts of it that mat
 5. Admin/super-admin workspaces (~50 pages) incl. banners, coupons, reports, audit logs.
 6. Simplified pack-stock order pipeline with atomic deduction, restoration and idempotency (0054).
 7. A tested mobile API foundation: envelope, error codes, pagination, rate limiting, bearer auth.
+8. The nine `/api/mobile/v1` routes the Android app calls — `auth/{login,refresh,logout,
+   password-reset,password-update}`, `retailers/register`, `areas`, `session`, `health` — with their
+   own test files (`tests/mobile-auth.test.ts`, `tests/mobile-api-foundation.test.ts`).
 
 **Native Android (source only — compiles: NOT VERIFIED):**
 
-1. Gradle 9.1.0 wrapper + AGP 9.0.1 + Kotlin 2.4.20 + Hilt + Retrofit/OkHttp + Compose M3,
-   pinned in one version catalog.
-2. Seven modules: `app`, `core/{common,model,network,auth,datastore,designsystem}`.
+1. Gradle 9.1.0 wrapper + AGP 9.0.1 + Kotlin 2.4.20 (built-in Kotlin) + Hilt + Retrofit/OkHttp +
+   Compose M3, pinned in one version catalog.
+2. Eight modules: `app`, `core/{common,model,network,auth,datastore,designsystem}`, `feature/auth`.
 3. Keystore (AES-GCM) token storage, `SessionManager` restore/refresh/logout, `AuthInterceptor`.
 4. Typed errors (`AppError`/`ApiErrorCode`), `ApiCallExecutor`, pagination helper, `UserRole`.
-5. Material 3 brand theme, splash, session gate screens, role-aware navigation shell (2 routes).
-6. Hardened manifest: cleartext disabled, backups disabled, one exported component, no WebView.
-7. 12 Kotlin test classes mirroring the above.
+5. Material 3 brand theme, splash, session gate screens, role-aware navigation shell.
+6. Phase C's UI: `AuthFlowScreen` (sign-in / registration / reset), `LoginViewModel`,
+   `RegisterViewModel`, `AreaDirectory` for the area picker — reached from `MaharaniApp`'s
+   `when (sessionState)`, so an unverified session cannot render the signed-in shell.
+7. Hardened manifest: cleartext disabled, backups disabled, one exported component, no WebView.
+8. 17 Kotlin test classes across 55 source files (~7,300 lines), none of which has ever run.
 
 ---
 
@@ -282,9 +290,9 @@ from here, and the annotations and the PR comment carry the parts of it that mat
 
 | Area | Missing |
 | --- | --- |
-| **Verification** | Any successful Gradle run. No compile, no lint, no unit-test execution, no APK. |
-| **CI** | Native pipeline is an inactive file in `docs/`. Active workflow builds the prohibited wrapper. |
-| **Auth (C)** | No login/refresh/logout/reset/registration endpoints; no `feature/auth`; app cannot sign in. |
+| **Verification** | Any successful Gradle run. Configuration now completes and Kotlin compilation is reached (§1.9), but no module has compiled to completion, no test has executed, lint has never run, and no APK exists. |
+| **CI** | Nothing missing in the pipeline itself — the native workflow is the active one and the wrapper is retired. What is missing is a green run, and a readable failure when it is not green. |
+| **Auth (C)** | Nothing missing in the *source*: all nine `/api/mobile/v1` routes and the whole `feature/auth` flow exist and are wired into the root `when (sessionState)`. What is missing is everything that would make it true — it has never been compiled, its 3 test classes have never run, and it has never spoken to a live Supabase project. Treat Phase C as written-but-unverified, not as done. |
 | **Catalog (D)** | No catalog/search/PDP/categories/brands endpoints or screens; no images (Coil unused). |
 | **Commerce (E)** | No cart, quote, checkout, orders, invoices endpoints or screens. Checkout is web-only. |
 | **Engagement (F)** | No coins, notifications, banners, profile, addresses, support. |
@@ -301,14 +309,14 @@ call this project near completion.
 
 | # | Risk | Severity | Mitigation already in place / required |
 | --- | --- | --- | --- |
-| S1 | **Unverified Kotlin**: 5k LOC never compiled — import/API errors, broken DI graph, runtime crashes on first install | **High** | activate CI; compile before adding features |
+| S1 | **Unverified Kotlin**: ~7,300 lines (55 source files, 17 test classes) have never compiled to completion, never run, and never been linted — import/API errors, a broken DI graph and first-install crashes are all still open | **High** | the pipeline now reaches Kotlin compilation on every push; keep it green before adding features, and treat every un-compiled claim as unverified |
 | S2 | Next.js Server Actions are not a public API; treating them as one would be brittle | Medium | use the versioned `/api/mobile/v1` contract (already the project's decision) |
 | S3 | Service-role key must never reach the client | Critical | it does not today; `lib/mobile/supabase.ts` + `requireMobileSession` keep identity server-side. Must stay that way. |
 | S4 | In-memory rate limiter is per-instance on Vercel (`lib/mobile/rate-limit.ts:8`) | Low | documented best-effort; **do not** claim it as a security control |
 | S5 | `cost_price` / `stock_quantity` are column-revoked for `anon`/`authenticated` | — | the app must never expect these fields; admin stock edits only via `admin_product_pack_stock` |
 | S6 | Order double-submission on retry | High | `orders.request_key` + `complete_order_request` (service-role only) — client must send a stable key and not auto-retry |
 | S7 | Warehouse misconfiguration (`<> 1` active) surfaces as a raw `22023` | Medium | map to a distinct, user-visible configuration error; never fall back to a hardcoded warehouse |
-| S8 | Legacy Capacitor wrapper keeps loading a live remote URL inside a WebView | Medium | retire at Phase G end; today's active CI still builds it |
+| S8 | ~~Legacy Capacitor wrapper keeps loading a live remote URL inside a WebView~~ | — | **retired in this session** (wrapper, `capacitor.config.ts`, `www/` and its build script deleted in one reviewable change; see §1.8) |
 | S9 | `capacitor.config.ts` documents that the previous production alias returns `DEPLOYMENT_NOT_FOUND` | Medium | verify the current API base URL in `ApiBaseUrlContract.kt` resolves before any on-device test |
 | S10 | Session material on disk | High | mitigation present: Keystore AES-GCM store + `allowBackup=false` |
 | S11 | Release build signing secrets | — | env-only in `app/build.gradle.kts`; never in Git. Keep. |

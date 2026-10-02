@@ -3,6 +3,13 @@ package com.maharanitraders.core.auth
 import com.maharanitraders.core.common.AppError
 import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.common.TimeSource
+// `AppResult.map`/`getOrNull`/`onSuccess` are top-level extensions, not members
+// (a member `map` would put `T` in an `in` position and break the covariance
+// that lets `Failure : AppResult<Nothing>` stand in for any `AppResult<T>`).
+// Extensions live in a package, not in the interface, so they need importing
+// wherever the receiver's own import does not already bring them: without this
+// line every `.map { }` below is `Unresolved reference 'map'`.
+import com.maharanitraders.core.common.map
 import com.maharanitraders.core.model.SessionTokens
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi

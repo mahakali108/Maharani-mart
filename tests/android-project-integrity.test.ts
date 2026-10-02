@@ -121,10 +121,12 @@ function commentDepthProblem(source: string, file = ''): string | null {
 function declaredSymbols(): Map<string, Set<string>> {
   const packages = new Map<string, Set<string>>();
   const declarationPatterns = [
-    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:internal\s+|private\s+|public\s+)?(?:annotation\s+class|fun\s+interface|enum\s+class|sealed\s+interface|sealed\s+class|data\s+class|class|object|interface|typealias)\s+([A-Za-z_]\w*)/,
-    // extension functions: `fun UserRole.label(...)`
-    /^fun\s+[\w.<>?,\s]+\.\s*([A-Za-z_]\w*)\s*\(/,
-    /^fun\s+(?:<[^>]+>\s*)?([A-Za-z_]\w*)\s*\(/,
+    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:\w+\s+)*(?:annotation\s+class|fun\s+interface|enum\s+class|sealed\s+interface|sealed\s+class|data\s+class|class|object|interface|typealias)\s+([A-Za-z_]\w*)/,
+    // extension functions, including the modified and generic forms:
+    //   `fun UserRole.label(...)`, `inline fun <T, R> AppResult<T>.map(...)`
+    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:\w+\s+)*fun\s+(?:<[^>]*>\s*)?[\w.]+(?:<[^>]*>)?\.([A-Za-z_]\w*)\s*\(/,
+    // top-level functions: `fun health()`, `suspend fun login(...)`
+    /^(?:@\w+(?:\([^)]*\))?\s*)*(?:\w+\s+)*fun\s+(?:<[^>]*>\s*)?([A-Za-z_]\w*)\s*\(/,
   ];
 
   for (const file of kotlinFiles()) {
@@ -332,6 +334,45 @@ describe('Android build scripts stay executable', () => {
       if (!hasNamespace || !hasSdk) missing.push(relative(ROOT, file));
     }
     expect(missing).toEqual([]);
+  });
+
+  it('imports the AppResult extension functions wherever it uses them', () => {
+    // `AppResult.map`, `.getOrNull`, `.onSuccess` and friends are top-level
+    // extensions in `com.maharanitraders.core.common` — they have to be, because a
+    // member `map` would put `T` in an `in` position and break the covariance that
+    // lets `Failure : AppResult<Nothing>` stand in for any `AppResult<T>`. The
+    // consequence is that importing the *interface* does not bring them in, and
+    // `:core:auth`'s `AuthRepository.kt` failed to compile with eight
+    // "Unresolved reference 'map' on receiver of type 'AppResult<…>'" errors for
+    // exactly that reason.
+    //
+    // Deliverable-evidence for this check: reintroducing the missing import line
+    // makes it fail with that file named.
+    const helpers = ['getOrNull', 'errorOrNull', 'onSuccess', 'onFailure'];
+    const offenders: string[] = [];
+    for (const file of kotlinFiles()) {
+      const rel = relative(ROOT, file);
+      if (rel.includes('core/common/src/main')) continue; // same package as the declarations
+      const source = readFileSync(file, 'utf8');
+      if (!source.includes('com.maharanitraders.core.common.')) continue;
+
+      // `.map` is also the stdlib collection function, so it only counts when it is
+      // chained straight onto the call that produces an AppResult.
+      // no braces inside the lambda: `executeEnvelope { api.login(...) }.map {}`.
+      // Allowing nesting would also match `list.filter { … }.map { … }`, which is
+      // the stdlib function and needs no import.
+      const mapOnAppResult = /executeEnvelope\s*\{[^{}]*\}\s*\.\s*map\s*[({]/.test(source);
+      const needsImport = [
+        ...(mapOnAppResult ? ['map'] : []),
+        ...helpers.filter((h) => new RegExp(`\\.${h}\\s*[({]`).test(source)),
+      ];
+      for (const helper of needsImport) {
+        if (!source.includes(`com.maharanitraders.core.common.${helper}`)) {
+          offenders.push(`${rel}: calls .${helper}(…) without importing com.maharanitraders.core.common.${helper}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('backs every cross-module import with a declared project dependency', () => {
