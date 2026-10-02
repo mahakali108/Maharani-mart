@@ -11,7 +11,6 @@ import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.PasswordResetRequestDto
 import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
 import com.maharanitraders.core.network.dto.RefreshRequestDto
-import com.maharanitraders.core.network.dto.RefreshSessionDto
 import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -136,24 +135,32 @@ class AuthRepository @Inject constructor(
         tokens = dto.session?.let { tokensOf(it.accessToken, it.refreshToken, it.expiresAt) },
       )
     }
-}
 
-/**
- * Convert a wire session to stored tokens.
- *
- * `expiresAt` is optional on the wire. When GoTrue omits it, the lifetime is
- * assumed to be [ASSUMED_TOKEN_LIFETIME_SECONDS] (GoTrue's own default) so the
- * app still has a refresh schedule. This is an assumption about *timing only*:
- * the server verifies every token on every request, so a wrong guess causes an
- * early refresh (harmless) or a late one the server rejects with
- * `invalid_token` (which signs the user out). It never grants access.
- */
-private fun tokensOf(accessToken: String, refreshToken: String, expiresAt: Long?): SessionTokens =
-  SessionTokens(
+  /**
+   * Convert a wire session to stored tokens.
+   *
+   * `expiresAt` is optional on the wire. When GoTrue omits it, the lifetime is
+   * assumed to be [ASSUMED_TOKEN_LIFETIME_SECONDS] so the app still has a
+   * refresh schedule. This is an assumption about *timing only*: the server
+   * verifies every token on every request, so a wrong guess causes an early
+   * refresh (harmless) or a late one the server rejects with `invalid_token`
+   * (which signs the user out).
+   */
+  private fun tokensOf(
+    accessToken: String,
+    refreshToken: String,
+    expiresAt: Long?,
+  ): SessionTokens = SessionTokens(
     accessToken = accessToken,
     refreshToken = refreshToken,
     expiresAtEpochSeconds = expiresAt
       ?: (timeSource.nowEpochSeconds() + ASSUMED_TOKEN_LIFETIME_SECONDS),
   )
+}
 
+/**
+ * How long a session is assumed to last when the provider omits `expires_at`
+ * (GoTrue's own default of one hour). This only schedules the refresh; it never
+ * grants access — the server verifies every token on every request.
+ */
 private const val ASSUMED_TOKEN_LIFETIME_SECONDS = 3600L

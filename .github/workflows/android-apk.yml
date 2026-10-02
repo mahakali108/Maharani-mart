@@ -126,17 +126,25 @@ jobs:
             echo "::error::Gradle produced no log file — the step failed before the build started."
             exit 0
           fi
-          # Kotlin/Gradle/KSP error lines, deduplicated and truncated so the
-          # annotation list stays readable.
-          MATCHES=$(grep -E "^e: |error:|FAILURE:|Execution failed for task|What went wrong:|Caused by:|> Could not|Unresolved reference|Cannot access|Unsupported class file|A problem occurred|Could not resolve|Could not find|No matching variant|requires at least|incompatible" "$LOG" \
-            | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -45)
-          if [ -z "$MATCHES" ]; then
-            echo "::error::No known error pattern matched; emitting the tail of the log instead."
-            MATCHES=$(grep -v "^[[:space:]]*$" "$LOG" | tail -25)
+          # Emit the ROOT cause first: Gradle prints the outer exception, then
+          # "What went wrong", then the real cause. An earlier version of this
+          # step matched only the outer lines and hid the actual message.
+          emit() { printf '%s\n' "$1" | while IFS= read -r line; do [ -n "$line" ] && echo "::error::$line"; done; }
+
+          WHY=$(awk '/^\* What went wrong:/{f=1} f{print; c++} c>18{exit}' "$LOG")
+          [ -z "$WHY" ] && WHY=$(awk '/What went wrong/{f=1} f{print; c++} c>18{exit}' "$LOG")
+          [ -n "$WHY" ] && emit "=== What went wrong ===" && emit "$WHY"
+
+          CAUSES=$(grep -E "Caused by:" "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -12)
+          [ -n "$CAUSES" ] && emit "=== Caused by ===" && emit "$CAUSES"
+
+          KTERR=$(grep -E "^(e|w): " "$LOG" | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -30)
+          [ -n "$KTERR" ] && emit "=== Kotlin diagnostics ===" && emit "$KTERR"
+
+          if [ -z "$WHY$CAUSES$KTERR" ]; then
+            emit "=== No known pattern matched; tail of the log ==="
+            emit "$(grep -v "^[[:space:]]*$" "$LOG" | tail -25)"
           fi
-          printf '%s\n' "$MATCHES" | while IFS= read -r line; do
-            echo "::error::$line"
-          done
           echo "::notice::Full Gradle log is in the failed step's output and in the Gradle test/lint reports artifact."
 
       - name: Verify debug APK identity

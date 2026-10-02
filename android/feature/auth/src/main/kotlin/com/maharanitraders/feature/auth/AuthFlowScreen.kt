@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,8 +50,22 @@ fun AuthFlowScreen(
   val loginState by loginViewModel.state.collectAsStateWithLifecycle()
   val registerState by registerViewModel.state.collectAsStateWithLifecycle()
 
-  if (loginState.signedIn) {
-    onSignedIn()
+  // Both transitions below are side effects, so they run in a LaunchedEffect
+  // rather than during composition: writing state (or calling back into the
+  // parent) while Compose is calculating the frame can cause recomposition
+  // loops and lost updates.
+  LaunchedEffect(loginState.signedIn) {
+    if (loginState.signedIn) onSignedIn()
+  }
+
+  LaunchedEffect(registerState.registered, registerState.requiresEmailConfirmation) {
+    if (registerState.registered) {
+      step = if (registerState.requiresEmailConfirmation) {
+        AuthStep.CONFIRM_EMAIL
+      } else {
+        AuthStep.PENDING_APPROVAL
+      }
+    }
   }
 
   when (step) {
@@ -64,13 +79,6 @@ fun AuthFlowScreen(
     )
 
     AuthStep.REGISTER -> {
-      if (registerState.registered) {
-        step = if (registerState.requiresEmailConfirmation) {
-          AuthStep.CONFIRM_EMAIL
-        } else {
-          AuthStep.PENDING_APPROVAL
-        }
-      }
       RegisterScreen(
         state = registerState,
         onFullNameChange = registerViewModel::onFullNameChange,
