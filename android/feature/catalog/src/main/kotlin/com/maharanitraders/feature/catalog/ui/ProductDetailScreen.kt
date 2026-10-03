@@ -113,7 +113,7 @@ fun ProductDetailContent(
     state.detail == null -> LoadingState(message = "Loading product…")
 
     else -> ProductDetailBody(
-      detail = state.detail!!,
+      detail = state.detail,
       selectedPack = state.selectedPack,
       gallery = state.gallery,
       refreshing = state.refreshing,

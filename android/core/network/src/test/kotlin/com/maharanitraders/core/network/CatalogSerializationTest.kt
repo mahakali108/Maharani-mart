@@ -79,11 +79,15 @@ class CatalogSerializationTest {
     val envelope: ApiEnvelope<List<CatalogProductDto>> = decodeList(body)
 
     assertEquals("0f1c2d3e", envelope.requestId)
-    assertEquals("eyJrIjoia2V5c2V0In0", envelope.page?.nextCursor)
-    assertTrue(envelope.page!!.hasMore)
-    assertEquals(24, envelope.page!!.limit)
-    assertEquals(132, envelope.meta?.resultCount)
-    assertFalse(envelope.meta!!.resultCapped)
+    // Assert once through a local: after the first `!!` the compiler smart-casts
+    // `envelope.page`, so a second assertion on it is a warning, not a check.
+    val page = envelope.page!!
+    assertEquals("eyJrIjoia2V5c2V0In0", page.nextCursor)
+    assertTrue(page.hasMore)
+    assertEquals(24, page.limit)
+    val meta = envelope.meta!!
+    assertEquals(132, meta.resultCount)
+    assertFalse(meta.resultCapped)
 
     val card = envelope.data.single()
     assertEquals("Basmati Rice 500g", card.name)
@@ -113,8 +117,9 @@ class CatalogSerializationTest {
     assertNull(card.pack)
     assertNull(card.imageUrl)
     assertFalse(card.isNewLaunch)
-    assertFalse(envelope.page!!.hasMore)
-    assertNull(envelope.page!!.nextCursor)
+    val page = envelope.page!!
+    assertFalse(page.hasMore)
+    assertNull(page.nextCursor)
     assertNull(envelope.meta)
   }
 

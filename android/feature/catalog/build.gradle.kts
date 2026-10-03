@@ -87,8 +87,11 @@ dependencies {
 
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
-  testImplementation(libs.turbine)
   testImplementation(libs.truth)
+  // `ApiErrorMapper` takes a `Json`, and `:core:network` declares
+  // kotlinx-serialization-json as `implementation` — which deliberately does not
+  // leak to consumers — so the test source set has to ask for it directly.
+  testImplementation(libs.kotlinx.serialization.json)
   // The detail tests build a real `HttpException` so the 404 path is exercised
   // through the same error mapper the app uses, rather than a hand-made error.
   testImplementation(platform(libs.retrofit.bom))
