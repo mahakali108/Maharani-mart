@@ -36,6 +36,8 @@ data class MaharaniDestination(
 object MaharaniRoutes {
   const val HOME = "home"
   const val CATALOG = "catalog"
+  const val CATEGORIES = "categories"
+  const val ACCOUNT = "account"
   /**
    * Product detail, parameterised by product OR pack id.
    *
@@ -84,6 +86,15 @@ object MaharaniCatalog {
       summary = "Product catalogue, pack sizes, live availability and pricing from the existing backend.",
     ),
     MaharaniDestination(
+      route = MaharaniRoutes.CATEGORIES,
+      label = "Categories",
+      workspace = Workspace.RETAILER,
+      // Shipped with the native shopping redesign: a real directory over the
+      // existing taxonomy endpoints, so no planned-phase label.
+      phase = null,
+      summary = "The shop's real category and brand directory, with live product counts.",
+    ),
+    MaharaniDestination(
       route = MaharaniRoutes.CART,
       label = "Cart",
       workspace = Workspace.RETAILER,
@@ -96,6 +107,15 @@ object MaharaniCatalog {
       workspace = null,
       phase = MigrationPhase.ORDERS,
       summary = "Order history, status tracking and cancellation rules.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.ACCOUNT,
+      label = "Account",
+      workspace = null,
+      // Shipped with the native shopping redesign: the verified session, shown
+      // as a profile screen. No new data, no new endpoint.
+      phase = null,
+      summary = "Your signed-in profile, shop status and access period, exactly as the server reports them.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.COINS,
