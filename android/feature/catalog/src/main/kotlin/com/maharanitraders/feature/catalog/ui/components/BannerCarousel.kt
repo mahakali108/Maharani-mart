@@ -111,7 +111,9 @@ private fun BannerCard(
     modifier = modifier
       .fillMaxWidth()
       .clip(RoundedCornerShape(MaharaniDimens.radiusCard))
-      .then(if (clickable) Modifier.clickable { onOpenRoute?.invoke(route.orEmpty()) } else Modifier),
+      // `clickable` already proves the callback and the route exist, and the
+      // compiler smart-casts both from that stable val — no safe call needed.
+      .then(if (clickable) Modifier.clickable { onOpenRoute.invoke(route.orEmpty()) } else Modifier),
   ) {
     Box(modifier = Modifier.fillMaxWidth()) {
       ProductImage(
