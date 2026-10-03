@@ -2,6 +2,12 @@ package com.maharanitraders.feature.catalog
 
 import com.maharanitraders.core.common.AppError
 import com.maharanitraders.core.common.AppResult
+// `AppResult.map` is a top-level extension, not a member (a member `map` would put
+// `T` in an `in` position and break the covariance that lets
+// `Failure : AppResult<Nothing>` stand in for any `AppResult<T>`). Extensions live
+// in the package, so importing `AppResult` does not bring it: without this line
+// every `.map { }` below is `Unresolved reference 'map'`.
+import com.maharanitraders.core.common.map
 import com.maharanitraders.core.model.CatalogBrand
 import com.maharanitraders.core.model.CatalogCategory
 import com.maharanitraders.core.model.CatalogQuery

@@ -1,5 +1,8 @@
 package com.maharanitraders.feature.catalog.ui
 
+// `clickable` is an extension on Modifier, so it is not in scope from
+// `androidx.compose.ui.Modifier` alone.
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column

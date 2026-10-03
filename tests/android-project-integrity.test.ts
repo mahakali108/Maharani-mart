@@ -430,10 +430,17 @@ describe('Android build scripts stay executable', () => {
 
       // `.map` is also the stdlib collection function, so it only counts when it is
       // chained straight onto the call that produces an AppResult.
-      // no braces inside the lambda: `executeEnvelope { api.login(...) }.map {}`.
+      // no braces inside the lambda: `execute { api.login(...) }.map {}`.
       // Allowing nesting would also match `list.filter { … }.map { … }`, which is
-      // the stdlib function and needs no import.
-      const mapOnAppResult = /executeEnvelope\s*\{[^{}]*\}\s*\.\s*map\s*[({]/.test(source);
+      // the stdlib function and needs no import — `:feature:auth`'s
+      // `AreaDirectory.kt` does exactly that on a list and must stay clean.
+      //
+      // Both executors count: `ApiCallExecutor` exposes `execute` (yields the raw
+      // envelope) and `executeEnvelope` (unwraps it), and either can be the
+      // receiver. An earlier revision matched only `executeEnvelope`, which is why
+      // `:feature:catalog`'s `CatalogRepository.kt` reached CI with 15 unresolved
+      // `map`/`it`/`data`/`page`/`meta` references.
+      const mapOnAppResult = /execute(?:Envelope)?\s*\{[^{}]*\}\s*\.\s*map\s*[({]/.test(source);
       const needsImport = [
         ...(mapOnAppResult ? ['map'] : []),
         ...helpers.filter((h) => [`.${h}(`, `.${h} {`].some((call) => source.includes(call))),
@@ -1072,5 +1079,53 @@ describe('The Coil pin stays inside what the toolchain allows', () => {
       expect(atLeast(composeUi!, [1, 11, 1]),
         `coil ${coil} is built against Compose 1.11.1, which would upgrade composeUi ${composeUi}`).toBe(true);
     }
+  });
+});
+
+describe('Compose and Coil Modifier extensions are imported where they are used', () => {
+  /**
+   * WHY: `clickable`, `background`, `clip`, `testTag` and friends are extension
+   * functions on `Modifier`, so importing `androidx.compose.ui.Modifier` does not
+   * put them in scope. The failure is a bare `Unresolved reference` at the call
+   * site and nothing else hints at the missing import.
+   *
+   * `:feature:catalog`'s `ProductDetailScreen.kt` reached CI this way — one
+   * `.clickable(…)` at line 285 with no `androidx.compose.foundation.clickable`.
+   *
+   * Only extensions whose names are unambiguous are listed. Deliberately absent:
+   * `size`, `padding`, `height`, `width`, `map`, `filter`, `first` — all also
+   * stdlib collection members, so a naive check would flag correct code.
+   */
+  const EXTENSIONS: Record<string, string> = {
+    clickable: 'androidx.compose.foundation.clickable',
+    background: 'androidx.compose.foundation.background',
+    border: 'androidx.compose.foundation.border',
+    clip: 'androidx.compose.ui.draw.clip',
+    testTag: 'androidx.compose.ui.platform.testTag',
+    verticalScroll: 'androidx.compose.foundation.verticalScroll',
+    horizontalScroll: 'androidx.compose.foundation.horizontalScroll',
+    crossfade: 'coil3.request.crossfade',
+  };
+
+  it('imports every Modifier extension it calls', () => {
+    const offenders: string[] = [];
+    let checked = 0;
+
+    for (const file of kotlinFiles()) {
+      const source = readFileSync(file, 'utf8');
+      const imports = new Set([...source.matchAll(/^import\s+([\w.]+)/gm)].map((m) => m[1]!));
+
+      for (const [extension, required] of Object.entries(EXTENSIONS)) {
+        const used = new RegExp(`\\.\\s*${extension}\\s*[({]`).exec(source);
+        if (!used) continue;
+        checked += 1;
+        if (!imports.has(required)) {
+          const line = source.slice(0, used.index).split('\n').length;
+          offenders.push(`${relative(ROOT, file)}:${line} calls .${extension}(…) without importing ${required}`);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
+    expect(offenders.sort()).toEqual([]);
   });
 });
