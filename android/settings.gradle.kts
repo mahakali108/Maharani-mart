@@ -11,7 +11,8 @@
  *   core/designsystem         Material 3 theme (brand tokens), state surfaces, money formatting
  *
  * Feature modules are added one per migration phase, each together with the API
- * endpoints it needs — never as empty scaffolding. Phase C adds :feature:auth.
+ * endpoints it needs — never as empty scaffolding. Phase C adds :feature:auth,
+ * Phase D adds :feature:catalog (with its /api/mobile/v1/catalog endpoints).
  */
 pluginManagement {
   repositories {
@@ -39,3 +40,4 @@ include(":core:auth")
 include(":core:datastore")
 include(":core:designsystem")
 include(":feature:auth")
+include(":feature:catalog")

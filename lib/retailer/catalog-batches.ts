@@ -68,6 +68,16 @@ export interface CatalogFilters {
   onlyFavorites: boolean;
   onlyNew: boolean;
   onlyOffers: boolean;
+  /**
+   * Keep only cards whose priced pack is reported IN STOCK.
+   *
+   * Optional so existing call sites (the web catalogue) are unchanged. Stock
+   * status is resolved per retailer by `get_retailer_pack_availability`, which
+   * SQL cannot see, so setting this forces the bounded-working-set mode exactly
+   * like a price filter does — and, like every derived constraint, a pack whose
+   * status could not be read (`unknown`) is EXCLUDED rather than guessed at.
+   */
+  onlyInStock?: boolean;
 }
 
 export interface CatalogBatch {
@@ -133,6 +143,7 @@ export async function loadCatalogBatch(
   cursor: ListCursor | null
 ): Promise<CatalogBatch> {
   const { userId, areaId } = shopper;
+  const onlyInStock = filters.onlyInStock ?? false;
 
   const needsDerivedPricing = hasDerivedPriceConstraints({
     sort: filters.sort,
@@ -141,7 +152,7 @@ export async function loadCatalogBatch(
     minDiscount: filters.minDiscount,
     maxMoq: filters.maxMoq,
     onlyOffers: filters.onlyOffers,
-  });
+  }) || onlyInStock;
 
   const [favoriteIds, frequency] = await Promise.all([
     loadFavoriteIds(supabase, userId),
@@ -260,6 +271,10 @@ export async function loadCatalogBatch(
     if (filters.minDiscount !== null && calcDiscountPercent(card.mrp, card.fromPrice) < filters.minDiscount) return false;
     if (filters.maxMoq !== null && (card.moq ?? 1) > filters.maxMoq) return false;
     if (filters.onlyOffers && !card.hasOffer && calcDiscountPercent(card.mrp, card.fromPrice) <= 0) return false;
+    // A pack whose availability could not be read is `unknown`, not `in_stock`:
+    // the same rule the discovery rail uses, so an "in stock only" filter can
+    // never surface a product the warehouse has not confirmed.
+    if (onlyInStock && card.availability !== 'in_stock') return false;
     return true;
   });
 

@@ -36,6 +36,18 @@ data class MaharaniDestination(
 object MaharaniRoutes {
   const val HOME = "home"
   const val CATALOG = "catalog"
+  /**
+   * Product detail, parameterised by product OR pack id.
+   *
+   * The catalogue links to the variant the shopper was looking at, and the
+   * server accepts either id for the same product — so the route does not need
+   * to know which one it was given.
+   */
+  const val PRODUCT_DETAIL = "catalog/product/{productId}"
+
+  /** The concrete route for one product, for `NavController.navigate`. */
+  fun productDetail(productId: String): String = "catalog/product/$productId"
+
   const val CART = "cart"
   const val ORDERS = "orders"
   const val COINS = "coins"
@@ -66,7 +78,9 @@ object MaharaniCatalog {
       route = MaharaniRoutes.CATALOG,
       label = "Catalog",
       workspace = Workspace.RETAILER,
-      phase = MigrationPhase.CATALOG,
+      // Phase D shipped: this destination now renders a real screen, so it no
+      // longer carries a "planned" phase label.
+      phase = null,
       summary = "Product catalogue, pack sizes, live availability and pricing from the existing backend.",
     ),
     MaharaniDestination(

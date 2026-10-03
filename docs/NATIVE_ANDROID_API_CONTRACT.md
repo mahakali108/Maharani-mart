@@ -253,7 +253,11 @@ Returned session object (server-internal, never serialized raw):
 - The app treats a payload it cannot route (unknown role, blank `homeRoute`) as
   "unsupported account" on the client side as well — two independent fail-closed checks.
 
-### 2.2 PLANNED — Phase C (authentication & registration)
+### 2.2 IMPLEMENTED — Phase C (authentication & registration)
+
+> All six routes below exist under `app/api/mobile/v1/` and are covered by
+> `tests/mobile-auth.test.ts`. The heading previously said PLANNED; the
+> endpoints shipped and the label was never updated.
 
 | Method | Path | Auth | Request | Response | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -267,31 +271,84 @@ Returned session object (server-internal, never serialized raw):
 **Ownership/role:** none of these accept a role, retailer id or approval flag. The
 account's role comes from the database trigger (`handle_new_user`).
 
-### 2.3 PLANNED — Phase D (catalog, search, product detail)
+### 2.3 IMPLEMENTED — Phase D (catalog, search, product detail)
+
+All five routes live under `app/api/mobile/v1/` and are covered by
+`tests/mobile-catalog-api.test.ts`. Every one of them runs the same gate as the
+rest of the API: `newRequestId()` → `enforceRateLimit` → `requireMobileSession`
+→ `requireMobileRole(session, ['retailer'])`, rate group `read.catalog`
+(120/60s), `503 database_unavailable` when Supabase is unreachable and
+`500 internal_error` through `logServerError`.
 
 | Method | Path | Auth/role | Reuse |
 | --- | --- | --- | --- |
-| GET | `/catalog/products?categoryId&brandId&q&sort&minPrice&maxPrice&inStock&cursor&limit` | retailer | `lib/retailer/catalog.ts` (`priceCatalogProducts`), `catalog-params.ts` (`CATALOG_SORTS = recommended|price-low|price-high|discount|newest|frequent|name`, `sanitizeSearchTerm`, page size 24, max 240) |
-| GET | `/catalog/products/{id}` | retailer | `loadProductsByIds` + `priceCatalogPack` + pack tiers + gallery (`product_packs.image_url`, `product_images`) |
-| GET | `/catalog/categories`, `/catalog/brands` | retailer | `lib/retailer/{home-data,category-detail,brand-detail}.ts` |
-| GET | `/catalog/search/suggestions?q=` | retailer | `searchSuggestionsAction` (Turso cache is derived/disposable — if it is down, results come from the DB) |
-| POST | `/catalog/products/by-ids` | retailer | reorder/cart preview (`loadPricedProductsAction`) |
-| PUT/DELETE | `/favorites/{productId}` | retailer | `lib/retailer/favorite-actions.ts` |
-| GET | `/home` | retailer | `loadRetailerHome` (banners, categories, recent orders, cart summary, coins, schemes) |
+| GET | `/catalog/products?q&categoryId&brandId&sort&minPrice&maxPrice&discount&maxMoq&inStock&new&offers&fav&cursor` | retailer | `loadCatalogBatch` (`lib/retailer/catalog-batches.ts`) → `lib/retailer/catalog.ts` pricing, `catalog-params.ts` (`CATALOG_SORTS`, `sanitizeSearchTerm`, `CATALOG_PAGE_SIZE = 24`, result cap 240) |
+| GET | `/catalog/products/{id}` | retailer | product **or** pack id. `loadProductsByIds` + `priceCatalogPack` + `loadPackTiers` + gallery (`product_pack_images`, `product_packs.image_url`, `product_images`). A pack id marks that pack `selected: true`. |
+| GET | `/catalog/categories` | retailer | `lib/retailer/home-data.ts`, ordered by `sort_order` |
+| GET | `/catalog/brands` | retailer | `lib/retailer/home-data.ts`, ordered by `name` |
+| GET | `/home` | retailer | `loadRetailerHome` — banners (`isBannerVisible` + `resolveBannerTarget`), categories, brands, and a discovery rail that is **the first batch of the real catalogue**, not a separately curated list |
+
+**Query semantics.** `inStock`, `new`, `offers` and `fav` are explicit `=1`
+flags and default off. `minPrice`/`maxPrice` are rupees; a negative value,
+`minPrice > maxPrice`, a non-UUID `categoryId`/`brandId`, or an undecodable
+`cursor` is `400 invalid_request` with the offending field named. An unknown
+`sort` falls back to `recommended` instead of erroring, so an older app asking
+for a sort a newer server dropped still gets a catalogue.
+
+**There is no `limit` parameter.** The batch size is the server's
+`CATALOG_PAGE_SIZE` (24) and keyset cursors are aligned to it; a client asking
+for a different size would silently break the cursor. `page.limit` in the
+response is the server reporting what it used.
+
+**Still PLANNED from the original Phase D list** (deliberately not shipped):
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/catalog/search/suggestions?q=` | Search itself is server-side via `?q=` on `/catalog/products`. The type-ahead suggestion endpoint is not implemented; the app does not fake it locally. |
+| POST | `/catalog/products/by-ids` | Phase E (reorder / cart preview). |
+| PUT/DELETE | `/favorites/{productId}` | `isFavorite` is **read** (`loadFavoriteIds`) and rendered, but cannot be written yet. |
+| — | `/home` extras | Recent orders, cart summary, coins and schemes are Phase E/F; `/home` returns only `{ banners, categories, brands, products, nextCursor }`. |
 
 Contract details that matter:
 
 - **Prices** are always server-computed for the requesting retailer
-  (overrides/case-loose tiers/MOQ/offers) and returned as
-  `{ packId, packName, unitsPerCase, moq, effectiveCasePricePaise, unitPricePaise, mrpPaise, tiers[], inStock }`.
-- **Availability** is the two-state customer vocabulary (`in_stock` / `out_of_stock`)
-  from `get_retailer_pack_availability`; exact counts are never exposed here.
+  (overrides / case-loose tiers / MOQ / offers) and returned **in integer
+  paise** as
+  `{ packId, packName, unitsPerCase, moq, unitPricePaise, mrpPaise, derivedCasePricePaise, tiers[], availability }`.
+  There is no `effectiveCasePricePaise` field — the earlier draft name was never
+  implemented. Every money field is nullable: an unpriced pack returns `null`,
+  never `0`.
+- `tiers[]` entries are `{ minQuantity, maxQuantity, pricePerPiecePaise }` with
+  the bounds **in pieces**. It is the slab table the pricing engine actually
+  used. A pack with no configured loose slabs returns an **empty** array and is
+  priced from its case price — the app must not invent a slab.
+- **`pack: null` on a catalogue card means the product has no active pack.** It
+  is listed so the catalogue stays complete, but carries no price, no MOQ and no
+  availability, and the app must not offer to order it.
+- **Availability** is the two-state customer vocabulary (`in_stock` /
+  `out_of_stock`) from `get_retailer_pack_availability`; exact stock counts are
+  never exposed here. `unknown` is the DTO's third value for the case where
+  availability could not be resolved, and is rendered as a neutral state rather
+  than as "in stock".
 - **Banners** come from the `banners` table with existing scheduling
   (`isBannerVisible`: starts_at/ends_at + area targeting) and `sort_order`/priority;
   multiple eligible banners are returned in order; an empty array means the client shows
-  the existing fallback. No banner id is ever hardcoded in the app.
+  the existing fallback. No banner id is ever hardcoded in the app. A banner
+  `linkUrl` that fails the server's safety check is returned as `null` rather
+  than passed through.
+- A product that is invisible to the caller, or an id that matches neither a
+  product nor a pack, is `404 not_found` — the detail route does not leak
+  existence across the RLS boundary.
 - Packs without an active row are never returned; `MOQ` violations are rejected by the
   quote/order stages, not silently adjusted.
+- Envelopes: the collection route uses `jsonOkPage`
+  (`{ data: [...], page: { nextCursor, hasMore, limit }, meta: { resultCount, resultCapped }, requestId }`);
+  detail, taxonomy and home use plain `jsonOk`.
+
+**Client-side lock.** `android/core/network/.../dto/CatalogDtos.kt` mirrors these
+shapes field for field, and `tests/mobile-catalog-api.test.ts` parses that Kotlin
+source and asserts both directions of field agreement. A renamed server field is
+therefore a failing web test, not a silently empty product card.
 
 ### 2.4 PLANNED — Phase E (cart, checkout, orders, transaction safety)
 

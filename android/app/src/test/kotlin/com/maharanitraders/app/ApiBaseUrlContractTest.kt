@@ -51,6 +51,33 @@ class ApiBaseUrlContractTest {
   }
 
   @Test
+  fun `retrofit resolves the phase d catalogue endpoints against the compiled-in base url`() {
+    val base = ApiBaseUrlContract.requireValid(
+      BuildConfig.API_BASE_URL,
+      allowLocalHttp = BuildConfig.DEBUG,
+    ).toHttpUrl()
+
+    listOf(
+      "api/mobile/v1/catalog/products",
+      "api/mobile/v1/catalog/categories",
+      "api/mobile/v1/catalog/brands",
+      "api/mobile/v1/home",
+    ).forEach { relative ->
+      val resolved = base.resolve(relative)!!
+      assertEquals("/$relative", resolved.encodedPath)
+      assertEquals("https", resolved.scheme)
+    }
+
+    // The parameterised detail route keeps its single path segment: a product id
+    // must never be able to escape into the query string or a second segment.
+    val detail = base.resolve("api/mobile/v1/catalog/products/5f0c1a2e-0000-0000-0000-000000000001")!!
+    assertEquals(
+      "/api/mobile/v1/catalog/products/5f0c1a2e-0000-0000-0000-000000000001",
+      detail.encodedPath,
+    )
+  }
+
+  @Test
   fun `normalises a missing trailing slash`() {
     val result = ApiBaseUrlContract.validate("https://maharani.example.com")
     assertEquals(

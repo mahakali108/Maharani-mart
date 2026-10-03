@@ -12,15 +12,20 @@ import com.maharanitraders.core.network.dto.AckDto
 import com.maharanitraders.core.network.dto.ApiEnvelope
 import com.maharanitraders.core.network.dto.AreasDto
 import com.maharanitraders.core.network.dto.AuthSessionDto
+import com.maharanitraders.core.network.dto.CatalogBrandsDto
+import com.maharanitraders.core.network.dto.CatalogCategoriesDto
+import com.maharanitraders.core.network.dto.CatalogProductDto
 import com.maharanitraders.core.network.dto.HealthDto
 import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.NavigationDto
 import com.maharanitraders.core.network.dto.PasswordResetRequestDto
 import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
+import com.maharanitraders.core.network.dto.ProductDetailDto
 import com.maharanitraders.core.network.dto.RefreshRequestDto
 import com.maharanitraders.core.network.dto.RefreshSessionDto
 import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
 import com.maharanitraders.core.network.dto.RegisterRetailerResponseDto
+import com.maharanitraders.core.network.dto.RetailerHomeDto
 import com.maharanitraders.core.network.dto.RetailerDto
 import com.maharanitraders.core.network.dto.SessionDto
 import com.maharanitraders.core.network.dto.SessionUserDto
@@ -463,6 +468,27 @@ class FakeMaharaniApi : MaharaniApi {
   override suspend fun registerRetailer(
     body: RegisterRetailerRequestDto,
   ): ApiEnvelope<RegisterRetailerResponseDto> = unsupported("registerRetailer")
+
+  // Phase D added the catalogue endpoints. Same rule as above: the session layer
+  // cannot reach them, so they throw instead of returning a fabricated envelope.
+  override suspend fun catalogProducts(
+    search: String?,
+    categoryId: String?,
+    brandId: String?,
+    sort: String?,
+    inStock: String?,
+    cursor: String?,
+  ): ApiEnvelope<List<CatalogProductDto>> = unsupported("catalogProducts")
+
+  override suspend fun catalogProduct(id: String): ApiEnvelope<ProductDetailDto> =
+    unsupported("catalogProduct")
+
+  override suspend fun catalogCategories(): ApiEnvelope<CatalogCategoriesDto> =
+    unsupported("catalogCategories")
+
+  override suspend fun catalogBrands(): ApiEnvelope<CatalogBrandsDto> = unsupported("catalogBrands")
+
+  override suspend fun retailerHome(): ApiEnvelope<RetailerHomeDto> = unsupported("retailerHome")
 
   private fun unsupported(endpoint: String): Nothing =
     throw UnsupportedOperationException("$endpoint is not used by the session layer")

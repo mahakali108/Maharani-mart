@@ -21,6 +21,33 @@ import kotlinx.serialization.Serializable
 data class ApiEnvelope<T>(
   val data: T,
   val requestId: String? = null,
+  /** Present on collection responses only (contract §1.3). */
+  val page: PageDto? = null,
+  /** Optional, additive list facts. Never required to render a list. */
+  val meta: ListMetaDto? = null,
+)
+
+/**
+ * Pagination block of a collection response.
+ *
+ * [nextCursor] is OPAQUE: the client stores it and sends it back unchanged, and
+ * must not try to read the ordering columns out of it. `null` means the list is
+ * complete — which is the only end-of-list signal the app acts on.
+ */
+@Serializable
+data class PageDto(
+  val nextCursor: String? = null,
+  val hasMore: Boolean = false,
+  /** The batch size the SERVER used. Reported, not requested. */
+  val limit: Int = 0,
+)
+
+@Serializable
+data class ListMetaDto(
+  /** Exact match count, known on the first batch only. */
+  val resultCount: Int? = null,
+  /** True when a bounded working set capped the list; the UI must say so. */
+  val resultCapped: Boolean = false,
 )
 
 @Serializable

@@ -134,6 +134,7 @@ dependencies {
   implementation(project(":core:datastore"))
   implementation(project(":core:designsystem"))
   implementation(project(":feature:auth"))
+  implementation(project(":feature:catalog"))
 
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)
@@ -151,6 +152,12 @@ dependencies {
   implementation(libs.androidx.compose.material3)
 
   implementation(libs.kotlinx.coroutines.android)
+
+  // One image loader serves the whole process. Coil 3 keeps network support in
+  // a separate artifact, so it is declared where the loader is BUILT (here) as
+  // well as where images are drawn (:feature:catalog).
+  implementation(libs.coil.compose)
+  implementation(libs.coil.network.okhttp)
 
   implementation(libs.hilt.android)
   ksp(libs.hilt.compiler)

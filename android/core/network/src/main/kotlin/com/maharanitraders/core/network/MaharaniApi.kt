@@ -4,7 +4,12 @@ import com.maharanitraders.core.network.dto.AckDto
 import com.maharanitraders.core.network.dto.ApiEnvelope
 import com.maharanitraders.core.network.dto.AreasDto
 import com.maharanitraders.core.network.dto.AuthSessionDto
+import com.maharanitraders.core.network.dto.CatalogBrandsDto
+import com.maharanitraders.core.network.dto.CatalogCategoriesDto
+import com.maharanitraders.core.network.dto.CatalogProductDto
 import com.maharanitraders.core.network.dto.HealthDto
+import com.maharanitraders.core.network.dto.ProductDetailDto
+import com.maharanitraders.core.network.dto.RetailerHomeDto
 import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.PasswordResetRequestDto
 import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
@@ -16,6 +21,8 @@ import com.maharanitraders.core.network.dto.SessionDto
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * The versioned mobile API surface.
@@ -78,4 +85,56 @@ interface MaharaniApi {
   suspend fun registerRetailer(
     @Body body: RegisterRetailerRequestDto,
   ): ApiEnvelope<RegisterRetailerResponseDto>
+
+  // -------------------------------------------------------------------------
+  // Phase D - catalogue
+  // -------------------------------------------------------------------------
+  //
+  // All five are retailer-scoped on the server, priced for the CALLING
+  // retailer, and answer with the standard envelope. The list endpoint returns
+  // `data` as a bare array with a sibling `page` block (contract 1.3), so the
+  // cursor lives on the envelope rather than inside the payload.
+  //
+  // Every parameter is nullable and Retrofit omits nulls, so a request carries
+  // only the filters the shopper actually set. There is deliberately no
+  // retailer id, area id, role or price parameter: identity and pricing are the
+  // server's business.
+
+  @GET("api/mobile/v1/catalog/products")
+  suspend fun catalogProducts(
+    @Query("q") search: String? = null,
+    @Query("categoryId") categoryId: String? = null,
+    @Query("brandId") brandId: String? = null,
+    @Query("sort") sort: String? = null,
+    @Query("inStock") inStock: String? = null,
+    @Query("cursor") cursor: String? = null,
+  ): ApiEnvelope<List<CatalogProductDto>>
+
+  /**
+   * One product with every active pack priced at its own MOQ.
+   *
+   * [id] may be a product id or a pack id - the catalogue links to the variant
+   * the shopper was looking at, and a pack id additionally marks that pack as
+   * selected. The server answers `404 not_found` for an id that does not exist
+   * and for one the caller may not see, without distinguishing them.
+   */
+  @GET("api/mobile/v1/catalog/products/{id}")
+  suspend fun catalogProduct(@Path("id") id: String): ApiEnvelope<ProductDetailDto>
+
+  @GET("api/mobile/v1/catalog/categories")
+  suspend fun catalogCategories(): ApiEnvelope<CatalogCategoriesDto>
+
+  @GET("api/mobile/v1/catalog/brands")
+  suspend fun catalogBrands(): ApiEnvelope<CatalogBrandsDto>
+
+  /**
+   * The retailer home payload: admin-published banners, the real category strip
+   * and the first catalogue batch.
+   *
+   * Cart, coins, recent orders and schemes are NOT part of this response - they
+   * belong to later phases, and an empty `banners` list is a normal answer
+   * rather than a failure.
+   */
+  @GET("api/mobile/v1/home")
+  suspend fun retailerHome(): ApiEnvelope<RetailerHomeDto>
 }
