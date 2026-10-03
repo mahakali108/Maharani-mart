@@ -27,6 +27,7 @@ class ApiBaseUrlContractTest {
     assertTrue(normalized.startsWith("https://"))
     assertTrue(normalized.endsWith("/"))
     assertTrue("base url must not carry credentials or a query", !normalized.contains('@'))
+    assertEquals("maharanitraders.vercel.app", normalized.toHttpUrl().host)
   }
 
   @Test
@@ -65,6 +66,20 @@ class ApiBaseUrlContractTest {
       ApiBaseUrlContract.Validation.Valid("https://maharani.example.com/app/"),
       result,
     )
+  }
+
+  @Test
+  fun `rejects known deleted Vercel production hostnames`() {
+    listOf(
+      "maharani-mart-one.vercel.app",
+      "maharani-mart-mahakali108s-projects.vercel.app",
+    ).forEach { host ->
+      assertEquals(
+        "expected retired host $host to be rejected",
+        ApiBaseUrlContract.Validation.Invalid("API base URL must not use a retired Vercel hostname"),
+        ApiBaseUrlContract.validate("https://$host/"),
+      )
+    }
   }
 
   @Test
