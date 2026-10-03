@@ -84,7 +84,7 @@ class CatalogViewModelTest {
     assertThat(state.products.map { it.id }).containsExactly("p1", "p2").inOrder()
     assertThat(state.resultCount).isEqualTo(2)
     // A missing aggregate is reported as missing, not as zero.
-    assertThat(state.categories[1]!!.productCount).isNull()
+    assertThat(state.categories[1].productCount).isNull()
   }
 
   @Test

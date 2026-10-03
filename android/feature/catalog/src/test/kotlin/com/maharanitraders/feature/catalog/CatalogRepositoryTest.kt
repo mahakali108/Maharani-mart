@@ -247,10 +247,10 @@ class CatalogRepositoryTest {
     val page = (catalogRepository(api, dispatcher).loadProducts(CatalogQuery.DEFAULT, null) as AppResult.Success).value
     advanceUntilIdle()
 
-    assertThat(page.products[0]!!.pack!!.unitPricePaise).isNull()
-    assertThat(page.products[0]!!.pack!!.mrpPaise).isNull()
+    assertThat(page.products[0].pack!!.unitPricePaise).isNull()
+    assertThat(page.products[0].pack!!.mrpPaise).isNull()
     // No active pack: browse-only, with no price block to misread.
-    assertThat(page.products[1]!!.pack).isNull()
+    assertThat(page.products[1].pack).isNull()
   }
 
   @Test
@@ -304,13 +304,13 @@ class CatalogRepositoryTest {
     advanceUntilIdle()
 
     assertThat(home.banners).hasSize(2)
-    assertThat(home.banners[0]!!.isNavigable).isTrue()
+    assertThat(home.banners[0].isNavigable).isTrue()
     // An http(s) link is not a route the native shell can open, so it is not
     // advertised as tappable.
-    assertThat(home.banners[1]!!.isNavigable).isFalse()
-    assertThat(home.categories[0]!!.productCount).isEqualTo(12)
+    assertThat(home.banners[1].isNavigable).isFalse()
+    assertThat(home.categories[0].productCount).isEqualTo(12)
     // A missing aggregate stays missing rather than becoming a fake zero.
-    assertThat(home.categories[1]!!.productCount).isNull()
+    assertThat(home.categories[1].productCount).isNull()
     assertThat(home.products).hasSize(1)
     assertThat(home.nextCursor).isEqualTo("next")
   }

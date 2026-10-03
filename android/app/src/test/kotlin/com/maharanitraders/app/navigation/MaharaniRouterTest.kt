@@ -163,12 +163,38 @@ class MaharaniRouterTest {
 
   @Test
   fun `destinations that are not built yet always carry a phase label`() {
+    // `phase` is what `DestinationSurface` renders as "Planned · Phase X" for a
+    // destination that has no screen of its own, so a destination that DOES have
+    // one must not carry a phase — that would label a shipped feature as planned.
+    //
+    // This list is exactly the set of branches `DestinationSurface` renders.
+    // Add a route here only when its phase actually ships; the assertion below
+    // still fails for any new unbuilt destination that forgot its phase.
+    val built = setOf(MaharaniRoutes.HOME, MaharaniRoutes.CATALOG)
+
     MaharaniCatalog.destinations
-      .filter { it.route != MaharaniRoutes.HOME }
+      .filter { it.route !in built }
       .forEach { destination ->
         assertTrue(
           "${destination.route} must declare the phase that delivers it",
           destination.phase != null,
+        )
+      }
+  }
+
+  @Test
+  fun `a destination with a real screen does not carry a planned phase label`() {
+    // The other half of the rule above: the built set must not drift into
+    // carrying a phase, or the drawer's placeholder branch would describe a
+    // working screen as "Planned".
+    val built = setOf(MaharaniRoutes.HOME, MaharaniRoutes.CATALOG)
+
+    MaharaniCatalog.destinations
+      .filter { it.route in built }
+      .forEach { destination ->
+        assertNull(
+          "${destination.route} is built, so it must not declare a phase",
+          destination.phase,
         )
       }
   }
