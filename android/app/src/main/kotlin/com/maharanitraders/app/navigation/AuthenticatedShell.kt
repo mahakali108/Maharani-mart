@@ -223,7 +223,9 @@ private fun RoutedShell(
             snapshot = snapshot,
             search = homeSearch,
             onSearchChange = { homeSearch = it },
-            onSearchSubmit = { term -> openCatalog(CatalogRequest(search = term.trim())) },
+            // `MaharaniSearchBar.onSubmit` carries no argument: the shell owns the
+            // field's text, so submit reads the state it already holds.
+            onSearchSubmit = { openCatalog(CatalogRequest(search = homeSearch.trim())) },
             onOpenDrawer = ::openDrawer,
             onOpenAccount = { showAccount.value = true },
           )
