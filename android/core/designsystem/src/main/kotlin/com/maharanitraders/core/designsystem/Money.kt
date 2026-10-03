@@ -36,6 +36,18 @@ object MoneyFormat {
   fun formatPaisePlain(paise: Long): String =
     formatPaise(paise).removePrefix(RUPEE_SYMBOL)
 
+  /**
+   * Display-only compact form: `₹1,200.00` → `₹1,200`, while `₹1,200.50` keeps
+   * its paise. Wholesale rates are whole rupees far more often than not, and a
+   * card column is narrow; the VALUE is untouched — only a zero fraction is
+   * omitted, so this may never be used where an exact two-decimal figure is
+   * required (invoices, the tier table).
+   */
+  fun formatPaiseShort(paise: Long): String {
+    val formatted = formatPaise(paise)
+    return if (formatted.endsWith(".00")) formatted.dropLast(3) else formatted
+  }
+
   /** The Indian grouping rule, isolated so it is unit-testable on its own. */
   fun groupIndian(value: Long): String {
     val digits = value.absoluteValue.toString()

@@ -1,0 +1,262 @@
+package com.maharanitraders.app.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.maharanitraders.app.BuildConfig
+import com.maharanitraders.app.navigation.MaharaniCatalog
+import com.maharanitraders.core.designsystem.IsoDateDisplay
+import com.maharanitraders.core.designsystem.components.SectionHeader
+import com.maharanitraders.core.designsystem.labels.label
+import com.maharanitraders.core.designsystem.theme.MaharaniDimens
+import com.maharanitraders.core.model.SessionSnapshot
+import com.maharanitraders.core.model.Workspace
+
+/** Test tags for the account surface. */
+object AccountScreenTags {
+  const val PROFILE = "account_profile"
+  const val SHOP = "account_shop"
+  const val ACCESS = "account_access"
+  const val SIGN_OUT = "account_sign_out"
+}
+
+/**
+ * The Account tab: the verified session, presented as a profile.
+ *
+ * Nothing here is fetched again or invented — every line is the same
+ * server-verified snapshot the shell was routed with: identity, role, shop
+ * status, access period and the workspaces the server's policy grants. Sign
+ * out is the only action, and it is the real session controller's.
+ */
+@Composable
+fun AccountScreen(
+  snapshot: SessionSnapshot,
+  onSignOut: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  LazyColumn(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(AccountScreenTags.PROFILE),
+    contentPadding = PaddingValues(MaharaniDimens.pageGutter),
+    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
+  ) {
+    item { ProfileCard(snapshot = snapshot) }
+
+    if (snapshot.retailer != null) {
+      item { ShopCard(snapshot = snapshot) }
+    }
+
+    if (snapshot.access != null) {
+      item { AccessCard(snapshot = snapshot) }
+    }
+
+    item { WorkspacesCard(snapshot = snapshot) }
+
+    item {
+      Button(
+        onClick = onSignOut,
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag(AccountScreenTags.SIGN_OUT),
+        colors = ButtonDefaults.buttonColors(
+          containerColor = MaterialTheme.colorScheme.errorContainer,
+          contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+        shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+      ) {
+        Text(
+          text = "Sign out",
+          style = MaterialTheme.typography.labelLarge,
+          modifier = Modifier.padding(vertical = MaharaniDimens.spaceXs),
+        )
+      }
+    }
+
+    item {
+      Text(
+        text = "Maharani Traders for Android · version ${BuildConfig.VERSION_NAME}",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = MaharaniDimens.spaceMd),
+      )
+    }
+  }
+}
+
+@Composable
+private fun ProfileCard(snapshot: SessionSnapshot, modifier: Modifier = Modifier) {
+  val displayName = snapshot.user.fullName ?: snapshot.user.email ?: "Signed in"
+  AccountCard(modifier = modifier) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
+    ) {
+      Box(
+        modifier = Modifier
+          .size(56.dp)
+          .clip(CircleShape)
+          .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(
+          text = initialsOf(displayName),
+          style = MaterialTheme.typography.headlineSmall,
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+      }
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
+      ) {
+        Text(
+          text = displayName,
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+        )
+        snapshot.user.email?.let { email ->
+          Text(
+            text = email,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+        snapshot.user.phone?.let { phone ->
+          Text(
+            text = phone,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+          )
+        }
+      }
+      Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = RoundedCornerShape(MaharaniDimens.radiusPill),
+      ) {
+        Text(
+          text = snapshot.role.label(),
+          style = MaterialTheme.typography.labelSmall,
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun ShopCard(snapshot: SessionSnapshot, modifier: Modifier = Modifier) {
+  val retailer = snapshot.retailer ?: return
+  AccountCard(modifier = modifier.testTag(AccountScreenTags.SHOP)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+      SectionHeader(title = "Your shop")
+      FactRow(label = "Shop name", value = retailer.shopName ?: "Not set")
+      FactRow(label = "Approval", value = retailer.status.label())
+    }
+  }
+}
+
+@Composable
+private fun AccessCard(snapshot: SessionSnapshot, modifier: Modifier = Modifier) {
+  val access = snapshot.access ?: return
+  val expiry = IsoDateDisplay.formatDate(access.expiresAtIso)
+  AccountCard(modifier = modifier.testTag(AccountScreenTags.ACCESS)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+      SectionHeader(title = "Access period")
+      FactRow(label = "Status", value = access.status)
+      FactRow(label = "Valid until", value = expiry?.let { "$it (UTC)" } ?: "No expiry on record")
+    }
+  }
+}
+
+@Composable
+private fun WorkspacesCard(snapshot: SessionSnapshot, modifier: Modifier = Modifier) {
+  val workspaces = snapshot.navigation.workspaces
+  AccountCard(modifier = modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+      SectionHeader(
+        title = "Workspaces",
+        subtitle = "Granted by the server for this account",
+      )
+      if (workspaces.isEmpty()) {
+        Text(
+          text = "No workspace granted.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      } else {
+        workspaces.forEach { workspace: Workspace ->
+          val destination = MaharaniCatalog.destinations.firstOrNull { it.workspace == workspace }
+          FactRow(
+            label = workspace.label(),
+            value = destination?.summary ?: "Available in the web workspace.",
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun AccountCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+  Surface(
+    modifier = modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(MaharaniDimens.radiusCard),
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = MaharaniDimens.cardElevation,
+  ) {
+    Column(
+      modifier = Modifier.padding(MaharaniDimens.spaceLg),
+      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
+    ) { content() }
+  }
+}
+
+@Composable
+private fun FactRow(label: String, value: String, modifier: Modifier = Modifier) {
+  Column(modifier = modifier.fillMaxWidth()) {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.labelSmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+      text = value,
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurface,
+    )
+  }
+}
+
+/** "Gupta Kirana Store" → "GK"; falls back to the first two characters. */
+private fun initialsOf(name: String): String {
+  val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+  val initials = parts.mapNotNull { it.firstOrNull()?.uppercaseChar() }.take(2).joinToString("")
+  return initials.ifEmpty { name.take(2).uppercase() }
+}

@@ -1,7 +1,6 @@
 package com.maharanitraders.feature.catalog.ui
 
-// `clickable` is an extension on Modifier, so it is not in scope from
-// `androidx.compose.ui.Modifier` alone.
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,7 +24,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,12 +36,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maharanitraders.core.designsystem.MoneyFormat
 import com.maharanitraders.core.designsystem.components.EmptyState
 import com.maharanitraders.core.designsystem.components.ErrorState
+import com.maharanitraders.core.designsystem.components.FactChip
 import com.maharanitraders.core.designsystem.components.LoadingState
 import com.maharanitraders.core.designsystem.components.OfflineState
+import com.maharanitraders.core.designsystem.components.PagerDots
+import com.maharanitraders.core.designsystem.components.PriceBlock
+import com.maharanitraders.core.designsystem.components.PriceEmphasis
+import com.maharanitraders.core.designsystem.components.SectionHeader
+import com.maharanitraders.core.designsystem.components.StockBadge
+import com.maharanitraders.core.designsystem.theme.MaharaniDimens
+import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.model.ProductDetail
 import com.maharanitraders.core.model.ProductPackDetail
 import com.maharanitraders.feature.catalog.ProductDetailUiState
 import com.maharanitraders.feature.catalog.ProductDetailViewModel
+import com.maharanitraders.feature.catalog.ui.components.ProductImage
 
 /** Test tags for the product detail surface. */
 object ProductDetailTags {
@@ -60,13 +70,14 @@ object ProductDetailTags {
  * The product detail screen.
  *
  * This screen shows money, and none of it is computed here: the per-piece rate,
- * the GST-inclusive line total at the MOQ and the slab table all arrive from the
- * same pricing engine checkout uses, so what the shopper reads is what an order
- * would be charged.
+ * the GST-inclusive line total at the MOQ, the case price and the slab table all
+ * arrive from the same pricing engine checkout uses, so what the shopper reads
+ * is what an order would be charged.
  *
  * There is deliberately no "Add to cart" button. Cart and checkout are a later
- * phase; a control that looks like it works but cannot place an order would be a
- * lie, and the migration contract forbids it.
+ * phase; a control that looks like it works but cannot place an order would be
+ * a lie, and the migration contract forbids it. The screen says so plainly in
+ * one honest note instead.
  */
 @Composable
 fun ProductDetailScreen(
@@ -112,150 +123,251 @@ fun ProductDetailContent(
 
     state.detail == null -> LoadingState(message = "Loading product…")
 
-    else -> ProductDetailBody(
-      detail = state.detail,
-      selectedPack = state.selectedPack,
-      gallery = state.gallery,
-      refreshing = state.refreshing,
-      errorMessage = state.errorMessage,
-      onSelectPack = onSelectPack,
-      onRetry = onRetry,
-      modifier = modifier,
-    )
-  }
-}
-
-@Composable
-private fun ProductDetailBody(
-  detail: ProductDetail,
-  selectedPack: ProductPackDetail?,
-  gallery: List<String>,
-  refreshing: Boolean,
-  errorMessage: String?,
-  onSelectPack: (String) -> Unit,
-  onRetry: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Column(
-    modifier = modifier
-      .fillMaxSize()
-      .verticalScroll(rememberScrollState()),
-  ) {
-    ProductGallery(images = gallery, productName = detail.name)
-
-    Column(
-      modifier = Modifier.padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      if (refreshing) {
-        Text(
-          text = "Refreshing…",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-      if (errorMessage != null) {
-        Surface(
-          color = MaterialTheme.colorScheme.errorContainer,
-          contentColor = MaterialTheme.colorScheme.onErrorContainer,
-          shape = RoundedCornerShape(12.dp),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    else -> {
+      val detail = state.detail
+      if (detail != null) {
+        Column(modifier = modifier.fillMaxSize()) {
+          Column(
+            modifier = Modifier
+              .weight(1f)
+              .verticalScroll(rememberScrollState()),
           ) {
-            Text(text = errorMessage, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onRetry) { Text("Retry") }
+            ProductGallery(images = state.gallery, productName = detail.name)
+
+            Column(
+              modifier = Modifier.padding(MaharaniDimens.pageGutter),
+              verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
+            ) {
+              if (state.errorMessage != null) {
+                InlineRetryNote(message = state.errorMessage.orEmpty(), onRetry = onRetry)
+              }
+
+              ProductTitleBlock(detail = detail)
+
+              state.selectedPack?.let { pack ->
+                PackPricingPanel(pack = pack)
+              }
+
+              if (detail.packs.isNotEmpty()) {
+                PackSelector(
+                  packs = detail.packs,
+                  selectedPackId = state.selectedPack?.packId,
+                  onSelect = onSelectPack,
+                )
+              } else {
+                Text(
+                  text = "No pack is currently available for this product.",
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+
+              state.selectedPack?.let { pack ->
+                if (pack.tiers.size > 1) TierTable(pack = pack)
+              }
+
+              HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+              ProductFacts(detail = detail)
+
+              OrderingNote()
+            }
           }
+
+          state.selectedPack?.let { pack -> DetailBottomBar(pack = pack) }
         }
       }
-
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (detail.isNewLaunch) NewLaunchBadge()
-        if (detail.hasOffer) OfferBadge()
-      }
-
-      detail.brandName?.let { brand ->
-        Text(
-          text = brand,
-          style = MaterialTheme.typography.labelLarge,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-
-      Text(
-        text = detail.name,
-        style = MaterialTheme.typography.headlineSmall,
-        modifier = Modifier.testTag(ProductDetailTags.TITLE),
-      )
-
-      detail.categoryName?.let { category ->
-        MetaLabel(text = "Category: $category")
-      }
-
-      HorizontalDivider()
-
-      if (detail.packs.isEmpty()) {
-        Text(
-          text = "No pack is currently available for this product.",
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      } else {
-        PackSelector(
-          packs = detail.packs,
-          selectedPackId = selectedPack?.packId,
-          onSelect = onSelectPack,
-        )
-
-        selectedPack?.let { pack -> PackPricingPanel(pack = pack) }
-      }
-
-      HorizontalDivider()
-
-      ProductFacts(detail = detail)
     }
   }
 }
 
 @Composable
-private fun ProductGallery(images: List<String>, productName: String, modifier: Modifier = Modifier) {
-  Box(
-    modifier = modifier
-      .fillMaxWidth()
-      .testTag(ProductDetailTags.GALLERY),
+private fun ProductGallery(
+  images: List<String>,
+  productName: String,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    color = MaterialTheme.colorScheme.surface,
+    modifier = modifier.fillMaxWidth(),
   ) {
-    if (images.isEmpty()) {
-      ProductImage(
-        url = null,
-        fallbackLabel = productName,
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(280.dp),
-      )
-    } else {
-      val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { images.size })
-      androidx.compose.foundation.pager.HorizontalPager(
-        state = pagerState,
-        modifier = Modifier.fillMaxWidth(),
-      ) { page ->
+    Box(modifier = Modifier.fillMaxWidth().testTag(ProductDetailTags.GALLERY)) {
+      if (images.isEmpty()) {
         ProductImage(
-          url = images[page],
+          url = null,
           fallbackLabel = productName,
-          contentScale = ContentScale.Fit,
           modifier = Modifier
             .fillMaxWidth()
-            .height(280.dp),
+            .height(MaharaniDimens.heroImageHeight),
+        )
+      } else {
+        val pagerState = rememberPagerState(pageCount = { images.size })
+        HorizontalPager(
+          state = pagerState,
+          modifier = Modifier.fillMaxWidth(),
+        ) { page ->
+          ProductImage(
+            url = images[page],
+            fallbackLabel = productName,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(MaharaniDimens.heroImageHeight),
+          )
+        }
+
+        Surface(
+          color = MaterialTheme.colorScheme.scrim,
+          contentColor = MaterialTheme.colorScheme.onPrimary,
+          shape = RoundedCornerShape(MaharaniDimens.radiusPill),
+          modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(MaharaniDimens.spaceMd),
+        ) {
+          Text(
+            text = "${pagerState.currentPage + 1}/${images.size}",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+          )
+        }
+
+        PagerDots(
+          pageCount = images.size,
+          currentPage = pagerState.currentPage,
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = MaharaniDimens.spaceMd),
         )
       }
-      PagerDots(
-        pageCount = images.size,
-        currentPage = pagerState.currentPage,
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(bottom = 12.dp),
+    }
+  }
+}
+
+@Composable
+private fun ProductTitleBlock(detail: ProductDetail, modifier: Modifier = Modifier) {
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs)) {
+    if (detail.isNewLaunch || detail.hasOffer) {
+      Row(horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs)) {
+        if (detail.isNewLaunch) NewLaunchBadge()
+        if (detail.hasOffer) OfferBadge()
+      }
+    }
+
+    detail.brandName?.let { brand ->
+      Text(
+        text = brand,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
       )
+    }
+
+    Text(
+      text = detail.name,
+      style = MaterialTheme.typography.headlineSmall,
+      color = MaterialTheme.colorScheme.onBackground,
+      modifier = Modifier.testTag(ProductDetailTags.TITLE),
+    )
+
+    val scope = listOfNotNull(detail.categoryName, detail.unit.takeIf { it.isNotBlank() })
+      .joinToString(" · ")
+    if (scope.isNotEmpty()) {
+      MetaLabel(text = scope)
+    }
+  }
+}
+
+/** Price, stock, MOQ, case size, GST and the server's line total at the MOQ. */
+@Composable
+private fun PackPricingPanel(pack: ProductPackDetail, modifier: Modifier = Modifier) {
+  val tokens = MaharaniThemeTokens.colors
+  Surface(
+    color = MaterialTheme.colorScheme.surface,
+    shape = RoundedCornerShape(MaharaniDimens.radiusCard),
+    shadowElevation = MaharaniDimens.cardElevation,
+    modifier = modifier.fillMaxWidth(),
+  ) {
+    Column(
+      modifier = Modifier.padding(MaharaniDimens.spaceLg),
+      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        PriceBlock(
+          unitPricePaise = pack.unitPricePaise,
+          mrpPaise = pack.mrpPaise,
+          emphasis = PriceEmphasis.Detail,
+          caption = "GST inclusive · ${formatPercent(pack.gstPercent)} GST",
+          modifier = Modifier
+            .weight(1f, fill = false)
+            .testTag(ProductDetailTags.PRICE),
+        )
+        StockBadge(
+          availability = pack.availability,
+          modifier = Modifier.testTag(ProductDetailTags.AVAILABILITY),
+        )
+      }
+
+      // The line total at the MOQ is server-computed. The app never multiplies
+      // a price by a quantity itself.
+      pack.lineTotalAtMoqPaise?.let { total ->
+        Text(
+          text = "Min order total ${MoneyFormat.formatPaise(total)}",
+          style = MaterialTheme.typography.titleSmall,
+          color = tokens.onActionContainer,
+          modifier = Modifier.testTag(ProductDetailTags.LINE_TOTAL),
+        )
+      }
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+      ) {
+        // Weighted: three facts must fit a narrow phone without wrapping the
+        // panel or clipping a number mid-digit.
+        FactChip(
+          text = "Min order ${pack.moq} pcs",
+          modifier = Modifier
+            .weight(1f, fill = false)
+            .testTag(ProductDetailTags.MOQ),
+        )
+        FactChip(
+          text = "${pack.unitsPerCase} pcs/case",
+          modifier = Modifier
+            .weight(1f, fill = false)
+            .testTag(ProductDetailTags.CASE_SIZE),
+        )
+        pack.derivedCasePricePaise?.let { casePrice ->
+          FactChip(
+            text = "${MoneyFormat.formatPaiseShort(casePrice)}/case",
+            accent = true,
+            modifier = Modifier.weight(1f, fill = false),
+          )
+        }
+      }
+
+      if (!pack.allowLoosePieces) {
+        Text(
+          text = "Sold in whole cases only.",
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+
+      pack.message?.let { message ->
+        // The pricing engine's own explanation (below MOQ, no price configured).
+        // It is shown verbatim rather than paraphrased, so the app cannot soften
+        // a refusal into something that reads like an offer.
+        Text(
+          text = message,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.error,
+        )
+      }
     }
   }
 }
@@ -274,34 +386,60 @@ private fun PackSelector(
   onSelect: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Text(text = "Pack size", style = MaterialTheme.typography.titleSmall)
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+    SectionHeader(title = "Pack size")
     LazyRow(
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
       modifier = Modifier.testTag(ProductDetailTags.PACK_SELECTOR),
     ) {
       items(packs, key = { it.packId }) { pack ->
         val selected = pack.packId == selectedPackId
         Surface(
           modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(MaharaniDimens.radiusTile))
             .clickable(onClick = { onSelect(pack.packId) }),
-          shape = RoundedCornerShape(12.dp),
-          color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+          shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+          color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+          } else {
+            MaterialTheme.colorScheme.surface
+          },
           border = androidx.compose.foundation.BorderStroke(
             width = 1.dp,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+            color = if (selected) {
+              MaterialTheme.colorScheme.primary
+            } else {
+              MaterialTheme.colorScheme.outlineVariant
+            },
           ),
+          shadowElevation = if (selected) 0.dp else MaharaniDimens.cardElevation,
         ) {
           Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
           ) {
-            Text(text = pack.packName, style = MaterialTheme.typography.titleSmall)
             Text(
-              text = pack.unitPricePaise?.let { "${MoneyFormat.formatPaise(it)}/pc" } ?: "Price unavailable",
+              text = pack.packName,
+              style = MaterialTheme.typography.titleSmall,
+              color = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+              } else {
+                MaterialTheme.colorScheme.onSurface
+              },
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+              text = pack.unitPricePaise?.let { "${MoneyFormat.formatPaiseShort(it)}/pc" }
+                ?: "Price unavailable",
               style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              color = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              },
+              maxLines = 1,
             )
           }
         }
@@ -310,168 +448,191 @@ private fun PackSelector(
   }
 }
 
-/** Price, MOQ, case size, GST and the slab table for the selected pack. */
-@Composable
-private fun PackPricingPanel(pack: ProductPackDetail, modifier: Modifier = Modifier) {
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-      Column {
-        PriceText(
-          unitPricePaise = pack.unitPricePaise,
-          style = MaterialTheme.typography.headlineSmall,
-          modifier = Modifier.testTag(ProductDetailTags.PRICE),
-        )
-        Text(
-          text = "GST inclusive · ${formatPercent(pack.gstPercent)} GST",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-      AvailabilityChip(
-        availability = pack.availability,
-        modifier = Modifier.testTag(ProductDetailTags.AVAILABILITY),
-      )
-    }
-
-    MrpText(mrpPaise = pack.mrpPaise)
-
-    // The line total at the MOQ is server-computed. The app never multiplies a
-    // price by a quantity itself.
-    pack.lineTotalAtMoqPaise?.let { total ->
-      Text(
-        text = "Min order total ${MoneyFormat.formatPaise(total)}",
-        style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.testTag(ProductDetailTags.LINE_TOTAL),
-      )
-    }
-
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-      Column {
-        Text(text = "Minimum order", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-          text = "${pack.moq} pcs",
-          style = MaterialTheme.typography.titleSmall,
-          modifier = Modifier.testTag(ProductDetailTags.MOQ),
-        )
-      }
-      Column {
-        Text(text = "Units per case", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-          text = "${pack.unitsPerCase}",
-          style = MaterialTheme.typography.titleSmall,
-          modifier = Modifier.testTag(ProductDetailTags.CASE_SIZE),
-        )
-      }
-    }
-
-    if (!pack.allowLoosePieces) {
-      Text(
-        text = "Sold in whole cases only.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-
-    pack.message?.let { message ->
-      // The pricing engine's own explanation (below MOQ, no price configured).
-      // It is shown verbatim rather than paraphrased, so the app cannot soften
-      // a refusal into something that reads like an offer.
-      Text(
-        text = message,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.error,
-      )
-    }
-
-    if (pack.tiers.size > 1) {
-      TierTable(pack = pack)
-    }
-  }
-}
-
 /** The server's slab table, so "buy more, pay less" is a real published rate. */
 @Composable
 private fun TierTable(pack: ProductPackDetail, modifier: Modifier = Modifier) {
+  val tokens = MaharaniThemeTokens.colors
   Surface(
-    color = MaterialTheme.colorScheme.surfaceVariant,
-    shape = RoundedCornerShape(12.dp),
+    color = MaterialTheme.colorScheme.surfaceContainerLow,
+    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
     modifier = modifier
       .fillMaxWidth()
       .testTag(ProductDetailTags.TIER_TABLE),
   ) {
-    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-      Text(text = "Quantity slabs", style = MaterialTheme.typography.titleSmall)
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Quantity", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Per piece", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(
+      modifier = Modifier.padding(MaharaniDimens.spaceMd),
+      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
+    ) {
+      Text(
+        text = "Slab rates (per piece)",
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+      )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        Text(
+          text = "Quantity",
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+          text = "Price / pc",
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
-      pack.tiers.forEach { tier ->
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+      pack.tiers.forEachIndexed { index, tier ->
+        val upper = tier.maxQuantity
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(MaharaniDimens.radiusChip))
+            .then(
+              if (index == 0) Modifier.background(tokens.saffronSurface) else Modifier,
+            )
+            .padding(horizontal = MaharaniDimens.spaceSm, vertical = MaharaniDimens.spaceXs),
+          horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
           Text(
-            text = tier.maxQuantity?.let { "${tier.minQuantity}–${it - 1} pcs" } ?: "${tier.minQuantity}+ pcs",
-            style = MaterialTheme.typography.bodySmall,
+            text = if (upper == null) "${tier.minQuantity}+ pcs" else "${tier.minQuantity}–$upper pcs",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (index == 0) tokens.onSaffronSurface else MaterialTheme.colorScheme.onSurface,
           )
           Text(
-            text = MoneyFormat.formatPaise(tier.unitPricePaise),
-            style = MaterialTheme.typography.bodySmall,
+            text = "${MoneyFormat.formatPaise(tier.unitPricePaise)}/pc",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (index == 0) tokens.onSaffronSurface else MaterialTheme.colorScheme.onSurface,
           )
         }
       }
+      Text(
+        text = "Published slab rates for your shop; the price above is the rate at the " +
+          "minimum order quantity.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
   }
 }
 
+/** Server facts about the product, rendered as label/value rows. */
 @Composable
 private fun ProductFacts(detail: ProductDetail, modifier: Modifier = Modifier) {
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-    Text(text = "Product information", style = MaterialTheme.typography.titleSmall)
-    detail.hsnCode?.let { FactRow(label = "HSN code", value = it) }
-    FactRow(label = "Selling unit", value = detail.unit.ifBlank { "Not specified" })
-    FactRow(label = "GST", value = formatPercent(detail.gstPercent))
-    if (detail.leadTimeDays > 0) {
-      FactRow(label = "Lead time", value = "${detail.leadTimeDays} days")
+  val facts = buildList {
+    detail.hsnCode?.let { add("HSN code" to it) }
+    add("Unit" to detail.unit)
+    add("GST" to formatPercent(detail.gstPercent))
+    add("Lead time" to "${detail.leadTimeDays} day(s)")
+    detail.categoryName?.let { add("Category" to it) }
+    detail.brandName?.let { add("Brand" to it) }
+  }
+
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+    SectionHeader(title = "Product details")
+    facts.forEach { (label, value) ->
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        Text(
+          text = label,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.widthIn(max = 120.dp),
+        )
+        Text(
+          text = value,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
     }
-    FactRow(
-      label = "Availability",
-      value = detail.selectedPack?.availability?.label() ?: "Not confirmed",
-    )
   }
 }
 
+/**
+ * The one honest sentence about ordering: cart and checkout are a later phase,
+ * and the numbers on this screen are the same ones the web checkout uses.
+ */
 @Composable
-private fun FactRow(label: String, value: String, modifier: Modifier = Modifier) {
-  Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
-    Text(text = value, style = MaterialTheme.typography.bodySmall)
-  }
-}
-
-@Composable
-private fun OfferBadge(modifier: Modifier = Modifier) {
+private fun OrderingNote(modifier: Modifier = Modifier) {
+  val tokens = MaharaniThemeTokens.colors
   Surface(
-    color = MaterialTheme.colorScheme.secondaryContainer,
-    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    shape = RoundedCornerShape(6.dp),
-    modifier = modifier,
+    color = tokens.saffronSurface,
+    contentColor = tokens.onSaffronSurface,
+    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+    modifier = modifier.fillMaxWidth(),
   ) {
     Text(
-      text = "Offer",
-      style = MaterialTheme.typography.labelSmall,
-      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+      text = "Ordering from the app arrives with the cart & checkout phase. Until then the " +
+        "web workspace remains the order desk — the prices, slabs and stock on this screen " +
+        "are exactly what it will charge.",
+      style = MaterialTheme.typography.labelMedium,
+      modifier = Modifier.padding(MaharaniDimens.spaceMd),
     )
   }
 }
 
-/** `5` -> `5%`, `12.5` -> `12.5%`; a whole number never shows a trailing `.0`. */
-private fun formatPercent(value: Double): String =
-  if (value % 1.0 == 0.0) "${value.toLong()}%" else "${value}%"
+/** A sticky, information-only price bar: what this pack costs at its MOQ. */
+@Composable
+private fun DetailBottomBar(pack: ProductPackDetail, modifier: Modifier = Modifier) {
+  Surface(
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = MaharaniDimens.appBarElevation,
+    modifier = modifier.fillMaxWidth(),
+  ) {
+    Row(
+      modifier = Modifier.padding(
+        horizontal = MaharaniDimens.pageGutter,
+        vertical = MaharaniDimens.spaceMd,
+      ),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs)) {
+        PriceBlock(
+          unitPricePaise = pack.unitPricePaise,
+          emphasis = PriceEmphasis.Card,
+          caption = "Min order ${pack.moq} pcs · ${pack.packName}",
+        )
+      }
+      StockBadge(availability = pack.availability, compact = true)
+    }
+  }
+}
+
+@Composable
+private fun InlineRetryNote(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+  Surface(
+    color = MaterialTheme.colorScheme.errorContainer,
+    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+    modifier = modifier.fillMaxWidth(),
+  ) {
+    Row(
+      modifier = Modifier.padding(MaharaniDimens.spaceMd),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = message,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.weight(1f),
+      )
+      TextButton(onClick = onRetry) { Text("Retry") }
+    }
+  }
+}
+
+/** `5.0` → `5%`, `12.5` → `12.5%` — display formatting of a server percentage. */
+private fun formatPercent(value: Double): String {
+  val rounded = Math.round(value * 100.0) / 100.0
+  return if (rounded == Math.floor(rounded)) {
+    "${rounded.toInt()}%"
+  } else {
+    "$rounded%"
+  }
+}

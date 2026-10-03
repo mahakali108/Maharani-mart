@@ -56,6 +56,9 @@ class FakeCatalogApi : MaharaniApi {
   var nextHomeFailure: Throwable? = null
 
   var categoriesResult: ApiEnvelope<CatalogCategoriesDto> = ApiEnvelope(CatalogCategoriesDto())
+  var nextCategoriesFailure: Throwable? = null
+
+  var brandsResult: ApiEnvelope<CatalogBrandsDto> = ApiEnvelope(CatalogBrandsDto())
 
   var detailResult: ApiEnvelope<ProductDetailDto>? = null
   var nextDetailFailure: Throwable? = null
@@ -90,11 +93,11 @@ class FakeCatalogApi : MaharaniApi {
 
   override suspend fun catalogCategories(): ApiEnvelope<CatalogCategoriesDto> {
     categoryCallCount += 1
+    nextCategoriesFailure?.let { throw it }
     return categoriesResult
   }
 
-  override suspend fun catalogBrands(): ApiEnvelope<CatalogBrandsDto> =
-    ApiEnvelope(CatalogBrandsDto())
+  override suspend fun catalogBrands(): ApiEnvelope<CatalogBrandsDto> = brandsResult
 
   override suspend fun retailerHome(): ApiEnvelope<RetailerHomeDto> {
     homeCallCount += 1

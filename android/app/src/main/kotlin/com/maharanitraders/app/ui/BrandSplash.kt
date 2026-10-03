@@ -14,7 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.maharanitraders.core.designsystem.theme.MaharaniPalette
 
 /** Test tag for the restore-in-progress surface. */
 const val BRAND_SPLASH_TAG = "brand_splash"
@@ -22,6 +24,13 @@ const val BRAND_SPLASH_TAG = "brand_splash"
 /**
  * In-app continuation of the system splash: the same brand red, the same
  * wordmark, while stored credentials are verified with the server.
+ *
+ * The red here is pinned rather than themed. The system splash
+ * (`themes.xml` → `@color/brand_red`) and the launcher icon are brand red, and
+ * the native shopping redesign makes the in-app chrome Maharani blue; if this
+ * surface followed `colorScheme.primary` the handoff would be red → blue → red
+ * as the app restores the session. Identity stays red, commerce chrome is blue:
+ * see `docs/NATIVE_UI_REDESIGN.md`.
  *
  * It shows no account data — nothing about the user is displayed until the
  * server has confirmed the session.
@@ -32,8 +41,8 @@ fun BrandSplash() {
     modifier = Modifier
       .fillMaxSize()
       .testTag(BRAND_SPLASH_TAG),
-    color = MaterialTheme.colorScheme.primary,
-    contentColor = MaterialTheme.colorScheme.onPrimary,
+    color = MaharaniPalette.BrandRed600,
+    contentColor = Color.White,
   ) {
     Column(
       modifier = Modifier
@@ -57,7 +66,7 @@ fun BrandSplash() {
         modifier = Modifier
           .padding(top = 32.dp)
           .size(28.dp),
-        color = MaterialTheme.colorScheme.onPrimary,
+        color = Color.White,
       )
       Text(
         text = "Checking your session…",

@@ -3,11 +3,18 @@ package com.maharanitraders.core.designsystem.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Brand palette, transcribed from the EXISTING web tokens — nothing is invented
- * here:
+ * Brand palette, transcribed from the EXISTING web tokens plus the native
+ * shopping-redesign brief:
  *
  *   - `tailwind.config.ts` → `primary` (premium red) and `action` (buy blue)
  *   - the launcher background asset ships the same brand red (#C8102E)
+ *   - the native redesign promotes the marketplace blue to the app's PRIMARY
+ *     commerce colour (Flipkart-style shopping chrome) while the brand red
+ *     stays the identity colour of the crown mark, the splash and accents;
+ *     both come from the SAME web tokens, so nothing here is invented.
+ *   - the saffron scale and the cool page greys are the one addition of the
+ *     native brief (restrained accents, light-blue page backgrounds). They are
+ *     design tokens, not data: no product, price or stock value lives here.
  *
  * Note for reviewers: use these tokens (or the Material 3 scheme built from
  * them in [MaharaniTheme]) instead of literal hex values in screens.
@@ -57,6 +64,29 @@ object MaharaniPalette {
   val Success600 = Color(0xFF059669)
   val Success700 = Color(0xFF047857)
   val Success900 = Color(0xFF064E3B)
+
+  // Saffron — the native shopping redesign's restrained accent (tier-table
+  // emphasis, wholesale highlights). Part of the native brand direction, not a
+  // web token; the app keeps it to small surfaces only.
+  val Saffron50 = Color(0xFFFFF8EB)
+  val Saffron100 = Color(0xFFFEEFC7)
+  val Saffron200 = Color(0xFFFDDF8A)
+  val Saffron300 = Color(0xFFFBC44D)
+  val Saffron500 = Color(0xFFF59E0B)
+  val Saffron600 = Color(0xFFD97706)
+  val Saffron700 = Color(0xFFA16207)
+  val Saffron900 = Color(0xFF78350F)
+
+  // Cool page greys — the light-blue-tinted backgrounds the native redesign
+  // puts behind white cards, so the shop reads as one continuous surface.
+  val PageLight = Color(0xFFF3F6FB)
+  val Cool50 = Color(0xFFF8FAFD)
+  val Cool100 = Color(0xFFEFF3F9)
+  val Cool200 = Color(0xFFE3EAF3)
+  val Cool300 = Color(0xFFD3DDEA)
+  val PageDark = Color(0xFF0D1218)
+  val SurfaceDark = Color(0xFF151C25)
+  val SurfaceDarkHigh = Color(0xFF1E2732)
 
   val Warning50 = Color(0xFFFFFBEB)
   val Warning600 = Color(0xFFD97706)

@@ -42,6 +42,12 @@ data class CatalogUiState(
   val resultCapped: Boolean = false,
   /** Set when a continuation returned the same cursor: the list has ended. */
   val endOfList: Boolean = false,
+  /**
+   * Display label of a brand filter applied from outside the catalogue (the
+   * home screen's brand rail). The catalogue's own chip row is categories; a
+   * brand filter arrives already chosen, so its name travels with the request.
+   */
+  val brandLabel: String? = null,
 ) {
   val isEmpty: Boolean get() = !loading && errorMessage == null && products.isEmpty()
   val selectedCategoryName: String?
@@ -119,13 +125,30 @@ class CatalogViewModel @Inject constructor(
     reload()
   }
 
+  /**
+   * Brand filtering. The chip row carries categories; a brand usually arrives
+   * already chosen (the home brand rail), together with the label to show.
+   * Selecting `null` clears it.
+   */
+  fun selectBrand(brandId: String?, label: String? = null) {
+    val current = _state.value.query.brandId
+    if (current == brandId) return
+    _state.update {
+      it.copy(
+        query = it.query.copy(brandId = brandId),
+        brandLabel = if (brandId == null) null else label ?: it.brandLabel,
+      )
+    }
+    reload()
+  }
+
   fun toggleInStockOnly() {
     _state.update { it.copy(query = it.query.copy(inStockOnly = !it.query.inStockOnly)) }
     reload()
   }
 
   fun clearFilters() {
-    _state.update { it.copy(query = CatalogQuery.DEFAULT) }
+    _state.update { it.copy(query = CatalogQuery.DEFAULT, brandLabel = null) }
     reload()
   }
 

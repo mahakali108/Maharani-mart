@@ -65,6 +65,10 @@ class MaharaniRouterTest {
     assertEquals(MaharaniRoutes.HOME, routing.start.route)
     assertEquals(MaharaniRoutes.HOME, routes.first())
     assertTrue(MaharaniRoutes.CATALOG in routes)
+    // The native shopping redesign ships the category directory and the
+    // account profile, so both are real screens for a retailer.
+    assertTrue(MaharaniRoutes.CATEGORIES in routes)
+    assertTrue(MaharaniRoutes.ACCOUNT in routes)
     assertTrue(MaharaniRoutes.CART in routes)
     assertTrue(MaharaniRoutes.COINS in routes)
     assertTrue(MaharaniRoutes.ORDERS in routes) // shared across roles
@@ -87,6 +91,9 @@ class MaharaniRouterTest {
 
     val routes = routing.destinations.map { it.route }
     assertTrue(MaharaniRoutes.ADMINISTRATION in routes)
+    // The account profile is shared across roles; the retailer taxonomy is not.
+    assertTrue(MaharaniRoutes.ACCOUNT in routes)
+    assertTrue(MaharaniRoutes.CATEGORIES !in routes)
     assertTrue(MaharaniRoutes.CATALOG !in routes)
     assertTrue(MaharaniRoutes.CART !in routes)
     assertTrue(MaharaniRoutes.COINS !in routes)
@@ -170,7 +177,12 @@ class MaharaniRouterTest {
     // This list is exactly the set of branches `DestinationSurface` renders.
     // Add a route here only when its phase actually ships; the assertion below
     // still fails for any new unbuilt destination that forgot its phase.
-    val built = setOf(MaharaniRoutes.HOME, MaharaniRoutes.CATALOG)
+    val built = setOf(
+      MaharaniRoutes.HOME,
+      MaharaniRoutes.CATALOG,
+      MaharaniRoutes.CATEGORIES,
+      MaharaniRoutes.ACCOUNT,
+    )
 
     MaharaniCatalog.destinations
       .filter { it.route !in built }
@@ -187,7 +199,12 @@ class MaharaniRouterTest {
     // The other half of the rule above: the built set must not drift into
     // carrying a phase, or the drawer's placeholder branch would describe a
     // working screen as "Planned".
-    val built = setOf(MaharaniRoutes.HOME, MaharaniRoutes.CATALOG)
+    val built = setOf(
+      MaharaniRoutes.HOME,
+      MaharaniRoutes.CATALOG,
+      MaharaniRoutes.CATEGORIES,
+      MaharaniRoutes.ACCOUNT,
+    )
 
     MaharaniCatalog.destinations
       .filter { it.route in built }
