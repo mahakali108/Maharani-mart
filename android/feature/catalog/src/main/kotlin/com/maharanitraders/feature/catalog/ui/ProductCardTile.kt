@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,6 +34,13 @@ const val PRODUCT_TILE_TAG = "catalog_product_tile"
  * pricing engine returned, and the two-state stock status. Nothing is estimated
  * on the device.
  *
+ * The card reads top to bottom the way a shopper decides: artwork first (with
+ * the New and Offer markers laid over it, and out-of-stock artwork dimmed so
+ * the state is visible before any label is read), then identity (brand, name),
+ * then the money line — price is the strongest text on the card, with the MRP
+ * struck through beside it only when the server supplied one — and finally the
+ * order terms: pack size, MOQ and stock status on one line.
+ *
  * A product with no active pack renders its name and an explicit "No pack
  * available" line: it stays browsable, but there is no price to misread and no
  * affordance that suggests it can be ordered.
@@ -45,20 +53,27 @@ fun ProductCardTile(
 ) {
   val pack = product.pack
 
-  CatalogCard(onClick = onClick, modifier = modifier.testTag(PRODUCT_TILE_TAG)) {
-    Box(modifier = Modifier.fillMaxWidth()) {
+  CatalogCard(onClick = onClick, modifier = modifier.testTag(PRODUCT_TILE_TAG), header = {
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+    ) {
       ProductImage(
         url = product.imageUrl,
         fallbackLabel = product.name,
         contentScale = ContentScale.Fit,
         modifier = Modifier
           .fillMaxWidth()
-          .aspectRatio(1f)
-          .clip(RoundedCornerShape(12.dp)),
+          .aspectRatio(1f),
       )
 
       if (product.isNewLaunch) {
         NewLaunchBadge(modifier = Modifier.align(Alignment.TopStart).padding(6.dp))
+      }
+
+      if (product.hasOffer) {
+        OfferBadge(modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
       }
 
       // An out-of-stock pack dims the artwork so a scrolling shopper sees the
@@ -68,13 +83,12 @@ fun ProductCardTile(
           color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
           modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(12.dp)),
+            .aspectRatio(1f),
         ) {}
       }
     }
-
-    Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+  }) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
       product.brandName?.let { brand ->
         Text(
           text = brand,
@@ -92,37 +106,22 @@ fun ProductCardTile(
         overflow = TextOverflow.Ellipsis,
       )
 
-      Row(
-        modifier = Modifier.padding(top = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-      ) {
-        PackSizeChip(pack?.packName)
-        if (product.hasOffer) {
-          Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            shape = RoundedCornerShape(6.dp),
-          ) {
-            Text(
-              text = "Offer",
-              style = MaterialTheme.typography.labelSmall,
-              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-          }
-        }
-      }
+      PackSizeChip(pack?.packName)
+
+      HorizontalDivider(
+        modifier = Modifier.padding(vertical = 6.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant,
+      )
 
       if (pack == null) {
         Text(
           text = "No pack available",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(top = 6.dp),
         )
       } else {
         Row(
-          modifier = Modifier.padding(top = 6.dp),
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {

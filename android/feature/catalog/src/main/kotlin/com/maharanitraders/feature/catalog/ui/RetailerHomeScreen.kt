@@ -6,23 +6,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,12 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maharanitraders.core.designsystem.components.EmptyState
 import com.maharanitraders.core.designsystem.components.ErrorState
@@ -65,10 +57,11 @@ object HomeScreenTags {
  *
  * Layout, top to bottom: a prominent search field, the admin's promotional
  * banners, the real category strip, and a responsive grid of real catalogue
- * products. Every one of those comes from `GET /api/mobile/v1/home`; the screen
- * has no fallback content, so when the request fails the shopper sees an honest
- * error or offline state with a retry rather than a plausible looking shop that
- * the warehouse cannot fulfil.
+ * products — the last one the same [ProductGrid] the catalogue uses, so the two
+ * surfaces cannot drift. Every one of those comes from `GET /api/mobile/v1/home`;
+ * the screen has no fallback content, so when the request fails the shopper
+ * sees an honest error or offline state with a retry rather than a plausible
+ * looking shop that the warehouse cannot fulfil.
  *
  * Cart, coins and orders are intentionally absent — they are later phases, and
  * this screen offers no affordance that pretends otherwise.
@@ -109,120 +102,89 @@ fun HomeContent(
 ) {
   var search by rememberSaveable { mutableStateOf("") }
 
-  // Adaptive columns: two across a phone, more as the window widens, without a
-  // single hardcoded breakpoint.
-  LazyVerticalGrid(
-    columns = GridCells.Adaptive(minSize = 150.dp),
-    modifier = modifier
-      .fillMaxSize()
-      .testTag(HomeScreenTags.PRODUCT_GRID),
+  // One shared grid: the header slot carries everything above the product
+  // tiles, and the tiles themselves are the server's list, keyed by its ids.
+  ProductGrid(
+    products = state.home?.products.orEmpty(),
+    onOpenProduct = onOpenProduct,
+    modifier = modifier.testTag(HomeScreenTags.PRODUCT_GRID),
     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    item(span = { GridItemSpan(maxLineSpan) }) {
-      HomeSearchField(
-        value = search,
-        onValueChange = { search = it },
-        onSubmit = { onSearchSubmit(search.trim()) },
-      )
-    }
-
-    when {
-      // First load with nothing on screen yet: a skeleton, not a blank page.
-      state.loading && state.home == null -> item(span = { GridItemSpan(maxLineSpan) }) {
-        ProductGridSkeleton(columns = 2, rows = 3)
-      }
-
-      // Nothing to show at all, and no error: the account genuinely has no
-      // catalogue yet. Retry stays available because that is usually a sync
-      // problem rather than an empty shop.
-      state.isEmpty -> item(span = { GridItemSpan(maxLineSpan) }) {
-        EmptyState(
-          title = "Nothing to show yet",
-          message = "The catalogue is empty right now. Pull to refresh, or try again shortly.",
-          actionLabel = "Try again",
-          onAction = onRetry,
+    header = {
+      item(span = { GridItemSpan(maxLineSpan) }) {
+        CatalogSearchField(
+          value = search,
+          onValueChange = { search = it },
+          onSearch = { onSearchSubmit(search.trim()) },
+          testTag = HomeScreenTags.SEARCH_FIELD,
         )
       }
 
-      // A failure with no cached content: offline gets its own state, because
-      // "check your connection" and "the server failed" need different action.
-      state.errorMessage != null && state.home == null -> item(span = { GridItemSpan(maxLineSpan) }) {
-        if (state.offline) OfflineState(onRetry = onRetry)
-        else ErrorState(message = state.errorMessage.orEmpty(), retryable = state.retryable, onRetry = onRetry)
-      }
-
-      else -> {
-        // A failure WITH content keeps the content and explains above it, so a
-        // failed refresh never blanks a shop the shopper was reading.
-        if (state.errorMessage != null) {
-          item(span = { GridItemSpan(maxLineSpan) }) {
-            InlineErrorBanner(
-              message = state.errorMessage.orEmpty(),
-              offline = state.offline,
-              onRetry = if (state.retryable) onRetry else null,
-            )
-          }
+      when {
+        // First load with nothing on screen yet: a skeleton, not a blank page.
+        state.loading && state.home == null -> item(span = { GridItemSpan(maxLineSpan) }) {
+          ProductGridSkeleton(columns = 2, rows = 3)
         }
 
-        val home = state.home
-        if (home != null) {
-          if (home.banners.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-              BannerCarousel(banners = home.banners)
-            }
-          }
+        // Nothing to show at all, and no error: the account genuinely has no
+        // catalogue yet. Retry stays available because that is usually a sync
+        // problem rather than an empty shop.
+        state.isEmpty -> item(span = { GridItemSpan(maxLineSpan) }) {
+          EmptyState(
+            title = "Nothing to show yet",
+            message = "The catalogue is empty right now. Pull to refresh, or try again shortly.",
+            actionLabel = "Try again",
+            onAction = onRetry,
+          )
+        }
 
-          if (home.categories.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-              Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeader(title = "Shop by category", actionLabel = "View all", onAction = onOpenCatalog)
-                CategoryStrip(categories = home.categories, onSelect = onOpenCategory)
-              }
-            }
-          }
+        // A failure with no cached content: offline gets its own state, because
+        // "check your connection" and "the server failed" need different action.
+        state.errorMessage != null && state.home == null -> item(span = { GridItemSpan(maxLineSpan) }) {
+          if (state.offline) OfflineState(onRetry = onRetry)
+          else ErrorState(message = state.errorMessage.orEmpty(), retryable = state.retryable, onRetry = onRetry)
+        }
 
-          if (home.products.isNotEmpty()) {
+        else -> {
+          // A failure WITH content keeps the content and explains above it, so a
+          // failed refresh never blanks a shop the shopper was reading.
+          if (state.errorMessage != null) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-              SectionHeader(title = "Products for you", actionLabel = "View all", onAction = onOpenCatalog)
-            }
-            items(home.products, key = { it.id }) { product ->
-              ProductCardTile(
-                product = product,
-                onClick = { onOpenProduct(product.id) },
-                modifier = Modifier.fillMaxWidth(),
+              InlineErrorBanner(
+                message = state.errorMessage.orEmpty(),
+                offline = state.offline,
+                onRetry = if (state.retryable) onRetry else null,
               )
             }
           }
-        } else if (state.loading) {
-          item(span = { GridItemSpan(maxLineSpan) }) { LoadingState(message = "Loading your shop…") }
+
+          val home = state.home
+          if (home != null) {
+            if (home.banners.isNotEmpty()) {
+              item(span = { GridItemSpan(maxLineSpan) }) {
+                BannerCarousel(banners = home.banners)
+              }
+            }
+
+            if (home.categories.isNotEmpty()) {
+              item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                  SectionHeader(title = "Shop by category", actionLabel = "View all", onAction = onOpenCatalog)
+                  CategoryStrip(categories = home.categories, onSelect = onOpenCategory)
+                }
+              }
+            }
+
+            if (home.products.isNotEmpty()) {
+              item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeader(title = "Products for you", actionLabel = "View all", onAction = onOpenCatalog)
+              }
+            }
+          } else if (state.loading) {
+            item(span = { GridItemSpan(maxLineSpan) }) { LoadingState(message = "Loading your shop…") }
+          }
         }
       }
-    }
-  }
-}
-
-/** The prominent search entry point. Submitting hands the term to the catalogue. */
-@Composable
-private fun HomeSearchField(
-  value: String,
-  onValueChange: (String) -> Unit,
-  onSubmit: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  OutlinedTextField(
-    value = value,
-    onValueChange = onValueChange,
-    modifier = modifier
-      .fillMaxWidth()
-      .testTag(HomeScreenTags.SEARCH_FIELD),
-    placeholder = { Text("Search products, brands, pack sizes") },
-    leadingIcon = { SearchGlyph(modifier = Modifier.padding(start = 8.dp)) },
-    singleLine = true,
-    shape = RoundedCornerShape(28.dp),
-    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-    keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+    },
   )
 }
 

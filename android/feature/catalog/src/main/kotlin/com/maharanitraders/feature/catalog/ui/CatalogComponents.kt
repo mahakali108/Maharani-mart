@@ -16,8 +16,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -220,6 +225,23 @@ fun NewLaunchBadge(modifier: Modifier = Modifier) {
   }
 }
 
+/** "Offer" marker, driven by the server's `has_offer` flag. */
+@Composable
+fun OfferBadge(modifier: Modifier = Modifier) {
+  Surface(
+    color = MaterialTheme.colorScheme.secondaryContainer,
+    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    shape = RoundedCornerShape(6.dp),
+    modifier = modifier,
+  ) {
+    Text(
+      text = "Offer",
+      style = MaterialTheme.typography.labelSmall,
+      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+  }
+}
+
 /** A section heading with an optional trailing action. */
 @Composable
 fun SectionHeader(
@@ -324,11 +346,18 @@ fun MetaLabel(text: String, modifier: Modifier = Modifier) {
   )
 }
 
-/** Standard card surface used by every catalogue tile. */
+/**
+ * Standard card surface used by every catalogue tile.
+ *
+ * The optional `header` renders full-bleed above the padded content — that is
+ * where a tile's artwork goes, edge to edge, with the rounded top corners of
+ * the card itself.
+ */
 @Composable
 fun CatalogCard(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  header: (@Composable () -> Unit)? = null,
   content: @Composable () -> Unit,
 ) {
   Surface(
@@ -337,7 +366,10 @@ fun CatalogCard(
     color = MaterialTheme.colorScheme.surface,
     shadowElevation = 2.dp,
   ) {
-    Column(modifier = Modifier.padding(10.dp)) { content() }
+    Column {
+      header?.invoke()
+      Column(modifier = Modifier.padding(10.dp)) { content() }
+    }
   }
 }
 
@@ -384,4 +416,68 @@ fun SearchGlyph(
       cap = androidx.compose.ui.graphics.StrokeCap.Round,
     )
   }
+}
+
+/**
+ * The clear ("x") affordance for a text field, drawn instead of imported —
+ * same reasoning and same call style as [SearchGlyph].
+ */
+@Composable
+fun CloseGlyph(
+  modifier: Modifier = Modifier,
+  tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+  androidx.compose.foundation.Canvas(modifier = modifier.size(20.dp)) {
+    val stroke = 2.dp.toPx()
+    val inset = size.minDimension * 0.24f
+    drawLine(
+      color = tint,
+      start = androidx.compose.ui.geometry.Offset(inset, inset),
+      end = androidx.compose.ui.geometry.Offset(size.width - inset, size.height - inset),
+      strokeWidth = stroke,
+      cap = androidx.compose.ui.graphics.StrokeCap.Round,
+    )
+    drawLine(
+      color = tint,
+      start = androidx.compose.ui.geometry.Offset(size.width - inset, inset),
+      end = androidx.compose.ui.geometry.Offset(inset, size.height - inset),
+      strokeWidth = stroke,
+      cap = androidx.compose.ui.graphics.StrokeCap.Round,
+    )
+  }
+}
+
+/**
+ * The catalogue search field, shared by the home screen and the catalogue so
+ * the two entry points cannot drift.
+ *
+ * Search runs as the shopper types (the caller debounces), so the IME action is
+ * a convenience, not the submit mechanism. When the field has text it shows a
+ * clear button sized as a real touch target; the placeholder and glyph carry no
+ * content description of their own — the field's own label announces "Search".
+ */
+@Composable
+fun CatalogSearchField(
+  value: String,
+  onValueChange: (String) -> Unit,
+  onSearch: () -> Unit,
+  testTag: String,
+  modifier: Modifier = Modifier,
+) {
+  OutlinedTextField(
+    value = value,
+    onValueChange = onValueChange,
+    modifier = modifier.fillMaxWidth().testTag(testTag),
+    placeholder = { Text("Search products, brands, pack sizes") },
+    leadingIcon = { SearchGlyph(modifier = Modifier.padding(start = 8.dp)) },
+    trailingIcon = {
+      if (value.isNotEmpty()) {
+        IconButton(onClick = { onValueChange("") }) { CloseGlyph() }
+      }
+    },
+    singleLine = true,
+    shape = RoundedCornerShape(28.dp),
+    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+  )
 }
