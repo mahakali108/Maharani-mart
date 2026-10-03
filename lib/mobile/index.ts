@@ -10,6 +10,7 @@ export {
   REQUEST_ID_HEADER,
   newRequestId,
   jsonOk,
+  jsonOkPage,
   jsonError,
   logServerError,
   parseJsonBody,
@@ -60,6 +61,32 @@ export {
   enforceRateLimit,
 } from '@/lib/mobile/rate-limit';
 export type { RateLimitGroup, RateLimitResult, RateLimitRule } from '@/lib/mobile/rate-limit';
+
+// Phase D — catalogue. `catalog.ts` is isomorphic and secret-free (query
+// parsing + wire shaping); `catalog-service.ts` is server-only and is the only
+// part that touches the database.
+export {
+  MOBILE_AVAILABILITY,
+  DEFAULT_MOBILE_CATALOG_FILTERS,
+  isUuidLike,
+  parseCatalogQuery,
+  toMobileCatalogProduct,
+  toMobileCatalogProducts,
+  toMobileCategories,
+  toMobileBrands,
+  toMobileBanners,
+} from '@/lib/mobile/catalog';
+export type {
+  MobileAvailability,
+  MobileCatalogFilters,
+  MobileCatalogProduct,
+  MobileCatalogPack,
+  MobileCatalogCategory,
+  MobileCatalogBrand,
+  MobileBanner,
+  MobilePriceTier,
+  ParsedCatalogQuery,
+} from '@/lib/mobile/catalog';
 
 // Phase C — authentication. The GoTrue-facing clients live in
 // `clients.ts` rather than in `supabase.ts`, which stays strictly

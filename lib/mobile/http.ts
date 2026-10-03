@@ -85,6 +85,29 @@ export function jsonOk<T>(data: T, init?: { status?: number; requestId?: string 
   return withRequestId(response, requestId);
 }
 
+/**
+ * Collection success envelope (contract §1.3):
+ *
+ *   { "data": [ … ], "page": { nextCursor, hasMore, limit }, "requestId": "…" }
+ *
+ * `page` sits beside `data`, not inside it, so a client can read pagination
+ * without unwrapping the payload — and so a single-object and a collection
+ * response stay distinguishable by shape alone.
+ *
+ * `meta` carries optional, additive list facts (an exact result count, whether
+ * a bounded working set capped the list). It is never required to render.
+ */
+export function jsonOkPage<T>(
+  data: T[],
+  page: { nextCursor: string | null; hasMore: boolean; limit: number },
+  init?: { requestId?: string; meta?: Record<string, unknown> }
+): NextResponse {
+  const requestId = init?.requestId ?? newRequestId();
+  const body: Record<string, unknown> = { data, page, requestId };
+  if (init?.meta) body.meta = init.meta;
+  return withRequestId(NextResponse.json(body, { status: 200 }), requestId);
+}
+
 /** Failure envelope. `message` must already be end-user safe. */
 export function jsonError(
   code: MobileErrorCode,

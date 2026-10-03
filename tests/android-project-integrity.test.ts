@@ -430,10 +430,17 @@ describe('Android build scripts stay executable', () => {
 
       // `.map` is also the stdlib collection function, so it only counts when it is
       // chained straight onto the call that produces an AppResult.
-      // no braces inside the lambda: `executeEnvelope { api.login(...) }.map {}`.
+      // no braces inside the lambda: `execute { api.login(...) }.map {}`.
       // Allowing nesting would also match `list.filter { … }.map { … }`, which is
-      // the stdlib function and needs no import.
-      const mapOnAppResult = /executeEnvelope\s*\{[^{}]*\}\s*\.\s*map\s*[({]/.test(source);
+      // the stdlib function and needs no import — `:feature:auth`'s
+      // `AreaDirectory.kt` does exactly that on a list and must stay clean.
+      //
+      // Both executors count: `ApiCallExecutor` exposes `execute` (yields the raw
+      // envelope) and `executeEnvelope` (unwraps it), and either can be the
+      // receiver. An earlier revision matched only `executeEnvelope`, which is why
+      // `:feature:catalog`'s `CatalogRepository.kt` reached CI with 15 unresolved
+      // `map`/`it`/`data`/`page`/`meta` references.
+      const mapOnAppResult = /execute(?:Envelope)?\s*\{[^{}]*\}\s*\.\s*map\s*[({]/.test(source);
       const needsImport = [
         ...(mapOnAppResult ? ['map'] : []),
         ...helpers.filter((h) => [`.${h}(`, `.${h} {`].some((call) => source.includes(call))),
@@ -877,6 +884,248 @@ describe('Android error vocabulary matches the mobile API contract', () => {
     }
 
     expect(assertionsChecked).toBeGreaterThan(5);
+    expect(offenders.sort()).toEqual([]);
+  });
+});
+
+describe('Phase D wiring that only a Gradle build would otherwise catch', () => {
+  /**
+   * WHY: an unknown `libs.foo` accessor is a Gradle *configuration* failure, not
+   * a Kotlin compile error, so it aborts the build before anything is compiled
+   * and the message names the script rather than the cause. The version catalog
+   * is a plain TOML file and the accessor names are derivable from it, so a typo
+   * is decidable here.
+   */
+  it('resolves every libs.* accessor to an alias in the version catalog', () => {
+    const catalog = readFileSync(join(ANDROID, 'gradle', 'libs.versions.toml'), 'utf8');
+
+    const section = (name: string) =>
+      new RegExp(`^\\[${name}\\]([\\s\\S]*?)(?=^\\[|$(?![\\s\\S]))`, 'm').exec(catalog)?.[1] ?? '';
+    // Catalog accessors spell a dashed alias with dots: `androidx-core-ktx` is
+    // reached as `libs.androidx.core.ktx`.
+    const aliases = (body: string) =>
+      new Set([...body.matchAll(/^([A-Za-z0-9_.-]+)\s*=/gm)].map((m) => m[1]!));
+    const libraries = aliases(section('libraries'));
+    const plugins = aliases(section('plugins'));
+    expect(libraries.size).toBeGreaterThan(20);
+    expect(plugins.size).toBeGreaterThan(3);
+
+    const resolves = (alias: string, pool: Set<string>) =>
+      pool.has(alias) || pool.has(alias.replaceAll('.', '-'));
+
+    const offenders: string[] = [];
+    let checked = 0;
+    for (const file of kotlinOrScriptFiles().filter((f) => f.endsWith('.gradle.kts'))) {
+      // Comments name the catalog file itself (`libs.versions.toml`), which is
+      // not an accessor. Only real code is scanned.
+      const source = stripKotlinComments(readFileSync(file, 'utf8'));
+      const where = relative(ROOT, file);
+      for (const match of source.matchAll(/\blibs\.plugins\.([A-Za-z0-9_.]+)/g)) {
+        checked += 1;
+        if (!resolves(match[1]!, plugins)) offenders.push(`${where}: libs.plugins.${match[1]}`);
+      }
+      for (const match of source.matchAll(/\blibs\.(?!plugins\.)([A-Za-z0-9_.]+)/g)) {
+        checked += 1;
+        if (!resolves(match[1]!, libraries)) offenders.push(`${where}: libs.${match[1]}`);
+      }
+    }
+    expect(checked).toBeGreaterThan(50);
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  /**
+   * WHY: `retrofit2.converter.kotlinx.serialization` needs a generated
+   * serializer for every response type. A DTO missing `@Serializable` fails in
+   * KSP with a message that points at the converter, not at the forgotten
+   * annotation.
+   */
+  it('annotates every network DTO with @Serializable', () => {
+    const dtoDir = join(ANDROID, 'core', 'network', 'src', 'main', 'kotlin',
+      'com', 'maharanitraders', 'core', 'network', 'dto');
+    const offenders: string[] = [];
+    let checked = 0;
+
+    for (const file of walk(dtoDir).filter((f) => f.endsWith('.kt'))) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      for (let i = 0; i < lines.length; i += 1) {
+        const declared = /^\s*(?:data )?class (\w+)/.exec(lines[i]!);
+        if (!declared) continue;
+        checked += 1;
+        // Annotations sit directly above the declaration; a KDoc block ends the run.
+        let annotated = false;
+        for (let j = i - 1; j >= 0; j -= 1) {
+          const line = lines[j]!.trim();
+          if (line.startsWith('@')) {
+            if (line.startsWith('@Serializable')) annotated = true;
+            continue;
+          }
+          break;
+        }
+        if (!annotated) {
+          offenders.push(`${relative(ROOT, file)}:${i + 1} class ${declared[1]} has no @Serializable`);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  /**
+   * WHY: a Retrofit `@Query("...")` whose name the server does not read is
+   * silently dropped — the request succeeds, the filter does nothing, and the
+   * shopper sees an unfiltered list with a control that appears to work. That is
+   * the exact failure the migration contract forbids, and it is invisible to both
+   * the Kotlin compiler and the route tests.
+   */
+  it('only sends catalogue query parameters the server actually reads', () => {
+    const parser = readFileSync(join(ROOT, 'lib', 'mobile', 'catalog.ts'), 'utf8');
+    const route = readFileSync(
+      join(ROOT, 'app', 'api', 'mobile', 'v1', 'catalog', 'products', 'route.ts'), 'utf8');
+
+    const server = new Set<string>([
+      ...[...parser.matchAll(/search\.get\('([A-Za-z]+)'\)/g)].map((m) => m[1]!),
+      // The cursor is consumed by the route, not by the filter parser.
+      ...[...route.matchAll(/searchParams\.get\('([A-Za-z]+)'\)/g)].map((m) => m[1]!),
+    ]);
+    expect(server.has('q')).toBe(true);
+    expect(server.has('cursor')).toBe(true);
+
+    const api = readFileSync(join(ANDROID, 'core', 'network', 'src', 'main', 'kotlin',
+      'com', 'maharanitraders', 'core', 'network', 'MaharaniApi.kt'), 'utf8');
+    const sent = [...api.matchAll(/@Query\("([A-Za-z]+)"\)/g)].map((m) => m[1]!);
+    expect(sent.length).toBeGreaterThan(3);
+
+    const unknown = sent.filter((name) => !server.has(name));
+    expect(unknown).toEqual([]);
+  });
+
+  /**
+   * WHY: `ignoreUnknownKeys` is what lets the server add a field without
+   * breaking every installed app. It is one line, easy to lose in a refactor, and
+   * the failure only appears in production on the next additive change.
+   * `tests/../CatalogSerializationTest.kt` decodes with the same three settings,
+   * so they have to stay identical or that test proves nothing about the app.
+   */
+  it('keeps the production Json lenient, matching the serialization test', () => {
+    const networkModule = readFileSync(join(ANDROID, 'core', 'network', 'src', 'main', 'kotlin',
+      'com', 'maharanitraders', 'core', 'network', 'di', 'NetworkModule.kt'), 'utf8');
+    const production = /fun provideJson\(\): Json = Json \{([\s\S]*?)\n  \}/.exec(networkModule)?.[1] ?? '';
+
+    for (const setting of ['ignoreUnknownKeys = true', 'explicitNulls = false', 'coerceInputValues = true']) {
+      expect(production, `NetworkModule must keep \`${setting}\``).toContain(setting);
+    }
+
+    const test = readFileSync(join(ANDROID, 'core', 'network', 'src', 'test', 'kotlin',
+      'com', 'maharanitraders', 'core', 'network', 'CatalogSerializationTest.kt'), 'utf8');
+    const tested = /private val json = Json \{([\s\S]*?)\n  \}/.exec(test)?.[1] ?? '';
+    for (const setting of ['ignoreUnknownKeys = true', 'explicitNulls = false', 'coerceInputValues = true']) {
+      expect(tested, `CatalogSerializationTest must mirror \`${setting}\``).toContain(setting);
+    }
+  });
+});
+
+describe('The Coil pin stays inside what the toolchain allows', () => {
+  /**
+   * WHY: this exact class of failure cannot be seen by anything in this repo —
+   * it is AAR *metadata* checked at build time. Commit `ced2d85` was the first
+   * to consume the pre-existing `coil` alias, and CI failed on
+   * `:app:checkDebugAarMetadata`:
+   *
+   *   Dependency 'io.coil-kt.coil3:coil-compose-android:3.6.3' requires libraries
+   *   and applications that depend on it to compile against version 37 or later
+   *   of the Android APIs. :app is currently compiled against android-36.
+   *
+   * Coil 3.6.0 raised its compile SDK to 37 (its changelog says so), and AGP
+   * 9.0.1 tops out at 36. 3.5.0 is not a workaround: it is built against Compose
+   * 1.11.1, newer than this project's `composeUi` pin, so Gradle would resolve
+   * Compose upward and upgrade it app-wide. The ceilings below are a snapshot of
+   * Coil's published requirements; raise them together with compileSdk, AGP and
+   * the `platforms;android-NN` pin in `.github/workflows/android-apk.yml`.
+   */
+  it('does not require a compileSdk or Compose newer than the project pins', () => {
+    const catalog = readFileSync(join(ANDROID, 'gradle', 'libs.versions.toml'), 'utf8');
+    const pin = (name: string) => new RegExp(`^${name} = "([^"]+)"`, 'm').exec(catalog)?.[1];
+
+    const coil = pin('coil');
+    const composeUi = pin('composeUi');
+    expect(coil, 'libs.versions.toml must pin coil').toBeTruthy();
+    expect(composeUi, 'libs.versions.toml must pin composeUi').toBeTruthy();
+
+    const parts = (v: string) => v!.split(/[.\-]/).slice(0, 3).map((n) => Number.parseInt(n, 10) || 0);
+    const atLeast = (v: string, floor: number[]) => {
+      const a = parts(v);
+      for (let i = 0; i < 3; i += 1) {
+        if ((a[i] ?? 0) > (floor[i] ?? 0)) return true;
+        if ((a[i] ?? 0) < (floor[i] ?? 0)) return false;
+      }
+      return true;
+    };
+
+    // The highest compileSdk any consuming module declares.
+    let compileSdk = 0;
+    for (const file of kotlinOrScriptFiles().filter((f) => f.endsWith('.gradle.kts'))) {
+      for (const match of readFileSync(file, 'utf8').matchAll(/version\s*=\s*release\((\d+)\)/g)) {
+        compileSdk = Math.max(compileSdk, Number.parseInt(match[1]!, 10));
+      }
+    }
+    expect(compileSdk, 'a module must declare compileSdk').toBeGreaterThanOrEqual(36);
+
+    // Coil 3.6.0 -> AAR metadata requires compileSdk 37.
+    if (atLeast(coil!, [3, 6, 0])) {
+      expect(compileSdk, `coil ${coil} requires compileSdk 37+`).toBeGreaterThanOrEqual(37);
+    }
+    // Coil 3.5.0 -> built against Compose 1.11.1.
+    if (atLeast(coil!, [3, 5, 0])) {
+      expect(atLeast(composeUi!, [1, 11, 1]),
+        `coil ${coil} is built against Compose 1.11.1, which would upgrade composeUi ${composeUi}`).toBe(true);
+    }
+  });
+});
+
+describe('Compose and Coil Modifier extensions are imported where they are used', () => {
+  /**
+   * WHY: `clickable`, `background`, `clip`, `testTag` and friends are extension
+   * functions on `Modifier`, so importing `androidx.compose.ui.Modifier` does not
+   * put them in scope. The failure is a bare `Unresolved reference` at the call
+   * site and nothing else hints at the missing import.
+   *
+   * `:feature:catalog`'s `ProductDetailScreen.kt` reached CI this way — one
+   * `.clickable(…)` at line 285 with no `androidx.compose.foundation.clickable`.
+   *
+   * Only extensions whose names are unambiguous are listed. Deliberately absent:
+   * `size`, `padding`, `height`, `width`, `map`, `filter`, `first` — all also
+   * stdlib collection members, so a naive check would flag correct code.
+   */
+  const EXTENSIONS: Record<string, string> = {
+    clickable: 'androidx.compose.foundation.clickable',
+    background: 'androidx.compose.foundation.background',
+    border: 'androidx.compose.foundation.border',
+    clip: 'androidx.compose.ui.draw.clip',
+    testTag: 'androidx.compose.ui.platform.testTag',
+    verticalScroll: 'androidx.compose.foundation.verticalScroll',
+    horizontalScroll: 'androidx.compose.foundation.horizontalScroll',
+    crossfade: 'coil3.request.crossfade',
+  };
+
+  it('imports every Modifier extension it calls', () => {
+    const offenders: string[] = [];
+    let checked = 0;
+
+    for (const file of kotlinFiles()) {
+      const source = readFileSync(file, 'utf8');
+      const imports = new Set([...source.matchAll(/^import\s+([\w.]+)/gm)].map((m) => m[1]!));
+
+      for (const [extension, required] of Object.entries(EXTENSIONS)) {
+        const used = new RegExp(`\\.\\s*${extension}\\s*[({]`).exec(source);
+        if (!used) continue;
+        checked += 1;
+        if (!imports.has(required)) {
+          const line = source.slice(0, used.index).split('\n').length;
+          offenders.push(`${relative(ROOT, file)}:${line} calls .${extension}(…) without importing ${required}`);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
     expect(offenders.sort()).toEqual([]);
   });
 });

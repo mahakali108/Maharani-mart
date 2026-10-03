@@ -1,0 +1,139 @@
+package com.maharanitraders.feature.catalog
+
+import com.maharanitraders.core.model.CatalogBrand
+import com.maharanitraders.core.model.CatalogCategory
+import com.maharanitraders.core.model.CatalogPack
+import com.maharanitraders.core.model.CatalogProduct
+import com.maharanitraders.core.model.PackAvailability
+import com.maharanitraders.core.model.PriceTier
+import com.maharanitraders.core.model.ProductDetail
+import com.maharanitraders.core.model.ProductPackDetail
+import com.maharanitraders.core.model.PromoBanner
+import com.maharanitraders.core.model.RetailerHome
+import com.maharanitraders.core.network.dto.CatalogBrandDto
+import com.maharanitraders.core.network.dto.CatalogCategoryDto
+import com.maharanitraders.core.network.dto.CatalogPackDto
+import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.PriceTierDto
+import com.maharanitraders.core.network.dto.ProductDetailDto
+import com.maharanitraders.core.network.dto.ProductPackDetailDto
+import com.maharanitraders.core.network.dto.PromoBannerDto
+import com.maharanitraders.core.network.dto.RetailerHomeDto
+
+/**
+ * Wire model to domain model, written out field by field.
+ *
+ * The mapping is explicit rather than automatic on purpose: a server-side rename
+ * is a compile error here instead of a silently empty field on a product card.
+ *
+ * Two rules the mapping enforces:
+ *  - an unrecognised availability string becomes [PackAvailability.UNKNOWN], so
+ *    a new server value can never be displayed as "in stock";
+ *  - blank strings become `null`, so the UI has one way to say "not provided"
+ *    and never renders an empty chip next to a product name.
+ */
+object CatalogMapper {
+
+  private fun String?.orNullIfBlank(): String? = this?.trim()?.ifEmpty { null }
+
+  fun tier(dto: PriceTierDto): PriceTier = PriceTier(
+    minQuantity = dto.minQuantity,
+    maxQuantity = dto.maxQuantity,
+    unitPricePaise = dto.pricePerPiecePaise,
+  )
+
+  fun pack(dto: CatalogPackDto): CatalogPack = CatalogPack(
+    packId = dto.packId,
+    packName = dto.packName.orNullIfBlank(),
+    unitsPerCase = dto.unitsPerCase,
+    moq = dto.moq,
+    unitPricePaise = dto.unitPricePaise,
+    mrpPaise = dto.mrpPaise,
+    derivedCasePricePaise = dto.derivedCasePricePaise,
+    tiers = dto.tiers.map(::tier),
+    availability = PackAvailability.fromWire(dto.availability),
+  )
+
+  fun product(dto: CatalogProductDto): CatalogProduct = CatalogProduct(
+    id = dto.id,
+    name = dto.name,
+    brandName = dto.brandName.orNullIfBlank(),
+    imageUrl = dto.imageUrl.orNullIfBlank(),
+    isNewLaunch = dto.isNewLaunch,
+    categoryId = dto.categoryId.orNullIfBlank(),
+    brandId = dto.brandId.orNullIfBlank(),
+    hasOffer = dto.hasOffer,
+    isFavorite = dto.isFavorite,
+    pack = dto.pack?.let(::pack),
+  )
+
+  fun products(dtos: List<CatalogProductDto>): List<CatalogProduct> = dtos.map(::product)
+
+  fun category(dto: CatalogCategoryDto): CatalogCategory = CatalogCategory(
+    id = dto.id,
+    name = dto.name,
+    imageUrl = dto.imageUrl.orNullIfBlank(),
+    productCount = dto.productCount,
+  )
+
+  fun brand(dto: CatalogBrandDto): CatalogBrand = CatalogBrand(
+    id = dto.id,
+    name = dto.name,
+    logoUrl = dto.logoUrl.orNullIfBlank(),
+    productCount = dto.productCount,
+  )
+
+  fun banner(dto: PromoBannerDto): PromoBanner = PromoBanner(
+    id = dto.id,
+    title = dto.title,
+    subtitle = dto.subtitle.orNullIfBlank(),
+    imageUrl = dto.imageUrl.orNullIfBlank(),
+    ctaLabel = dto.ctaLabel.orNullIfBlank(),
+    linkUrl = dto.linkUrl.orNullIfBlank(),
+  )
+
+  fun home(dto: RetailerHomeDto): RetailerHome = RetailerHome(
+    banners = dto.banners.map(::banner),
+    categories = dto.categories.map(::category),
+    brands = dto.brands.map(::brand),
+    products = products(dto.products),
+    nextCursor = dto.nextCursor.orNullIfBlank(),
+  )
+
+  fun packDetail(dto: ProductPackDetailDto): ProductPackDetail = ProductPackDetail(
+    packId = dto.packId,
+    packName = dto.packName,
+    unitsPerCase = dto.unitsPerCase,
+    moq = dto.moq,
+    allowLoosePieces = dto.allowLoosePieces,
+    unitPricePaise = dto.unitPricePaise,
+    lineTotalAtMoqPaise = dto.lineTotalAtMoqPaise,
+    gstPercent = dto.gstPercent,
+    mrpPaise = dto.mrpPaise,
+    derivedCasePricePaise = dto.derivedCasePricePaise,
+    tiers = dto.tiers.map(::tier),
+    availability = PackAvailability.fromWire(dto.availability),
+    selected = dto.selected,
+    // A blank entry is dropped rather than handed to the image loader, which
+    // would otherwise show a broken tile in the middle of the gallery.
+    images = dto.images.mapNotNull { it.orNullIfBlank() },
+    message = dto.message.orNullIfBlank(),
+  )
+
+  fun detail(dto: ProductDetailDto): ProductDetail = ProductDetail(
+    id = dto.id,
+    name = dto.name,
+    brandName = dto.brandName.orNullIfBlank(),
+    categoryId = dto.categoryId.orNullIfBlank(),
+    categoryName = dto.categoryName.orNullIfBlank(),
+    unit = dto.unit,
+    hsnCode = dto.hsnCode.orNullIfBlank(),
+    gstPercent = dto.gstPercent,
+    leadTimeDays = dto.leadTimeDays,
+    isNewLaunch = dto.isNewLaunch,
+    isFavorite = dto.isFavorite,
+    hasOffer = dto.hasOffer,
+    images = dto.images.mapNotNull { it.orNullIfBlank() },
+    packs = dto.packs.map(::packDetail),
+  )
+}
