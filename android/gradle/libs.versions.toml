@@ -46,7 +46,21 @@ coroutines = "1.10.2"
 serialization = "1.10.0"
 retrofit = "3.0.0"
 okhttp = "5.3.2"
-coil = "3.6.3"
+# Coil 3.6.0 raised the Android compile SDK its AARs declare to 37, and this
+# project compiles against 36 — the maximum AGP 9.0.1 supports. Consuming 3.6.x
+# fails `:app:checkDebugAarMetadata` with "requires libraries and applications
+# that depend on it to compile against version 37 or later".
+#
+# 3.5.0 is NOT a workaround either: it is built against Compose 1.11.1, which is
+# newer than the composeUi pin below, so Gradle would resolve Compose upward and
+# silently upgrade it app-wide. 3.4.0 is the newest release that stays at or
+# below both this project's compileSdk (35 <= 36) and its Compose pin
+# (1.9.3 < 1.10.3), so adopting it upgrades nothing.
+#
+# Bumping this therefore requires bumping compileSdk AND AGP AND the pinned
+# `platforms;android-36` in .github/workflows/android-apk.yml together. See
+# tests/android-project-integrity.test.ts, which enforces the ceiling.
+coil = "3.4.0"
 
 junit = "4.13.2"
 turbine = "1.2.1"

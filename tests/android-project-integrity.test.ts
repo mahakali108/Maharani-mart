@@ -1016,3 +1016,61 @@ describe('Phase D wiring that only a Gradle build would otherwise catch', () => 
     }
   });
 });
+
+describe('The Coil pin stays inside what the toolchain allows', () => {
+  /**
+   * WHY: this exact class of failure cannot be seen by anything in this repo —
+   * it is AAR *metadata* checked at build time. Commit `ced2d85` was the first
+   * to consume the pre-existing `coil` alias, and CI failed on
+   * `:app:checkDebugAarMetadata`:
+   *
+   *   Dependency 'io.coil-kt.coil3:coil-compose-android:3.6.3' requires libraries
+   *   and applications that depend on it to compile against version 37 or later
+   *   of the Android APIs. :app is currently compiled against android-36.
+   *
+   * Coil 3.6.0 raised its compile SDK to 37 (its changelog says so), and AGP
+   * 9.0.1 tops out at 36. 3.5.0 is not a workaround: it is built against Compose
+   * 1.11.1, newer than this project's `composeUi` pin, so Gradle would resolve
+   * Compose upward and upgrade it app-wide. The ceilings below are a snapshot of
+   * Coil's published requirements; raise them together with compileSdk, AGP and
+   * the `platforms;android-NN` pin in `.github/workflows/android-apk.yml`.
+   */
+  it('does not require a compileSdk or Compose newer than the project pins', () => {
+    const catalog = readFileSync(join(ANDROID, 'gradle', 'libs.versions.toml'), 'utf8');
+    const pin = (name: string) => new RegExp(`^${name} = "([^"]+)"`, 'm').exec(catalog)?.[1];
+
+    const coil = pin('coil');
+    const composeUi = pin('composeUi');
+    expect(coil, 'libs.versions.toml must pin coil').toBeTruthy();
+    expect(composeUi, 'libs.versions.toml must pin composeUi').toBeTruthy();
+
+    const parts = (v: string) => v!.split(/[.\-]/).slice(0, 3).map((n) => Number.parseInt(n, 10) || 0);
+    const atLeast = (v: string, floor: number[]) => {
+      const a = parts(v);
+      for (let i = 0; i < 3; i += 1) {
+        if ((a[i] ?? 0) > (floor[i] ?? 0)) return true;
+        if ((a[i] ?? 0) < (floor[i] ?? 0)) return false;
+      }
+      return true;
+    };
+
+    // The highest compileSdk any consuming module declares.
+    let compileSdk = 0;
+    for (const file of kotlinOrScriptFiles().filter((f) => f.endsWith('.gradle.kts'))) {
+      for (const match of readFileSync(file, 'utf8').matchAll(/version\s*=\s*release\((\d+)\)/g)) {
+        compileSdk = Math.max(compileSdk, Number.parseInt(match[1]!, 10));
+      }
+    }
+    expect(compileSdk, 'a module must declare compileSdk').toBeGreaterThanOrEqual(36);
+
+    // Coil 3.6.0 -> AAR metadata requires compileSdk 37.
+    if (atLeast(coil!, [3, 6, 0])) {
+      expect(compileSdk, `coil ${coil} requires compileSdk 37+`).toBeGreaterThanOrEqual(37);
+    }
+    // Coil 3.5.0 -> built against Compose 1.11.1.
+    if (atLeast(coil!, [3, 5, 0])) {
+      expect(atLeast(composeUi!, [1, 11, 1]),
+        `coil ${coil} is built against Compose 1.11.1, which would upgrade composeUi ${composeUi}`).toBe(true);
+    }
+  });
+});
