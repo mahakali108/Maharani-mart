@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
@@ -135,7 +136,10 @@ fun HomeContent(
     horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
     verticalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
   ) {
-    val full = { GridItemSpan(maxLineSpan) }
+    // The receiver type has to be written out: without it Kotlin infers
+    // `() -> GridItemSpan`, which has no `maxLineSpan` and does not match the
+    // `LazyGridItemSpanScope.() -> GridItemSpan` that `item(span = …)` expects.
+    val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
 
     when {
       // First load with nothing on screen yet: a skeleton, not a blank page.
