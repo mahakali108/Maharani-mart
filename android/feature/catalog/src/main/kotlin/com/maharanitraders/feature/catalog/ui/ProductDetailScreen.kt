@@ -456,22 +456,6 @@ private fun FactRow(label: String, value: String, modifier: Modifier = Modifier)
   }
 }
 
-@Composable
-private fun OfferBadge(modifier: Modifier = Modifier) {
-  Surface(
-    color = MaterialTheme.colorScheme.secondaryContainer,
-    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    shape = RoundedCornerShape(6.dp),
-    modifier = modifier,
-  ) {
-    Text(
-      text = "Offer",
-      style = MaterialTheme.typography.labelSmall,
-      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-    )
-  }
-}
-
 /** `5` -> `5%`, `12.5` -> `12.5%`; a whole number never shows a trailing `.0`. */
 private fun formatPercent(value: Double): String =
   if (value % 1.0 == 0.0) "${value.toLong()}%" else "${value}%"
