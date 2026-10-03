@@ -16,6 +16,8 @@ package com.maharanitraders.app
  *     enabled for local development hosts by a debug build;
  *   • normalized to end with `/` so Retrofit resolves `api/mobile/v1/…`
  *     correctly;
+ *   • rejects retired production aliases (`maharani-mart-one.vercel.app` and
+ *     `maharani-mart-mahakali108s-projects.vercel.app`);
  *   • no credentials in the URL, no query string, no fragment.
  *
  * It NEVER supplies a default: an unusable value is an error, because silently
@@ -30,6 +32,10 @@ object ApiBaseUrlContract {
 
   /** Hosts allowed to use plain http in debug builds: loopback and emulator alias. */
   private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2", "[::1]")
+  private val RETIRED_VERCEL_HOSTS = setOf(
+    "maharani-mart-one.vercel.app",
+    "maharani-mart-mahakali108s-projects.vercel.app",
+  )
 
   fun validate(raw: String?, allowLocalHttp: Boolean = false): Validation {
     val value = raw?.trim().orEmpty()
@@ -58,6 +64,9 @@ object ApiBaseUrlContract {
     } else {
       authority.substringBefore(':')
     }).lowercase()
+    if (host.trimEnd('.') in RETIRED_VERCEL_HOSTS) {
+      return Validation.Invalid("API base URL must not use a retired Vercel hostname")
+    }
     if (scheme == "http" && (!allowLocalHttp || host !in LOCAL_HOSTS)) {
       return Validation.Invalid("Plain http is only allowed for local debug builds and development hosts")
     }

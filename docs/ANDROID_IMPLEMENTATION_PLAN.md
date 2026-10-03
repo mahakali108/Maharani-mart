@@ -343,7 +343,7 @@ call this project near completion.
 | S6 | Order double-submission on retry | High | `orders.request_key` + `complete_order_request` (service-role only) — client must send a stable key and not auto-retry |
 | S7 | Warehouse misconfiguration (`<> 1` active) surfaces as a raw `22023` | Medium | map to a distinct, user-visible configuration error; never fall back to a hardcoded warehouse |
 | S8 | ~~Legacy Capacitor wrapper keeps loading a live remote URL inside a WebView~~ | — | **retired in this session** (wrapper, `capacitor.config.ts`, `www/` and its build script deleted in one reviewable change; see §1.8) |
-| S9 | `capacitor.config.ts` documents that the previous production alias returns `DEPLOYMENT_NOT_FOUND` | Medium | verify the current API base URL in `ApiBaseUrlContract.kt` resolves before any on-device test |
+| S9 | Retired Vercel aliases `maharani-mart-one.vercel.app` and `maharani-mart-mahakali108s-projects.vercel.app` are no longer usable (`DEPLOYMENT_NOT_FOUND` / `410 GONE`) | Medium | default to `https://maharanitraders.vercel.app/`; its public `/api/mobile/v1/health` returned `status=ok`, `database=reachable` on 2026-10-03. `ApiBaseUrlContract` rejects both retired hosts; recheck health before device sign-off. |
 | S10 | Session material on disk | High | mitigation present: Keystore AES-GCM store + `allowBackup=false` |
 | S11 | Release build signing secrets | — | env-only in `app/build.gradle.kts`; never in Git. Keep. |
 | S12 | Logging of tokens/PII | Medium | `AuthInterceptor` keeps tokens out of URLs; add a "no body logging" test when the first write endpoint lands |

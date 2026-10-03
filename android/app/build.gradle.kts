@@ -17,7 +17,7 @@ plugins {
 //   ./gradlew assembleDebug -PmaharaniApiBaseUrl=https://staging.example/
 val maharaniApiBaseUrl: String =
   (project.findProperty("maharaniApiBaseUrl") as String?)
-    ?: "https://maharani-mart-mahakali108s-projects.vercel.app/"
+    ?: "https://maharanitraders.vercel.app/"
 
 // Release signing is read from the environment ONLY - never from the repo.
 val releaseStorePath: String? = System.getenv("RELEASE_KEYSTORE_PATH")
