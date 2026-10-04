@@ -1,34 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * CHECKOUT ATOMICITY — one cart, one order.
- *
- * `placeOrderAction` claims the cart by DELETE ... RETURNING: Postgres decides
- * which submission wins, so a double-tap, a retry or two concurrent tabs can
- * never turn one basket into two orders. When the order cannot be created the
- * claimed lines are put back, so the shop fixes the problem and retries with
- * one tap instead of rebuilding the cart.
+ * Checkout delegates the exact-cart comparison and clearing to one database
+ * transaction. The web action only reads the basket; a failed or uncertain RPC
+ * must never try to restore rows beside an order that might have committed.
  */
 
 type Op = { table: string; op: 'select' | 'insert' | 'delete' | 'update'; filters: [string, unknown][]; payload?: unknown };
 
 const state = {
   cartRows: [] as { pack_id: string; quantity: number }[],
-  inserted: [] as Record<string, unknown>[],
   ops: [] as Op[],
   address: null as Record<string, unknown> | null,
   retailer: { address: 'Shop line, Khagaria' } as Record<string, unknown> | null,
+  orderCommitted: false,
 };
 
 function makeClient() {
   function from(table: string) {
     const op: Op = { table, op: 'select', filters: [] };
-    let selected = false;
     const chain: Record<string, unknown> = {
-      select: () => {
-        if (op.op === 'delete') selected = true;
-        return chain;
-      },
+      select: () => chain,
       eq: (column: string, value: unknown) => {
         op.filters.push([column, value]);
         return chain;
@@ -50,11 +42,8 @@ function makeClient() {
       },
       then: (resolve: (value: { data: unknown; error: null }) => unknown) => {
         state.ops.push(op);
-        if (table === 'cart_items' && op.op === 'delete') {
-          // The atomic claim: whoever calls first gets the rows.
-          const claimed = state.cartRows;
-          state.cartRows = [];
-          return Promise.resolve({ data: selected ? claimed : null, error: null }).then(resolve);
+        if (table === 'cart_items' && op.op === 'select') {
+          return Promise.resolve({ data: [...state.cartRows], error: null }).then(resolve);
         }
         return Promise.resolve({ data: null, error: null }).then(resolve);
       },
@@ -77,12 +66,10 @@ vi.mock('@/lib/orders/create-order', () => ({
   createOrderForRetailer: (...args: unknown[]) => mocks.createOrder(...args),
 }));
 vi.mock('@/lib/notifications/notify', () => ({ createInAppNotification: async () => undefined }));
-vi.mock('@/lib/coupons/validate', () => ({ loadActiveCouponForRetailer: async () => ({ coupon: null }) }));
+vi.mock('@/lib/coupons/validate', () => ({ loadActiveCouponForRetailer: async () => ({ coupon: null, error: false }) }));
 vi.mock('next/cache', () => ({ revalidatePath: () => undefined }));
 const redirects: string[] = [];
 vi.mock('next/navigation', () => ({
-  // A real Next redirect throws to unwind the server action; the test records
-  // the destination and treats the throw as success.
   redirect: (url: string) => {
     redirects.push(url);
     throw new Error('NEXT_REDIRECT');
@@ -104,10 +91,10 @@ beforeEach(() => {
     { pack_id: 'pack-1', quantity: 12 },
     { pack_id: 'pack-2', quantity: 6 },
   ];
-  state.inserted = [];
   state.ops = [];
   state.address = { label: 'Shop', receiver_name: 'Owner', phone: '90000', line1: 'A', line2: null, landmark: null, city: 'Khagaria', district: null, state: null, pincode: '851204' };
   state.retailer = { address: 'Shop line, Khagaria' };
+  state.orderCommitted = false;
   redirects.length = 0;
   mocks.createOrder.mockReset();
   mocks.createOrder.mockResolvedValue({
@@ -116,16 +103,15 @@ beforeEach(() => {
 });
 
 describe('one cart, one order', () => {
-  it('claims the cart with DELETE ... RETURNING and forwards no client money', async () => {
+  it('reads the saved basket and asks the atomic writer to clear it only with a confirmed order', async () => {
     const result = await place('Please deliver in the morning');
 
     expect(result).toEqual({ success: true });
     expect(redirects).toEqual(['/retailer/orders/order-1?placed=1']);
-    const claim = state.ops.find((op) => op.table === 'cart_items' && op.op === 'delete');
-    expect(claim).toBeTruthy();
-    expect(claim!.filters).toContainEqual(['retailer_id', 'retailer-1']);
+    const cartRead = state.ops.find((op) => op.table === 'cart_items' && op.op === 'select');
+    expect(cartRead?.filters).toContainEqual(['retailer_id', 'retailer-1']);
+    expect(state.ops.some((op) => op.table === 'cart_items' && op.op === 'delete')).toBe(false);
 
-    // Only pack ids + quantities + notes/address reach the order service.
     expect(mocks.createOrder).toHaveBeenCalledTimes(1);
     const args = mocks.createOrder.mock.calls[0]![0] as Record<string, unknown>;
     expect(args.lines).toEqual([
@@ -133,45 +119,87 @@ describe('one cart, one order', () => {
       { packId: 'pack-2', quantity: 6 },
     ]);
     expect(args.notes).toBe('Please deliver in the morning');
-    expect(Object.keys(args).sort()).toEqual(['collectedBy', 'couponCode', 'lines', 'notes', 'retailerId', 'shippingAddress']);
+    expect(args.clearCartAfterOrder).toBe(true);
+    expect(Object.keys(args).sort()).toEqual([
+      'clearCartAfterOrder', 'collectedBy', 'couponCode', 'lines', 'notes', 'retailerId', 'shippingAddress',
+    ]);
   });
 
-  it('lets exactly ONE of two concurrent submissions place the order', async () => {
+  it('lets the atomic writer arbitrate overlapping cart reads without creating two orders', async () => {
+    let committed = false;
+    mocks.createOrder.mockImplementation(async () => {
+      if (committed) return { error: 'Your cart changed after it was reviewed.', code: 'conflict' };
+      committed = true;
+      state.orderCommitted = true;
+      state.cartRows = [];
+      return {
+        order: {
+          id: 'order-1', orderNumber: 'MK-1', status: 'pending',
+          placedAt: '2026-10-03T10:00:00.000Z', grandTotal: 636,
+          coinsUsed: 100, payableOnDelivery: 536, coinsBalanceAfterPaise: 0,
+          idempotentReplay: false,
+        },
+      };
+    });
+
     const [first, second] = await Promise.all([place(), place()]);
-    const succeeded = [first, second].filter((result) => 'success' in result);
-    const failed = [first, second].filter((result) => 'error' in result);
-
-    expect(succeeded).toHaveLength(1);
-    expect(failed).toHaveLength(1);
-    expect((failed[0] as { error: string }).error).toMatch(/cart is empty/i);
-    expect(mocks.createOrder).toHaveBeenCalledTimes(1);
+    const outcomes = [first, second];
+    expect(outcomes.filter((result) => 'success' in result)).toHaveLength(1);
+    expect(outcomes.filter((result) => 'error' in result)).toHaveLength(1);
+    expect((outcomes.find((result) => 'error' in result) as { error: string }).error)
+      .toMatch(/cart changed/i);
+    expect(state.orderCommitted).toBe(true);
+    expect(state.cartRows).toEqual([]);
+    expect(mocks.createOrder).toHaveBeenCalledTimes(2);
     expect(redirects).toHaveLength(1);
+    expect(state.ops.filter((op) => op.table === 'cart_items' && op.op === 'select')).toHaveLength(2);
+    expect(state.ops.some((op) => op.table === 'cart_items' && (op.op === 'insert' || op.op === 'delete'))).toBe(false);
   });
 
-  it('restores the claimed cart when the order cannot be created', async () => {
+  it('does not expose money inputs to the order service', async () => {
+    await place();
+    const args = mocks.createOrder.mock.calls[0]![0] as Record<string, unknown>;
+    expect(args).not.toHaveProperty('subtotal');
+    expect(args).not.toHaveProperty('grandTotal');
+    expect(args).not.toHaveProperty('gst');
+    expect(args).not.toHaveProperty('stock');
+  });
+
+  it('does not clear or restore the cart when order creation fails', async () => {
     mocks.createOrder.mockResolvedValue({ error: 'Minimum order quantity for this pack is 24.' });
 
     const result = await place();
 
     expect(result).toEqual({ error: 'Minimum order quantity for this pack is 24.' });
-    const restore = state.ops.filter((op) => op.table === 'cart_items' && op.op === 'insert');
-    expect(restore).toHaveLength(1);
-    expect(restore[0]!.payload).toEqual([
-      { retailer_id: 'retailer-1', pack_id: 'pack-1', quantity: 12 },
-      { retailer_id: 'retailer-1', pack_id: 'pack-2', quantity: 6 },
-    ]);
-    expect(state.cartRows).toEqual([]); // the fake returns the claim, not the re-insert
+    expect(state.cartRows).toHaveLength(2);
+    expect(state.ops.some((op) => op.table === 'cart_items' && op.op === 'insert')).toBe(false);
+    expect(state.ops.some((op) => op.table === 'cart_items' && op.op === 'delete')).toBe(false);
   });
 
-  it('restores the cart and stops before ordering when the address is not the caller’s', async () => {
+  it('does not restore rows after an uncertain result that may have committed', async () => {
+    mocks.createOrder.mockImplementation(async () => {
+      // Simulate the database commit succeeding before the response is lost.
+      state.orderCommitted = true;
+      state.cartRows = [];
+      return { error: 'The order could not be confirmed. Check your order history before trying again.' };
+    });
+
+    const result = await place();
+
+    expect(result).toHaveProperty('error');
+    expect(state.orderCommitted).toBe(true);
+    expect(state.cartRows).toEqual([]);
+    expect(state.ops.some((op) => op.table === 'cart_items' && op.op === 'insert')).toBe(false);
+  });
+
+  it('stops before ordering when the address is not owned by the caller and preserves their cart', async () => {
     state.address = null;
 
     const result = await place('', 'someone-elses-address');
 
     expect(result).toEqual({ error: 'The selected delivery address could not be found. Pick an address and try again.' });
     expect(mocks.createOrder).not.toHaveBeenCalled();
-    expect(state.ops.some((op) => op.table === 'cart_items' && op.op === 'insert')).toBe(true);
-    // The address lookup is owner-scoped, so a foreign id can never resolve.
+    expect(state.cartRows).toHaveLength(2);
     const lookup = state.ops.find((op) => op.table === 'retailer_addresses');
     expect(lookup!.filters).toContainEqual(['retailer_id', 'retailer-1']);
   });

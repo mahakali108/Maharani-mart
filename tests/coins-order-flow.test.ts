@@ -490,12 +490,16 @@ describe('coin source guarantees', () => {
     expect(server).toContain('getRetailerCoinPosition');
   });
 
-  it('order placement cancels the order if the coin debit fails', async () => {
+  it('order placement applies Coins and stock in the atomic transaction, so a debit failure cannot leave a partial order', async () => {
     const { readFile } = await import('node:fs/promises');
     const createOrder = await readFile('lib/orders/create-order.ts', 'utf8');
-    expect(createOrder).toContain('debitCoinsForOrder');
-    expect(createOrder).toContain('Coin debit failed');
-    // No credit gate left in the current order flow.
+    const atomicOrder = await readFile('supabase/migrations/0056_mobile_checkout_atomic.sql', 'utf8');
+    expect(createOrder).toContain('p_expected_coins_used_paise: quote.coins.usedPaise');
+    expect(atomicOrder).toContain('public.check_and_debit_retailer_wallet(');
+    expect(atomicOrder).toContain("'order:' || v_order.id::text");
+    expect(atomicOrder).toContain('request_completed_at = now()');
+    expect(atomicOrder).not.toContain('Coin debit failed');
+    // No credit gate left in the TypeScript order path.
     expect(createOrder).not.toContain('exceedsLimit');
     expect(createOrder).not.toContain('order:${order.id}');
   });

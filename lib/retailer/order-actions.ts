@@ -143,7 +143,7 @@ export async function addReorderLinesToCartAction(
     }
     // Reuse the full canonical cart validation, including today's selling
     // tiers, rather than copying a historical price or bypassing the engine.
-    const validationError = await validatePackForCart(supabase, packId, quantity);
+    const validationError = await validatePackForCart(supabase, user.id, packId, quantity);
     if (validationError) { skippedCount += 1; continue; }
     validLines.push({ packId, quantity });
   }

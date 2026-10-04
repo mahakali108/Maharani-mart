@@ -18,8 +18,11 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +50,7 @@ import com.maharanitraders.core.designsystem.components.SectionHeader
 import com.maharanitraders.core.designsystem.components.StockBadge
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
+import com.maharanitraders.core.model.PackAvailability
 import com.maharanitraders.core.model.ProductDetail
 import com.maharanitraders.core.model.ProductPackDetail
 import com.maharanitraders.feature.catalog.ProductDetailUiState
@@ -64,6 +68,7 @@ object ProductDetailTags {
   const val CASE_SIZE = "product_case_size"
   const val TIER_TABLE = "product_tier_table"
   const val AVAILABILITY = "product_availability"
+  const val ADD_TO_CART = "product_add_to_cart"
   const val NOT_FOUND = "product_not_found"
 }
 
@@ -75,16 +80,23 @@ object ProductDetailTags {
  * arrive from the same pricing engine checkout uses, so what the shopper reads
  * is what an order would be charged.
  *
- * There is deliberately no "Add to cart" button. Cart and checkout are a later
- * phase; a control that looks like it works but cannot place an order would be
- * a lie, and the migration contract forbids it. The screen says so plainly in
- * one honest note instead.
+ * The add action sends only the server-selected pack id and MOQ piece intent;
+ * it never sends a price. The authenticated backend revalidates quantity and
+ * persists the shared cart, and checkout obtains a fresh authoritative quote.
  */
 @Composable
 fun ProductDetailScreen(
   onBack: () -> Unit,
+  onAddToCart: (packId: String, quantity: Int) -> Unit,
+  canAddToCart: Boolean,
   modifier: Modifier = Modifier,
   viewModel: ProductDetailViewModel = hiltViewModel(),
+  addingToCart: Boolean = false,
+  cartLoading: Boolean = false,
+  cartMessage: String? = null,
+  cartError: String? = null,
+  cartNeedsRefresh: Boolean = false,
+  onRefreshCart: () -> Unit = {},
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -93,6 +105,14 @@ fun ProductDetailScreen(
     onRetry = viewModel::load,
     onSelectPack = viewModel::selectPack,
     onBack = onBack,
+    onAddToCart = onAddToCart,
+    canAddToCart = canAddToCart,
+    addingToCart = addingToCart,
+    cartLoading = cartLoading,
+    cartMessage = cartMessage,
+    cartError = cartError,
+    cartNeedsRefresh = cartNeedsRefresh,
+    onRefreshCart = onRefreshCart,
     modifier = modifier,
   )
 }
@@ -103,7 +123,15 @@ fun ProductDetailContent(
   onRetry: () -> Unit,
   onSelectPack: (String) -> Unit,
   onBack: () -> Unit,
+  onAddToCart: (packId: String, quantity: Int) -> Unit,
+  canAddToCart: Boolean,
   modifier: Modifier = Modifier,
+  addingToCart: Boolean = false,
+  cartLoading: Boolean = false,
+  cartMessage: String? = null,
+  cartError: String? = null,
+  cartNeedsRefresh: Boolean = false,
+  onRefreshCart: () -> Unit = {},
 ) {
   when {
     state.loading && state.detail == null -> LoadingState(message = "Loading product…")
@@ -171,11 +199,27 @@ fun ProductDetailContent(
 
               ProductFacts(detail = detail)
 
-              OrderingNote()
+              OrderingNote(canAddToCart = canAddToCart)
+              cartMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+              }
+              cartError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+              }
             }
           }
 
-          state.selectedPack?.let { pack -> DetailBottomBar(pack = pack) }
+          state.selectedPack?.let { pack ->
+            DetailBottomBar(
+              pack = pack,
+              canAddToCart = canAddToCart,
+              addingToCart = addingToCart,
+              cartLoading = cartLoading,
+              cartNeedsRefresh = cartNeedsRefresh,
+              onRefreshCart = onRefreshCart,
+              onAddToCart = { onAddToCart(pack.packId, pack.moq) },
+            )
+          }
         }
       }
     }
@@ -349,14 +393,6 @@ private fun PackPricingPanel(pack: ProductPackDetail, modifier: Modifier = Modif
             modifier = Modifier.weight(1f, fill = false),
           )
         }
-      }
-
-      if (!pack.allowLoosePieces) {
-        Text(
-          text = "Sold in whole cases only.",
-          style = MaterialTheme.typography.labelMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
       }
 
       pack.message?.let { message ->
@@ -555,12 +591,9 @@ private fun ProductFacts(detail: ProductDetail, modifier: Modifier = Modifier) {
   }
 }
 
-/**
- * The one honest sentence about ordering: cart and checkout are a later phase,
- * and the numbers on this screen are the same ones the web checkout uses.
- */
+/** Explains the server-owned ordering rules without advertising checkout to other roles. */
 @Composable
-private fun OrderingNote(modifier: Modifier = Modifier) {
+private fun OrderingNote(canAddToCart: Boolean, modifier: Modifier = Modifier) {
   val tokens = MaharaniThemeTokens.colors
   Surface(
     color = tokens.saffronSurface,
@@ -569,39 +602,85 @@ private fun OrderingNote(modifier: Modifier = Modifier) {
     modifier = modifier.fillMaxWidth(),
   ) {
     Text(
-      text = "Ordering from the app arrives with the cart & checkout phase. Until then the " +
-        "web workspace remains the order desk — the prices, slabs and stock on this screen " +
-        "are exactly what it will charge.",
+      text = if (canAddToCart) {
+        "Add the pack at its minimum piece quantity. The shared cart and checkout use " +
+          "current server pricing; stock, GST, eligibility and MOQ are rechecked before an order is saved."
+      } else {
+        "Current prices and stock are shown for browsing; checkout is subject to server verification."
+      },
       style = MaterialTheme.typography.labelMedium,
       modifier = Modifier.padding(MaharaniDimens.spaceMd),
     )
   }
 }
 
-/** A sticky, information-only price bar: what this pack costs at its MOQ. */
+/** Sticky server price and MOQ-based add action; no money is sent by this button. */
 @Composable
-private fun DetailBottomBar(pack: ProductPackDetail, modifier: Modifier = Modifier) {
+private fun DetailBottomBar(
+  pack: ProductPackDetail,
+  canAddToCart: Boolean,
+  addingToCart: Boolean,
+  cartLoading: Boolean,
+  cartNeedsRefresh: Boolean,
+  onRefreshCart: () -> Unit,
+  onAddToCart: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
   Surface(
     color = MaterialTheme.colorScheme.surface,
     shadowElevation = MaharaniDimens.appBarElevation,
     modifier = modifier.fillMaxWidth(),
   ) {
-    Row(
+    Column(
       modifier = Modifier.padding(
         horizontal = MaharaniDimens.pageGutter,
         vertical = MaharaniDimens.spaceMd,
       ),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
     ) {
-      Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs)) {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         PriceBlock(
           unitPricePaise = pack.unitPricePaise,
           emphasis = PriceEmphasis.Card,
           caption = "Min order ${pack.moq} pcs · ${pack.packName}",
         )
+        StockBadge(availability = pack.availability, compact = true)
       }
-      StockBadge(availability = pack.availability, compact = true)
+      if (cartNeedsRefresh) {
+        OutlinedButton(
+          onClick = onRefreshCart,
+          enabled = !addingToCart && !cartLoading,
+          modifier = Modifier.fillMaxWidth(),
+        ) { Text("Refresh shared cart") }
+      }
+      if (canAddToCart) {
+        Button(
+          onClick = onAddToCart,
+          enabled = !addingToCart && !cartLoading && !cartNeedsRefresh && pack.moq > 0 && pack.unitPricePaise != null &&
+            pack.availability == PackAvailability.IN_STOCK,
+          modifier = Modifier.fillMaxWidth().testTag(ProductDetailTags.ADD_TO_CART),
+        ) {
+          if (addingToCart || cartLoading) CircularProgressIndicator(strokeWidth = 2.dp)
+          else Text("Add ${pack.moq} pieces to cart")
+        }
+      } else {
+        Text(
+          "Ordering is unavailable for this account.",
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+      if (pack.availability != PackAvailability.IN_STOCK) {
+        Text(
+          text = if (pack.availability == PackAvailability.OUT_OF_STOCK) {
+            "This pack is currently out of stock."
+          } else {
+            "Availability is unconfirmed; refresh before adding to cart."
+          },
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
     }
   }
 }

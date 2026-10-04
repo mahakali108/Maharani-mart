@@ -24,7 +24,7 @@ class MaharaniRouterTest {
     role: UserRole = UserRole.RETAILER,
     homeRoute: String = "/retailer/home",
     workspaces: List<Workspace> = listOf(Workspace.RETAILER),
-    permissions: Set<String> = setOf("orders.create"),
+    permissions: Set<String> = setOf("orders.create", "orders.view.own"),
   ) = SessionSnapshot(
     user = SessionUser(
       id = "user-1",
@@ -71,12 +71,27 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.ACCOUNT in routes)
     assertTrue(MaharaniRoutes.CART in routes)
     assertTrue(MaharaniRoutes.COINS in routes)
-    assertTrue(MaharaniRoutes.ORDERS in routes) // shared across roles
+    assertTrue(MaharaniRoutes.ORDERS in routes) // retailer-only history
     assertTrue(MaharaniRoutes.NOTIFICATIONS in routes)
 
     assertTrue("retailers must not see the admin workspace", MaharaniRoutes.ADMINISTRATION !in routes)
     assertTrue(MaharaniRoutes.WAREHOUSE !in routes)
     assertTrue(MaharaniRoutes.SALES_DESK !in routes)
+  }
+
+  @Test
+  fun `retailer commerce destinations require the role and server permissions they call`() {
+    val historyOnly = MaharaniRouter.destinationsFor(
+      snapshot(permissions = setOf("orders.view.own")),
+    ).map { it.route }
+    assertTrue(MaharaniRoutes.ORDERS in historyOnly)
+    assertTrue(MaharaniRoutes.CART !in historyOnly)
+
+    val createOnly = MaharaniRouter.destinationsFor(
+      snapshot(permissions = setOf("orders.create")),
+    ).map { it.route }
+    assertTrue(MaharaniRoutes.CART !in createOnly)
+    assertTrue(MaharaniRoutes.ORDERS !in createOnly)
   }
 
   @Test
@@ -96,6 +111,7 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.CATEGORIES !in routes)
     assertTrue(MaharaniRoutes.CATALOG !in routes)
     assertTrue(MaharaniRoutes.CART !in routes)
+    assertTrue(MaharaniRoutes.ORDERS !in routes)
     assertTrue(MaharaniRoutes.COINS !in routes)
   }
 
@@ -128,6 +144,8 @@ class MaharaniRouterTest {
     val routes = routing.destinations.map { it.route }
     assertTrue(MaharaniRoutes.SALES_DESK in routes)
     assertTrue(MaharaniRoutes.CATALOG in routes)
+    assertTrue(MaharaniRoutes.CART !in routes)
+    assertTrue(MaharaniRoutes.ORDERS !in routes)
   }
 
   @Test
@@ -147,15 +165,16 @@ class MaharaniRouterTest {
 
   @Test
   fun `destinations without a workspace are always available to signed-in users`() {
-    val policy = NavigationPolicy(
+    val admin = snapshot(
+      role = UserRole.ADMIN,
       homeRoute = "/admin/dashboard",
       workspaces = listOf(Workspace.ADMIN),
       permissions = emptySet(),
     )
-    val routes = MaharaniRouter.destinationsFor(policy).map { it.route }
+    val routes = MaharaniRouter.destinationsFor(admin).map { it.route }
 
     assertTrue(MaharaniRoutes.HOME in routes)
-    assertTrue(MaharaniRoutes.ORDERS in routes)
+    assertTrue(MaharaniRoutes.ORDERS !in routes)
     assertTrue(MaharaniRoutes.NOTIFICATIONS in routes)
   }
 
@@ -181,6 +200,8 @@ class MaharaniRouterTest {
       MaharaniRoutes.HOME,
       MaharaniRoutes.CATALOG,
       MaharaniRoutes.CATEGORIES,
+      MaharaniRoutes.CART,
+      MaharaniRoutes.ORDERS,
       MaharaniRoutes.ACCOUNT,
     )
 
@@ -203,6 +224,8 @@ class MaharaniRouterTest {
       MaharaniRoutes.HOME,
       MaharaniRoutes.CATALOG,
       MaharaniRoutes.CATEGORIES,
+      MaharaniRoutes.CART,
+      MaharaniRoutes.ORDERS,
       MaharaniRoutes.ACCOUNT,
     )
 

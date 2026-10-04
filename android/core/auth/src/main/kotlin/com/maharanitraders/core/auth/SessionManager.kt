@@ -3,6 +3,7 @@ package com.maharanitraders.core.auth
 import com.maharanitraders.core.common.AppError
 import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.common.TimeSource
+import com.maharanitraders.core.datastore.AppPreferences
 import com.maharanitraders.core.model.AccountGate
 import com.maharanitraders.core.model.ApiErrorCode
 import com.maharanitraders.core.model.SessionTokens
@@ -83,6 +84,7 @@ class SessionManager @Inject constructor(
   private val mapper: SessionMapper,
   private val timeSource: TimeSource,
   private val authRepository: AuthRepository,
+  private val appPreferences: AppPreferences,
   /**
    * The single in-memory token, shared with the interceptor. It lives in
    * `core:network` because it is dependency-free: deriving it from this class
@@ -193,6 +195,11 @@ class SessionManager @Inject constructor(
 
     return when (val result = authRepository.login(identifier, password)) {
       is AppResult.Success -> {
+        // A device can lose its encrypted token while the non-sensitive
+        // idempotency key remains in DataStore. Clear session-scoped commerce
+        // state before accepting any fresh login, so a retry key can never
+        // cross from one account to another without an explicit clean slate.
+        if (!clearSessionScopedForNewLogin()) return _state.value
         storeQuietly(result.value.tokens)
         tokenHolder.set(result.value.tokens.accessToken)
 
@@ -337,6 +344,26 @@ class SessionManager @Inject constructor(
     return state
   }
 
+  private suspend fun clearSessionScopedForNewLogin(): Boolean {
+    try {
+      appPreferences.clearSessionScoped()
+      return true
+    } catch (cancellation: CancellationException) {
+      throw cancellation
+    } catch (_: Exception) {
+      // Fail closed: do not publish or persist a new account while an older
+      // account's commerce recovery key may still be present locally.
+      clearStoredSession()
+      publish(
+        SessionState.Unavailable(
+          "Previous session data could not be cleared on this device. Please try signing in again.",
+          retryable = true,
+        )
+      )
+      return false
+    }
+  }
+
   private suspend fun clearStoredSession() {
     clearActiveToken()
     try {
@@ -346,6 +373,14 @@ class SessionManager @Inject constructor(
     } catch (_: Exception) {
       // A failed local wipe must not block sign-out: the token is already
       // unusable in memory, and the next restore re-validates with the server.
+    }
+    try {
+      appPreferences.clearSessionScoped()
+    } catch (cancellation: CancellationException) {
+      throw cancellation
+    } catch (_: Exception) {
+      // Commerce recovery keys are non-sensitive, but must not cross accounts.
+      // A storage failure cannot restore a signed-out token or authorize a write.
     }
   }
 

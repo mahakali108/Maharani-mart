@@ -340,8 +340,9 @@ describe('Phase 5 — persisted order lines reconcile (unit_price × quantity = 
 
   it('order creation persists the reconciled per-piece unit price', () => {
     const create = read('lib/orders/create-order.ts');
-    expect(create).toContain('unit_price: item.unitPrice');
-    expect(create).toContain('line_total: item.lineTotal');
+    expect(create).toContain('unit_price: item?.unitPrice ?? line.unitPrice');
+    expect(create).toContain('line_total: item?.lineTotal ?? line.lineTotal');
+    expect(create).toContain('p_order_items: atomicItems');
     const quote = read('lib/orders/quote-order.ts');
     expect(quote).toContain('unitPrice: pricing.unitPrice');
     expect(quote).toContain("quantityUnit: 'pieces'");

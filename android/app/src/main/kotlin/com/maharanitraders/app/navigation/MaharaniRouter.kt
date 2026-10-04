@@ -1,7 +1,7 @@
 package com.maharanitraders.app.navigation
 
-import com.maharanitraders.core.model.NavigationPolicy
 import com.maharanitraders.core.model.SessionSnapshot
+import com.maharanitraders.core.model.UserRole
 import com.maharanitraders.core.model.Workspace
 
 /**
@@ -26,9 +26,9 @@ sealed interface SessionRouting {
 /**
  * Pure routing decisions — no Compose, no Android, fully unit-tested.
  *
- * The single source of truth for "where may this account go" is the
- * server-issued [NavigationPolicy]; the app contributes only presentation
- * (labels, phases, ordering).
+ * The single source of truth for "where may this account go" is the server-issued
+ * navigation policy and verified role; the app contributes presentation (labels,
+ * phases, ordering) while commerce endpoints enforce the same permission gates.
  */
 object MaharaniRouter {
 
@@ -63,17 +63,29 @@ object MaharaniRouter {
 
     return SessionRouting.Ready(
       start = home,
-      destinations = destinationsFor(policy),
+      destinations = destinationsFor(snapshot),
     )
   }
 
   /**
    * Destinations visible to this account: Home, plus every catalog entry whose
-   * workspace the server granted. Entries for other workspaces are hidden
-   * entirely (no disabled-but-visible cross-workspace links).
+   * workspace the server granted. Cart and order history are also restricted
+   * to the retailer role because their existing commerce APIs are retailer-only;
+   * a salesman who can enter the retailer catalogue does not gain these routes.
+   * Visibility is UX only—the endpoints still enforce role and permission.
    */
-  fun destinationsFor(policy: NavigationPolicy): List<MaharaniDestination> =
+  fun destinationsFor(snapshot: SessionSnapshot): List<MaharaniDestination> =
     MaharaniCatalog.destinations.filter { destination ->
-      destination.workspace == null || policy.canEnter(destination.workspace)
+      val workspaceAllowed = destination.workspace == null || snapshot.navigation.canEnter(destination.workspace)
+      workspaceAllowed && isRoleAndPermissionAllowed(destination.route, snapshot)
     }
+
+  private fun isRoleAndPermissionAllowed(route: String, snapshot: SessionSnapshot): Boolean = when (route) {
+    MaharaniRoutes.CART -> snapshot.role == UserRole.RETAILER
+      && snapshot.navigation.can("orders.create")
+      && snapshot.navigation.can("orders.view.own")
+    MaharaniRoutes.ORDERS -> snapshot.role == UserRole.RETAILER
+      && snapshot.navigation.can("orders.view.own")
+    else -> true
+  }
 }

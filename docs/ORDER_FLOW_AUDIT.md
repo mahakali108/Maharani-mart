@@ -195,3 +195,31 @@ after Phase 2 is merged.
 3. **Existing data:** a read-only query should be run in Supabase to list orders whose
    `grand_total` does not match `Σ order_items.line_total − discount_total`, and orders
    with no `ORDER_DEBIT`. That tells us whether C1–C3 were ever exercised in production.
+
+---
+
+## 5. Repository follow-up — native Phase E (2026-10-04)
+
+This audit is an intentionally dated snapshot of the earlier schema; the findings and
+recommendations above were not rewritten after the fact. Migration
+`0056_mobile_checkout_atomic.sql` now implements the order-creation hardening for the
+current repository paths:
+
+- Revoke direct authenticated inserts on `orders`, `order_items`, and cart inserts/updates;
+  native cart writes use an owner-derived MOQ-checked compare-and-set RPC.
+- Create orders only through the service-role-only `create_order_atomic` function. It
+  reconciles quoted lines/totals, current price/GST/MOQ/coupon/Coins/eligibility and
+  stock, then commits order/items, coupon redemption, wallet debit, request completion,
+  and (for retailer self-checkout) exact cart clearing in one PostgreSQL transaction.
+- Bind request UUIDs to owner/actor and a SHA-256 intent fingerprint. Android persists
+  one key before submission and recovers the actual committed order after an uncertain
+  response; historical rows without a wallet-balance snapshot remain `null`.
+- Keep existing Coins arithmetic and ledger RPCs as the storage/business source; no
+  payment method is introduced. The Android slice does not implement cancellation,
+  returns, reorder, invoices, delivery tracking, or saved carts.
+
+The migration and server/API contract have local PGlite-backed regression coverage. That
+single-connection harness cannot prove two independent PostgreSQL sessions contend on the
+advisory lock; production concurrency remains a deployment/CI integration check. This
+addendum describes repository code, not a claim that migration 0056 has been applied to
+a live Supabase database.

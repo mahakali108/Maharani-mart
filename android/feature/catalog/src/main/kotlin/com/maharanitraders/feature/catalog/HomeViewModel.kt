@@ -64,7 +64,8 @@ data class HomeUiState(
  * This ViewModel holds no fallback content of its own — when the home request
  * fails the screen says so and offers a retry, because a home screen full of
  * plausible looking products that the warehouse does not have is worse than an
- * honest error. Cart, coins and orders are deliberately absent: later phases.
+ * honest error. Cart and order history are separate Phase E destinations, not
+ * part of the home response; a Coins wallet summary remains later work.
  */
 @HiltViewModel
 class HomeViewModel @Inject constructor(

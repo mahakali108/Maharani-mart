@@ -43,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -81,6 +83,9 @@ import com.maharanitraders.feature.catalog.ui.CategoriesScreen
 import com.maharanitraders.feature.catalog.ui.HomeScreenTags
 import com.maharanitraders.feature.catalog.ui.ProductDetailScreen
 import com.maharanitraders.feature.catalog.ui.RetailerHomeScreen
+import com.maharanitraders.feature.orders.CartCheckoutViewModel
+import com.maharanitraders.feature.orders.ui.CartScreen
+import com.maharanitraders.feature.orders.ui.OrderHistoryScreen
 import kotlinx.coroutines.launch
 
 /** Test tags for the shell, used by Compose UI tests added in later phases. */
@@ -123,11 +128,9 @@ private val BOTTOM_NAV_ROUTES = listOf(
  * role-shaped.
  *
  * Every entry comes from [MaharaniRouter], so the bar, the drawer and the graph
- * can never disagree with the server's policy. Destinations that belong to a
- * later migration phase render [UnavailableFeatureState] — this build has no
- * fake cart, no placeholder order flow and no simulated coins, and the bar shows
- * them as honest "planned" tabs rather than hiding them, because a retailer
- * expects a cart and an order history to exist in a shopping app.
+ * can never disagree with the server's policy. Unshipped destinations render
+ * [UnavailableFeatureState]. Phase E cart, checkout and history use the existing
+ * authenticated API; the app never fabricates a basket, price, payment or order.
  *
  * Role awareness is preserved exactly as before: a retailer lands on the
  * shopping home, every other role keeps the session home that shows the account
@@ -166,6 +169,8 @@ private fun RoutedShell(
   // shopper can influence.
   val retailerHome = snapshot.role == UserRole.RETAILER &&
     routing.destinations.any { it.route == MaharaniRoutes.CATALOG }
+  val canUseRetailerCommerce = snapshot.role == UserRole.RETAILER &&
+    snapshot.navigation.can("orders.create") && snapshot.navigation.can("orders.view.own")
 
   val bottomItems = routing.destinations.filter { it.route in BOTTOM_NAV_ROUTES }
   val drawerItems = routing.destinations.filter { it.route !in BOTTOM_NAV_ROUTES }
@@ -334,6 +339,9 @@ private fun RoutedShell(
               onOpenProduct = { productId ->
                 navController.navigate(MaharaniRoutes.productDetail(productId))
               },
+              onViewOrders = {
+                navController.navigate(MaharaniRoutes.ORDERS) { launchSingleTop = true }
+              },
               onSignOut = onSignOut,
             )
           }
@@ -347,7 +355,27 @@ private fun RoutedShell(
             navArgument(ProductDetailViewModel.ARG_PRODUCT_ID) { type = NavType.StringType },
           ),
         ) {
-          ProductDetailScreen(onBack = { navController.popBackStack() })
+          if (canUseRetailerCommerce) {
+            val cartViewModel: CartCheckoutViewModel = hiltViewModel()
+            val cartState by cartViewModel.state.collectAsStateWithLifecycle()
+            ProductDetailScreen(
+              onBack = { navController.popBackStack() },
+              onAddToCart = cartViewModel::addCartLine,
+              canAddToCart = true,
+              addingToCart = cartState.isCartMutating,
+              cartLoading = cartState.cartLoading,
+              cartMessage = cartState.message,
+              cartError = cartState.cartError,
+              cartNeedsRefresh = cartState.cartNeedsRefresh,
+              onRefreshCart = cartViewModel::refreshCart,
+            )
+          } else {
+            ProductDetailScreen(
+              onBack = { navController.popBackStack() },
+              onAddToCart = { _, _ -> },
+              canAddToCart = false,
+            )
+          }
         }
       }
     }
@@ -561,6 +589,7 @@ private fun DestinationSurface(
   onOpenCatalog: (CatalogRequest) -> Unit,
   onOpenCategories: () -> Unit,
   onOpenProduct: (String) -> Unit,
+  onViewOrders: () -> Unit,
   onSignOut: () -> Unit,
 ) {
   when (destination.route) {
@@ -590,6 +619,13 @@ private fun DestinationSurface(
         onOpenCatalog(CatalogRequest(brandId = brand.id, brandLabel = brand.name))
       },
     )
+
+    MaharaniRoutes.CART -> CartScreen(
+      onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
+      onViewOrders = onViewOrders,
+    )
+
+    MaharaniRoutes.ORDERS -> OrderHistoryScreen()
 
     MaharaniRoutes.ACCOUNT -> AccountScreen(
       snapshot = snapshot,

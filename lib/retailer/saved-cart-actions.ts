@@ -227,15 +227,14 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
     const pack = packById.get(item.pack_id);
     // Cheap pre-filter (avoids an RPC round-trip per dead line), then the
     // FULL validation every add path uses: active pack/product, CURRENT MOQ,
-    // and the piece-pricing engine (whole pieces, no unpriced loose
-    // remainder for case-only packs). A line that fails is counted and
+    // and the retailer piece-pricing engine. A line that fails is counted and
     // reported back — never silently dropped and never carried into the
     // cart as an unorderable quantity.
     if (!pack || !pack.is_active || !pack.products?.is_active || item.quantity < pack.moq) {
       skippedCount += 1;
       continue;
     }
-    const validationError = await validatePackForCart(supabase, item.pack_id, item.quantity);
+    const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
     if (validationError) {
       skippedCount += 1;
       continue;

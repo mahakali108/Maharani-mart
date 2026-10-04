@@ -94,13 +94,14 @@ export async function getOrderCoinMovement(
   orderId: string,
   retailerId: string
 ): Promise<OrderCoinMovement> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('retailer_wallet_ledger')
     .select('transaction_type, amount_paise, is_reversed, reversal_of')
     .eq('reference_id', orderId)
     .eq('retailer_id', retailerId)
     .returns<{ transaction_type: string; amount_paise: number; is_reversed: boolean; reversal_of: string | null }[]>();
 
+  if (error) throw new Error('Order coin movement could not be verified.');
   const rows = data ?? [];
   const debits = rows.filter((row) => row.transaction_type === 'ORDER_DEBIT');
   const reversals = rows.filter((row) => row.transaction_type === 'ORDER_REVERSAL' && row.reversal_of !== null);

@@ -305,9 +305,9 @@ response is the server reporting what it used.
 | Method | Path | Notes |
 | --- | --- | --- |
 | GET | `/catalog/search/suggestions?q=` | Search itself is server-side via `?q=` on `/catalog/products`. The type-ahead suggestion endpoint is not implemented; the app does not fake it locally. |
-| POST | `/catalog/products/by-ids` | Phase E (reorder / cart preview). |
+| POST | `/catalog/products/by-ids` | Not implemented. Phase E cart and order APIs resolve their own current product/pack snapshots; this batch endpoint would be needed for a future reorder flow. |
 | PUT/DELETE | `/favorites/{productId}` | `isFavorite` is **read** (`loadFavoriteIds`) and rendered, but cannot be written yet. |
-| — | `/home` extras | Recent orders, cart summary, coins and schemes are Phase E/F; `/home` returns only `{ banners, categories, brands, products, nextCursor }`. |
+| — | `/home` extras | Phase E cart and recent orders have dedicated endpoints but are not added to `/home`; Coins home/history and schemes remain later work. `/home` returns only `{ banners, categories, brands, products, nextCursor }`. |
 
 Contract details that matter:
 
@@ -350,30 +350,33 @@ shapes field for field, and `tests/mobile-catalog-api.test.ts` parses that Kotli
 source and asserts both directions of field agreement. A renamed server field is
 therefore a failing web test, not a silently empty product card.
 
-### 2.4 PLANNED — Phase E (cart, checkout, orders, transaction safety)
+### 2.4 Phase E — Cart, checkout and order management (server API implemented; Android verification pending)
 
-| Method | Path | Auth/role | Request | Notes |
+| Method | Path | Auth/role | Request | Implemented contract |
 | --- | --- | --- | --- | --- |
-| GET | `/cart` | retailer | — | Cart lines + server-priced preview + availability. Cart rows never store price (`tests/production-readiness.test.ts` invariant). |
-| POST | `/cart/lines` | retailer | `{ packId, quantity }` | `validatePackForCart` (active pack, MOQ, quantity bounds) |
-| PATCH | `/cart/lines/{id}` | retailer | `{ quantity }` | ownership enforced by RLS + explicit check |
-| DELETE | `/cart/lines/{id}` | retailer | — | |
-| DELETE | `/cart` | retailer | — | `clearCartAction` semantics |
-| POST | `/cart/save`, `GET /cart/saved`, `POST /cart/saved/{id}/restore` | retailer | saved carts (`0033`) |
-| POST | `/coupons/apply` `{ code }`, `DELETE /coupons/active` | retailer | `lib/coupons/{validate,actions}.ts`; coupon is read server-side at checkout from the retailer's active row |
-| POST | `/checkout/quote` | retailer | `{ lines: [{packId, quantity}], couponCode? }` | `quoteOrderForRetailer` — **the only source of totals**; returns subtotal/GST/discount/grand total, per-line breakdown, coin preview (`quoteCoinPayment`), and warehouse-configuration errors in customer-safe copy |
-| POST | `/orders` | retailer/salesman | `{ lines, notes?, addressId?, couponCode? }` + `Idempotency-Key` | Retailer: server claims the cart atomically exactly like `placeOrderAction` (never trusts client totals, never accepts a client warehouse id). Salesman (`orders.create` + assigned retailer): `createOrderForRetailer` with `requestKey = Idempotency-Key` → `complete_order_request`. Duplicate key returns the **original** order (200), not a second order. |
-| GET | `/orders?status&cursor&limit` | retailer (own) / salesman (assigned) / staff,admin (all, permission-gated) | — | Ownership filters applied server-side; RLS is the backstop |
-| GET | `/orders/{id}` | scoped | — | Includes line items (`item-display.ts` semantics), status timeline, invoices summary, coins applied |
-| POST | `/orders/{id}/cancel` `{ reason }` | retailer own (permission `orders.cancel`) / staff,admin | — | Existing state machine + `restore_simple_stock_on_cancel` + `refund_order_coins`; retrying a cancel is safe (idempotent by status). |
-| POST | `/orders/{id}/return` `{ reason, items? }` | retailer own | — | `requestReturnAction` + return-window rules |
-| POST | `/orders/{id}/reorder` | retailer own | `{ mode: "cart" }` | `addReorderLinesToCartAction`; availability/price re-validated |
-| GET | `/orders/{id}/invoice` | owner/admin | — | Server-computed GST split; the device renders (no client maths) |
-| GET | `/orders/{id}/delivery` | owner / assigned staff | — | Delivery status, OTP state, proof URL (signed URL endpoint `lib/storage/signed-url.ts`) |
+| GET | `/cart` | active retailer, `orders.create` + `orders.view.own` | — | The caller's shared persisted cart, freshly priced by the server. No exact stock count or client-supplied money is returned. |
+| POST | `/cart/lines` | active retailer, `orders.create` + `orders.view.own` | `{ packId, quantity }` | Adds a whole-piece quantity through the MOQ/active-pack/cart RPC; the server owns price and availability. |
+| PATCH | `/cart/lines/{lineId}` | active retailer, `orders.create` + `orders.view.own` | `{ quantity }` | Sets the final whole-piece quantity; caller ownership, MOQ and compare-and-set are checked server-side. |
+| DELETE | `/cart/lines/{lineId}` | active retailer, `orders.create` + `orders.view.own` | — | Removes only the caller's owned line. |
+| POST/DELETE | `/cart/coupon` | active retailer, `orders.create` + `orders.view.own` | POST `{ code }`; DELETE has no body | Applies/removes the caller's active coupon pointer. The discount is revalidated from server coupon terms and cart lines at quote and again inside atomic order creation. |
+| GET | `/addresses` | active retailer, `orders.create` + `orders.view.own` | — | Saved addresses plus the registered profile/shop address; checkout sends only a saved `addressId` or null. |
+| POST | `/checkout/quote` | active retailer, `orders.create` + `orders.view.own` | `{ lines: [{ packId, quantity }], addressId? }` | Read-only quote over the exact persisted shared cart. Pricing, GST, coupon and Coins are server-computed; an applied coupon is read from the retailer's server-owned active-coupon row (not the body). Availability is status-only. |
+| POST | `/orders` | active retailer, `orders.create` + `orders.view.own` + `Idempotency-Key` | `{ lines, notes?, addressId? }` | Requires the submitted pack/quantity lines to match the saved cart. A server-only PostgreSQL transaction rechecks current price/GST/MOQ/coupon/Coins/stock/eligibility, writes order and items, debits Coins, snapshots the post-debit wallet balance, completes the idempotency key and clears the exact cart atomically. A duplicate key returns the original order; no payment is collected. |
+| GET | `/orders?cursor=` | retailer, `orders.view.own` | — | Paged actual order history, filtered to the authenticated retailer; status, timestamps, server totals and persisted item snapshots are returned. |
+| GET | `/orders/{id}` | retailer, `orders.view.own` | — | One actual owner-scoped order with status, timestamps, totals and item snapshots. |
+| GET | `/orders/requests/{requestKey}` | retailer, `orders.view.own` | — | Recovers a committed order after an uncertain POST. `coinsUsedPaise` is read from that order's wallet-ledger movement; `balanceAfterCoinsPaise` is the stored wallet balance immediately after the atomic debit (null for historical rows with no snapshot), **not** the amount left on the order. A miss is 404, an unfinished request is 409, and an unverifiable ledger read fails closed with 503. |
 
-**Explicitly out of scope (invariants preserved):** customer credit is not offered in
-checkout (historical credit/ledger views remain read-only); no FEFO/warehouse reservation
-is reintroduced; no client-side stock mutation; no offline order queue replay.
+**Address and serviceability boundary.** Quote and order submission resolve the selected saved `addressId` against the authenticated retailer's own address rows, or resolve `null` to that retailer's current non-empty profile/shop address; the server freezes the resolved snapshot on the order. The current backend has no separate PIN-code/zone serviceability rule or API, so this slice does not claim geographic coverage or infer it from the retailer's pricing area. Any future coverage decision must be added as an authoritative server contract.
+
+**Quantity semantics.** The shared retailer cart and quote model stores integer piece counts. Its increment is one piece, while MOQ is a separate piece-count minimum enforced by the server at cart mutation, quote and atomic order commit. `units_per_case` and the catalog `allow_loose_pieces` flag do not change this current retailer piece-cart increment; clients must not derive a case-size step from those catalog fields. The API accepts only the requested final quantity and revalidates it server-side.
+
+**Money semantics.** All mobile money is integer paise. On a quote, `coinsBalancePaise` is the wallet/Coins balance before use, `coinsUsedPaise` is the server-authorized amount applied to this order, and `balanceAfterCoinsPaise` is the remaining wallet/Coins balance (`max(balance - used, 0)`). It is never `grandTotalPaise - coinsUsedPaise`; that difference is an amount remaining on the order, not a wallet balance. Order confirmation and recovery use a database snapshot captured after the actual debit. The server does not accept client totals, discount, stock, Coins, warehouse ids, or a payment method.
+
+**Commit-time coupon validation.** The database transaction locks the active-coupon pointer and coupon row, verifies current code/status/window/retailer/minimum order value, resolves current product/category/brand scope from the order lines, and recomputes the eligible GST-exclusive subtotal and exact discount using current terms before writing. `redeem_coupon` then rechecks global/per-retailer limits and first-order eligibility under its lock. If a quote became stale, the transaction fails without order, stock, wallet, redemption or cart-clear effects.
+
+**Not implemented in this Phase E native/API slice:** saved-cart endpoints, a whole-cart DELETE endpoint, order cancellation/returns/reorder, invoices, and delivery tracking. They remain existing web/server capabilities or later mobile work; the Android client must not simulate them. The current native surface is cart, coupon application, address selection, server quote, idempotent placement/recovery and real order history/detail.
+
+**Explicit invariants:** historical customer credit/payable amount is not a payment method, no online/COD payment flow is exposed, no FEFO/warehouse reservation is reintroduced, no client-side stock mutation is allowed, and an offline/uncertain request is never queued for automatic replay with a new key.
 
 ### 2.5 PLANNED — Phase F (coins, notifications, banners, account)
 
@@ -385,7 +388,7 @@ is reintroduced; no client-side stock mutation; no offline order queue replay.
 | GET | `/banners` | retailer | `banners` + scheduling/area targeting; `[]` ⇒ client fallback |
 | GET | `/wallet/summary`, `/wallet/ledger?cursor&limit` | retailer | `getRetailerWalletSummary`, `getRetailerLedgerBatch` (batch 25, `cancelled` excluded, payment-gap notice preserved) |
 | GET/PATCH | `/profile`, `/profile/notification-preferences` | any role | `lib/retailer/profile-actions.ts` |
-| GET/POST/PATCH/DELETE | `/addresses` | retailer | `lib/retailer/address-shared.ts` validation |
+| POST/PATCH/DELETE | `/addresses` | retailer | Address-book mutations remain Phase F; Phase E already implements the owner-scoped GET used for checkout selection, with existing `lib/retailer/address-shared.ts` validation on web writes. |
 | GET/POST | `/support/tickets`, `/support/tickets/{id}/messages` | retailer | `lib/retailer/support*.ts` |
 | GET | `/reports/summary`, `/schemes` | retailer | `lib/retailer/{reports,schemes}` |
 

@@ -68,6 +68,9 @@ beforeEach(() => {
     grand_total: 100,
     status: 'pending',
     request_completed_at: null,
+    request_fingerprint: null,
+    placed_at: '2026-09-29T00:00:00.000Z',
+    coins_balance_after_paise: 30000,
   };
   state.firstItem = null;
   state.queries = [];
@@ -82,7 +85,10 @@ describe('salesman request-key replay', () => {
   it('does not return an unfinished pending order as a successful replay', async () => {
     const result = await createOrderForRetailer(input());
 
-    expect(result).toEqual({ error: 'This order request is still being finalized. Refresh your orders before trying again.' });
+    expect(result).toEqual({
+      error: 'This order request is still being finalized. Refresh your orders before trying again.',
+      code: 'conflict',
+    });
     expect(state.queries.map((query) => query.table)).toEqual(['orders']);
     expect(mocks.quote).not.toHaveBeenCalled();
     expect(mocks.coinMovement).not.toHaveBeenCalled();
@@ -99,13 +105,31 @@ describe('salesman request-key replay', () => {
       order: {
         id: ORDER_ID,
         orderNumber: 'MK-20260929-00001',
+        status: 'pending',
+        placedAt: '2026-09-29T00:00:00.000Z',
         grandTotal: 100,
         coinsUsed: 25,
         payableOnDelivery: 75,
+        coinsBalanceAfterPaise: 30000,
+        idempotentReplay: true,
       },
     });
     expect(state.queries.map((query) => query.table)).toEqual(['orders', 'order_items']);
     expect(mocks.coinMovement).toHaveBeenCalledWith(mocks.client, ORDER_ID, RETAILER_ID);
+    expect(mocks.quote).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the wallet ledger cannot verify the committed Coins movement', async () => {
+    state.order = { ...state.order, request_completed_at: '2026-09-29T00:00:00.000Z' };
+    state.firstItem = { id: 'item-1' };
+    mocks.coinMovement.mockRejectedValue(new Error('ledger query failed'));
+
+    const result = await createOrderForRetailer(input());
+
+    expect(result).toEqual({
+      error: 'The previous order attempt could not be verified. Refresh and check your orders.',
+      code: 'database_unavailable',
+    });
     expect(mocks.quote).not.toHaveBeenCalled();
   });
 
@@ -114,7 +138,36 @@ describe('salesman request-key replay', () => {
 
     const result = await createOrderForRetailer(input());
 
-    expect(result).toEqual({ error: 'This order request was already cancelled. Review the current stock and submit a new order.' });
+    expect(result).toEqual({
+      error: 'This order request was already cancelled. Review the current stock and submit a new order.',
+      code: 'conflict',
+    });
+    expect(state.queries.map((query) => query.table)).toEqual(['orders']);
+    expect(mocks.quote).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request-key retry with different order details before quoting', async () => {
+    state.order = { ...state.order, request_fingerprint: '0'.repeat(64) };
+
+    const result = await createOrderForRetailer(input());
+
+    expect(result).toEqual({
+      error: 'This order request key was already used for different order details.',
+      code: 'idempotency_conflict',
+    });
+    expect(state.queries.map((query) => query.table)).toEqual(['orders']);
+    expect(mocks.quote).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a retailer retries an old request without a stored fingerprint', async () => {
+    state.order = { ...state.order, collected_by: null, request_completed_at: '2026-09-29T00:00:00.000Z' };
+
+    const result = await createOrderForRetailer({ ...input(), collectedBy: null });
+
+    expect(result).toEqual({
+      error: 'This older order request cannot be verified safely. Check your order history before submitting again.',
+      code: 'conflict',
+    });
     expect(state.queries.map((query) => query.table)).toEqual(['orders']);
     expect(mocks.quote).not.toHaveBeenCalled();
   });

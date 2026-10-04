@@ -102,9 +102,12 @@ describe('no live credit copy on customer or field surfaces', () => {
 });
 
 describe('order-coin arithmetic is the only balance logic in the order flow', () => {
-  it('order placement quotes, debits coins and never consults credit', () => {
+  it('order placement quotes, applies server Coins rules atomically, and never consults client credit', () => {
     const createOrder = read('lib/orders/create-order.ts');
-    expect(createOrder).toContain('debitCoinsForOrder');
+    const atomicOrder = read('supabase/migrations/0056_mobile_checkout_atomic.sql');
+    expect(createOrder).toContain('p_expected_coins_used_paise: quote.coins.usedPaise');
+    expect(createOrder).toContain('create_order_atomic');
+    expect(atomicOrder).toContain('public.check_and_debit_retailer_wallet(');
     expect(createOrder).not.toMatch(/exceedsLimit|calculateCreditPosition|credit_limit/);
   });
 

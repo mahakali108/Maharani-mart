@@ -24,9 +24,10 @@ import { loadMobileHome } from '@/lib/mobile/catalog-service';
  * array is a normal answer — the app then shows its own fallback. No banner id,
  * title or image is hardcoded anywhere in the client.
  *
- * DELIBERATELY NOT HERE (later phases, so they are not faked now): cart summary
- * and coin balance (Phase E/F), recent orders and reorders (Phase E), schemes
- * (Phase F). The web home remains the source of truth for those until they ship.
+ * DELIBERATELY NOT HERE: the Phase E cart, checkout and order history use
+ * dedicated endpoints rather than duplicating commerce data in `/home`.
+ * Reorder is not part of the native slice; a Coins wallet/history summary and
+ * schemes remain later work. This endpoint stays a discovery-only payload.
  *
  * Contract: docs/NATIVE_ANDROID_API_CONTRACT.md §2.3.
  */

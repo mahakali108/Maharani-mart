@@ -18,6 +18,7 @@ function tables() {
     product_pricing_tiers: tiers.map((tier) => ({ ...tier, product_pack_id: PACK })),
     orders: [{ id: ORDER, retailer_id: RETAILER }],
     order_items: [{ order_id: ORDER, pack_id: PACK }],
+    retailers: [{ id: RETAILER, area_id: null }],
   };
 }
 beforeEach(() => {
@@ -34,6 +35,17 @@ describe('existing cart action contract used by home (mocked Supabase)', () => {
     expect(db.tables.cart_items?.[0]).not.toHaveProperty('price');
     expect(mocks.revalidate).toHaveBeenCalledWith('/retailer/cart');
     expect(mocks.revalidate).toHaveBeenCalledWith('/retailer', 'layout');
+  });
+  it('keeps the shared retailer cart at a one-piece step when legacy case metadata disallows loose pieces', async () => {
+    const fixture = tables();
+    fixture.product_packs[0]!.allow_loose_pieces = false;
+    const db = supabaseFixture(fixture); mocks.client.mockReturnValue(db);
+
+    expect(await addToCartAction(PACK, 7)).toEqual({ success: true });
+    expect(db.rpcs[0]).toMatchObject({
+      name: 'mutate_retailer_cart_line',
+      args: { p_pack_id: PACK, p_quantity: 7 },
+    });
   });
   it.each([0, 1, 2.5, 100001])('rejects invalid/current-MOQ quantity %s before writing', async (quantity) => {
     const db = supabaseFixture(tables()); mocks.client.mockReturnValue(db);
@@ -61,7 +73,7 @@ describe('existing cart action contract used by home (mocked Supabase)', () => {
     expect(db.tables.cart_items).toBeUndefined();
   });
   it('does not falsely report success when the cart write is rejected', async () => {
-    const db = supabaseFixture(tables(), { 'cart_items:insert': 'RLS denied' }); mocks.client.mockReturnValue(db);
+    const db = supabaseFixture(tables(), { 'rpc:mutate_retailer_cart_line': 'RLS denied' }); mocks.client.mockReturnValue(db);
     expect(await addToCartAction(PACK, 6)).toHaveProperty('error');
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });
@@ -71,11 +83,18 @@ describe('existing cart action contract used by home (mocked Supabase)', () => {
     expect(mocks.client).not.toHaveBeenCalled();
   });
   it('bounds combined quantities and owner-scopes the existing-line update', async () => {
-    const db = supabaseFixture({ cart_items: [{ id: 'line', retailer_id: RETAILER, pack_id: PACK, quantity: 99999 }] });
+    const db = supabaseFixture({
+      ...tables(),
+      cart_items: [{ id: 'line', retailer_id: RETAILER, pack_id: PACK, quantity: 99999 }],
+    });
     await expect(mergeLinesIntoCart(db as never, RETAILER, [{ packId: PACK, quantity: 6 }])).rejects.toThrow('combined quantity');
     expect(db.tables.cart_items?.[0]?.quantity).toBe(99999);
     await mergeLinesIntoCart(db as never, RETAILER, [{ packId: PACK, quantity: 1 }]);
-    expect(db.queries.find((query) => query.operation === 'update')?.filters).toContainEqual({ op: 'eq', column: 'retailer_id', value: RETAILER });
+    expect(db.queries.find((query) => query.table === 'cart_items')?.filters).toContainEqual({ op: 'eq', column: 'retailer_id', value: RETAILER });
+    expect(db.rpcs[0]).toMatchObject({
+      name: 'mutate_retailer_cart_line',
+      args: { p_pack_id: PACK, p_expected_quantity: 99999, p_quantity: 100000 },
+    });
   });
 });
 

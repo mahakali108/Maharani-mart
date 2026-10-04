@@ -1088,6 +1088,10 @@ export interface Database {
           request_key: string | null;
           /** 0054: non-null only after order-side effects have completed. */
           request_completed_at: string | null;
+          /** 0056: SHA-256 of canonical order intent for idempotency-key reuse checks. */
+          request_fingerprint: string | null;
+          /** 0056: wallet balance in paise immediately after the order Coins debit; NULL for historical orders. */
+          coins_balance_after_paise: number | null;
           status: OrderStatusEnum;
           collected_by: string | null;
           subtotal: number;
@@ -1116,6 +1120,8 @@ export interface Database {
           simple_stock_mode?: boolean;
           request_key?: string | null;
           request_completed_at?: string | null;
+          request_fingerprint?: string | null;
+          coins_balance_after_paise?: number | null;
           status?: OrderStatusEnum;
           collected_by?: string | null;
           subtotal?: number;
@@ -2234,6 +2240,53 @@ export interface Database {
       complete_order_request: {
         Args: { p_order_id: string; p_request_key: string; p_actor_id: string };
         Returns: boolean;
+      };
+      // 0056_mobile_checkout_atomic.sql — caller-owned persistent cart and
+      // server-only atomic order transaction.
+      get_retailer_cart_lines: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          cart_item_id: string;
+          pack_id: string;
+          quantity: number;
+          product_id: string | null;
+          product_name: string | null;
+          pack_name: string | null;
+          units_per_case: number | null;
+          moq: number | null;
+          pack_active: boolean | null;
+          product_active: boolean | null;
+        }[];
+      };
+      mutate_retailer_cart_line: {
+        Args: {
+          p_pack_id: string;
+          p_cart_item_id: string | null;
+          p_expected_quantity: number;
+          p_quantity: number;
+        };
+        Returns: number;
+      };
+      create_order_atomic: {
+        Args: {
+          p_retailer_id: string;
+          p_collected_by: string | null;
+          p_request_key: string;
+          p_request_fingerprint: string;
+          p_notes: string | null;
+          p_shipping_address: { line: string; label?: string; receiverName?: string; phone?: string } | null;
+          p_subtotal: number;
+          p_gst_total: number;
+          p_discount_total: number;
+          p_grand_total: number;
+          p_coupon_id: string | null;
+          p_coupon_code: string | null;
+          p_coupon_discount: number;
+          p_expected_coins_used_paise: number;
+          p_order_items: { pack_id: string; quantity: number; unit_price: number; gst_percent: number; line_total: number }[];
+          p_clear_cart_after_order?: boolean;
+        };
+        Returns: Record<string, unknown>;
       };
       get_retailer_pack_availability: {
         Args: { p_pack_ids: string[] };

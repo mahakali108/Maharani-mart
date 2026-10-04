@@ -1,21 +1,18 @@
 import 'server-only';
-import { createClient } from '@/lib/supabase/server';
-import type { Database } from '@/types/database.types';
 
-type CartItemInsert = Database['public']['Tables']['cart_items']['Insert'];
+import { createClient } from '@/lib/supabase/server';
+import { validatePackForCart } from '@/lib/retailer/cart-validation';
+import { mutateRetailerCartLine } from '@/lib/retailer/cart-rpc';
 
 /**
- * The single cart-merge implementation: adds (packId, quantity) lines
- * into a retailer's persistent cart, incrementing the quantity when a
- * line for the same pack already exists. cart_items stores no price —
- * the current effective price is always resolved later by the
- * cart/checkout reads and by createOrderForRetailer at order time.
+ * Atomic merge for the shared persistent retailer cart.
  *
- * Shared by addToCartAction (catalog/quick-order adds) and
- * addReorderLinesToCartAction (reorder review screen) so the merge
- * semantics can never drift between the two entry points. RLS
- * (cart_owner) independently confines all of these writes to
- * retailer_id = auth.uid().
+ * The caller-scoped `mutate_retailer_cart_line` RPC takes the per-retailer
+ * advisory lock, checks the expected current quantity, enforces pack activity
+ * and MOQ, and applies the new full piece count. The SQL function never prices
+ * a line; before it runs, this service revalidates the target quantity through
+ * the existing retailer pricing engine. A concurrent merge returns a conflict
+ * instead of losing an increment or overwriting a newer quantity.
  */
 export async function mergeLinesIntoCart(
   supabase: ReturnType<typeof createClient>,
@@ -31,18 +28,28 @@ export async function mergeLinesIntoCart(
       .maybeSingle<{ id: string; quantity: number }>();
 
     if (readError) throw new Error('The cart could not be read. Please try again.');
-    if (existing) {
-      if (existing.quantity + line.quantity > 100000) throw new Error('The combined quantity is too large. Review your cart.');
-      const { error } = await supabase
-        .from('cart_items')
-        .update({ quantity: existing.quantity + line.quantity } as unknown as never)
-        .eq('id', existing.id)
-        .eq('retailer_id', retailerId);
-      if (error) throw new Error('The cart could not be updated. Review your cart and try again.');
-    } else {
-      const payload: CartItemInsert = { retailer_id: retailerId, pack_id: line.packId, quantity: line.quantity };
-      const { error } = await supabase.from('cart_items').insert(payload as unknown as never);
-      if (error) throw new Error('The cart could not be updated. Review your cart and try again.');
+    const expectedQuantity = existing?.quantity ?? 0;
+    const targetQuantity = expectedQuantity + line.quantity;
+    if (!Number.isInteger(line.quantity) || line.quantity < 1 || targetQuantity > 100000) {
+      throw new Error('The combined quantity is too large. Review your cart.');
+    }
+
+    const validationError = await validatePackForCart(supabase, retailerId, line.packId, targetQuantity);
+    if (validationError) throw new Error(validationError);
+
+    const { error } = await mutateRetailerCartLine(supabase, {
+      p_pack_id: line.packId,
+      p_cart_item_id: null,
+      p_expected_quantity: expectedQuantity,
+      p_quantity: targetQuantity,
+    });
+    if (error) {
+      if (/CART_CHANGED/i.test(error.message)) {
+        throw new Error('Your cart changed in another request. Refresh it and try again.');
+      }
+      if (/minimum[ _]order[ _]quantity/i.test(error.message)) throw new Error(error.message);
+      if (/PACK_UNAVAILABLE/i.test(error.message)) throw new Error('This pack is no longer available.');
+      throw new Error('The cart could not be updated. Review your cart and try again.');
     }
   }
 }

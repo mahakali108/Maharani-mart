@@ -447,12 +447,12 @@ describe('retailer data isolation is enforced in every read', () => {
 
   it('re-quotes server-side before an order is written', () => {
     const create = read('lib/orders/create-order.ts');
-    expect(create).toContain('quoteOrderForRetailer({ retailerId, lines, supabase, couponCode })');
-    // The server re-quote is the only source of money: no credit gate remains
-    // (credit was removed from the current flow) and the coin debit is derived
-    // from the quoted grand total.
+    expect(create).toContain('quoteOrderForRetailer({');
+    expect(create).toContain('p_expected_coins_used_paise: quote.coins.usedPaise');
+    expect(create).toContain('p_order_items: atomicItems');
+    // The server re-quote is the only source of money: no credit gate remains,
+    // and no client-supplied price or total reaches the atomic writer.
     expect(create).not.toContain('quote.credit.exceedsLimit');
-    expect(create).toMatch(/orderTotalPaise: Math\.round\(quote\.grandTotal \* 100\)/);
     expect(create).not.toMatch(/unit_price:\s*line\.(clientPrice|submittedPrice)/);
   });
 });
@@ -569,10 +569,13 @@ describe('cart mutations stay owner-scoped', () => {
   });
 
   it('validates MOQ and availability before a line is written', () => {
-    expect(service).toContain('export async function validatePackForCart(');
-    expect(service).toContain('Minimum order quantity for this pack is');
-    expect(service).toContain("if (!pack.is_active) return 'This pack is currently unavailable.'");
-    expect(service).toContain("if (!pack.products?.is_active) return 'This product is currently unavailable.'");
+    const validation = read('lib/retailer/cart-validation.ts');
+    expect(validation).toContain('export async function validatePackForCart(');
+    expect(validation).toContain('Minimum order quantity for this pack is');
+    expect(validation).toContain("if (!pack.is_active) return 'This pack is currently unavailable.'");
+    expect(validation).toContain("if (!pack.products?.is_active) return 'This product is currently unavailable.'");
+    expect(validation).toContain('getProductPriceOverride(supabase, pack.product_id, retailerId, retailer.area_id)');
+    expect(service).toContain('validatePackForCart(supabase, retailerId, item.pack_id, quantity)');
   });
 
   it('revalidates on the server even though the client mirrors the rule', () => {

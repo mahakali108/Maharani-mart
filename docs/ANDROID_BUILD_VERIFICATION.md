@@ -3,6 +3,17 @@
 Branch: `arena/01a100c2-maharani-mart` · change set: the native shopping redesign
 (see `docs/NATIVE_UI_REDESIGN.md`) · recorded 2026-10-03.
 
+> **Historical snapshot.** Sections 1–7 below record the Phase D UI-redesign branch
+> and checks as they stood on 2026-10-03; the branch name and its old checklist are
+> not instructions for the current Arena session. Phase E is being developed on
+> `arena/01a10274-maharani-mart`. Its current web checks and Android blocker are
+> recorded in `docs/NATIVE_UI_REDESIGN.md` §10. On 2026-10-04,
+> `./gradlew testDebugUnitTest lintDebug assembleDebug` was attempted from `android/`
+> and exited before Gradle started: `JAVA_HOME` is unset and no `java` executable
+> exists. `ANDROID_HOME`/`ANDROID_SDK_ROOT`, common SDK directories and the local
+> Gradle wrapper distribution cache are also absent; the Android tasks and APK
+> therefore remain unverified.
+
 ## 0. Bottom line
 
 **No debug APK was produced. Nothing in `android/` has been compiled.**
@@ -234,7 +245,7 @@ Treat §2/§3 as the only path to a real verdict.
 
 ---
 
-## 6. Evidence that *did* run in this environment
+## 6. Phase D evidence recorded on 2026-10-03
 
 | Command | Result |
 | --- | --- |
@@ -248,7 +259,7 @@ Treat §2/§3 as the only path to a real verdict.
 
 ---
 
-## 7. Reviewer sign-off checklist
+## 7. Original Phase D reviewer sign-off checklist (historical)
 
 - [ ] CI `android` job green on `arena/01a100c2-maharani-mart`
 - [ ] `maharani-traders-debug-apk` artifact downloaded, `aapt dump badging` shows

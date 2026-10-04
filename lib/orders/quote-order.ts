@@ -22,14 +22,14 @@ export interface RequestedQuoteLine {
 }
 
 /**
- * One persisted `order_items` row. A mixed line produces two rows so that every
- * row satisfies `unit_price × quantity = line_total` exactly — a case row is
- * billed in cases at the case price, a loose row in pieces at the loose tier
- * price. Nothing is ever blended into a fake unit price.
+ * One persisted `order_items` row for the current retailer piece quote.
+ * `quantity` and `quantityPieces` are the same whole-piece count, and
+ * `unit_price × quantity = line_total` exactly. Historical orders may still
+ * contain case-backed rows; new retailer checkout never splits a line by case.
  */
 export interface QuotedOrderItem {
   quantity: number;
-  quantityUnit: 'cases' | 'pieces';
+  quantityUnit: 'pieces';
   /** Pieces this row covers, snapshotted for invoice/reorder/dispatch. */
   quantityPieces: number;
   unitsPerCase: number;
@@ -79,7 +79,7 @@ export interface QuotedOrderLine {
   loosePriceSource: 'tier' | 'derived' | 'gap' | 'none';
   /** The loose slab that priced the remainder, when one applied. */
   looseTier: PricingTier | null;
-  /** Rows to persist for this line: one, or two when there is a loose remainder. */
+  /** Exactly one piece-backed row is persisted for this current retailer quote. */
   items: QuotedOrderItem[];
 }
 
@@ -106,7 +106,9 @@ export interface OrderQuote {
   coupon: QuotedCoupon | null;
 }
 
-export type QuoteOrderResult = { error: string } | { quote: OrderQuote };
+export type QuoteOrderResult =
+  | { error: string; code?: 'coupon_invalid' }
+  | { quote: OrderQuote };
 
 /**
  * Legacy GST calculation helper (GST added on top of a pre-tax price).
@@ -137,7 +139,6 @@ interface PackForQuote {
   case_price: number;
   units_per_case: number;
   moq: number;
-  allow_loose_pieces?: boolean;
   is_active: boolean;
   // category_id/brand_id feed the coupon eligibility engine (0051) without a
   // second read; they are never rendered as pricing.
@@ -219,7 +220,7 @@ export async function quoteOrderForRetailer({
   const { data: packData, error: packError } = await supabase
     .from('product_packs')
     .select(
-      'id, product_id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active, products ( id, name, gst_percent, is_active, category_id, brand_id )'
+      'id, product_id, pack_name, base_price, ptr, case_price, units_per_case, moq, is_active, products ( id, name, gst_percent, is_active, category_id, brand_id )'
     )
     .in('id', [...normalized.keys()]);
   if (packError) return { error: 'The product catalog could not be loaded. Please try again.' };
@@ -257,6 +258,9 @@ export async function quoteOrderForRetailer({
     // used here solely as the derived-per-piece fallback when a pack has no
     // configured selling tiers. The same function the product page, cart and
     // checkout preview with, re-run authoritatively before anything is written.
+    // The existing retailer cart/quote contract accepts whole-piece quantities
+    // at a one-piece increment; MOQ is a separate piece floor. `allow_loose_pieces`
+    // is not part of this current retailer piece-pricing rule.
     const pricing: RetailerPiecePricing = calculateRetailerPiecePrice({
       quantity,
       unitsPerCase: pack.units_per_case,
@@ -340,7 +344,7 @@ export async function quoteOrderForRetailer({
       lines: couponLines,
     });
     if (!validation.valid) {
-      return { error: validation.message };
+      return { error: validation.message, code: 'coupon_invalid' };
     }
     discountTotal = validation.discount;
     quotedCoupon = { id: validation.coupon.id, code: validation.coupon.code, discount: validation.discount };
