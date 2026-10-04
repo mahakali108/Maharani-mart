@@ -62,7 +62,9 @@ class CartCheckoutViewModel @Inject constructor(
   val state: StateFlow<CartCheckoutUiState> = _state.asStateFlow()
 
   init {
-    restorePendingOrderThenCart()
+    viewModelScope.launch {
+      restorePendingOrderThenCart()
+    }
   }
 
   fun refreshCart() {
