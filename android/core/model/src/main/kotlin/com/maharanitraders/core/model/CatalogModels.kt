@@ -177,7 +177,7 @@ data class ProductPackDetail(
   val packName: String,
   val unitsPerCase: Int,
   val moq: Int,
-  /** False when the pack may only be sold in whole cases. */
+  /** Catalog case/loose metadata; the current retailer cart uses one-piece increments regardless. */
   val allowLoosePieces: Boolean,
   val unitPricePaise: Long?,
   /** GST-inclusive line total at the MOQ — server-computed, never derived here. */

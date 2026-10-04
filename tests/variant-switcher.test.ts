@@ -469,12 +469,14 @@ describe('product size / variant switcher', () => {
     it('order creation persists quote lines verbatim — pack_id included — and never trusts client prices', () => {
       const create = read('lib/orders/create-order.ts');
       expect(create).toContain('pack_id: line.packId');
-      // 0026: a mixed line is persisted as one row per billing unit, each with
-      // its own exact unit price (never a blended per-case figure).
-      expect(create).toContain('unit_price: item.unitPrice');
-      expect(create).toContain('quantity_unit: item.quantityUnit');
-      expect(create).toContain('quantity_pieces: item.quantityPieces');
-      expect(create).toContain('quote.lines.flatMap((line) =>');
+      // The quote's verified per-piece rate and line total are passed to the
+      // one atomic RPC; 0056 persists each as a piece-backed order line.
+      expect(create).toContain('unit_price: item?.unitPrice ?? line.unitPrice');
+      expect(create).toContain('line_total: item?.lineTotal ?? line.lineTotal');
+      expect(create).toContain('quote.lines.map((line) =>');
+      expect(create).toContain('p_order_items: atomicItems');
+      expect(create).toContain('create_order_atomic');
+      expect(read('supabase/migrations/0056_mobile_checkout_atomic.sql')).toContain("v_item.quantity, 'pieces'");
       expect(create).toContain('quoteOrderForRetailer');
       // The order detail page and invoice read product_packs per order item.
       const detail = read('app/retailer/orders/[id]/page.tsx');

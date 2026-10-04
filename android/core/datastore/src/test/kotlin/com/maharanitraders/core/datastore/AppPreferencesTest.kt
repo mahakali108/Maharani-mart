@@ -31,6 +31,26 @@ class AppPreferencesTest {
   }
 
   @Test
+  fun `pending order request key is stable until confirmed success clears it`() = runTest {
+    val first = preferences.getOrCreatePendingOrderRequestKey()
+    val retry = preferences.getOrCreatePendingOrderRequestKey()
+
+    assertTrue(first.isNotBlank())
+    assertEquals(first, retry)
+
+    preferences.clearPendingOrderRequestKey()
+    assertTrue(preferences.getOrCreatePendingOrderRequestKey() != first)
+  }
+
+  @Test
+  fun `sign-out clears a pending order idempotency key`() = runTest {
+    val pending = preferences.getOrCreatePendingOrderRequestKey()
+    preferences.clearSessionScoped()
+
+    assertTrue(preferences.getOrCreatePendingOrderRequestKey() != pending)
+  }
+
+  @Test
   fun `the notification prompt is offered exactly once`() = runTest {
     assertTrue(preferences.shouldOfferNotificationPrompt())
     preferences.markNotificationPromptShown()

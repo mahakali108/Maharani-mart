@@ -83,8 +83,9 @@ object HomeScreenTags {
  * field so it stays visible while scrolling, exactly like the reference UX);
  * submitting it hands the term to the catalogue.
  *
- * Cart, coins and orders are intentionally absent — they are later phases, and
- * this screen offers no affordance that pretends otherwise.
+ * Cart and orders live on their own Phase E tabs, not inside this home payload;
+ * a Coins wallet summary, notifications and schemes remain later work. This
+ * screen offers no affordance that pretends otherwise.
  */
 @Composable
 fun RetailerHomeScreen(

@@ -24,6 +24,18 @@ import com.maharanitraders.core.network.dto.RetailerHomeDto
 import com.maharanitraders.core.network.dto.SessionDto
 import com.maharanitraders.core.network.dto.SessionUserDto
 import com.maharanitraders.core.network.dto.NavigationDto
+import com.maharanitraders.core.network.dto.CartLineRequestDto
+import com.maharanitraders.core.network.dto.CartQuantityRequestDto
+import com.maharanitraders.core.network.dto.CheckoutQuoteDto
+import com.maharanitraders.core.network.dto.CheckoutQuoteRequestDto
+import com.maharanitraders.core.network.dto.CouponRequestDto
+import com.maharanitraders.core.network.dto.CouponResultDto
+import com.maharanitraders.core.network.dto.CouponRemovedDto
+import com.maharanitraders.core.network.dto.MobileAddressesDto
+import com.maharanitraders.core.network.dto.MobileCartDto
+import com.maharanitraders.core.network.dto.MobileOrderDto
+import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
+import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
 
 /**
  * A [MaharaniApi] double for the catalogue tests.
@@ -132,6 +144,21 @@ class FakeCatalogApi : MaharaniApi {
   override suspend fun registerRetailer(
     body: RegisterRetailerRequestDto,
   ): ApiEnvelope<RegisterRetailerResponseDto> = unsupported("registerRetailer")
+
+  override suspend fun mobileCart(): ApiEnvelope<MobileCartDto> = unsupported("mobileCart")
+  override suspend fun addCartLine(body: CartLineRequestDto): ApiEnvelope<MobileCartDto> = unsupported("addCartLine")
+  override suspend fun updateCartLine(lineId: String, body: CartQuantityRequestDto): ApiEnvelope<MobileCartDto> =
+    unsupported("updateCartLine")
+  override suspend fun removeCartLine(lineId: String): ApiEnvelope<MobileCartDto> = unsupported("removeCartLine")
+  override suspend fun applyCartCoupon(body: CouponRequestDto): ApiEnvelope<CouponResultDto> = unsupported("applyCartCoupon")
+  override suspend fun removeCartCoupon(): ApiEnvelope<CouponRemovedDto> = unsupported("removeCartCoupon")
+  override suspend fun mobileAddresses(): ApiEnvelope<MobileAddressesDto> = unsupported("mobileAddresses")
+  override suspend fun checkoutQuote(body: CheckoutQuoteRequestDto): ApiEnvelope<CheckoutQuoteDto> = unsupported("checkoutQuote")
+  override suspend fun placeOrder(requestKey: String, body: PlaceOrderRequestDto): ApiEnvelope<PlaceOrderResponseDto> =
+    unsupported("placeOrder")
+  override suspend fun orderHistory(cursor: String?): ApiEnvelope<List<MobileOrderDto>> = unsupported("orderHistory")
+  override suspend fun orderDetail(orderId: String): ApiEnvelope<MobileOrderDto> = unsupported("orderDetail")
+  override suspend fun recoverOrderRequest(requestKey: String): ApiEnvelope<MobileOrderDto> = unsupported("recoverOrderRequest")
 
   private fun unsupported(endpoint: String): Nothing =
     throw UnsupportedOperationException("$endpoint is not used by the catalogue layer")

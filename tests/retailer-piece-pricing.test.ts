@@ -254,7 +254,7 @@ describe('server re-calculates the final price authoritatively', () => {
     expect(quote).not.toMatch(/unitPrice: pricing\.looseUnitPrice/);
   });
 
-  it('quotes 12 pcs as a single exact piece row', async () => {
+  it('quotes 12 pcs as a single exact piece row at a one-piece increment despite legacy case metadata', async () => {
     // Imported lazily to avoid loading server-only at collection time in some
     // runtimes; the function is exercised through the public API.
     const { quoteOrderForRetailer } = await import('@/lib/orders/quote-order');
@@ -267,6 +267,7 @@ describe('server re-calculates the final price authoritatively', () => {
       case_price: CASE_PRICE,
       units_per_case: UNITS_PER_CASE,
       moq: 1,
+      allow_loose_pieces: false,
       is_active: true,
       products: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Test', gst_percent: 0, is_active: true },
     };

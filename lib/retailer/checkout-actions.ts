@@ -20,7 +20,7 @@ interface CartItemForCheckout {
  * Places an order from the retailer's current cart through the shared
  * order service also used by salesman order capture. The service
  * re-reads and validates every pack, MOQ, price, GST rate, retailer
- * status, and credit value; no client-supplied money value is trusted.
+ * status and Coins balance; no client-supplied money value is trusted.
  *
  * `addressId` (when provided) is resolved server-side through the
  * RLS-scoped session, so the frozen order snapshot is ALWAYS one of the
@@ -33,34 +33,20 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
 
   const supabase = createClient();
 
-  // DUPLICATE CHECKOUT PROTECTION — the cart is CLAIMED atomically.
-  //
-  // Deleting the rows and reading what was deleted lets Postgres decide who
-  // gets to check out: a double-tap, a retried request or two concurrent
-  // submissions race on the same rows, exactly one claim returns lines, and the
-  // other sees an empty cart. Without this both requests would read the same
-  // cart and place two orders for one basket of goods.
-  const { data: claimed, error: claimError } = await supabase
+  // Read the persisted basket without clearing it. `create_order_atomic` takes
+  // the same per-retailer cart lock as every add/update/remove, verifies that
+  // these exact lines are still present, and clears them only in the transaction
+  // that commits the order. A failed or uncertain response therefore never
+  // re-adds a cart beside an order that may already have committed.
+  const { data: cart, error: cartError } = await supabase
     .from('cart_items')
-    .delete()
-    .eq('retailer_id', user.id)
-    .select('pack_id, quantity');
+    .select('pack_id, quantity')
+    .eq('retailer_id', user.id);
 
-  if (claimError) return { error: 'Your cart could not be prepared for checkout. Please try again.' };
-  const items = (claimed ?? []) as CartItemForCheckout[];
+  if (cartError) return { error: 'Your cart could not be prepared for checkout. Please try again.' };
+  const items = (cart ?? []) as CartItemForCheckout[];
   if (items.length === 0) {
     return { error: 'Your cart is empty — add products before placing an order.' };
-  }
-
-  /** Put the claimed lines back if the order could not be created. */
-  async function restoreClaimedCart() {
-    try {
-      await supabase.from('cart_items').insert(
-        items.map((item) => ({ retailer_id: user.id, pack_id: item.pack_id, quantity: item.quantity })) as never
-      );
-    } catch (cause) {
-      console.error('Cart restore after a failed checkout failed.', cause);
-    }
   }
 
   // Resolve the delivery address server-side: a saved address book entry
@@ -86,7 +72,6 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
         pincode: string;
       } | never>();
     if (!address) {
-      await restoreClaimedCart();
       return { error: 'The selected delivery address could not be found. Pick an address and try again.' };
     }
     shippingAddress = {
@@ -107,10 +92,9 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
   // The applied coupon is read from the retailer's OWN active-coupon row via
   // the RLS-scoped session — the client only ever submits notes/address. The
   // quote inside createOrderForRetailer revalidates it against fresh database
-  // state before anything is billed (0051).
+  // state before the order transaction applies any stock, coupon or Coins effects (0056).
   const activeCoupon = await loadActiveCouponForRetailer(supabase, user.id);
   if (activeCoupon.error) {
-    await restoreClaimedCart();
     return { error: 'The applied coupon could not be verified. Please open your cart and try again.' };
   }
 
@@ -121,19 +105,17 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
     notes,
     shippingAddress,
     couponCode: activeCoupon.coupon?.code ?? null,
+    clearCartAfterOrder: true,
   });
 
   if ('error' in result) {
-    // Nothing was created: give the shop its cart back so the fix is one tap,
-    // not a rebuild of the whole order.
-    await restoreClaimedCart();
+    // PostgreSQL rolls back the order and cart-clear together. On an uncertain
+    // transport failure, the retailer can inspect order history; never invent a
+    // second cart write that could duplicate goods beside a committed order.
     return { error: result.error };
   }
 
-  // The cart was already cleared by the claim above; the coupon was consumed by
-  // this order, so clear the pointer too so it is
-  // not silently re-applied to the next cart.
-  await supabase.from('retailer_active_coupons').delete().eq('retailer_id', user.id);
+  // Coupon redemption and pointer removal are part of create_order_atomic.
   revalidatePath('/retailer/coupons');
 
   // Notifications are ancillary to the completed, persisted order. A

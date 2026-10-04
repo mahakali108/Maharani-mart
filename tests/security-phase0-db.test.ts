@@ -385,10 +385,15 @@ describe('P0-5 inactive / suspended accounts at the database (SEC-10)', () => {
       pack.productId,
       pack.packId,
     ]);
+  const cartAdd = () => (tx: Parameters<Parameters<typeof as>[2]>[0]) =>
+    tx.query(`select public.mutate_retailer_cart_line($1, null, 0, (select moq from product_packs where id = $1))`, [pack.packId]);
 
-  it('LEGIT: an active retailer writes its own cart, address and profile', async () => {
+  it('LEGIT: an active retailer writes its own cart through the MOQ-checked RPC and can write its address/profile', async () => {
     const r = await createRetailer(db);
-    await as(db, r.id, cartInsert(r.id));
+    // Direct writes are revoked even for active retailers; the owned RPC is the
+    // sole cart mutation path and rechecks active status, pack and MOQ.
+    expect(await errorOf(db, r.id, cartInsert(r.id))).toMatch(/permission denied for table cart_items/);
+    await as(db, r.id, cartAdd());
     await as(db, r.id, (tx) =>
       tx.query(
         `insert into retailer_addresses (retailer_id, receiver_name, phone, line1, city, pincode) values ($1, 'Owner', '9000000000', 'Main Road', 'Khagaria', '851204')`,
@@ -400,14 +405,16 @@ describe('P0-5 inactive / suspended accounts at the database (SEC-10)', () => {
 
   it('a SUSPENDED retailer can no longer write through the API', async () => {
     const r = await createRetailer(db, { status: 'suspended' });
-    expect(await errorOf(db, r.id, cartInsert(r.id))).toMatch(/row-level security/);
+    expect(await errorOf(db, r.id, cartAdd())).toMatch(/active retailer session is required/i);
+    expect(await errorOf(db, r.id, cartInsert(r.id))).toMatch(/permission denied for table cart_items/);
     await as(db, r.id, (tx) => tx.query(`update profiles set full_name = 'x' where id = $1`, [r.id]));
     expect((await one<{ full_name: string }>(`select full_name from profiles where id = $1`, [r.id])).full_name).not.toBe('x');
   });
 
   it('a PENDING (unapproved) retailer cannot write', async () => {
     const id = await signUp({ area_id: area });
-    expect(await errorOf(db, id, cartInsert(id))).toMatch(/row-level security/);
+    expect(await errorOf(db, id, cartAdd())).toMatch(/active retailer session is required/i);
+    expect(await errorOf(db, id, cartInsert(id))).toMatch(/permission denied for table cart_items/);
   });
 
   it('a deactivated profile loses its role everywhere (RLS helpers + RPC guards)', async () => {

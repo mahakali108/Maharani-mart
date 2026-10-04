@@ -245,7 +245,7 @@ export interface MobileProductPack {
   packName: string;
   unitsPerCase: number;
   moq: number;
-  /** False when the pack may only be sold in whole cases. */
+  /** Catalog case/loose metadata; the current retailer cart contract still uses one-piece increments. */
   allowLoosePieces: boolean;
   unitPricePaise: number | null;
   lineTotalAtMoqPaise: number | null;
@@ -440,10 +440,10 @@ export interface MobileHome {
  * The retailer home payload for Phase D: real banners, real taxonomy and a real
  * catalogue batch.
  *
- * Deliberately NOT included yet — they belong to later phases and returning
- * them half-built would put unverified numbers on a home screen:
- * cart summary and coins (Phase E/F), recent orders and reorders (Phase E),
- * schemes (Phase F). The web home remains the source of truth for those.
+ * Deliberately NOT included yet — commerce reads have dedicated Phase E
+ * endpoints, and adding summaries here would duplicate responses without a
+ * home contract. Coins wallet/history and schemes belong to later work. The
+ * home remains a catalogue/discovery payload, not a second commerce API.
  */
 export async function loadMobileHome(
   session: MobileSession,

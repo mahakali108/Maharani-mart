@@ -2,6 +2,8 @@ package com.maharanitraders.core.auth
 
 import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.common.TimeSource
+import com.maharanitraders.core.datastore.AppPreferences
+import com.maharanitraders.core.datastore.PreferenceStore
 import com.maharanitraders.core.model.SessionTokens
 import com.maharanitraders.core.network.ActiveTokenHolder
 import com.maharanitraders.core.network.ApiCallExecutor
@@ -15,7 +17,19 @@ import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.CatalogBrandsDto
 import com.maharanitraders.core.network.dto.CatalogCategoriesDto
 import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.CartLineRequestDto
+import com.maharanitraders.core.network.dto.CartQuantityRequestDto
+import com.maharanitraders.core.network.dto.CheckoutQuoteDto
+import com.maharanitraders.core.network.dto.CheckoutQuoteRequestDto
+import com.maharanitraders.core.network.dto.CouponRemovedDto
+import com.maharanitraders.core.network.dto.CouponRequestDto
+import com.maharanitraders.core.network.dto.CouponResultDto
 import com.maharanitraders.core.network.dto.HealthDto
+import com.maharanitraders.core.network.dto.MobileAddressesDto
+import com.maharanitraders.core.network.dto.MobileCartDto
+import com.maharanitraders.core.network.dto.MobileOrderDto
+import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
+import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
 import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.NavigationDto
 import com.maharanitraders.core.network.dto.PasswordResetRequestDto
@@ -68,6 +82,7 @@ class SessionManagerTest {
     api: FakeMaharaniApi,
     store: FakeTokenStore,
     now: Long = 1_000_000,
+    preferences: AppPreferences = AppPreferences(TestPreferenceStore()),
   ): SessionManager {
     val executor = ApiCallExecutor(ApiErrorMapper(Json { ignoreUnknownKeys = true }), dispatcher)
     val timeSource = FakeTimeSource(now)
@@ -81,6 +96,7 @@ class SessionManagerTest {
       // the refresh token server-side. This test is about the session lifecycle, so
       // the repository is wired to the same fakes and never exercised here.
       authRepository = AuthRepository(api = api, executor = executor, timeSource = timeSource),
+      appPreferences = preferences,
       // The same holder the interceptor reads: `session.accessToken()` and the
       // Authorization header can never disagree, which is what the token tests
       // below rely on.
@@ -98,9 +114,10 @@ class SessionManagerTest {
     role: String = "retailer",
     homeRoute: String = "/retailer/home",
     retailer: RetailerDto? = RetailerDto(status = "active", shopName = "Gupta Kirana Store"),
+    userId: String = "user-1",
   ) = SessionDto(
     user = SessionUserDto(
-      id = "user-1",
+      id = userId,
       email = "gupta@example.com",
       role = role,
       fullName = "Gupta Kirana",
@@ -328,6 +345,60 @@ class SessionManagerTest {
   }
 
   @Test
+  fun `a fresh verified login clears a pending request key before account state is published`() = runTest(dispatcher) {
+    val preferenceStore = TestPreferenceStore()
+    val preferences = AppPreferences(preferenceStore)
+    val oldPendingKey = preferences.getOrCreatePendingOrderRequestKey()
+    val api = FakeMaharaniApi().apply {
+      nextLoginResult = {
+        ApiEnvelope(AuthSessionDto(
+          accessToken = "new-access-token",
+          refreshToken = "new-refresh-token",
+          expiresAt = 2_000_000,
+        ))
+      }
+      nextResult = { ApiEnvelope(sessionDto(userId = "different-user")) }
+    }
+    val tokenStore = FakeTokenStore()
+    val session = manager(api, tokenStore, preferences = preferences)
+
+    val state = session.signIn("different@example.com", "password")
+
+    assertTrue(state is SessionState.Authenticated)
+    assertEquals("different-user", (state as SessionState.Authenticated).snapshot.user.id)
+    assertNull(preferences.pendingOrderRequestKey())
+    assertEquals("new-access-token", session.accessToken())
+    assertTrue(oldPendingKey.isNotBlank())
+  }
+
+  @Test
+  fun `a fresh login fails closed when the pending order key cannot be cleared`() = runTest(dispatcher) {
+    val preferenceStore = TestPreferenceStore()
+    val preferences = AppPreferences(preferenceStore)
+    val oldPendingKey = preferences.getOrCreatePendingOrderRequestKey()
+    preferenceStore.failingRemoveKey = "pending_order_request"
+    val api = FakeMaharaniApi().apply {
+      nextLoginResult = {
+        ApiEnvelope(AuthSessionDto(
+          accessToken = "new-access-token",
+          refreshToken = "new-refresh-token",
+          expiresAt = 2_000_000,
+        ))
+      }
+    }
+    val tokenStore = FakeTokenStore()
+    val session = manager(api, tokenStore, preferences = preferences)
+
+    val state = session.signIn("different@example.com", "password")
+
+    assertTrue(state is SessionState.Unavailable)
+    assertNull(tokenStore.stored)
+    assertNull(session.accessToken())
+    assertEquals(0, api.sessionCalls)
+    assertEquals(oldPendingKey, preferences.pendingOrderRequestKey())
+  }
+
+  @Test
   fun `sign out wipes storage and the in-memory token`() = runTest(dispatcher) {
     val api = FakeMaharaniApi().apply { nextResult = { ApiEnvelope(sessionDto()) } }
     val store = FakeTokenStore(initial = validTokens())
@@ -423,11 +494,28 @@ class FakeTimeSource(var now: Long) : TimeSource {
   override fun nowEpochSeconds(): Long = now
 }
 
+private class TestPreferenceStore : PreferenceStore {
+  private val values = mutableMapOf<String, Any>()
+  var failingRemoveKey: String? = null
+
+  override suspend fun getString(key: String): String? = values[key] as? String
+  override suspend fun putString(key: String, value: String) { values[key] = value }
+  override suspend fun getBoolean(key: String): Boolean? = values[key] as? Boolean
+  override suspend fun putBoolean(key: String, value: Boolean) { values[key] = value }
+  override suspend fun getLong(key: String): Long? = values[key] as? Long
+  override suspend fun putLong(key: String, value: Long) { values[key] = value }
+  override suspend fun remove(key: String) {
+    check(key != failingRemoveKey) { "Test preference removal failed for $key" }
+    values.remove(key)
+  }
+}
+
 class FakeMaharaniApi : MaharaniApi {
   var sessionCalls: Int = 0
     private set
 
   var nextResult: () -> ApiEnvelope<SessionDto> = { throw IOException("not configured") }
+  var nextLoginResult: () -> ApiEnvelope<AuthSessionDto> = { unsupported("login") }
 
   override suspend fun health(): ApiEnvelope<HealthDto> =
     throw UnsupportedOperationException("health is not used by the session layer")
@@ -448,7 +536,7 @@ class FakeMaharaniApi : MaharaniApi {
   // from the code under test; the rest exist because an interface implementation
   // has to name every member, and they throw rather than return a fabricated
   // envelope so that a test which accidentally depends on one fails loudly.
-  override suspend fun login(body: LoginRequestDto): ApiEnvelope<AuthSessionDto> = unsupported("login")
+  override suspend fun login(body: LoginRequestDto): ApiEnvelope<AuthSessionDto> = nextLoginResult()
 
   override suspend fun refresh(body: RefreshRequestDto): ApiEnvelope<RefreshSessionDto> {
     refreshCalls += 1
@@ -489,6 +577,27 @@ class FakeMaharaniApi : MaharaniApi {
   override suspend fun catalogBrands(): ApiEnvelope<CatalogBrandsDto> = unsupported("catalogBrands")
 
   override suspend fun retailerHome(): ApiEnvelope<RetailerHomeDto> = unsupported("retailerHome")
+
+  // Phase E commerce endpoints are not reachable from the session lifecycle.
+  // Keep throwing implementations so an accidental dependency fails loudly.
+  override suspend fun mobileCart(): ApiEnvelope<MobileCartDto> = unsupported("mobileCart")
+  override suspend fun addCartLine(body: CartLineRequestDto): ApiEnvelope<MobileCartDto> = unsupported("addCartLine")
+  override suspend fun updateCartLine(
+    lineId: String,
+    body: CartQuantityRequestDto,
+  ): ApiEnvelope<MobileCartDto> = unsupported("updateCartLine")
+  override suspend fun removeCartLine(lineId: String): ApiEnvelope<MobileCartDto> = unsupported("removeCartLine")
+  override suspend fun applyCartCoupon(body: CouponRequestDto): ApiEnvelope<CouponResultDto> = unsupported("applyCartCoupon")
+  override suspend fun removeCartCoupon(): ApiEnvelope<CouponRemovedDto> = unsupported("removeCartCoupon")
+  override suspend fun mobileAddresses(): ApiEnvelope<MobileAddressesDto> = unsupported("mobileAddresses")
+  override suspend fun checkoutQuote(body: CheckoutQuoteRequestDto): ApiEnvelope<CheckoutQuoteDto> = unsupported("checkoutQuote")
+  override suspend fun placeOrder(
+    requestKey: String,
+    body: PlaceOrderRequestDto,
+  ): ApiEnvelope<PlaceOrderResponseDto> = unsupported("placeOrder")
+  override suspend fun orderHistory(cursor: String?): ApiEnvelope<List<MobileOrderDto>> = unsupported("orderHistory")
+  override suspend fun orderDetail(orderId: String): ApiEnvelope<MobileOrderDto> = unsupported("orderDetail")
+  override suspend fun recoverOrderRequest(requestKey: String): ApiEnvelope<MobileOrderDto> = unsupported("recoverOrderRequest")
 
   private fun unsupported(endpoint: String): Nothing =
     throw UnsupportedOperationException("$endpoint is not used by the session layer")

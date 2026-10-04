@@ -306,54 +306,93 @@ interface FakeCartLine {
 
 function makeCartSupabase(initial: FakeCartLine[]) {
   const lines: FakeCartLine[] = [...initial];
-  const calls: { op: 'insert' | 'update'; payload: Record<string, unknown> }[] = [];
+  const calls: { name: string; args: Record<string, unknown> }[] = [];
+  let currentRetailer: string | undefined;
+  const packs = [PACK_50G, PACK_100G].map((id) => ({
+    id,
+    product_id: 'product-1',
+    pack_name: id === PACK_50G ? '50g' : '100g',
+    moq: 1,
+    units_per_case: 10,
+    case_price: 100,
+    ptr: null,
+    base_price: 100,
+    allow_loose_pieces: true,
+    is_active: true,
+    products: { is_active: true },
+  }));
+  const priceTiers = [PACK_50G, PACK_100G].map((product_pack_id) => ({
+    id: `tier-${product_pack_id}`,
+    product_pack_id,
+    min_quantity: 1,
+    max_quantity: null,
+    price_per_piece: 10,
+    rule_type: 'default',
+    label: 'Default',
+    is_active: true,
+  }));
 
-  function makeChain() {
+  function from(table: string) {
     const filters: Record<string, unknown> = {};
     const chain = {
       select: () => chain,
       eq: (col: string, val: unknown) => {
         filters[col] = val;
+        if (table === 'cart_items' && col === 'retailer_id') currentRetailer = String(val);
         return chain;
       },
+      in: (col: string, val: unknown[]) => { filters[col] = val; return chain; },
+      lte: () => chain,
+      order: () => chain,
+      returns: () => chain,
       maybeSingle: async () => {
-        const match =
-          lines.find((line) =>
-            Object.entries(filters).every(
-              ([key, value]) => (line as unknown as Record<string, unknown>)[key] === value
-            )
-          ) ?? null;
-        return { data: match, error: null };
+        if (table === 'cart_items') {
+          const match = lines.find((line) => Object.entries(filters).every(
+            ([key, value]) => (line as unknown as Record<string, unknown>)[key] === value
+          )) ?? null;
+          return { data: match, error: null };
+        }
+        if (table === 'product_packs') {
+          const match = packs.find((pack) => pack.id === filters.id) ?? null;
+          return { data: match, error: null };
+        }
+        if (table === 'retailers') return { data: { area_id: null }, error: null };
+        return { data: null, error: null };
       },
-      update: (payload: Record<string, unknown>) => {
-        const mutation = {
-          eq: (col: string, val: unknown) => { filters[col] = val; return mutation; },
-          then: (resolve: (value: { error: null }) => unknown) => {
-            const match = lines.find((line) => Object.entries(filters).every(
-              ([key, value]) => (line as unknown as Record<string, unknown>)[key] === value
-            ));
-            if (match && typeof payload.quantity === 'number') match.quantity = payload.quantity;
-            calls.push({ op: 'update', payload });
-            return Promise.resolve(resolve({ error: null }));
-          },
-        };
-        return mutation;
-      },
-      insert: (payload: Record<string, unknown>) => {
-        lines.push({
-          id: `new-${lines.length}`,
-          retailer_id: String(payload.retailer_id),
-          pack_id: String(payload.pack_id),
-          quantity: Number(payload.quantity),
-        });
-        calls.push({ op: 'insert', payload });
-        return Promise.resolve({ error: null });
+      then: (resolve: (result: { data: unknown[]; error: null }) => unknown) => {
+        const data = table === 'product_pricing_tiers'
+          ? priceTiers.filter((tier) => (filters.product_pack_id as unknown[] | undefined)?.includes(tier.product_pack_id))
+          : [];
+        return Promise.resolve({ data, error: null as null }).then(resolve);
       },
     };
     return chain;
   }
 
-  return { from: () => makeChain(), lines, calls };
+  return {
+    from,
+    lines,
+    calls,
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args });
+      const packId = String(args.p_pack_id);
+      const lineId = args.p_cart_item_id == null ? null : String(args.p_cart_item_id);
+      const existing = lines.find((line) => lineId
+        ? line.id === lineId && line.retailer_id === currentRetailer
+        : line.pack_id === packId && line.retailer_id === currentRetailer);
+      if ((existing?.quantity ?? 0) !== Number(args.p_expected_quantity)) {
+        return { data: null, error: { message: 'CART_CHANGED: cart quantity changed.' } };
+      }
+      if (existing) existing.quantity = Number(args.p_quantity);
+      else lines.push({
+        id: `new-${lines.length}`,
+        retailer_id: currentRetailer ?? RETAILER_ID,
+        pack_id: packId,
+        quantity: Number(args.p_quantity),
+      });
+      return { data: Number(args.p_quantity), error: null };
+    },
+  };
 }
 
 describe('cart line identity', () => {
@@ -361,7 +400,15 @@ describe('cart line identity', () => {
     const fake = makeCartSupabase([{ id: 'ci-1', retailer_id: RETAILER_ID, pack_id: PACK_50G, quantity: 4 }]);
     await mergeLinesIntoCart(fake as never, RETAILER_ID, [{ packId: PACK_50G, quantity: 2 }]);
     expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0]).toMatchObject({ op: 'update', payload: { quantity: 6 } });
+    expect(fake.calls[0]).toMatchObject({
+      name: 'mutate_retailer_cart_line',
+      args: {
+        p_pack_id: PACK_50G,
+        p_cart_item_id: null,
+        p_expected_quantity: 4,
+        p_quantity: 6,
+      },
+    });
     expect(fake.lines).toHaveLength(1);
 
     // A different variant of the same product is a DISTINCT line.
@@ -393,9 +440,11 @@ describe('add-to-cart behaviour', () => {
     expect(actions).toContain('export async function addToCartAction(packId: string, quantity: number)');
     expect(actions).not.toMatch(/addToCartAction\([^)]*price/);
     // Server-side validation re-runs the pack's real rules before writing.
-    const service = read('lib/retailer/cart-service.ts');
-    expect(service).toContain('validatePackForCart(supabase, line.packId, line.quantity)');
-    expect(service).toContain('if (!pack.is_active) return');
+    const service = read('lib/retailer/cart-merge.ts');
+    expect(service).toContain('validatePackForCart(supabase, retailerId, line.packId, targetQuantity)');
+    const validation = read('lib/retailer/cart-validation.ts');
+    expect(validation).toContain('if (!pack.is_active) return');
+    expect(service).toContain('mutateRetailerCartLine(supabase');
   });
 
   it('the product page sends exactly the selected variant/pack id with the piece count', () => {

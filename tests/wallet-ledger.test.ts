@@ -236,7 +236,11 @@ describe('wallet idempotency', () => {
     expect(coins).toContain("rpc('check_and_debit_retailer_wallet'");
     expect(coins).toMatch(/p_idempotency_key: coinDebitKey\(orderId\)/);
     const createOrder = read('lib/orders/create-order.ts');
-    expect(createOrder).toContain('debitCoinsForOrder');
+    const atomicOrder = read('supabase/migrations/0056_mobile_checkout_atomic.sql');
+    expect(createOrder).toContain('create_order_atomic');
+    expect(createOrder).toContain('p_expected_coins_used_paise: quote.coins.usedPaise');
+    expect(atomicOrder).toContain("'order:' || v_order.id::text");
+    expect(atomicOrder).toContain('public.check_and_debit_retailer_wallet(');
   });
 
   it('payment uses pay: prefix and adjustment uses adj: prefix', () => {
@@ -288,11 +292,16 @@ describe('wallet over-limit rejection', () => {
     expect(migration).toContain('if v_allow_overdue and v_overdue_limit > 0 then');
   });
 
-  it('create-order cancels the order when the coin debit fails', () => {
+  it('the atomic order transaction rolls back rather than leaving an order when the coin debit fails', () => {
     const createOrder = read('lib/orders/create-order.ts');
-    expect(createOrder).toContain('if (!debit.ok)');
-    expect(createOrder).toContain('status: \'cancelled\'');
-    expect(createOrder).toContain('Coin debit failed');
+    const atomicOrder = read('supabase/migrations/0056_mobile_checkout_atomic.sql');
+    expect(createOrder).toContain('p_expected_coins_used_paise: quote.coins.usedPaise');
+    expect(atomicOrder).toContain('public.check_and_debit_retailer_wallet(');
+    expect(atomicOrder).toContain("'order:' || v_order.id::text");
+    expect(atomicOrder).toContain('request_completed_at = now()');
+    // A PostgreSQL exception aborts this function's transaction: no compensating
+    // cancel or partially-created order is needed.
+    expect(atomicOrder).not.toContain('Coin debit failed');
   });
 
   it('checkout UI shows coins, never an over-limit credit warning', () => {
@@ -473,13 +482,14 @@ describe('wallet migration safety', () => {
 // 11. Server-authoritative mutations
 // ---------------------------------------------------------------------------
 describe('wallet server-authoritative', () => {
-  it('checkout does not trust client total, uses quoted grandTotal', () => {
+  it('checkout passes only the authoritative server quote into the atomic writer', () => {
     const createOrder = read('lib/orders/create-order.ts');
     expect(createOrder).toContain('quote.grandTotal');
-    // The coin deduction is derived from the SERVER quote (paise), never from a
-    // number posted by the browser.
-    expect(createOrder).toMatch(/orderTotalPaise: Math\.round\(quote\.grandTotal \* 100\)/);
+    expect(createOrder).toContain('p_grand_total: quote.grandTotal');
+    expect(createOrder).toContain('p_expected_coins_used_paise: quote.coins.usedPaise');
+    expect(createOrder).toContain('p_order_items: atomicItems');
     expect(createOrder).toMatch(/quoteOrderForRetailer\(/);
+    expect(createOrder).not.toContain('grandTotalPaise: input');
   });
 
   it('ledger amount is bigint paise, always positive, direction says debit/credit', () => {

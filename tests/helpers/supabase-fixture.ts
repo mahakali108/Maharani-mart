@@ -86,7 +86,43 @@ export function supabaseFixture(
     from, queries, tables, rpcs,
     rpc: async (name: string, args: Record<string, unknown>) => {
       rpcs.push({ name, args });
-      return { data: errors.rpc ? null : availability, error: errors.rpc ? { message: errors.rpc } : null };
+      const rpcError = errors[`rpc:${name}`] ?? errors.rpc;
+      if (rpcError) return { data: null, error: { message: rpcError } };
+      if (name === 'mutate_retailer_cart_line') {
+        const packId = String(args.p_pack_id);
+        const lineId = args.p_cart_item_id == null ? null : String(args.p_cart_item_id);
+        const expected = Number(args.p_expected_quantity);
+        const quantity = Number(args.p_quantity);
+        const cartRead = [...queries].reverse().find((query) =>
+          query.table === 'cart_items' && query.operation === 'select'
+        );
+        const ownerFilter = cartRead?.filters.find((filter) => filter.column === 'retailer_id');
+        const retailerId = ownerFilter?.value;
+        const rows = tables.cart_items ?? [];
+        const existing = rows.find((row) => lineId
+          ? row.id === lineId && row.retailer_id === retailerId
+          : row.pack_id === packId && row.retailer_id === retailerId);
+        if ((existing?.quantity ?? 0) !== expected) {
+          return { data: null, error: { message: 'CART_CHANGED: cart quantity no longer matches.' } };
+        }
+        if (lineId && !existing) {
+          return { data: null, error: { message: 'CART_CHANGED: cart line no longer exists.' } };
+        }
+        if (existing) existing.quantity = quantity;
+        else {
+          const pack = (tables.product_packs ?? []).find((row) => row.id === packId);
+          rows.push({
+            id: `inserted-cart-${rows.length}`,
+            retailer_id: retailerId,
+            product_id: pack?.product_id,
+            pack_id: packId,
+            quantity,
+          });
+          tables.cart_items = rows;
+        }
+        return { data: quantity, error: null };
+      }
+      return { data: availability, error: null };
     },
   };
 }

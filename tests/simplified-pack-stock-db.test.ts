@@ -47,7 +47,7 @@ async function createSimpleOrder({
   requestedWarehouse?: string | null;
   withLine?: boolean;
 }) {
-  return as(db, retailer.id, async (tx) => {
+  return as(db, 'service', async (tx) => {
     const { rows } = await tx.query<{ id: string; warehouse_id: string; simple_stock_mode: boolean }>(
       `insert into orders (retailer_id, warehouse_id, simple_stock_mode, request_key)
        values ($1, $2, false, $3)
@@ -105,7 +105,7 @@ beforeEach(async () => {
 describe('new pack-stock orders', () => {
   it('requires exactly one active warehouse and overwrites a posted warehouse/mode', async () => {
     await db.query(`update warehouses set is_active = false`);
-    const zero = await errorOf(db, retailer.id, (tx) => tx.query(
+    const zero = await errorOf(db, 'service', (tx) => tx.query(
       `insert into orders (retailer_id, warehouse_id) values ($1, $2)`,
       [retailer.id, inactiveWarehouseId]
     ));
@@ -113,7 +113,7 @@ describe('new pack-stock orders', () => {
 
     await db.query(`update warehouses set is_active = true where id = $1`, [activeWarehouseId]);
     const anotherActive = await warehouse('Second active site', retailer.areaId, true);
-    const multiple = await errorOf(db, retailer.id, (tx) => tx.query(
+    const multiple = await errorOf(db, 'service', (tx) => tx.query(
       `insert into orders (retailer_id, warehouse_id) values ($1, $2)`,
       [retailer.id, inactiveWarehouseId]
     ));
@@ -123,6 +123,26 @@ describe('new pack-stock orders', () => {
     const created = await createSimpleOrder({ quantity: 2, requestedWarehouse: inactiveWarehouseId });
     expect(created.simple_stock_mode).toBe(true);
     expect(created.warehouse_id).toBe(activeWarehouseId);
+  });
+
+  it('denies authenticated direct order and line inserts without changing stock', async () => {
+    await db.query(`update warehouses set is_active = (id = $1)`, [activeWarehouseId]);
+
+    const orderDenied = await errorOf(db, retailer.id, (tx) => tx.query(
+      `insert into orders (retailer_id) values ($1)`, [retailer.id]
+    ));
+    expect(orderDenied).toMatch(/permission denied for table orders/);
+
+    const order = await createSimpleOrder({ withLine: false });
+    const lineDenied = await errorOf(db, retailer.id, (tx) => tx.query(
+      `insert into order_items
+         (order_id, product_id, pack_id, quantity, unit_price, gst_percent, line_total,
+          quantity_unit, quantity_pieces, units_per_case)
+       values ($1, $2, $3, 1, 1, 0, 1, 'pieces', 1, 1)`,
+      [order.id, pack.productId, pack.packId]
+    ));
+    expect(lineDenied).toMatch(/permission denied for table order_items/);
+    expect(await readPackStock()).toBe(5);
   });
 
   it('forces newly inserted variants to start with zero sellable stock', async () => {
@@ -145,7 +165,7 @@ describe('new pack-stock orders', () => {
     expect(await readOrderItem(order.itemId!)).toEqual({ stock_deducted_quantity: 4, stock_restored_quantity: 0 });
 
     const retryOrder = await createSimpleOrder({ withLine: false });
-    const shortage = await errorOf(db, retailer.id, (tx) => tx.query(
+    const shortage = await errorOf(db, 'service', (tx) => tx.query(
       `insert into order_items
          (order_id, product_id, pack_id, quantity, unit_price, gst_percent, line_total,
           quantity_unit, quantity_pieces, units_per_case)
@@ -155,7 +175,7 @@ describe('new pack-stock orders', () => {
     expect(shortage).toMatch(/INSUFFICIENT_STOCK: Only 1 available/);
     expect(await readPackStock()).toBe(1);
 
-    const duplicateLine = await errorOf(db, retailer.id, (tx) => tx.query(
+    const duplicateLine = await errorOf(db, 'service', (tx) => tx.query(
       `insert into order_items
          (order_id, product_id, pack_id, quantity, unit_price, gst_percent, line_total,
           quantity_unit, quantity_pieces, units_per_case)
@@ -165,7 +185,7 @@ describe('new pack-stock orders', () => {
     expect(duplicateLine).toMatch(/This pack is already present in the order/);
     expect(await readPackStock()).toBe(1);
 
-    const replayedKey = await errorOf(db, retailer.id, (tx) => tx.query(
+    const replayedKey = await errorOf(db, 'service', (tx) => tx.query(
       `insert into orders (retailer_id, request_key) values ($1, $2)`,
       [retailer.id, order.requestKey]
     ));

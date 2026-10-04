@@ -7,6 +7,19 @@ import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.CatalogBrandsDto
 import com.maharanitraders.core.network.dto.CatalogCategoriesDto
 import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.CartLineRequestDto
+import com.maharanitraders.core.network.dto.CartQuantityRequestDto
+import com.maharanitraders.core.network.dto.CheckoutQuoteDto
+import com.maharanitraders.core.network.dto.CheckoutQuoteRequestDto
+import com.maharanitraders.core.network.dto.CouponRequestDto
+import com.maharanitraders.core.network.dto.CouponResultDto
+import com.maharanitraders.core.network.dto.CouponRemovedDto
+import com.maharanitraders.core.network.dto.MobileAddressesDto
+import com.maharanitraders.core.network.dto.MobileCartDto
+import com.maharanitraders.core.network.dto.MobileOrderDto
+import com.maharanitraders.core.network.dto.OrderConfirmationDto
+import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
+import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
 import com.maharanitraders.core.network.dto.HealthDto
 import com.maharanitraders.core.network.dto.ProductDetailDto
 import com.maharanitraders.core.network.dto.RetailerHomeDto
@@ -19,7 +32,10 @@ import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
 import com.maharanitraders.core.network.dto.RegisterRetailerResponseDto
 import com.maharanitraders.core.network.dto.SessionDto
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -131,10 +147,65 @@ interface MaharaniApi {
    * The retailer home payload: admin-published banners, the real category strip
    * and the first catalogue batch.
    *
-   * Cart, coins, recent orders and schemes are NOT part of this response - they
-   * belong to later phases, and an empty `banners` list is a normal answer
-   * rather than a failure.
+   * Cart and order history use dedicated Phase E endpoints and are NOT part of
+   * this discovery response. Coins wallet/history and schemes remain later
+   * work, and an empty `banners` list is a normal answer rather than a failure.
    */
   @GET("api/mobile/v1/home")
   suspend fun retailerHome(): ApiEnvelope<RetailerHomeDto>
+
+  // -------------------------------------------------------------------------
+  // Phase E — server-owned cart, quote, order submission and history
+  // -------------------------------------------------------------------------
+
+  /** The caller's persistent shared cart, re-priced by the server on every read. */
+  @GET("api/mobile/v1/cart")
+  suspend fun mobileCart(): ApiEnvelope<MobileCartDto>
+
+  /** Adds the requested piece quantity to the caller's shared cart. */
+  @POST("api/mobile/v1/cart/lines")
+  suspend fun addCartLine(@Body body: CartLineRequestDto): ApiEnvelope<MobileCartDto>
+
+  /** Sets a saved line's final piece count; the server rechecks its MOQ. */
+  @PATCH("api/mobile/v1/cart/lines/{lineId}")
+  suspend fun updateCartLine(
+    @Path("lineId") lineId: String,
+    @Body body: CartQuantityRequestDto,
+  ): ApiEnvelope<MobileCartDto>
+
+  @DELETE("api/mobile/v1/cart/lines/{lineId}")
+  suspend fun removeCartLine(@Path("lineId") lineId: String): ApiEnvelope<MobileCartDto>
+
+  @POST("api/mobile/v1/cart/coupon")
+  suspend fun applyCartCoupon(@Body body: CouponRequestDto): ApiEnvelope<CouponResultDto>
+
+  @DELETE("api/mobile/v1/cart/coupon")
+  suspend fun removeCartCoupon(): ApiEnvelope<CouponRemovedDto>
+
+  @GET("api/mobile/v1/addresses")
+  suspend fun mobileAddresses(): ApiEnvelope<MobileAddressesDto>
+
+  /** A no-write server quote over the exact shared-cart intent. */
+  @POST("api/mobile/v1/checkout/quote")
+  suspend fun checkoutQuote(@Body body: CheckoutQuoteRequestDto): ApiEnvelope<CheckoutQuoteDto>
+
+  /**
+   * Place one order. The persisted UUID header must remain unchanged for every
+   * retry of this exact logical submission; OkHttp never retries mutations.
+   */
+  @POST("api/mobile/v1/orders")
+  suspend fun placeOrder(
+    @Header("Idempotency-Key") requestKey: String,
+    @Body body: PlaceOrderRequestDto,
+  ): ApiEnvelope<PlaceOrderResponseDto>
+
+  @GET("api/mobile/v1/orders")
+  suspend fun orderHistory(@Query("cursor") cursor: String? = null): ApiEnvelope<List<MobileOrderDto>>
+
+  @GET("api/mobile/v1/orders/{id}")
+  suspend fun orderDetail(@Path("id") orderId: String): ApiEnvelope<MobileOrderDto>
+
+  /** Recover a committed order when the submit response was uncertain. */
+  @GET("api/mobile/v1/orders/requests/{requestKey}")
+  suspend fun recoverOrderRequest(@Path("requestKey") requestKey: String): ApiEnvelope<MobileOrderDto>
 }

@@ -180,19 +180,22 @@ this retailer.
 Layout: paged gallery (pack images, then product images) with dots and a `1/3`
 counter → brand, name, category · unit → the pricing panel (per-piece rate,
 server-struck MRP when present, GST percent, the **server-computed**
-`lineTotalAtMoqPaise`, MOQ / pcs-per-case / derived case price chips,
-"Sold in whole cases only" when `allowLoosePieces` is false, and the pricing
-engine's own `message` verbatim when it refused the pack) → pack selector →
-slab-rate table → product facts (HSN, unit, GST, lead time, category, brand) →
-the ordering note. A sticky bottom bar repeats price, pack, MOQ and stock.
+`lineTotalAtMoqPaise`, MOQ / pcs-per-case / derived case price chips, and the
+server's MOQ and pricing-engine message verbatim when it refused the pack) → pack
+selector → slab-rate table → product facts (HSN, unit, GST, lead time, category,
+brand) → the ordering note. The sticky bottom bar repeats server price, pack, MOQ
+and stock, then offers **Add _MOQ_ pieces to cart** only when price, MOQ and
+availability are valid. The button submits only the selected pack id and piece
+quantity; no money or stock data comes from the device. It writes to the same
+persistent retailer cart as the web workspace. The shared cart accepts whole
+piece quantities at a one-piece increment; MOQ is a separate minimum and
+`allowLoosePieces` does not create a case-size step.
 
-**There is no "Add to cart" button.** Cart and checkout are Phase E; a control
-that looks like it works but cannot place an order would be a lie, and the
-migration contract forbids it. The screen says so once, plainly:
-
-> Ordering from the app arrives with the cart & checkout phase. Until then the web
-> workspace remains the order desk — the prices, slabs and stock on this screen are
-> exactly what it will charge.
+A cart-write timeout is treated as uncertain: the screen asks the shopper to
+refresh the shared cart before another mutation, rather than replaying an add and
+risking a duplicate quantity. Checkout gets a fresh server quote and the order
+transaction rechecks current price, GST, coupon, Coins, eligibility, MOQ and
+stock before it confirms.
 
 Back navigation preserves catalogue context: the detail route is pushed on top of
 the catalogue entry, the grid keeps its own `LazyGridState`, and the bottom bar
@@ -227,12 +230,11 @@ editable field, nothing fetched twice.
 
 Role handling is unchanged: the retailer shopping home requires
 `role == RETAILER` **and** the `CATALOG` grant; every other role keeps
-`SessionHomeScreen`. Two new destinations were added to the catalog —
-`CATEGORIES` (`workspace = RETAILER`) and `ACCOUNT` (`workspace = null`, shared) —
-both with `phase = null` because they are real screens now. `routes.first()` is
-still `HOME`, and `MaharaniRouterTest`'s "built" sets were updated in the same
-change (retailers now assert `CATEGORIES` and `ACCOUNT` are present; admins assert
-`ACCOUNT` is present and `CATEGORIES` is not).
+`SessionHomeScreen`. Phase D added two destinations — `CATEGORIES`
+(`workspace = RETAILER`) and `ACCOUNT` (`workspace = null`, shared) — both with
+`phase = null` because they became real screens in that phase. Phase E later
+activated the retailer `CART` and `ORDERS` destinations. `routes.first()` is
+still `HOME`, and `MaharaniRouterTest`'s built sets were updated with each phase.
 
 ---
 
@@ -260,20 +262,22 @@ change (retailers now assert `CATEGORIES` and `ACCOUNT` are present; admins asse
 
 ## 7. Documented API gaps → what the UI does instead
 
-Nothing below was faked. Each row is a design idea from the brief that the current
-wire contract (`docs/NATIVE_ANDROID_API_CONTRACT.md` §2.3) cannot support.
+Nothing below is faked. The first rows distinguish Phase E features now backed by
+`docs/NATIVE_ANDROID_API_CONTRACT.md` §2.4 from endpoints that remain intentionally
+outside this native slice.
 
-| Idea | Why it is not on screen | What the app does |
+| Idea | Contract status | What the app does |
 | --- | --- | --- |
-| "Deliver to <area>" in the app bar | `/session` and `/home` carry no area name; `GET /areas` is the registration picker (`areaId` + name), not the retailer's own service area. | Shows the verified **shop name** instead — real data, same slot. Adding a `deliveryArea` field to `/session` or `/home` would enable the location chip with no client change beyond one line. |
-| Notifications bell | No mobile notifications endpoint; the notifications destination is Phase F. | No bell. The `NOTIFICATIONS` destination stays in the drawer as a planned tab. |
-| Cart badge / cart screen | No cart summary endpoint reachable from mobile. | `CART` tab renders `UnavailableFeatureState` ("Planned · Phase E"). The PDP has no add-to-cart. |
-| Orders list / order detail | No mobile order-history endpoint. | `ORDERS` tab renders the same honest placeholder. |
-| Maharani Coins | No coins endpoint for mobile. | Drawer entry, planned placeholder. |
+| "Deliver to <area>" in the app bar | `/session` and `/home` carry no area name; `GET /areas` is the registration picker, not the retailer's own service area. | Shows the verified **shop name**. Adding a `deliveryArea` field to `/session` or `/home` would enable a location chip later. |
+| Cart badge / cart screen | Implemented: authenticated shared-cart read/mutation, MOQ validation, address choices, server quote, coupon pointer, and atomic idempotent order placement. No cart-count badge endpoint exists. | `CART` is a real tab; the PDP adds the selected pack at its MOQ. The UI never computes totals or stock and refreshes after an uncertain cart write. |
+| Orders list / order detail | Implemented: owner-scoped history, detail and request-recovery reads. Cancellation, returns, reorder, invoice and delivery-tracking endpoints are not part of this API slice. | `ORDERS` shows actual server statuses, timestamps, totals and item snapshots. Unsupported actions are not simulated. |
+| Notifications bell | No mobile notifications endpoint; the notifications destination is Phase F. | No bell. The `NOTIFICATIONS` destination stays in the drawer as a planned feature. |
+| Maharani Coins | Checkout reuses the existing server Coins rule; a separate native wallet/ledger screen is not implemented. | Checkout shows only the server quote and committed order snapshot; no client debit or payment flow. |
 | Search suggestions / trending | No suggestion endpoint; a client-side list would be invented data. | Search submits to the real catalogue query; the field shows clear-text and loading states only. |
 | Ratings & reviews | Not in the catalogue contract. | Omitted entirely. |
 | Favourites | `isFavorite` is readable on the wire but there is no write endpoint. | Read-only; no heart control that could silently fail. |
 | Schemes / coupons / offers list | `hasOffer` is a boolean only; no offer detail endpoint. | `OfferBadge` reflects the boolean and nothing more. |
+| Saved carts / cancel / return / reorder / invoice / tracking | Endpoints are not implemented in the native/API Phase E slice. | Not shown or simulated. |
 | Pull to refresh | Kept out to avoid a half-gesture; refresh is an explicit retry/`load()` path. | Retry buttons in every error state; the home reloads on `load()`. |
 
 ---
@@ -314,43 +318,35 @@ wire contract (`docs/NATIVE_ANDROID_API_CONTRACT.md` §2.3) cannot support.
 
 ---
 
-## 10. Verification — what ran and what could not
+## 10. Verification — Phase E repository checks
 
-Ran in this environment:
+Ran on the current Phase E worktree:
 
 | Check | Result |
 | --- | --- |
-| `npm run typecheck` (`tsc --noEmit`) | Clean. |
-| `npx vitest run` (whole web suite) | 98 files / 1951 tests passed. |
-| `tests/android-project-integrity.test.ts` | 23/23 passed — including "every `colors.<x>` / `MaharaniPalette.<X>` is declared", cross-module imports have Gradle deps, test doubles implement every interface member, Coil ceiling, no `material-icons`, no WebView/Capacitor, manifest/theme/network-config invariants. |
-| `tests/mobile-safety.test.ts` | 6/6 passed. |
-| Tree-sitter parse of every Kotlin file (`web-tree-sitter` + `tree-sitter-kotlin.wasm`) | 111 files parsed; the only 2 "problems" are the known grammar limitation on `fun interface` (`core/common/TimeSource.kt`, `core/network/AuthInterceptor.kt`), both pre-existing and both valid Kotlin. |
-| Static cross-reference audit (script) | Every `MaharaniDimens.*`, `MaharaniThemeTokens.colors.*`, `MaharaniPalette.*`, typography role, tag constant, enum member and `com.maharanitraders.*` import used by the changed files resolves to a real declaration; no duplicate top-level declarations per package. |
-| Compose audit (script, mutation-tested) | Modifier-extension imports, unresolved Compose class references and `@Composable` presence on every function that calls a composable. The auditor was validated against a planted broken file (flagged 4/4, then deleted). It found two real compile errors, both fixed: a missing `fillMaxWidth` import in `ui/components/ProductGrid.kt` and a non-existent token `tokens.onAppBarFieldHint` → `tokens.appBarFieldHint` in `MaharaniSearchBar.kt`. |
-| Scope review | All 17 `Modifier.weight(...)` and 4 `Modifier.align(Alignment.*)` sites hand-verified inside `RowScope` / `ColumnScope` / `BoxScope`. |
+| `corepack pnpm run typecheck` | Passed (`tsc --noEmit`). |
+| `npx --no-install vitest run` | Passed: 101 files / 1,991 tests, including mobile address ownership, commerce API, atomic checkout database, cart MOQ/quantity, retry/recovery and history coverage. |
+| `npm run lint` | Passed. Existing warning only: `<img>` in `components/admin/product-image-manager.tsx:110`. |
+| `npm run build` | Passed: Next.js production build, 114 pages generated; same existing `<img>` warning. |
+| `git diff --check` | Passed. |
+| `./gradlew testDebugUnitTest lintDebug assembleDebug` (from `android/`) | **Not run:** Gradle exits before task configuration because `JAVA_HOME` is unset and no `java` executable exists. `ANDROID_HOME` and `ANDROID_SDK_ROOT` are also unset, common SDK paths and the local Gradle wrapper distribution cache are absent. Gradle therefore did not reach SDK or network resolution; no APK or Android test/lint result is available. |
 
-Full probe evidence, the exact blocker, and step-by-step reproduction on GitHub
-Actions or a local machine: **`docs/ANDROID_BUILD_VERIFICATION.md`**.
+The PGlite database suite verifies transaction rollback, stock/MOQ/price/coupon/Coins
+revalidation, exact cart clearing and replay. Its harness uses one database connection;
+its scheduled duplicate-call test is not proof of contention between independent
+PostgreSQL sessions. The advisory-lock concurrency contract still needs a multi-session
+PostgreSQL integration check in CI or a configured environment.
 
-Could **not** run here, and therefore is **not** verified:
-
-| Check | Why |
-| --- | --- |
-| `./gradlew assembleDebug` (debug APK) | No JDK, no Android SDK, no Gradle distribution in the sandbox, and Maven Central / Gradle services / Adoptium are unreachable, so nothing can be downloaded. |
-| `./gradlew testDebugUnitTest` (JVM unit tests, incl. the new `CategoriesViewModelTest`) | Same reason. |
-| `./gradlew lintDebug` | Same reason. |
-| `next lint` / `next build` | Not required: **no backend, web or config file changed**. They were not run. |
-
-A tree-sitter parse and a symbol cross-reference are *not* a Kotlin compile. The
-new and rewritten Kotlin is unproven against `kotlinc`; expect to run the three
-Gradle commands above on a machine with a JDK 17+ and the Android SDK before
-trusting this build. The Compose APIs used are all stable in the pinned versions
-(`composeUi 1.10.3`, `composeMaterial3 1.4.0`, `navigation-compose`,
-`hilt-navigation-compose`, `coil-compose 3.4.0`), and no dependency was added.
+A web typecheck/build or static Kotlin inspection is not an Android compile. The new
+Kotlin/Compose code and Android unit tests remain unverified by Gradle until a compatible
+JDK 17+ and Android SDK are available.
 
 ---
 
-## 11. Changed files
+## 11. Phase D UI redesign changed files
+
+The list below records the catalogue/home redesign before Phase E; the cart/order files
+added by Phase E are described in `docs/NATIVE_ANDROID_API_CONTRACT.md` §2.4.
 
 New — design system (`:core:designsystem`):
 
@@ -399,16 +395,10 @@ Deleted:
 
 ---
 
-## 12. Follow-ups for Phase E (cart & checkout)
+## 12. Later work (not part of Phase E)
 
-1. Wire `CART` and `ORDERS` to real endpoints; the tabs, their icons and their
-   routes already exist, so the switch is a `DestinationSurface` branch.
-2. Add `Add to cart` on the PDP **only** with the cart endpoint: the sticky bottom
-   bar already reserves the space, and the pack selector already carries the pack
-   id the API needs.
-3. `deliveryArea` on `/session` or `/home` → one line in `RetailerHomeTopBar`.
-4. Search suggestions endpoint → `MaharaniSearchBar` already has a `loading` slot;
-   a suggestion list should be a new component below the field, not a fabricated
-   local list.
-5. Favourite writes → the `isFavorite` flag is already mapped, so the heart is a
-   repository call away.
+1. A verified `deliveryArea` field on `/session` or `/home` could replace the shop-name app-bar slot with a delivery-area chip.
+2. A real search-suggestions endpoint could use `MaharaniSearchBar`'s loading slot; no local suggestion list should be fabricated.
+3. Favourite writes need an authenticated backend endpoint; the current `isFavorite` field remains read-only.
+4. Saved carts, whole-cart deletion, cancellation, returns, reorder, invoices and delivery tracking need separately verified server contracts before they appear in the native app.
+5. A standalone Coins wallet/history screen belongs to later native work; checkout continues to use only the existing server-owned Coins calculation and debit rules.

@@ -2,87 +2,22 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
-import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
-import { resolvePackCasePrice } from '@/lib/retailer/effective-price';
-import { loadPackTiers } from '@/lib/retailer/pricing-data';
+import { mutateRetailerCartLine } from '@/lib/retailer/cart-rpc';
+import { validatePackForCart } from '@/lib/retailer/cart-validation';
 
-interface PackForCart {
-  id: string;
-  pack_name: string;
-  moq: number;
-  units_per_case: number;
-  case_price: number;
-  ptr: number | null;
-  base_price: number;
-  allow_loose_pieces: boolean;
-  is_active: boolean;
-  products: { is_active: boolean } | null;
-}
+export { validatePackForCart } from '@/lib/retailer/cart-validation';
 
 export type CartServiceResult = { error: string } | { success: true };
 
-/**
- * The single cart-side quantity rule. It runs the SAME pure retailer piece
- * pricing engine the server quote and the UI previews use, so a retailer can
- * never park a quantity in the cart that checkout would reject (below MOQ or
- * an unwhole quantity).
- *
- * A product-level `price_lists` override is deliberately not consulted here:
- * an override changes what a piece costs, never what may be ordered. Money is
- * still resolved authoritatively at quote/order time.
- */
-async function quantityError(supabase: ReturnType<typeof createClient>, pack: PackForCart, quantity: number) {
-  const tiers = await loadPackTiers(supabase, [pack.id]);
-  const pricing = calculateRetailerPiecePrice({
-    quantity,
-    unitsPerCase: pack.units_per_case,
-    casePrice: resolvePackCasePrice(pack, null),
-    tiers: tiers.get(pack.id) ?? [],
-    moq: pack.moq,
-  });
-  if (pricing.orderable && Number.isFinite(pricing.unitPrice) && Number.isFinite(pricing.lineTotal)) return null;
-  return pricing.message ?? 'That quantity is not available for this pack.';
-}
-
-export async function validatePackForCart(
-  supabase: ReturnType<typeof createClient>,
-  packId: string,
-  quantity: number
-): Promise<string | null> {
-  // `quantity` is a PIECE count (0026): 6 pcs, 46 pcs or 80 pcs are all valid.
-  if (!packId || quantity < 1 || quantity > 100000 || !Number.isInteger(quantity)) {
-    return 'Enter a valid whole number quantity in pieces.';
-  }
-  const { data: pack, error } = await supabase
-    .from('product_packs')
-    .select(
-      'id, pack_name, moq, units_per_case, case_price, ptr, base_price, allow_loose_pieces, is_active, products ( is_active )'
-    )
-    .eq('id', packId)
-    .maybeSingle<PackForCart>();
-  if (error || !pack) return 'This pack no longer exists.';
-  if (!pack.is_active) return 'This pack is currently unavailable.';
-  if (!pack.products?.is_active) return 'This product is currently unavailable.';
-  // MOQ is checked here with the wording the cart has always used, and again by
-  // the engine below (single implementation of the rule) for the case/loose
-  // rules: a whole-case-only pack and an unpriced loose remainder.
-  if (quantity < pack.moq) return `Minimum order quantity for this pack is ${pack.moq}.`;
-  try {
-    return await quantityError(supabase, pack, quantity);
-  } catch {
-    return 'Current pricing could not be verified. Please try again.';
-  }
-}
-
+/** Add to the shared piece cart after validating the final merged quantity. */
 export async function addCartLines(
   supabase: ReturnType<typeof createClient>,
   retailerId: string,
   lines: { packId: string; quantity: number }[]
 ): Promise<CartServiceResult> {
   if (lines.length < 1 || lines.length > 100) return { error: 'Add between 1 and 100 cart lines.' };
-  for (const line of lines) {
-    const error = await validatePackForCart(supabase, line.packId, line.quantity);
-    if (error) return { error };
+  if (new Set(lines.map((line) => line.packId.toLowerCase())).size !== lines.length) {
+    return { error: 'The same pack cannot be added more than once.' };
   }
   try {
     await mergeLinesIntoCart(supabase, retailerId, lines);
@@ -98,21 +33,28 @@ export async function updateCartLine(
   cartItemId: string,
   quantity: number
 ): Promise<CartServiceResult> {
-  const { data: item } = await supabase
+  const { data: item, error: readError } = await supabase
     .from('cart_items')
-    .select('pack_id')
+    .select('pack_id, quantity')
     .eq('id', cartItemId)
     .eq('retailer_id', retailerId)
-    .maybeSingle<{ pack_id: string }>();
+    .maybeSingle<{ pack_id: string; quantity: number }>();
+  if (readError) return { error: 'The cart item could not be loaded. Please try again.' };
   if (!item) return { error: 'Cart item not found.' };
-  const validationError = await validatePackForCart(supabase, item.pack_id, quantity);
+  const validationError = await validatePackForCart(supabase, retailerId, item.pack_id, quantity);
   if (validationError) return { error: validationError };
-  const { error } = await supabase
-    .from('cart_items')
-    .update({ quantity } as unknown as never)
-    .eq('id', cartItemId)
-    .eq('retailer_id', retailerId);
-  return error ? { error: 'The cart could not be updated.' } : { success: true };
+
+  const { error } = await mutateRetailerCartLine(supabase, {
+    p_pack_id: item.pack_id,
+    p_cart_item_id: cartItemId,
+    p_expected_quantity: item.quantity,
+    p_quantity: quantity,
+  });
+  if (!error) return { success: true };
+  if (/CART_CHANGED/i.test(error.message)) return { error: 'Your cart changed in another request. Refresh it and try again.' };
+  if (/minimum[ _]order[ _]quantity/i.test(error.message)) return { error: error.message };
+  if (/PACK_UNAVAILABLE/i.test(error.message)) return { error: 'This pack is no longer available.' };
+  return { error: 'The cart could not be updated. Please try again.' };
 }
 
 export async function removeCartLine(

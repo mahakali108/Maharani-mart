@@ -54,9 +54,9 @@ data class ProductDetailUiState(
  * same engine checkout uses, so what the shopper reads here is what an order
  * would be charged. Nothing here is sent back to the server as a price.
  *
- * There is deliberately no "add to cart" in Phase D: the cart and checkout are a
- * later phase, and a button that appears to work but cannot place an order would
- * be a lie.
+ * The Phase E add-to-cart action is owned by `CartCheckoutViewModel` in the
+ * authenticated shell; this catalogue ViewModel continues to carry no cart,
+ * price-submission or checkout state of its own.
  */
 @HiltViewModel
 class ProductDetailViewModel @Inject constructor(
