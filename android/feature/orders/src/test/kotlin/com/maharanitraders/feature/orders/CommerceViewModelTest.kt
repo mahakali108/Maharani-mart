@@ -42,8 +42,10 @@ class CommerceViewModelTest {
     assertEquals(6, viewModel.state.value.cart?.lines?.single()?.quantity)
     assertTrue(viewModel.state.value.message.orEmpty().contains("Minimum order"))
 
-    repository.updateResults += AppResult.Success(
-      cart.copy(lines = listOf(CART_LINE.copy(quantity = 7, unitPricePaise = 12_000, lineTotalPaise = 84_000))),
+    repository.updateResults.add(
+      AppResult.Success(
+        repository.cart.copy(lines = listOf(CART_LINE.copy(quantity = 7, unitPricePaise = 12_000, lineTotalPaise = 84_000))),
+      ),
     )
     viewModel.increment(CART_LINE.id)
     advanceUntilIdle()
