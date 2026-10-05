@@ -125,11 +125,15 @@ data class NavigationDto(
  * Counts only, by design: the endpoint exists so a badge is a server fact rather
  * than a number the device accumulates between screens, and so the shell never
  * has to download a cart or a notification feed to paint one digit.
+ *
+ * Both fields are required and carry no default: a response missing a count is a
+ * failed read (which keeps the last known badge on screen), not a zero that would
+ * tell the shopper their cart is empty.
  */
 @Serializable
 data class ShellBadgesDto(
   /** Saved cart LINES, exactly as the web retailer layout counts them. */
-  val cartCount: Int = 0,
+  val cartCount: Int,
   /** Notifications the caller has not read. */
-  val unreadNotificationCount: Int = 0,
+  val unreadNotificationCount: Int,
 )
