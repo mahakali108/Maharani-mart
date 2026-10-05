@@ -145,7 +145,7 @@ fun ProductDetailContent(
   /** Heart states from the shared favourites store; the product payload seeds them. */
   favorites: FavoritesUiState = FavoritesUiState(),
   /** Null hides the heart: an account or build without the write shows no dead control. */
-  onToggleFavorite: (() -> Unit)? = null,
+  onToggleFavorite: ((String) -> Unit)? = null,
 ) {
   when {
     state.loading && state.detail == null -> LoadingState(message = "Loading product…")
@@ -180,7 +180,7 @@ fun ProductDetailContent(
               productName = detail.name,
               isFavorite = favorites.isFavorite(detail.id, detail.isFavorite),
               favoriteBusy = favorites.isBusy(detail.id),
-              onToggleFavorite = onToggleFavorite,
+              onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(detail.id) } },
             )
 
             Column(
