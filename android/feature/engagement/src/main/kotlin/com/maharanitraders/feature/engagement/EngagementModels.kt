@@ -56,10 +56,10 @@ data class WalletLedgerPage(
 )
 
 // ---- Favorites ----
-
-data class FavoritesState(
-  val productIds: Set<String> = emptySet(),
-)
+//
+// Intentionally absent: favourite state is owned by
+// `com.maharanitraders.feature.catalog.FavoritesStore`, the single source of
+// truth every surface reads. See EngagementRepository's note.
 
 // ---- Coupons ----
 

@@ -26,11 +26,23 @@ const val PRODUCT_GRID_TAG = "catalog_product_grid"
 fun LazyGridScope.productCardItems(
   products: List<CatalogProduct>,
   onOpenProduct: (String) -> Unit,
+  /**
+   * Favourite state for one product. Defaults to the flag the server put on the
+   * row, so a grid that does not observe the favourites store still renders a
+   * truthful heart.
+   */
+  isFavorite: (CatalogProduct) -> Boolean = { it.isFavorite },
+  isFavoritePending: (CatalogProduct) -> Boolean = { false },
+  /** Null hides the control: not every grid offers favouriting. */
+  onToggleFavorite: ((String) -> Unit)? = null,
 ) {
   items(products, key = { it.id }) { product ->
     ProductCard(
       product = product,
       onClick = { onOpenProduct(product.id) },
+      isFavorite = isFavorite(product),
+      favoritePending = isFavoritePending(product),
+      onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(product.id) } },
       modifier = Modifier.fillMaxWidth(),
     )
   }
@@ -54,6 +66,9 @@ fun ProductGrid(
     horizontal = MaharaniDimens.pageGutter,
     vertical = MaharaniDimens.spaceSm,
   ),
+  isFavorite: (CatalogProduct) -> Boolean = { it.isFavorite },
+  isFavoritePending: (CatalogProduct) -> Boolean = { false },
+  onToggleFavorite: ((String) -> Unit)? = null,
   footer: (LazyGridScope.() -> Unit)? = null,
 ) {
   LazyVerticalGrid(
@@ -64,7 +79,13 @@ fun ProductGrid(
     horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
     verticalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
   ) {
-    productCardItems(products, onOpenProduct)
+    productCardItems(
+      products = products,
+      onOpenProduct = onOpenProduct,
+      isFavorite = isFavorite,
+      isFavoritePending = isFavoritePending,
+      onToggleFavorite = onToggleFavorite,
+    )
     footer?.invoke(this)
   }
 }

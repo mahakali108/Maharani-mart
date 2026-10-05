@@ -23,3 +23,21 @@ internal fun catalogRepository(
     ioDispatcher = dispatcher,
   ),
 )
+
+/**
+ * The REAL [FavoritesStore] over the faked Retrofit interface.
+ *
+ * Same reasoning as the repository above: faking the store would stop the tests
+ * proving that favourite state is server-confirmed rather than guessed, which
+ * is the whole point of having one store.
+ */
+internal fun favoritesStore(
+  api: FakeCatalogApi,
+  dispatcher: CoroutineDispatcher,
+): FavoritesStore = FavoritesStore(
+  api = api,
+  executor = ApiCallExecutor(
+    errorMapper = ApiErrorMapper(Json { ignoreUnknownKeys = true }),
+    ioDispatcher = dispatcher,
+  ),
+)

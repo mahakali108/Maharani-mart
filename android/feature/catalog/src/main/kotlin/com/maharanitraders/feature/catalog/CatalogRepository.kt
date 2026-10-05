@@ -79,6 +79,7 @@ class NetworkCatalogRepository @Inject constructor(
           brandId = query.brandId,
           sort = query.sortParam,
           inStock = query.inStockParam,
+          favoritesOnly = query.favoritesParam,
           // A blank cursor is the first batch. Retrofit drops nulls, so the
           // server never sees `cursor=` and never has to guess what it meant.
           cursor = cursor?.trim()?.ifEmpty { null },

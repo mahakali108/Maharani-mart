@@ -70,6 +70,7 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.CATEGORIES in routes)
     assertTrue(MaharaniRoutes.ACCOUNT in routes)
     assertTrue(MaharaniRoutes.CART in routes)
+    assertTrue(MaharaniRoutes.FAVORITES in routes)
     assertTrue(MaharaniRoutes.COINS in routes)
     assertTrue(MaharaniRoutes.ORDERS in routes) // retailer-only history
     assertTrue(MaharaniRoutes.NOTIFICATIONS in routes)
@@ -113,6 +114,9 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.CART !in routes)
     assertTrue(MaharaniRoutes.ORDERS !in routes)
     assertTrue(MaharaniRoutes.COINS !in routes)
+    // Favourites are saved against a retailer account, so no other workspace
+    // has one to show.
+    assertTrue(MaharaniRoutes.FAVORITES !in routes)
   }
 
   @Test
@@ -200,8 +204,12 @@ class MaharaniRouterTest {
       MaharaniRoutes.HOME,
       MaharaniRoutes.CATALOG,
       MaharaniRoutes.CATEGORIES,
+      MaharaniRoutes.FAVORITES,
       MaharaniRoutes.CART,
       MaharaniRoutes.ORDERS,
+      MaharaniRoutes.COINS,
+      MaharaniRoutes.NOTIFICATIONS,
+      MaharaniRoutes.COUPONS,
       MaharaniRoutes.ACCOUNT,
     )
 
@@ -224,8 +232,12 @@ class MaharaniRouterTest {
       MaharaniRoutes.HOME,
       MaharaniRoutes.CATALOG,
       MaharaniRoutes.CATEGORIES,
+      MaharaniRoutes.FAVORITES,
       MaharaniRoutes.CART,
       MaharaniRoutes.ORDERS,
+      MaharaniRoutes.COINS,
+      MaharaniRoutes.NOTIFICATIONS,
+      MaharaniRoutes.COUPONS,
       MaharaniRoutes.ACCOUNT,
     )
 

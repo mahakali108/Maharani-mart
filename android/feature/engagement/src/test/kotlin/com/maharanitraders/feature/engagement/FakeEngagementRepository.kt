@@ -1,6 +1,5 @@
 package com.maharanitraders.feature.engagement
 
-import com.maharanitraders.core.common.AppError
 import com.maharanitraders.core.common.AppResult
 
 /**
@@ -18,8 +17,6 @@ class FakeEngagementRepository : EngagementRepository {
   var walletLedgerResult: AppResult<WalletLedgerPage> = AppResult.Success(
     WalletLedgerPage(entries = emptyList(), nextCursor = null, hasMore = false, total = 0),
   )
-  var favoritesResult: AppResult<FavoritesState> = AppResult.Success(FavoritesState())
-  var toggleResult: AppResult<Boolean> = AppResult.Success(false)
   var couponsResult: AppResult<CouponsState> = AppResult.Success(CouponsState())
 
   override suspend fun loadNotifications(cursor: String?, unreadOnly: Boolean): AppResult<NotificationPage> =
@@ -33,12 +30,6 @@ class FakeEngagementRepository : EngagementRepository {
 
   override suspend fun loadWalletLedger(cursor: String?): AppResult<WalletLedgerPage> =
     walletLedgerResult
-
-  override suspend fun loadFavorites(): AppResult<FavoritesState> =
-    favoritesResult
-
-  override suspend fun toggleFavorite(productId: String): AppResult<Boolean> =
-    toggleResult
 
   override suspend fun loadCoupons(): AppResult<CouponsState> =
     couponsResult

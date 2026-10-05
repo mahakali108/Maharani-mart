@@ -80,6 +80,7 @@ import com.maharanitraders.core.model.UserRole
 import com.maharanitraders.feature.catalog.ProductDetailViewModel
 import com.maharanitraders.feature.catalog.ui.CatalogScreen
 import com.maharanitraders.feature.catalog.ui.CategoriesScreen
+import com.maharanitraders.feature.catalog.ui.FavoritesScreen
 import com.maharanitraders.feature.catalog.ui.HomeScreenTags
 import com.maharanitraders.feature.catalog.ui.ProductDetailScreen
 import com.maharanitraders.feature.catalog.ui.RetailerHomeScreen
@@ -621,6 +622,11 @@ private fun DestinationSurface(
       onOpenBrand = { brand ->
         onOpenCatalog(CatalogRequest(brandId = brand.id, brandLabel = brand.name))
       },
+    )
+
+    MaharaniRoutes.FAVORITES -> FavoritesScreen(
+      onOpenProduct = onOpenProduct,
+      onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
     )
 
     MaharaniRoutes.CART -> CartScreen(

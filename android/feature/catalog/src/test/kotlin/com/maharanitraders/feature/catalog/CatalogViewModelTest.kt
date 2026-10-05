@@ -75,7 +75,10 @@ class CatalogViewModelTest {
     val api = api()
     api.productPages.addLast(envelope(listOf("p1", "p2"), resultCount = 2))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     val state = viewModel.state.value
@@ -93,7 +96,10 @@ class CatalogViewModelTest {
     api.categoriesResult = ApiEnvelope(CatalogCategoriesDto())
     api.productPages.addLast(envelope(listOf("p1"), resultCount = 1))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     assertThat(viewModel.state.value.categories).isEmpty()
@@ -106,7 +112,10 @@ class CatalogViewModelTest {
     api.productPages.addLast(envelope(listOf("p1", "p2"), nextCursor = "cursor-2", hasMore = true, resultCount = 3))
     api.productPages.addLast(envelope(listOf("p2", "p3"), nextCursor = null, hasMore = false, resultCount = 3))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
     assertThat(viewModel.state.value.products.map { it.id }).containsExactly("p1", "p2").inOrder()
 
@@ -125,7 +134,10 @@ class CatalogViewModelTest {
     api.productPages.addLast(envelope(listOf("p1"), nextCursor = "stuck", hasMore = true))
     api.productPages.addLast(envelope(listOf("p2"), nextCursor = "stuck", hasMore = true))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
     viewModel.loadMore()
     advanceUntilIdle()
@@ -140,7 +152,10 @@ class CatalogViewModelTest {
     val api = api()
     api.productPages.addLast(envelope(listOf("p1"), nextCursor = null, hasMore = false))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
     val requests = api.productRequests.size
 
@@ -157,7 +172,10 @@ class CatalogViewModelTest {
     api.productPages.addLast(envelope(listOf("p1"), resultCount = 1))
     api.productPages.addLast(envelope(listOf("rice"), resultCount = 1))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
     val beforeSearch = api.productRequests.size
 
@@ -183,7 +201,10 @@ class CatalogViewModelTest {
     val api = api()
     repeat(4) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     viewModel.selectCategory("c1")
@@ -205,7 +226,8 @@ class CatalogViewModelTest {
     val cleared = api.productRequests.last()
     assertThat(cleared).isEqualTo(
       FakeCatalogApi.ProductRequest(
-        search = null, categoryId = null, brandId = null, sort = null, inStock = null, cursor = null,
+        search = null, categoryId = null, brandId = null, sort = null, inStock = null,
+        favoritesOnly = null, cursor = null,
       ),
     )
     assertThat(viewModel.state.value.query).isEqualTo(CatalogQuery.DEFAULT)
@@ -216,7 +238,10 @@ class CatalogViewModelTest {
     val api = api()
     repeat(3) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
     viewModel.selectCategory("c1")
     advanceUntilIdle()
@@ -233,7 +258,10 @@ class CatalogViewModelTest {
     val api = api()
     api.productPages.addLast(envelope(listOf("p1", "p2"), nextCursor = "c2", hasMore = true))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     api.nextProductFailure = IOException("timeout")
@@ -252,7 +280,10 @@ class CatalogViewModelTest {
     val api = api()
     api.productPages.addLast(envelope(emptyList(), resultCount = 0))
 
-    val viewModel = CatalogViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = CatalogViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     val state = viewModel.state.value

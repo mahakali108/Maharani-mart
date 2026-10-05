@@ -50,6 +50,7 @@ object MaharaniRoutes {
   /** The concrete route for one product, for `NavController.navigate`. */
   fun productDetail(productId: String): String = "catalog/product/$productId"
 
+  const val FAVORITES = "favorites"
   const val CART = "cart"
   const val ORDERS = "orders"
   const val COINS = "coins"
@@ -94,6 +95,15 @@ object MaharaniCatalog {
       // existing taxonomy endpoints, so no planned-phase label.
       phase = null,
       summary = "The shop's real category and brand directory, with live product counts.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.FAVORITES,
+      label = "Favourites",
+      workspace = Workspace.RETAILER,
+      // Shipped: a real list over `GET /catalog/products?fav=1`, with the
+      // server-owned favourite set behind it. No planned-phase label.
+      phase = null,
+      summary = "The products you saved, priced and stocked exactly as the catalogue shows them.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.CART,

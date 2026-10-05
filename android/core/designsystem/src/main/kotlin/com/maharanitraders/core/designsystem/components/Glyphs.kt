@@ -326,3 +326,33 @@ fun SortGlyph(
     drawPath(polygon(13.4f, 8.4f, 18.6f, 8.4f, 16f, 3.6f), tint)
   }
 }
+
+/**
+ * Heart: the favourite (wishlist) affordance.
+ *
+ * [filled] draws the solid state the server confirmed, the outline state is the
+ * un-favourited one. Both are the same path, so the two states cannot drift in
+ * size or optical weight as a shopper taps between them.
+ */
+@Composable
+fun HeartGlyph(
+  filled: Boolean,
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph(if (filled) "Saved to favourites" else "Not in favourites", modifier) {
+    val path = Path().apply {
+      moveTo(px(12f), px(20.4f))
+      cubicTo(px(3.4f), px(14.7f), px(2.4f), px(9.5f), px(5.1f), px(6.6f))
+      cubicTo(px(7.4f), px(4.1f), px(10.7f), px(4.8f), px(12f), px(7.5f))
+      cubicTo(px(13.3f), px(4.8f), px(16.6f), px(4.1f), px(18.9f), px(6.6f))
+      cubicTo(px(21.6f), px(9.5f), px(20.6f), px(14.7f), px(12f), px(20.4f))
+      close()
+    }
+    if (filled) {
+      drawPath(path, tint)
+    } else {
+      drawPath(path, tint, style = Stroke(px(1.9f), join = StrokeJoin.Round))
+    }
+  }
+}
