@@ -202,6 +202,9 @@ class MaharaniRouterTest {
       MaharaniRoutes.CATEGORIES,
       MaharaniRoutes.CART,
       MaharaniRoutes.ORDERS,
+      MaharaniRoutes.COINS,
+      MaharaniRoutes.NOTIFICATIONS,
+      MaharaniRoutes.COUPONS,
       MaharaniRoutes.ACCOUNT,
     )
 
@@ -226,6 +229,9 @@ class MaharaniRouterTest {
       MaharaniRoutes.CATEGORIES,
       MaharaniRoutes.CART,
       MaharaniRoutes.ORDERS,
+      MaharaniRoutes.COINS,
+      MaharaniRoutes.NOTIFICATIONS,
+      MaharaniRoutes.COUPONS,
       MaharaniRoutes.ACCOUNT,
     )
 
