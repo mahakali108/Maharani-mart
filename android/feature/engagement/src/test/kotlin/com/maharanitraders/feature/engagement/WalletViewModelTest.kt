@@ -110,7 +110,9 @@ class WalletViewModelTest {
     viewModel.state.test {
       val state = awaitItem()
       assertThat(state.entries).hasSize(2)
-      assertThat(state.hasMore).isFalse()
+      // `WalletUiState` namespaces the ledger paging flags, because the screen
+      // also pages a summary: the field is `ledgerHasMore`, not `hasMore`.
+      assertThat(state.ledgerHasMore).isFalse()
     }
   }
 }

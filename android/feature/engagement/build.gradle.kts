@@ -52,4 +52,10 @@ dependencies {
 
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+  // The view-model tests collect StateFlow with Turbine and assert with Truth.
+  // Both were used by the test sources from the start but never declared, so
+  // `:feature:engagement:compileDebugUnitTestKotlin` failed with
+  // "Unresolved reference 'app'" (app.cash.turbine) and main went red.
+  testImplementation(libs.turbine)
+  testImplementation(libs.truth)
 }
