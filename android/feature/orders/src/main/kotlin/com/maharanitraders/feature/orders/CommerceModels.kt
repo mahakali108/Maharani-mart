@@ -125,6 +125,154 @@ data class OrderItem(
   val unitPricePaise: Long,
   val gstPercent: Double,
   val lineTotalPaise: Long,
+) {
+  /**
+   * The piece count a reorder should add.
+   *
+   * The order row snapshots the pieces it covered, so a mixed case+loose line
+   * is reordered as its TOTAL PIECES and today's pricing engine decides the
+   * case/loose split again — exactly what the web reorder page does. Only a
+   * pre-split historical row (null pieces) falls back to its stored quantity.
+   */
+  val reorderPieces: Int get() = quantityPieces ?: quantity
+
+  /** True when this line can be replayed into the cart at all. */
+  val isReorderable: Boolean get() = packId != null && reorderPieces > 0
+}
+
+/** One status-history row from the order, oldest first. */
+data class OrderStatusEntry(
+  val id: String,
+  val status: String,
+  val note: String?,
+  val createdAt: String,
+)
+
+/** One billed unit price on an invoice line. */
+data class InvoiceUnitPrice(val unitPricePaise: Long, val unit: String)
+
+/** One folded invoice line; every figure came from the server. */
+data class InvoiceLine(
+  val key: String,
+  val displayName: String,
+  val packName: String,
+  val hsn: String?,
+  val quantityLabel: String,
+  val unitPrices: List<InvoiceUnitPrice>,
+  val gstPercent: Double,
+  val lineTotalPaise: Long,
+  val taxPaise: Long,
+  val cgstPaise: Long,
+  val sgstPaise: Long,
+  val igstPaise: Long,
+)
+
+/** Who issued the invoice. */
+data class InvoiceParty(
+  val name: String? = null,
+  val gstin: String? = null,
+  val address: String? = null,
+  val phone: String? = null,
+)
+
+/** The billed retailer. */
+data class InvoiceBilledTo(
+  val shopName: String? = null,
+  val address: String? = null,
+  val areaName: String? = null,
+  val gstin: String? = null,
+)
+
+/** Invoice totals in paise, as decided by the server. */
+data class InvoiceTotals(
+  val subtotalPaise: Long,
+  val gstTotalPaise: Long,
+  val cgstPaise: Long,
+  val sgstPaise: Long,
+  val igstPaise: Long,
+  val discountPaise: Long,
+  val grandTotalPaise: Long,
+)
+
+/** One order's invoice. `taxMode` is 'intra', 'inter' or 'unsplit'. */
+data class OrderInvoice(
+  val orderId: String,
+  val orderNumber: String,
+  val status: String,
+  val placedAt: String,
+  val biller: InvoiceParty,
+  val billedTo: InvoiceBilledTo,
+  val taxMode: String,
+  val lines: List<InvoiceLine>,
+  val totals: InvoiceTotals,
+) {
+  /** True only when the server split the tax into CGST + SGST. */
+  val isIntraState: Boolean get() = taxMode == "intra"
+
+  /** True only when the server split the tax as IGST. */
+  val isInterState: Boolean get() = taxMode == "inter"
+}
+
+/** Proof-of-delivery files. */
+data class DeliveryProof(
+  val signatureCaptured: Boolean,
+  val photoCaptured: Boolean,
+  val signatureUrl: String?,
+  val photoUrl: String?,
+)
+
+/** One delivery line. */
+data class DeliveryItem(
+  val id: String,
+  val productName: String?,
+  val packName: String?,
+  val quantityOrdered: Int,
+  val quantityDelivered: Int,
+  val quantityMissing: Int,
+  val quantityDamaged: Int,
+  val lineTotalPaise: Long,
+)
+
+/** The delivery record for one order, as the server reports it. */
+data class OrderDelivery(
+  val orderId: String,
+  val orderNumber: String,
+  val orderStatus: String,
+  val grandTotalPaise: Long,
+  val placedAt: String,
+  val shippingAddressLine: String?,
+  val status: String,
+  val assignedName: String?,
+  val dispatchedAt: String?,
+  val inProgressAt: String?,
+  val deliveredAt: String?,
+  val receiverName: String?,
+  val otpVerified: Boolean,
+  val deliveryNotes: String?,
+  val failureReason: String?,
+  val returnWindowDays: Int?,
+  val returnDeadline: String?,
+  /** The server's inclusive-deadline decision; null before a delivery exists. */
+  val returnWindowOpen: Boolean?,
+  val proof: DeliveryProof,
+  val items: List<DeliveryItem>,
+) {
+  /** True when any line was short or damaged — the refund case. */
+  val hasShortfall: Boolean
+    get() = items.any { it.quantityMissing > 0 || it.quantityDamaged > 0 }
+}
+
+/**
+ * What a reorder actually achieved.
+ *
+ * [addedCount] counts the lines the server accepted; a failure stops the
+ * replay and is reported with the error instead, because the lines already
+ * added remain in the server cart and the app must not claim otherwise.
+ */
+data class ReorderOutcome(
+  val requestedCount: Int,
+  val addedCount: Int,
+  val cart: CartSnapshot?,
 )
 
 data class RetailerOrder(
@@ -142,7 +290,17 @@ data class RetailerOrder(
   val items: List<OrderItem>,
   val coinsUsedPaise: Long?,
   val balanceAfterCoinsPaise: Long?,
-)
+  /** Detail-only; empty on list rows because the list does not carry it. */
+  val statusHistory: List<OrderStatusEntry> = emptyList(),
+  /** Coins this order spent, read from the ledger. Null when unavailable. */
+  val coinsSpentPaise: Long? = null,
+  val coinsRefundedPaise: Long? = null,
+  val coinsRefunded: Boolean = false,
+) {
+  /** The lines a reorder can replay; lines with no pack are skipped, not guessed. */
+  val reorderableItems: List<OrderItem> get() = items.filter { it.isReorderable }
+}
+
 
 data class OrderHistoryPage(
   val orders: List<RetailerOrder>,

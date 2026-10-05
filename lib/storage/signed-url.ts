@@ -15,12 +15,20 @@ import { createClient } from '@/lib/supabase/server';
  */
 export type PrivateBucket = 'retailer-documents' | 'delivery-proofs' | 'payment-proofs';
 
+/**
+ * `client` lets a caller that is NOT cookie-authenticated (the mobile API,
+ * which authenticates with a bearer token) sign with its own RLS-scoped
+ * client. Signing with the default cookie client from a bearer-token request
+ * would use an ANONYMOUS session, and RLS would (correctly) refuse the URL —
+ * the retailer would see "no proof" for proof they are entitled to.
+ */
 export async function getSignedUrl(
   bucket: PrivateBucket,
   path: string,
-  expiresInSeconds = 3600
+  expiresInSeconds = 3600,
+  client?: ReturnType<typeof createClient>
 ): Promise<string | null> {
-  const supabase = createClient();
+  const supabase = client ?? createClient();
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresInSeconds);
   if (error || !data) return null;
   return data.signedUrl;

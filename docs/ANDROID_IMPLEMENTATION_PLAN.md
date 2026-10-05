@@ -4,6 +4,11 @@
 **Audit date:** 2026-10-02
 **Audited revision:** `arena/01a0fb9b-maharani-mart` @ `77d4b99dd447300b4dc0154bf9b0f39a70304260`
 
+**Status note (2026-10-05):** this is a dated Phase A audit. The gap table in §3 describes the
+revision above, not the current tree; the living record of what the native app implements today
+is `docs/NATIVE_PWA_FEATURE_PARITY.md`, and the endpoint contract is
+`docs/NATIVE_ANDROID_API_CONTRACT.md`.
+
 Every claim below is either (a) a file/command result reproduced in §1, or (b) explicitly
 marked **NOT VERIFIED** with the reason it could not be checked in this environment.
 Nothing in this document was inferred from a previous session's notes without re-checking it.

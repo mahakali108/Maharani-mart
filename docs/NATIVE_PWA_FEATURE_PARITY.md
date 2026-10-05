@@ -28,8 +28,8 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 |---|---|---|---|---|---|---|
 | AUTH-01 | Login | `app/login/page.tsx` | `POST /api/mobile/v1/auth/login` | `LoginScreen` + `LoginViewModel` | IMPLEMENTED | Email + password; token pair stored via the Keystore-backed session store. |
 | AUTH-02 | Retailer registration | `app/register-retailer/page.tsx` | `POST /api/mobile/v1/retailers/register` | `RegisterScreen` + `RegisterViewModel` | IMPLEMENTED | Full form; areas come from `GET /areas`, never a hardcoded list. |
-| AUTH-03 | Forgot password | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | `AuthFlowScreen` | IMPLEMENTED | Triggers the Supabase reset mail. |
-| AUTH-04 | Reset password | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | `AuthFlowScreen` | IMPLEMENTED | Token-based update. |
+| AUTH-03 | Forgot password | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | — | MISSING | The mobile endpoint exists, and `AuthRepository.requestPasswordReset` wraps it, but no native screen calls it: the sign-in screen has no "Forgot password" affordance, so a retailer who forgets the password currently has to use the website. |
+| AUTH-04 | Reset password | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | — | MISSING | The bearer-authenticated mobile endpoint exists, and `AuthRepository.updatePassword` wraps it, but nothing calls it: the app registers no reset deep link (the manifest has only the launcher intent filter), so the reset link completes on the web. |
 | AUTH-05 | Logout | `lib/auth/actions.ts` | `POST /api/mobile/v1/auth/logout` | `AuthenticatedShell` | IMPLEMENTED | Clears the stored session as well as the server session. |
 | AUTH-06 | Silent token refresh | `middleware.ts` | `POST /api/mobile/v1/auth/refresh` | `SessionManager`, `AuthInterceptor` | IMPLEMENTED | Single-flight refresh on 401; the failed call is replayed once. |
 | AUTH-07 | Session / role bootstrap | `middleware.ts` | `GET /api/mobile/v1/session` | `SessionBootstrapper`, `MaharaniRouter` | IMPLEMENTED | Role and workspace decide the destination set; the client never grants itself a workspace. |
@@ -46,8 +46,8 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | HOME-03 | Search | `app/retailer/catalog` search field | `GET /catalog/products?search=` | `CatalogScreen` filter bar | IMPLEMENTED | Debounced; the query is sent to the server, never filtered client-side. |
 | HOME-04 | Category directory | `app/retailer/categories/page.tsx` | `GET /catalog/categories` | `CategoriesScreen` + `CategoriesViewModel` | IMPLEMENTED | Tapping a category opens the catalogue filtered by it. |
 | HOME-05 | Category landing page | `app/retailer/categories/[id]/page.tsx` | `GET /catalog/products?categoryId=` | `CatalogScreen` (filtered) | IMPLEMENTED | Same list, pre-filtered, rather than a second screen that could price differently. |
-| HOME-06 | Brand directory | `app/retailer/brands/page.tsx` | `GET /catalog/brands` | — | MISSING | The endpoint and the DTO exist and `CatalogQuery.brandId` is wired; only the brand-picker screen is absent. The catalogue can already be filtered by brand programmatically. |
-| HOME-07 | Brand landing page | `app/retailer/brands/[id]/page.tsx` | `GET /catalog/products?brandId=` | `CatalogScreen` (filtered) | PARTIAL | Reachable only once something sets `brandId`; with HOME-06 missing there is no in-app way to pick a brand. |
+| HOME-06 | Brand directory | `app/retailer/brands/page.tsx` | `GET /catalog/brands` | `CategoriesScreen` brand rail + `CategoriesViewModel` | IMPLEMENTED | The brands endpoint is read alongside categories and rendered as a horizontal brand rail on the Categories tab, narrowed by the same filter field; a failed or empty brand read cannot blank the category directory. Tapping a brand opens the catalogue filtered by it. |
+| HOME-07 | Brand landing page | `app/retailer/brands/[id]/page.tsx` | `GET /catalog/products?brandId=` | `CatalogScreen` (filtered) | IMPLEMENTED | Tapping a brand tile opens the catalogue pre-filtered by `brandId`, with the brand name as the filter label — the same single-screen choice HOME-05 makes for categories. |
 
 ## 3. Catalogue and product detail
 
@@ -101,10 +101,10 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
 |---|---|---|---|---|---|---|
 | ORD-01 | Order history | `app/retailer/orders/page.tsx` | `GET /orders` | `OrderHistoryScreen` + `OrderHistoryViewModel` | IMPLEMENTED | Cursor-paged, server statuses and values. |
-| ORD-02 | Order detail | `app/retailer/orders/[id]/page.tsx` | `GET /orders/{id}` | `OrderHistoryScreen` expandable row | PARTIAL | Items, address and notes are shown, but from the LIST payload. `GET /orders/{id}` and `MaharaniApi.orderDetail` both exist and nothing calls them; there is no addressable order-detail screen or route. |
-| ORD-03 | Invoice | `app/retailer/orders/[id]/invoice/page.tsx` | — | — | BLOCKED | There is no mobile invoice endpoint. The tax split lives in TypeScript (`lib/retailer/invoice-tax.ts`, `invoice-display.ts`); re-deriving GST in Kotlin would create a second implementation of tax arithmetic, which is exactly the kind of duplication that eventually disagrees. The right fix is `GET /api/mobile/v1/orders/{id}/invoice` returning the already-computed lines. |
-| ORD-04 | Reorder | `app/retailer/orders/[id]/reorder/page.tsx` | `POST /cart/lines` | — | MISSING | Buildable on existing endpoints by replaying each line into the cart; not implemented in this change set. |
-| ORD-05 | Delivery tracking | `app/retailer/orders/[id]/delivery/page.tsx` | — | — | BLOCKED | No mobile endpoint exposes delivery events. Would need a route over the same data the web page reads. |
+| ORD-02 | Order detail | `app/retailer/orders/[id]/page.tsx` | `GET /orders/{id}` | `OrderDetailScreen` + `OrderDetailViewModel` (route `orders/{orderId}`) | IMPLEMENTED | Every history row opens a real detail destination that calls the detail endpoint, so the screen shows the server's record rather than the list payload. The detail response now also carries the order's status history (the same rows the web timeline reads) and this order's Coins movement when the ledger read succeeds; the app computes neither. |
+| ORD-03 | Invoice | `app/retailer/orders/[id]/invoice/page.tsx` | `GET /api/mobile/v1/orders/{id}/invoice` | `OrderInvoiceScreen` + `InvoiceViewModel` | IMPLEMENTED | The endpoint folds the stored order rows with the web invoice's own helpers (`toInvoiceDisplayLines`, `classifyTaxSplit`, `computeInvoiceTaxLines`) and answers in paise, so no GST arithmetic exists in Kotlin. The screen prints the server's `taxMode` columns — CGST + SGST, IGST, or the stored unsplit total — verbatim; the printed grand total is the stored one. Ownership is checked before any child row is read, and a malformed or foreign id is a 404. |
+| ORD-04 | Reorder | `app/retailer/orders/[id]/reorder/page.tsx` | `POST /cart/lines` | `OrderDetailScreen` reorder action + `OrderDetailViewModel.reorder()` | IMPLEMENTED | Replays each line's stored piece count (never its row count) into the real cart, one `POST /cart/lines` per line, so the cart RPC revalidates MOQ, quantity bounds and pack activity and re-prices every line. A line whose pack no longer exists is skipped and said so; a mid-way failure keeps the lines the server already accepted, re-reads the server badge count and reports the error rather than claiming nothing happened. |
+| ORD-05 | Delivery tracking | `app/retailer/orders/[id]/delivery/page.tsx` | `GET /api/mobile/v1/orders/{id}/delivery` | `OrderDeliveryScreen` + `DeliveryViewModel` | IMPLEMENTED | The endpoint reads the same dossier as the web page (`fetchDeliveryDetail`), resolves proof object paths to short-lived signed URLs using the caller's own RLS client, and returns the server's inclusive `returnWindowOpen` decision — the app never compares dates. The screen is read-only because RLS grants retailers read-only access to delivery rows. |
 
 ## 8. Coins
 
@@ -172,10 +172,10 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 
 | Status | Count |
 |---|---|
-| IMPLEMENTED | 61 |
-| PARTIAL | 4 |
+| IMPLEMENTED | 65 |
+| PARTIAL | 2 |
 | MISSING | 4 |
-| BLOCKED | 7 |
+| BLOCKED | 5 |
 | N/A | 1 |
 | **Total rows** | **77** |
 
@@ -188,15 +188,14 @@ claimed totals that its own table contradicted.
 Each of these needs backend work that does not exist today. None of them is hidden
 behind a placeholder screen in the app.
 
-1. **ORD-03 — invoice.** Needs `GET /api/mobile/v1/orders/{id}/invoice` returning the
-   lines already computed by `lib/retailer/invoice-tax.ts`. Re-deriving the GST split
-   in Kotlin would duplicate tax arithmetic in a second language.
-2. **ORD-05 — delivery tracking.** Needs a mobile route over the delivery events the
-   web page reads.
-3. **NOTIF-05 — notification preferences.** Needs read/write routes.
-4. **PROMO-04 — schemes.** Needs a mobile route for scheme data.
-5. **ACC-03 — profile editing.** Needs a mobile profile-update route.
-6. **MISC-01 / MISC-03 — support and reports.** Need mobile routes.
+1. **NOTIF-05 — notification preferences.** Needs read/write routes; the web page
+   uses a server action, so there is no `/api/mobile/v1` surface yet.
+2. **PROMO-04 — schemes.** Needs a mobile route over the scheme data the web page reads.
+3. **ACC-03 — profile editing.** Needs a mobile profile-update route. The web edit page
+   writes through a server action guarded by `update_my_shop_profile`; no mobile
+   endpoint exists, and the app does not write profile rows directly.
+4. **MISC-01 / MISC-03 — support and reports.** Need mobile routes for support threads
+   and report figures.
 
 ## Method
 
@@ -209,10 +208,15 @@ behind a placeholder screen in the app.
   on the response. Reachability was checked against `DestinationSurface`, so a screen
   that exists but cannot be opened does not count.
 - Route behaviour for the rows changed on 2026-10-05 (CAT-08, CART-08, CHK-07, NOTIF-03,
-  NOTIF-04, ACC-02) was verified by running the endpoint tests under `tests/` (session,
-  role, ownership, validation, error and response-shape assertions), not by reading the
-  route alone. The Android side was verified by reading the screen, its state model and
-  the shell's render table. **Android compilation and unit tests could not be executed
-  in the verifying environment** (no JDK or Android SDK available), so no Kotlin build
-  result is claimed here; that gap is why the stale destination allow-list in
-  `MaharaniRouterTest` was found by reading rather than by a failing run.
+  NOTIF-04, ACC-02, ORD-02, ORD-03, ORD-04, ORD-05) was verified by running the endpoint
+  tests under `tests/` (session, role, ownership, validation, error and response-shape
+  assertions), not by reading the route alone: `tests/mobile-order-invoice.test.ts` and
+  `tests/mobile-order-delivery.test.ts` cover the two endpoints this change set adds,
+  including the "foreign order is a 404 with no child read" case. The Android side was
+  verified by reading the screen, its state model and the shell's render table, and by
+  the repository's static Android gates (`tests/android-project-integrity.test.ts`,
+  which resolves the new symbols, DTO `@Serializable` annotations and fake-interface
+  completeness). **Android compilation and unit tests cannot be executed in the
+  verifying environment** (no JDK or Android SDK available); they run in the
+  `android-apk.yml` GitHub Actions job, and no Kotlin build result is claimed here
+  unless that job is green.

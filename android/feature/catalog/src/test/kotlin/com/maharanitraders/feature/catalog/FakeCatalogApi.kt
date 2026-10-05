@@ -33,6 +33,8 @@ import com.maharanitraders.core.network.dto.CouponResultDto
 import com.maharanitraders.core.network.dto.CouponRemovedDto
 import com.maharanitraders.core.network.dto.MobileAddressesDto
 import com.maharanitraders.core.network.dto.MobileCartDto
+import com.maharanitraders.core.network.dto.MobileDeliveryDto
+import com.maharanitraders.core.network.dto.MobileInvoiceDto
 import com.maharanitraders.core.network.dto.MobileOrderDto
 import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
 import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
@@ -192,6 +194,8 @@ class FakeCatalogApi : MaharaniApi {
   override suspend fun orderHistory(cursor: String?): ApiEnvelope<List<MobileOrderDto>> = unsupported("orderHistory")
   override suspend fun orderDetail(orderId: String): ApiEnvelope<MobileOrderDto> = unsupported("orderDetail")
   override suspend fun recoverOrderRequest(requestKey: String): ApiEnvelope<MobileOrderDto> = unsupported("recoverOrderRequest")
+  override suspend fun orderInvoice(orderId: String): ApiEnvelope<MobileInvoiceDto> = unsupported("orderInvoice")
+  override suspend fun orderDelivery(orderId: String): ApiEnvelope<MobileDeliveryDto> = unsupported("orderDelivery")
 
   override suspend fun notifications(cursor: String?, unreadOnly: String?): ApiEnvelope<List<com.maharanitraders.core.network.dto.MobileNotificationDto>> = unsupported("notifications")
   override suspend fun markNotificationsRead(body: com.maharanitraders.core.network.dto.MarkReadRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MarkReadResponseDto> = unsupported("markNotificationsRead")

@@ -95,8 +95,12 @@ import com.maharanitraders.feature.engagement.ui.CouponsScreen
 import com.maharanitraders.feature.engagement.ui.NotificationsScreen
 import com.maharanitraders.feature.engagement.ui.WalletScreen
 import com.maharanitraders.feature.orders.CartCheckoutViewModel
+import com.maharanitraders.feature.orders.OrderDetailViewModel
 import com.maharanitraders.feature.orders.ui.CartScreen
+import com.maharanitraders.feature.orders.ui.OrderDeliveryScreen
+import com.maharanitraders.feature.orders.ui.OrderDetailScreen
 import com.maharanitraders.feature.orders.ui.OrderHistoryScreen
+import com.maharanitraders.feature.orders.ui.OrderInvoiceScreen
 import kotlinx.coroutines.launch
 
 /** Test tags for the shell, used by Compose UI tests added in later phases. */
@@ -263,8 +267,19 @@ private fun RoutedShell(
             onOpenAccount = { showAccount.value = true },
           )
 
-          currentRoute == MaharaniRoutes.PRODUCT_DETAIL -> TopAppBar(
-            title = { Text("Product details") },
+          currentRoute == MaharaniRoutes.PRODUCT_DETAIL ||
+            currentRoute == MaharaniRoutes.ORDER_DETAIL ||
+            currentRoute == MaharaniRoutes.ORDER_INVOICE ||
+            currentRoute == MaharaniRoutes.ORDER_DELIVERY -> TopAppBar(
+            title = {
+              Text(
+                when (currentRoute) {
+                  MaharaniRoutes.ORDER_INVOICE -> "Invoice"
+                  MaharaniRoutes.ORDER_DELIVERY -> "Delivery record"
+                  else -> "Order details"
+                }
+              )
+            },
             navigationIcon = {
               IconButton(onClick = { navController.popBackStack() }) {
                 BackGlyph(modifier = Modifier.size(22.dp))
@@ -407,6 +422,7 @@ private fun RoutedShell(
               },
               onSignOut = handleSignOut,
               onOpenAddresses = { navController.navigate(MaharaniRoutes.ADDRESS_BOOK) { launchSingleTop = true } },
+              onOpenOrder = { orderId -> navController.navigate(MaharaniRoutes.orderDetail(orderId)) },
             )
           }
         }
@@ -416,6 +432,47 @@ private fun RoutedShell(
         // checkout opens.
         composable(MaharaniRoutes.ADDRESS_BOOK) {
           AddressBookScreen()
+        }
+
+        // Order sub-screens. The history list opens the detail record; the
+        // detail record opens its server-computed invoice and its delivery
+        // note. Each reads its own order id from the navigation argument, so a
+        // stale screen can never show another order's figures.
+        composable(
+          route = MaharaniRoutes.ORDER_DETAIL,
+          arguments = listOf(
+            navArgument(OrderDetailViewModel.ARG_ORDER_ID) { type = NavType.StringType },
+          ),
+        ) {
+          OrderDetailScreen(
+            onBack = { navController.popBackStack() },
+            onOpenInvoice = { orderId -> navController.navigate(MaharaniRoutes.orderInvoice(orderId)) },
+            onOpenDelivery = { orderId -> navController.navigate(MaharaniRoutes.orderDelivery(orderId)) },
+            onOpenCart = {
+              navController.navigate(MaharaniRoutes.CART) {
+                launchSingleTop = true
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+              }
+            },
+          )
+        }
+
+        composable(
+          route = MaharaniRoutes.ORDER_INVOICE,
+          arguments = listOf(
+            navArgument(OrderDetailViewModel.ARG_ORDER_ID) { type = NavType.StringType },
+          ),
+        ) {
+          OrderInvoiceScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+          route = MaharaniRoutes.ORDER_DELIVERY,
+          arguments = listOf(
+            navArgument(OrderDetailViewModel.ARG_ORDER_ID) { type = NavType.StringType },
+          ),
+        ) {
+          OrderDeliveryScreen(onBack = { navController.popBackStack() })
         }
 
         // Product detail sits outside the drawer catalog: it is reachable from
@@ -663,6 +720,7 @@ private fun DestinationSurface(
   onViewOrders: () -> Unit,
   onSignOut: () -> Unit,
   onOpenAddresses: () -> Unit,
+  onOpenOrder: (String) -> Unit,
 ) {
   when (destination.route) {
     MaharaniRoutes.HOME -> if (retailerHome) {
@@ -704,7 +762,7 @@ private fun DestinationSurface(
       onViewOrders = onViewOrders,
     )
 
-    MaharaniRoutes.ORDERS -> OrderHistoryScreen()
+    MaharaniRoutes.ORDERS -> OrderHistoryScreen(onOpenOrder = onOpenOrder)
 
     MaharaniRoutes.COINS -> WalletScreen()
 

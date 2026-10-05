@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -20,9 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -36,7 +31,6 @@ import com.maharanitraders.core.designsystem.components.LoadingState
 import com.maharanitraders.core.designsystem.components.OfflineState
 import com.maharanitraders.feature.orders.OrderHistoryUiState
 import com.maharanitraders.feature.orders.OrderHistoryViewModel
-import com.maharanitraders.feature.orders.OrderItem
 import com.maharanitraders.feature.orders.RetailerOrder
 
 object OrderHistoryTags {
@@ -47,11 +41,18 @@ object OrderHistoryTags {
 
 @Composable
 fun OrderHistoryScreen(
+  onOpenOrder: (String) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: OrderHistoryViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  OrderHistoryContent(state = state, onRefresh = viewModel::refresh, onLoadMore = viewModel::loadMore, modifier)
+  OrderHistoryContent(
+    state = state,
+    onRefresh = viewModel::refresh,
+    onLoadMore = viewModel::loadMore,
+    onOpenOrder = onOpenOrder,
+    modifier = modifier,
+  )
 }
 
 @Composable
@@ -59,6 +60,7 @@ fun OrderHistoryContent(
   state: OrderHistoryUiState,
   onRefresh: () -> Unit,
   onLoadMore: () -> Unit,
+  onOpenOrder: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   if (state.loading && state.orders.isEmpty()) {
@@ -105,7 +107,7 @@ fun OrderHistoryContent(
       }
     }
     items(state.orders, key = { it.id }) { order ->
-      OrderCard(order)
+      OrderCard(order = order, onOpen = { onOpenOrder(order.id) })
     }
     if (state.hasMore) {
       item {
@@ -123,10 +125,12 @@ fun OrderHistoryContent(
 }
 
 @Composable
-private fun OrderCard(order: RetailerOrder) {
-  var expanded by remember(order.id) { mutableStateOf(false) }
+private fun OrderCard(order: RetailerOrder, onOpen: () -> Unit) {
   Surface(
-    modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.testTag("${OrderHistoryTags.ITEM}_${order.id}"),
+    modifier = Modifier
+      .fillMaxWidth()
+      .clickable(onClick = onOpen)
+      .testTag("${OrderHistoryTags.ITEM}_${order.id}"),
     shape = RoundedCornerShape(18.dp),
     color = MaterialTheme.colorScheme.surfaceContainerLow,
     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -138,56 +142,15 @@ private fun OrderCard(order: RetailerOrder) {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
           Text(order.orderNumber, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-          Text("Server status: ${order.status}", style = MaterialTheme.typography.bodyMedium)
+          Text(orderStatusHeading(order.status), style = MaterialTheme.typography.bodyMedium)
         }
         Text(MoneyFormat.formatPaise(order.grandTotalPaise), style = MaterialTheme.typography.titleMedium)
       }
       Text("Placed (UTC): ${order.placedAt}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      Text("Last updated (UTC): ${order.updatedAt}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      Text("${order.items.size} item(s) · ${if (expanded) "Tap to collapse" else "Tap for item details"}", style = MaterialTheme.typography.labelMedium)
-
-      if (expanded) {
-        HorizontalDivider()
-        HistoryAmountRow("Subtotal", order.subtotalPaise)
-        HistoryAmountRow("GST", order.gstTotalPaise)
-        HistoryAmountRow("Discount", order.discountTotalPaise)
-        HistoryAmountRow("Grand total", order.grandTotalPaise, emphasized = true)
-        order.shippingAddressLine?.let { Text("Delivery address: $it", style = MaterialTheme.typography.bodySmall) }
-        order.notes?.takeIf { it.isNotBlank() }?.let { Text("Notes: $it", style = MaterialTheme.typography.bodySmall) }
-        if (order.items.isEmpty()) {
-          Text("No line-item snapshot was returned for this order.", style = MaterialTheme.typography.bodySmall)
-        } else {
-          order.items.forEach { item -> OrderItemRow(item) }
-        }
-      }
+      Text(
+        "${order.items.size} item(s) · Tap for the full record, invoice and reorder",
+        style = MaterialTheme.typography.labelMedium,
+      )
     }
   }
 }
-
-@Composable
-private fun OrderItemRow(item: OrderItem) {
-  Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-    Text(item.productName ?: "Product", style = MaterialTheme.typography.titleSmall)
-    Text(
-      "${item.packName ?: "Pack"} · ${item.quantity} ${item.quantityUnit}" +
-        (item.quantityPieces?.let { " ($it pieces)" } ?: ""),
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Text(
-      "${MoneyFormat.formatPaise(item.unitPricePaise)} / unit · GST ${formatPercent(item.gstPercent)} · line ${MoneyFormat.formatPaise(item.lineTotalPaise)}",
-      style = MaterialTheme.typography.bodySmall,
-    )
-  }
-}
-
-@Composable
-private fun HistoryAmountRow(label: String, paise: Long, emphasized: Boolean = false) {
-  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-    Text(label, style = if (emphasized) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodySmall)
-    Text(MoneyFormat.formatPaise(paise), style = if (emphasized) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodySmall)
-  }
-}
-
-private fun formatPercent(value: Double): String =
-  if (value % 1.0 == 0.0) "${value.toInt()}%" else "$value%"

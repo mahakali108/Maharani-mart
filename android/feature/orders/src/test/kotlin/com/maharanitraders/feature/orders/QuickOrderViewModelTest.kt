@@ -283,4 +283,12 @@ internal class FakeCartWriter : CommerceRepository {
     throw UnsupportedOperationException()
   override suspend fun orderHistory(cursor: String?): AppResult<OrderHistoryPage> =
     throw UnsupportedOperationException()
+  override suspend fun orderDetail(orderId: String): AppResult<RetailerOrder> =
+    throw UnsupportedOperationException()
+  override suspend fun orderInvoice(orderId: String): AppResult<OrderInvoice> =
+    throw UnsupportedOperationException()
+  override suspend fun orderDelivery(orderId: String): AppResult<OrderDelivery> =
+    throw UnsupportedOperationException()
+  override suspend fun reorderLines(intents: List<CartLineIntent>): AppResult<ReorderOutcome> =
+    throw UnsupportedOperationException()
 }

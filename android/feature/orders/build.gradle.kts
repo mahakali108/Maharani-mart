@@ -50,6 +50,11 @@ dependencies {
   // CommerceRepository inspects the server-owned JSON address snapshot shape.
   implementation(libs.kotlinx.serialization.json)
 
+  // The delivery record renders the proof the delivery captured. The image
+  // loader itself is built once in the application module, so only the
+  // composable integration is declared here.
+  implementation(libs.coil.compose)
+
   implementation(libs.hilt.android)
   ksp(libs.hilt.compiler)
 

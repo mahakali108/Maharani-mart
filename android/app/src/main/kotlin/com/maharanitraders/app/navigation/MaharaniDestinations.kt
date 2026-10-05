@@ -50,6 +50,28 @@ object MaharaniRoutes {
   /** The concrete route for one product, for `NavController.navigate`. */
   fun productDetail(productId: String): String = "catalog/product/$productId"
 
+  /**
+   * One order's full record, invoice and delivery note.
+   *
+   * Sub-screens of the orders tab rather than drawer destinations: they are
+   * reached from the history list (and from each other), never from the shell
+   * menu, and each carries the order id it belongs to.
+   */
+  const val ORDER_DETAIL = "orders/{orderId}"
+
+  /** The concrete detail route for one order, for `NavController.navigate`. */
+  fun orderDetail(orderId: String): String = "orders/$orderId"
+
+  /** The GST invoice of one order, computed server-side. */
+  const val ORDER_INVOICE = "orders/{orderId}/invoice"
+
+  fun orderInvoice(orderId: String): String = "orders/$orderId/invoice"
+
+  /** The delivery record of one order. */
+  const val ORDER_DELIVERY = "orders/{orderId}/delivery"
+
+  fun orderDelivery(orderId: String): String = "orders/$orderId/delivery"
+
   const val FAVORITES = "favorites"
   /**
    * Quick order. A retailer shopping tool reached from the drawer: it searches

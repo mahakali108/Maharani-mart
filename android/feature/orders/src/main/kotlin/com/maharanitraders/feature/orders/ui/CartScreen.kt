@@ -629,6 +629,3 @@ internal fun orderStatusHeading(status: String): String = when (status.trim().lo
   "returned" -> "Order returned"
   else -> "Order status"
 }
-
-private fun formatPercent(value: Double): String =
-  if (value % 1.0 == 0.0) "${value.toInt()}%" else "$value%"

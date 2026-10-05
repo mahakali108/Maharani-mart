@@ -215,8 +215,10 @@ current repository paths:
   one key before submission and recovers the actual committed order after an uncertain
   response; historical rows without a wallet-balance snapshot remain `null`.
 - Keep existing Coins arithmetic and ledger RPCs as the storage/business source; no
-  payment method is introduced. The Android slice does not implement cancellation,
-  returns, reorder, invoices, delivery tracking, or saved carts.
+  payment method is introduced. At the revision this addendum describes, the Android slice
+  did not implement cancellation, returns, reorder, invoices, delivery tracking or saved carts;
+  reorder, invoices and delivery tracking were added later, and
+  `docs/NATIVE_PWA_FEATURE_PARITY.md` is the living record of their state.
 
 The migration and server/API contract have local PGlite-backed regression coverage. That
 single-connection harness cannot prove two independent PostgreSQL sessions contend on the
