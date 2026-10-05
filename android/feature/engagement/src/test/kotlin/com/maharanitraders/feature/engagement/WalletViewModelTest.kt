@@ -92,7 +92,13 @@ class WalletViewModelTest {
     )
 
     fakeRepository.walletSummaryResult = AppResult.Success(
-      WalletSummary(0, 0, 0, false, false, false),
+      WalletSummary(
+        coinsFundedPaise = 0,
+        coinsSpentPaise = 0,
+        hasConfiguredLimit = false,
+        isOverLimit = false,
+        allowOverdue = false,
+      ),
     )
     fakeRepository.walletLedgerResult = AppResult.Success(
       WalletLedgerPage(entries = firstBatch, nextCursor = "cursor1", hasMore = true, total = 2),

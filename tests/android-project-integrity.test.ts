@@ -627,8 +627,8 @@ describe('Android test doubles keep up with the main sources', () => {
   }
 
   /** Required (no-default) constructor parameters of every main-source class. */
-  function requiredConstructorParameters(): Map<string, { params: string[]; file: string }> {
-    const found = new Map<string, { params: string[]; file: string }>();
+  function requiredConstructorParameters(): Map<string, { params: string[]; total: number; file: string }> {
+    const found = new Map<string, { params: string[]; total: number; file: string }>();
     for (const file of mainSources()) {
       const source = readFileSync(file, 'utf8');
       for (const match of source.matchAll(/\bconstructor\s*\(/g)) {
@@ -650,9 +650,13 @@ describe('Android test doubles keep up with the main sources', () => {
             );
           })
           .filter((name): name is string => Boolean(name));
+        const declared = args
+          .map((arg) => stripKotlinComments(arg).trim())
+          .filter((arg) => arg.length > 0).length;
         const existing = found.get(className);
         found.set(className, {
           params: [...new Set([...(existing?.params ?? []), ...required])],
+          total: Math.max(existing?.total ?? 0, declared),
           file: existing?.file ?? relative(ROOT, file),
         });
       }
@@ -798,6 +802,72 @@ describe('Android test doubles keep up with the main sources', () => {
           if (actual.join(',') !== expected.join(',')) {
             offenders.push(
               `${className}.${override[1]} takes (${actual.join(', ')}) but ${interfaceName} declares (${expected.join(', ')}) in ${relative(ROOT, file)}`,
+            );
+          }
+        }
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  /**
+   * Primary-constructor arity for every class in main sources.
+   *
+   * `requiredConstructorParameters` only sees classes written with an explicit
+   * `constructor(` — which is the injected ones. A plain `data class Foo(a, b)`
+   * is invisible to it, and those are exactly what tests build positionally.
+   */
+  function constructorArity(): Map<string, { total: number; file: string }> {
+    const found = new Map<string, { total: number; file: string }>();
+    for (const file of mainSources()) {
+      const source = blankBlockComments(readFileSync(file, 'utf8'));
+      const declarations = [
+        ...source.matchAll(/\b(?:data\s+|value\s+)?class\s+(\w+)\s*(?:<[^<>]*>)?\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:private\s+|internal\s+)?(?:constructor\s*)?\(/g),
+      ];
+      for (const match of declarations) {
+        const open = source.indexOf('(', match.index! + match[0].length - 1);
+        const args = splitArguments(source, open);
+        if (!args) continue;
+        const total = args.map((a) => a.trim()).filter((a) => a.length > 0).length;
+        const existing = found.get(match[1]!);
+        found.set(match[1]!, {
+          total: Math.max(existing?.total ?? 0, total),
+          file: existing?.file ?? relative(ROOT, file),
+        });
+      }
+    }
+    return found;
+  }
+
+  it('passes a plausible number of positional arguments at every test call site', () => {
+    // WHY: the rule below reads NAMED arguments, so a fully positional call is
+    // invisible to it. `WalletSummary(0, 0, 0, false, false, false)` survived a
+    // field being removed from that class and failed in CI as "actual type is
+    // 'Int', but 'Boolean' was expected" — decidable from the sources.
+    const constructors = constructorArity();
+    expect(constructors.size).toBeGreaterThan(20);
+    const offenders: string[] = [];
+
+    for (const file of testSources()) {
+      const source = blankBlockComments(readFileSync(file, 'utf8'));
+      for (const [className, declaration] of constructors) {
+        const pattern = new RegExp(`(?<![\\w.])${className}\\s*\\(`, 'g');
+        for (const call of source.matchAll(pattern)) {
+          // Skip the declaration itself and any `: ClassName(` supertype call.
+          const before = source.slice(Math.max(0, call.index! - 24), call.index!);
+          if (/\b(class|interface|object|fun)\s+$/.test(before)) continue;
+
+          const args = splitArguments(source, source.indexOf('(', call.index!));
+          if (!args) continue;
+          const parts = args.map((a) => a.trim()).filter((a) => a.length > 0);
+          // Named arguments are the other rule's business.
+          if (parts.length === 0 || parts.some((a) => /^\w+\s*=/.test(a))) continue;
+          // A spread or a trailing lambda makes the count unknowable here.
+          if (parts.some((a) => a.startsWith('*'))) continue;
+
+          if (parts.length > declaration.total) {
+            offenders.push(
+              `${className}(…) is called with ${parts.length} positional arguments but declares ${declaration.total} (class in ${declaration.file}; call in ${relative(ROOT, file)})`,
             );
           }
         }
