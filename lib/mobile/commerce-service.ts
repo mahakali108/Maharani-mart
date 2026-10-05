@@ -391,6 +391,47 @@ export async function quoteMobileCheckout(
   };
 }
 
+/**
+ * The shell's live counters.
+ *
+ * The web retailer layout (`app/retailer/layout.tsx`) paints the cart badge and
+ * the unread-notification badge from exactly two head-counts, and this is the
+ * same pair through the same caller-scoped client: no number is ever derived on
+ * the device, and no row content crosses the boundary — only the counts.
+ *
+ * Both reads are owner-filtered twice over: the explicit `.eq()` and the table's
+ * own RLS (`cart_items.cart_owner`, `notifications.notifications_owner`), so a
+ * caller can only ever count their own rows.
+ */
+export interface MobileShellCounts {
+  /** Saved cart LINES (not piece quantity), as the web badge counts them. */
+  cartCount: number;
+  unreadNotificationCount: number;
+}
+
+export async function loadMobileShellCounts(session: MobileSession): Promise<MobileShellCounts> {
+  const supabase = callerClient(session);
+  const [
+    { count: cartCount, error: cartError },
+    { count: unreadCount, error: notificationError },
+  ] = await Promise.all([
+    supabase
+      .from('cart_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('retailer_id', session.userId),
+    supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_id', session.userId)
+      .eq('is_read', false),
+  ]);
+
+  if (cartError || notificationError) {
+    throw databaseError('The shop counters could not be loaded. Please try again.');
+  }
+  return { cartCount: cartCount ?? 0, unreadNotificationCount: unreadCount ?? 0 };
+}
+
 /** A minimal equality check reused by route handlers and unit tests. */
 export function isValidCartRequest(lines: CartIntentLine[]): boolean {
   return lines.length > 0

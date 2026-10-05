@@ -406,6 +406,35 @@ movement keeps its ledger row. Refunds/reversals keep their idempotency keys
 | Admin | `GET /admin/retailers`, `POST /admin/retailers/{id}/approve|suspend`, `GET/POST/PATCH /admin/products`, `/admin/packs`, `/admin/stock`, `GET/PATCH /admin/orders/{id}`, `GET/POST/PATCH /admin/banners` (+ image upload via `lib/media/*`), `/admin/team`, `/admin/targets`, `/admin/reports/*`, `/admin/cleanup/status` (**read-only, dry-run**) | `lib/admin/*` |
 | Super admin | `GET /admin/control-center/*` (privileged accounts, AI memory admin) | `requireSuperAdmin` semantics — **never** reachable by `admin` |
 
+### 2.7 IMPLEMENTED — shell counters, and the engagement reads as they actually ship
+
+| Method | Path | Auth/role | Body/params | Response |
+| --- | --- | --- | --- | --- |
+| GET | `/shell/badges` | retailer + `orders.create` + `orders.view.own` | — | `{ cartCount, unreadNotificationCount }` |
+| GET | `/notifications?cursor&unreadOnly=1` | any verified role | `cursor` (base64 keyset), `unreadOnly` = exactly `1` | `{ data: […], page: { nextCursor, hasMore, limit: 20 } }` |
+| POST | `/notifications/read` | any verified role | `{ ids: uuid[1…100] }` (strict) | `{ marked: n }` |
+| GET | `/favorites` | any verified role | — | `{ productIds: […] }` |
+| POST | `/favorites` | any verified role | `{ productId: uuid }` (strict; no retailer id accepted) | `{ isFavorite: <server's new state> }` |
+| GET | `/catalog/products?fav=1` | retailer | `fav` = exactly `1` restricts the batch to the caller's saved products | catalogue page, each card carrying `isFavorite` |
+
+`GET /shell/badges` is the two head-count queries of `app/retailer/layout.tsx`
+(`cart_items` by `retailer_id`, `notifications` by `recipient_id` + `is_read = false`)
+exposed as one cheap read, so a native badge is a server fact rather than a number
+the device accumulates between screens. **Counts only** — no cart rows, no
+notification bodies, no notification preferences. It is deliberately pull-based: the
+app reads it on shell entry, on `ON_RESUME`, and when the shopper leaves the cart or
+the alert feed. There is no timer, no push channel and no cache header, and a failed
+read leaves the last known counts on screen instead of blinking them to zero.
+
+Where this section and the Phase F plan in §2.5 differ, **this section is current**:
+`/notifications/{id}/read` and `/notifications/read-all` were not built (one batch
+endpoint with 1–100 ids covers both), `/coins/balance` and `/coins/transactions` ship
+as `/wallet` and `/wallet/ledger`, and the profile endpoints are still unbuilt.
+
+Tests: `tests/mobile-shell-engagement-api.test.ts` (24 cases over all six routes above
+— owner scoping, filter reach, strict-body rejection, 401/403/503 gates, and "a failed
+favourite write invents nothing").
+
 **Never exposed to mobile:** cleanup execution (`GET /api/cron/cleanup` stays
 `CRON_SECRET`-only), service-role operations, permanent catalog/product-image deletion,
 blind wallet-ledger deletion, or any "pretend it worked" stub. Where a feature cannot be

@@ -966,6 +966,17 @@ describe('mobile catalogue mapping', () => {
     expect(inStockOnly.ok && inStockOnly.filters.onlyInStock).toBe(true);
     const unfiltered = parseCatalogQuery('https://x/api');
     expect(unfiltered.ok && unfiltered.filters.onlyInStock).toBe(false);
+
+    // `fav=1` is the favourites filter the saved-products screens read (web page
+    // and the native app alike). Only the exact value `1` turns it on: a client
+    // sending `fav=0` or `fav=yes` gets the unfiltered catalogue, never a
+    // half-applied filter.
+    const favourites = parseCatalogQuery('https://x/api?fav=1');
+    expect(favourites.ok && favourites.filters.onlyFavorites).toBe(true);
+    const offFavourites = parseCatalogQuery('https://x/api?fav=0');
+    expect(offFavourites.ok && offFavourites.filters.onlyFavorites).toBe(false);
+    expect(unfiltered.ok && unfiltered.filters.onlyFavorites).toBe(false);
+    expect(DEFAULT_MOBILE_CATALOG_FILTERS.onlyFavorites).toBe(false);
     expect(DEFAULT_MOBILE_CATALOG_FILTERS.onlyInStock).toBe(false);
     expect(DEFAULT_MOBILE_CATALOG_FILTERS.sort).toBe('recommended');
   });
