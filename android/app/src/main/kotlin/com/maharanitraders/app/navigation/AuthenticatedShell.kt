@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +39,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,11 +62,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maharanitraders.app.ui.AccountScreen
+import com.maharanitraders.app.ui.ShellBadgesViewModel
 import com.maharanitraders.app.ui.SessionHomeScreen
 import com.maharanitraders.app.ui.UnsupportedAccountScreen
 import com.maharanitraders.core.designsystem.IsoDateDisplay
 import com.maharanitraders.core.designsystem.components.AccountGlyph
 import com.maharanitraders.core.designsystem.components.BackGlyph
+import com.maharanitraders.core.designsystem.components.BellGlyph
 import com.maharanitraders.core.designsystem.components.CartGlyph
 import com.maharanitraders.core.designsystem.components.CategoryGlyph
 import com.maharanitraders.core.designsystem.components.CrownGlyph
@@ -79,6 +84,8 @@ import com.maharanitraders.core.model.SessionSnapshot
 import com.maharanitraders.core.model.UserRole
 import com.maharanitraders.feature.catalog.ProductDetailViewModel
 import com.maharanitraders.feature.catalog.ui.CatalogScreen
+import com.maharanitraders.feature.orders.ui.AddressBookScreen
+import com.maharanitraders.feature.orders.ui.QuickOrderScreen
 import com.maharanitraders.feature.catalog.ui.CategoriesScreen
 import com.maharanitraders.feature.catalog.ui.FavoritesScreen
 import com.maharanitraders.feature.catalog.ui.HomeScreenTags
@@ -101,6 +108,9 @@ object ShellTags {
   const val ACCOUNT_SHEET = "shell_account_sheet"
   const val BRAND = "shell_brand"
   const val BOTTOM_BAR = "shell_bottom_bar"
+  const val CART_BADGE = "shell_cart_badge"
+  const val NOTIFICATIONS = "shell_notifications"
+  const val NOTIFICATIONS_BADGE = "shell_notifications_badge"
 }
 
 /**
@@ -162,6 +172,20 @@ private fun RoutedShell(
   val navController = rememberNavController()
   val drawerState = rememberDrawerState(DrawerValue.Closed)
   val scope = rememberCoroutineScope()
+  // The two badges read the shared stores; the shell never counts anything
+  // itself — see ShellBadgesViewModel.
+  val badges: ShellBadgesViewModel = hiltViewModel()
+  val cartLineCount by badges.cartLineCount.collectAsStateWithLifecycle()
+  val unreadCount by badges.unreadCount.collectAsStateWithLifecycle()
+
+  LaunchedEffect(Unit) { badges.refresh() }
+
+  // Every sign-out in the shell goes through here, so the previous account's
+  // badge counts are cleared before the session ends.
+  val handleSignOut: () -> Unit = {
+    badges.onSignOut()
+    onSignOut()
+  }
   val backStackEntry by navController.currentBackStackEntryAsState()
   val currentRoute = backStackEntry?.destination?.route ?: routing.start.route
   val showAccount = rememberSaveable { mutableStateOf(false) }
@@ -219,7 +243,7 @@ private fun RoutedShell(
           },
           onSignOut = {
             scope.launch { drawerState.close() }
-            onSignOut()
+            handleSignOut()
           },
         )
       }
@@ -270,6 +294,25 @@ private fun RoutedShell(
               }
             },
             actions = {
+              IconButton(
+                onClick = { navController.navigate(MaharaniRoutes.NOTIFICATIONS) { launchSingleTop = true } },
+                modifier = Modifier.testTag(ShellTags.NOTIFICATIONS),
+              ) {
+                BadgedBox(
+                  badge = {
+                    // Only a real, server-reported count is drawn. Nothing is
+                    // shown before the server has answered, and 99+ caps the
+                    // bubble instead of stretching the bar.
+                    if (unreadCount != null && unreadCount!! > 0) {
+                      Badge(modifier = Modifier.testTag(ShellTags.NOTIFICATIONS_BADGE)) {
+                        Text(if (unreadCount!! > 99) "99+" else unreadCount.toString())
+                      }
+                    }
+                  },
+                ) {
+                  BellGlyph(modifier = Modifier.size(22.dp))
+                }
+              }
               if (currentRoute != MaharaniRoutes.ACCOUNT) {
                 IconButton(
                   onClick = { showAccount.value = true },
@@ -298,7 +341,23 @@ private fun RoutedShell(
               NavigationBarItem(
                 selected = destination.route == currentRoute,
                 onClick = { selectTab(destination) },
-                icon = { BottomBarIcon(route = destination.route) },
+                icon = {
+                  if (destination.route == MaharaniRoutes.CART) {
+                    BadgedBox(
+                      badge = {
+                        if (cartLineCount != null && cartLineCount!! > 0) {
+                          Badge(modifier = Modifier.testTag(ShellTags.CART_BADGE)) {
+                            Text(if (cartLineCount!! > 99) "99+" else cartLineCount.toString())
+                          }
+                        }
+                      },
+                    ) {
+                      BottomBarIcon(route = destination.route)
+                    }
+                  } else {
+                    BottomBarIcon(route = destination.route)
+                  }
+                },
                 label = {
                   Text(
                     text = destination.label,
@@ -346,9 +405,17 @@ private fun RoutedShell(
               onViewOrders = {
                 navController.navigate(MaharaniRoutes.ORDERS) { launchSingleTop = true }
               },
-              onSignOut = onSignOut,
+              onSignOut = handleSignOut,
+              onOpenAddresses = { navController.navigate(MaharaniRoutes.ADDRESS_BOOK) { launchSingleTop = true } },
             )
           }
+        }
+
+        // The address book is a sub-screen of Account, not a drawer entry: it
+        // is reached from the account tab and its own screen is the same one
+        // checkout opens.
+        composable(MaharaniRoutes.ADDRESS_BOOK) {
+          AddressBookScreen()
         }
 
         // Product detail sits outside the drawer catalog: it is reachable from
@@ -388,7 +455,7 @@ private fun RoutedShell(
   if (showAccount.value) {
     AccountDialog(snapshot = snapshot, onClose = { showAccount.value = false }, onSignOut = {
       showAccount.value = false
-      onSignOut()
+      handleSignOut()
     })
   }
 }
@@ -595,6 +662,7 @@ private fun DestinationSurface(
   onOpenProduct: (String) -> Unit,
   onViewOrders: () -> Unit,
   onSignOut: () -> Unit,
+  onOpenAddresses: () -> Unit,
 ) {
   when (destination.route) {
     MaharaniRoutes.HOME -> if (retailerHome) {
@@ -629,6 +697,8 @@ private fun DestinationSurface(
       onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
     )
 
+    MaharaniRoutes.QUICK_ORDER -> QuickOrderScreen()
+
     MaharaniRoutes.CART -> CartScreen(
       onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
       onViewOrders = onViewOrders,
@@ -645,6 +715,7 @@ private fun DestinationSurface(
     MaharaniRoutes.ACCOUNT -> AccountScreen(
       snapshot = snapshot,
       onSignOut = onSignOut,
+      onOpenAddresses = onOpenAddresses,
     )
 
     else -> {

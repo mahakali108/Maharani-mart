@@ -48,6 +48,12 @@ data class ListMetaDto(
   val resultCount: Int? = null,
   /** True when a bounded working set capped the list; the UI must say so. */
   val resultCapped: Boolean = false,
+  /**
+   * Exact number of unread rows for the collection's owner, when the server
+   * reports one (the notifications feed does, on its first page). This is the
+   * badge fact: it must never be derived by counting the loaded page.
+   */
+  val unreadCount: Int? = null,
 )
 
 @Serializable

@@ -39,6 +39,7 @@ object AccountScreenTags {
   const val SHOP = "account_shop"
   const val ACCESS = "account_access"
   const val SIGN_OUT = "account_sign_out"
+  const val ADDRESS_BOOK = "account_address_book"
 }
 
 /**
@@ -54,6 +55,8 @@ fun AccountScreen(
   snapshot: SessionSnapshot,
   onSignOut: () -> Unit,
   modifier: Modifier = Modifier,
+  /** Opens the delivery address book — a real screen over the addresses API. */
+  onOpenAddresses: () -> Unit = {},
 ) {
   LazyColumn(
     modifier = modifier
@@ -70,6 +73,43 @@ fun AccountScreen(
 
     if (snapshot.access != null) {
       item { AccessCard(snapshot = snapshot) }
+    }
+
+    if (snapshot.retailer != null) {
+      item {
+        Surface(
+          onClick = onOpenAddresses,
+          shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+          color = MaterialTheme.colorScheme.surface,
+          tonalElevation = 1.dp,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag(AccountScreenTags.ADDRESS_BOOK),
+        ) {
+          Row(
+            modifier = Modifier.padding(MaharaniDimens.spaceMd),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Delivery addresses",
+                style = MaterialTheme.typography.titleSmall,
+              )
+              Text(
+                text = "Add, edit, delete or set the default address used at checkout.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+            Text(
+              text = "Manage",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.primary,
+            )
+          }
+        }
+      }
     }
 
     item { WorkspacesCard(snapshot = snapshot) }

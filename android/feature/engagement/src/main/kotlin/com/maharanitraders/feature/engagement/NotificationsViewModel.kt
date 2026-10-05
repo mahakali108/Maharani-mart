@@ -27,27 +27,29 @@ data class NotificationsUiState(
   val actionMessage: String? = null,
 ) {
 
-  /** Unread notifications among the pages that have been LOADED. */
+  /**
+   * Unread notifications among the pages that have been LOADED.
+   *
+   * Only a fallback for the moment before the server's exact total arrives
+   * (`UnreadStore`); the screen prefers the server number and says "N+" while
+   * it only knows this floor.
+   */
   val unreadLoaded: Int get() = items.count { !it.isRead }
 
-  /**
-   * Whether [unreadLoaded] is the shop's whole unread total.
-   *
-   * It only is once the last page has arrived. `GET /notifications` returns no
-   * unread count, so while more pages exist the honest statement is "at least
-   * this many" — see the BLOCKED row in the parity doc for the server-side
-   * count a true badge would need.
-   */
-  val unreadCountIsExact: Boolean get() = !hasMore
 }
 
 @HiltViewModel
 class NotificationsViewModel @Inject constructor(
   private val repository: EngagementRepository,
+  /** The shared badge source; this screen keeps no unread count of its own. */
+  private val unread: UnreadStore,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(NotificationsUiState())
   val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
+
+  /** Observed by the shell badge; the screen does not duplicate the count. */
+  val unreadCount: StateFlow<Int?> = unread.unreadCount
 
   init {
     load()
@@ -61,16 +63,19 @@ class NotificationsViewModel @Inject constructor(
     }
     viewModelScope.launch {
       when (val result = repository.loadNotifications(cursor = null, unreadOnly = false)) {
-        is AppResult.Success -> _state.update {
-          it.copy(
-            loading = false,
-            refreshing = false,
-            items = result.value.items,
-            nextCursor = result.value.nextCursor,
-            hasMore = result.value.hasMore,
-            errorMessage = null,
-            offline = false,
-          )
+        is AppResult.Success -> {
+          unread.record(result.value.unreadCount)
+          _state.update {
+            it.copy(
+              loading = false,
+              refreshing = false,
+              items = result.value.items,
+              nextCursor = result.value.nextCursor,
+              hasMore = result.value.hasMore,
+              errorMessage = null,
+              offline = false,
+            )
+          }
         }
         is AppResult.Failure -> _state.update {
           it.copy(
@@ -114,13 +119,15 @@ class NotificationsViewModel @Inject constructor(
    * shopkeeper taps again forever.
    */
   fun markAllRead() {
-    val unread = _state.value.items.filter { !it.isRead }
-    if (unread.isEmpty() || _state.value.markingRead) return
+    val unreadItems = _state.value.items.filter { !it.isRead }
+    if (unreadItems.isEmpty() || _state.value.markingRead) return
 
     _state.update { it.copy(markingRead = true, actionMessage = null) }
     viewModelScope.launch {
-      when (val result = repository.markNotificationsRead(unread.map { it.id })) {
-        is AppResult.Success -> if (result.value == unread.size) {
+      when (val result = repository.markNotificationsRead(unreadItems.map { it.id })) {
+        is AppResult.Success -> if (result.value == unreadItems.size) {
+          // Only the shared store's count moves; the screen keeps no copy.
+          unread.applyMarkedRead(result.value)
           _state.update { state ->
             state.copy(
               markingRead = false,

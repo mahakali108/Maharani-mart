@@ -43,7 +43,7 @@ class NotificationsViewModelTest {
       NotificationPage(items = notifications, nextCursor = null, hasMore = false),
     )
 
-    viewModel = NotificationsViewModel(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, UnreadStore(fakeRepository))
     testDispatcher.scheduler.advanceUntilIdle()
 
     viewModel.state.test {
@@ -61,7 +61,7 @@ class NotificationsViewModelTest {
       AppError.Api(code = ApiErrorCode.DATABASE_UNAVAILABLE, message = "Try again."),
     )
 
-    viewModel = NotificationsViewModel(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, UnreadStore(fakeRepository))
     testDispatcher.scheduler.advanceUntilIdle()
 
     viewModel.state.test {
@@ -84,7 +84,7 @@ class NotificationsViewModelTest {
     fakeRepository.notificationsResult = AppResult.Success(
       NotificationPage(items = firstBatch, nextCursor = "cursor1", hasMore = true),
     )
-    viewModel = NotificationsViewModel(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, UnreadStore(fakeRepository))
     testDispatcher.scheduler.advanceUntilIdle()
 
     fakeRepository.notificationsResult = AppResult.Success(
@@ -112,7 +112,7 @@ class NotificationsViewModelTest {
     )
     fakeRepository.markReadResult = AppResult.Success(1)
 
-    viewModel = NotificationsViewModel(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, UnreadStore(fakeRepository))
     testDispatcher.scheduler.advanceUntilIdle()
 
     viewModel.markAllRead()
@@ -142,7 +142,7 @@ class NotificationsViewModelTest {
       AppError.Api(code = ApiErrorCode.DATABASE_UNAVAILABLE, message = "Could not update your updates."),
     )
 
-    viewModel = NotificationsViewModel(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, UnreadStore(fakeRepository))
     testDispatcher.scheduler.advanceUntilIdle()
 
     viewModel.markAllRead()
@@ -173,7 +173,7 @@ class NotificationsViewModelTest {
     // Two were sent, the server marked one. Which one is the server's business.
     fakeRepository.markReadResult = AppResult.Success(1)
 
-    viewModel = NotificationsViewModel(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, UnreadStore(fakeRepository))
     testDispatcher.scheduler.advanceUntilIdle()
 
     fakeRepository.notificationsResult = AppResult.Success(
@@ -197,34 +197,43 @@ class NotificationsViewModelTest {
   }
 
   @Test
-  fun `the unread count is only exact once the last page has arrived`() = runTest(testDispatcher) {
+  fun `the server's exact unread total feeds the shared badge source`() = runTest(testDispatcher) {
     fakeRepository.notificationsResult = AppResult.Success(
       NotificationPage(
         items = listOf(AppNotification("n1", "Unread", "Body", null, false, "2026-01-01")),
         nextCursor = "cursor1",
         hasMore = true,
+        unreadCount = 7,
       ),
     )
 
-    viewModel = NotificationsViewModel(fakeRepository)
+    val unread = UnreadStore(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, unread)
     testDispatcher.scheduler.advanceUntilIdle()
 
-    // The feed endpoint returns no unread total, so with pages still unseen
-    // the screen may only claim "at least one".
+    // The first page carries the server's exact total for the whole feed, not
+    // a count of what happens to be loaded; the loaded-page floor is only a
+    // fallback for the moment before that total arrives.
+    assertThat(unread.unreadCount.value).isEqualTo(7)
     assertThat(viewModel.state.value.unreadLoaded).isEqualTo(1)
-    assertThat(viewModel.state.value.unreadCountIsExact).isFalse()
 
-    fakeRepository.notificationsResult = AppResult.Success(
-      NotificationPage(
-        items = listOf(AppNotification("n2", "Unread too", "Body", null, false, "2025-12-31")),
-        nextCursor = null,
-        hasMore = false,
-      ),
-    )
-    viewModel.loadMore()
+    // Marking notifications read subtracts the server-confirmed number.
+    fakeRepository.markReadResult = AppResult.Success(1)
+    viewModel.markAllRead()
     testDispatcher.scheduler.advanceUntilIdle()
 
-    assertThat(viewModel.state.value.unreadLoaded).isEqualTo(2)
-    assertThat(viewModel.state.value.unreadCountIsExact).isTrue()
+    assertThat(unread.unreadCount.value).isEqualTo(6)
+  }
+
+  @Test
+  fun `a page without a total leaves the badge source untouched`() = runTest(testDispatcher) {
+    val unread = UnreadStore(fakeRepository)
+    viewModel = NotificationsViewModel(fakeRepository, unread)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // No `unreadCount` on the envelope means exactly that: unknown. The badge
+    // must stay hidden rather than claim zero unread notifications.
+    assertThat(unread.unreadCount.value).isNull()
+    assertThat(viewModel.state.value.unreadLoaded).isEqualTo(0)
   }
 }

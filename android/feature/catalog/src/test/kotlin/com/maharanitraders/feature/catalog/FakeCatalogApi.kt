@@ -175,6 +175,17 @@ class FakeCatalogApi : MaharaniApi {
   override suspend fun applyCartCoupon(body: CouponRequestDto): ApiEnvelope<CouponResultDto> = unsupported("applyCartCoupon")
   override suspend fun removeCartCoupon(): ApiEnvelope<CouponRemovedDto> = unsupported("removeCartCoupon")
   override suspend fun mobileAddresses(): ApiEnvelope<MobileAddressesDto> = unsupported("mobileAddresses")
+  override suspend fun createAddress(
+    body: com.maharanitraders.core.network.dto.AddressPayloadDto,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.MobileAddressMutationDto> = unsupported("createAddress")
+  override suspend fun updateAddress(
+    addressId: String,
+    body: com.maharanitraders.core.network.dto.AddressPayloadDto,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.MobileAddressMutationDto> = unsupported("updateAddress")
+  override suspend fun deleteAddress(addressId: String): ApiEnvelope<MobileAddressesDto> = unsupported("deleteAddress")
+  override suspend fun setDefaultAddress(
+    addressId: String,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.MobileAddressMutationDto> = unsupported("setDefaultAddress")
   override suspend fun checkoutQuote(body: CheckoutQuoteRequestDto): ApiEnvelope<CheckoutQuoteDto> = unsupported("checkoutQuote")
   override suspend fun placeOrder(requestKey: String, body: PlaceOrderRequestDto): ApiEnvelope<PlaceOrderResponseDto> =
     unsupported("placeOrder")
@@ -211,6 +222,12 @@ class FakeCatalogApi : MaharaniApi {
   }
 
   override suspend fun coupons(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileCouponsDto> = unsupported("coupons")
+  override suspend fun quickOrder(
+    q: String,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.MobileQuickOrderDto> = unsupported("quickOrder")
+  override suspend fun matchBulkLines(
+    body: com.maharanitraders.core.network.dto.MobileBulkMatchRequestDto,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.MobileBulkMatchDto> = unsupported("matchBulkLines")
 
   private fun unsupported(endpoint: String): Nothing =
     throw UnsupportedOperationException("$endpoint is not used by the catalogue layer")

@@ -55,6 +55,8 @@ fun NotificationsScreen(
   viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  // The badge count is the shared store's — this screen never counts for itself.
+  val serverUnread by viewModel.unreadCount.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
 
   // A mark-read that did not reach the server is reported. Swallowing it
@@ -109,7 +111,10 @@ fun NotificationsContent(
     return
   }
 
-  val unreadCount = state.unreadLoaded
+  // Prefer the server's exact unread total; until it arrives, show what the
+  // loaded pages prove, marked with "+" so the number is never overstated.
+  val unreadCount = serverUnread ?: state.unreadLoaded
+  val unreadIsExact = serverUnread != null
 
   LazyColumn(
     modifier = modifier.fillMaxSize().testTag(NotificationTags.SCREEN),
@@ -125,9 +130,8 @@ fun NotificationsContent(
           Text("Updates & alerts", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
           if (unreadCount > 0) {
             Text(
-              // "3+" while later pages are still unseen: the feed endpoint
-              // returns no unread total, so a flat "3" would be a guess.
-              if (state.unreadCountIsExact) {
+              // "3+" while the server's exact total has not arrived.
+              if (unreadIsExact) {
                 "$unreadCount unread update${if (unreadCount == 1) "" else "s"}"
               } else {
                 "$unreadCount+ unread updates"
@@ -148,7 +152,7 @@ fun NotificationsContent(
               CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
             } else {
               // Honest label: only what has been loaded can be sent.
-              Text(if (state.unreadCountIsExact) "Mark all read" else "Mark these read")
+              Text(if (unreadIsExact) "Mark all read" else "Mark these read")
             }
           }
         }

@@ -2,12 +2,12 @@ import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
 import type { MobileSession } from '@/lib/mobile/auth';
-import { sameCartIntent, type CartIntentLine } from '@/lib/mobile/commerce-shared';
+import { cartCounts, sameCartIntent, type CartIntentLine } from '@/lib/mobile/commerce-shared';
 import { PRODUCT_CARD_SELECT, loadCatalogPricing, priceCatalogPack, type CatalogProductRow } from '@/lib/retailer/catalog';
 import { toPaise } from '@/lib/retailer/case-pricing';
 import { loadActiveCouponForRetailer } from '@/lib/coupons/validate';
 import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
-import { formatAddressLine } from '@/lib/retailer/address-shared';
+import { formatAddressLine, type AddressPayload } from '@/lib/retailer/address-shared';
 import { loadCatalogAvailability } from '@/lib/retailer/catalog';
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -72,6 +72,18 @@ export interface MobileAddressOption {
   receiverName: string | null;
   phone: string | null;
   isDefault: boolean;
+  /**
+   * The structured fields behind [line], so a native address book can EDIT a
+   * saved address instead of only picking one. Absent on the synthetic
+   * registered-shop option (id null), which is not editable.
+   */
+  line1?: string;
+  line2?: string | null;
+  landmark?: string | null;
+  city?: string;
+  district?: string | null;
+  state?: string | null;
+  pincode?: string;
 }
 
 export interface ResolvedMobileAddress {
@@ -147,6 +159,14 @@ export async function loadMobileCart(session: MobileSession): Promise<{
   lines: MobileCartLine[];
   couponCode: string | null;
   couponUnavailable: boolean;
+  /**
+   * Number of saved cart LINES — the same fact the web shell's cart badge
+   * shows (`count of cart_items rows`), computed here so the native badge is
+   * server-reported rather than a client-side guess.
+   */
+  lineCount: number;
+  /** Total pieces across the lines. */
+  itemCount: number;
 }> {
   const supabase = callerClient(session);
   const rows = await loadRetailerCartRows(session);
@@ -216,7 +236,7 @@ export async function loadMobileCart(session: MobileSession): Promise<{
     };
   });
 
-  return { lines, couponCode, couponUnavailable };
+  return { lines, couponCode, couponUnavailable, ...cartCounts(lines) };
 }
 
 /** Server-side address choices. Profile text comes from the retailer row, never the checkout request. */
@@ -238,14 +258,7 @@ export async function loadMobileAddresses(session: MobileSession): Promise<Mobil
   ]);
   if (addressError || retailerError) throw databaseError('Delivery addresses could not be loaded. Please try again.');
 
-  const options: MobileAddressOption[] = (saved ?? []).map((row) => ({
-    id: row.id,
-    label: row.label,
-    line: formatAddressLine(row),
-    receiverName: row.receiver_name,
-    phone: row.phone,
-    isDefault: row.is_default,
-  }));
+  const options: MobileAddressOption[] = (saved ?? []).map(toAddressOption);
   const profileAddress = retailer?.address?.trim();
   if (profileAddress) {
     options.push({
@@ -309,6 +322,186 @@ export async function resolveMobileAddress(
       receiverName: display.receiverName ?? undefined,
       phone: display.phone ?? undefined,
     },
+  };
+}
+
+/**
+ * The column payload for one saved address.
+ *
+ * `state` defaults to Bihar exactly like the web form's writer: the shop is a
+ * Khagaria-district wholesaler, so an address without a state would be
+ * incomplete for delivery.
+ */
+function addressColumns(
+  retailerId: string,
+  value: AddressPayload
+): Record<string, unknown> {
+  return {
+    retailer_id: retailerId,
+    label: value.label,
+    receiver_name: value.receiverName,
+    phone: value.phone,
+    line1: value.line1,
+    line2: value.line2 ?? null,
+    landmark: value.landmark ?? null,
+    city: value.city,
+    district: value.district ?? null,
+    state: value.state ?? 'Bihar',
+    pincode: value.pincode,
+    is_default: value.isDefault ?? false,
+  };
+}
+
+/** Clears `is_default` on the retailer's other addresses (default is exclusive). */
+async function clearOtherDefaults(
+  supabase: SupabaseClient,
+  retailerId: string,
+  keepId?: string
+): Promise<void> {
+  const query = supabase
+    .from('retailer_addresses')
+    .update({ is_default: false } as unknown as never)
+    .eq('retailer_id', retailerId);
+  if (keepId) await query.neq('id', keepId);
+  else await query;
+}
+
+/**
+ * When no default exists, make the first-saved address the default so checkout
+ * always has a deterministic preselected address. Mirrors the web action.
+ */
+async function ensureDefaultAddress(supabase: SupabaseClient, retailerId: string): Promise<void> {
+  const { data } = await supabase
+    .from('retailer_addresses')
+    .select('id, is_default')
+    .eq('retailer_id', retailerId)
+    .order('created_at', { ascending: true });
+  const addresses = (data ?? []) as unknown as { id: string; is_default: boolean }[];
+  const first = addresses[0];
+  if (!first || addresses.some((row) => row.is_default)) return;
+  await supabase
+    .from('retailer_addresses')
+    .update({ is_default: true } as unknown as never)
+    .eq('id', first.id)
+    .eq('retailer_id', retailerId);
+}
+
+/**
+ * Create one saved address for the authenticated retailer.
+ *
+ * Identity comes from the session — never the request body — and RLS
+ * (`retailer_addresses_owner_insert`) is the hard boundary behind the explicit
+ * `.eq('retailer_id', …)` filters. Validation happens BEFORE this function is
+ * called, using the same zod schema as the web form.
+ */
+export async function createMobileAddress(
+  session: MobileSession,
+  value: AddressPayload
+): Promise<MobileAddressOption> {
+  const supabase = callerClient(session);
+  const payload = addressColumns(session.userId, value);
+  const { data, error } = await supabase
+    .from('retailer_addresses')
+    .insert(payload as unknown as never)
+    .select('id')
+    .maybeSingle<{ id: string }>();
+  if (error || !data) throw databaseError('The address could not be saved. Please try again.');
+
+  if (payload.is_default === true) await clearOtherDefaults(supabase, session.userId, data.id);
+  else await ensureDefaultAddress(supabase, session.userId);
+
+  const created = { id: data.id, ...payload } as unknown as RetailerAddressRow;
+  return { ...toAddressOption(created), id: data.id };
+}
+
+/**
+ * Update one of the retailer's own saved addresses.
+ *
+ * The row is matched by BOTH `id` and `retailer_id`, so another retailer's
+ * address can never be edited even if RLS were misconfigured, and a missing /
+ * foreign row answers `404` without disclosing which of the two it was.
+ */
+export async function updateMobileAddress(
+  session: MobileSession,
+  addressId: string,
+  value: AddressPayload
+): Promise<MobileAddressOption> {
+  const supabase = callerClient(session);
+  const payload: Record<string, unknown> = {
+    ...addressColumns(session.userId, value),
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from('retailer_addresses')
+    .update(payload as unknown as never)
+    .eq('id', addressId)
+    .eq('retailer_id', session.userId)
+    .select('id')
+    .maybeSingle<{ id: string }>();
+  if (error) throw databaseError('The address could not be updated. Please try again.');
+  if (!data) throw new MobileCommerceError('not_found', 404, 'That saved address was not found.');
+
+  if (payload.is_default === true) await clearOtherDefaults(supabase, session.userId, addressId);
+
+  const saved = { id: addressId, ...payload } as unknown as RetailerAddressRow;
+  return { ...toAddressOption(saved), id: addressId };
+}
+
+/** Make one of the retailer's own addresses the exclusive default. */
+export async function setDefaultMobileAddress(
+  session: MobileSession,
+  addressId: string
+): Promise<MobileAddressOption> {
+  const supabase = callerClient(session);
+  const { data, error } = await supabase
+    .from('retailer_addresses')
+    .update({ is_default: true } as unknown as never)
+    .eq('id', addressId)
+    .eq('retailer_id', session.userId)
+    .select('id, label, receiver_name, phone, line1, line2, landmark, city, district, state, pincode, is_default')
+    .maybeSingle<RetailerAddressRow>();
+  if (error) throw databaseError('The default address could not be changed. Please try again.');
+  if (!data) throw new MobileCommerceError('not_found', 404, 'That saved address was not found.');
+
+  await clearOtherDefaults(supabase, session.userId, addressId);
+  return toAddressOption({ ...data, is_default: true });
+}
+
+/**
+ * Delete one of the retailer's own saved addresses, then keep the default
+ * deterministic (the oldest remaining address becomes default when none is).
+ */
+export async function deleteMobileAddress(session: MobileSession, addressId: string): Promise<void> {
+  const supabase = callerClient(session);
+  const { data, error } = await supabase
+    .from('retailer_addresses')
+    .delete()
+    .eq('id', addressId)
+    .eq('retailer_id', session.userId)
+    .select('id')
+    .maybeSingle<{ id: string }>();
+  if (error) throw databaseError('The address could not be deleted. Please try again.');
+  if (!data) throw new MobileCommerceError('not_found', 404, 'That saved address was not found.');
+
+  await ensureDefaultAddress(supabase, session.userId);
+}
+
+/** One saved row → the wire shape every address response uses. */
+function toAddressOption(row: RetailerAddressRow): MobileAddressOption {
+  return {
+    id: row.id,
+    label: row.label,
+    line: formatAddressLine(row),
+    receiverName: row.receiver_name,
+    phone: row.phone,
+    isDefault: row.is_default,
+    line1: row.line1,
+    line2: row.line2,
+    landmark: row.landmark,
+    city: row.city,
+    district: row.district,
+    state: row.state,
+    pincode: row.pincode,
   };
 }
 

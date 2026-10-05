@@ -8,6 +8,10 @@ data class MobileCartDto(
   val lines: List<MobileCartLineDto> = emptyList(),
   val couponCode: String? = null,
   val couponUnavailable: Boolean = false,
+  /** Saved cart lines, computed by the server — the web shell's cart badge fact. */
+  val lineCount: Int = 0,
+  /** Total pieces across the lines, computed by the server. */
+  val itemCount: Int = 0,
 )
 
 @Serializable
@@ -61,6 +65,35 @@ data class MobileAddressesDto(
   val addresses: List<MobileAddressDto> = emptyList(),
 )
 
+/**
+ * The exact fields the server accepts for a saved address.
+ *
+ * It is the same schema the web form validates (`addressPayloadSchema`), so a
+ * rule can never apply to one surface and miss the other. The owner is
+ * deliberately absent: identity comes from the verified session.
+ */
+@Serializable
+data class AddressPayloadDto(
+  val label: String,
+  val receiverName: String,
+  val phone: String,
+  val line1: String,
+  val line2: String? = null,
+  val landmark: String? = null,
+  val city: String,
+  val district: String? = null,
+  val state: String? = null,
+  val pincode: String,
+  val isDefault: Boolean = false,
+)
+
+/** One saved address plus the refreshed list, as every address write answers. */
+@Serializable
+data class MobileAddressMutationDto(
+  val address: MobileAddressDto,
+  val addresses: List<MobileAddressDto> = emptyList(),
+)
+
 @Serializable
 data class MobileAddressDto(
   val id: String? = null,
@@ -69,6 +102,18 @@ data class MobileAddressDto(
   val receiverName: String? = null,
   val phone: String? = null,
   val isDefault: Boolean = false,
+  /**
+   * The structured fields behind [line]; the server sends them for saved
+   * addresses so the address book can edit one. Absent on the synthetic
+   * registered-shop option (id null), which is not editable.
+   */
+  val line1: String? = null,
+  val line2: String? = null,
+  val landmark: String? = null,
+  val city: String? = null,
+  val district: String? = null,
+  val state: String? = null,
+  val pincode: String? = null,
 )
 
 @Serializable

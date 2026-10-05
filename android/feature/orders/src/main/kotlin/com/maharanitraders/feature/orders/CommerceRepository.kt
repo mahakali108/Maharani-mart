@@ -4,6 +4,7 @@ import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.common.map
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi
+import com.maharanitraders.core.network.dto.AddressPayloadDto
 import com.maharanitraders.core.network.dto.CartLineRequestDto
 import com.maharanitraders.core.network.dto.CartQuantityRequestDto
 import com.maharanitraders.core.network.dto.CheckoutLineIntentDto
@@ -29,6 +30,10 @@ interface CommerceRepository {
   suspend fun updateCartLine(lineId: String, quantity: Int): AppResult<CartSnapshot>
   suspend fun removeCartLine(lineId: String): AppResult<CartSnapshot>
   suspend fun loadAddresses(): AppResult<List<DeliveryAddress>>
+  suspend fun createAddress(draft: AddressDraft): AppResult<List<DeliveryAddress>>
+  suspend fun updateAddress(addressId: String, draft: AddressDraft): AppResult<List<DeliveryAddress>>
+  suspend fun deleteAddress(addressId: String): AppResult<List<DeliveryAddress>>
+  suspend fun setDefaultAddress(addressId: String): AppResult<List<DeliveryAddress>>
   suspend fun applyCoupon(code: String): AppResult<CouponApplication>
   suspend fun removeCoupon(): AppResult<Unit>
   suspend fun quote(lines: List<CartLineIntent>, addressId: String?): AppResult<CheckoutQuote>
@@ -65,6 +70,22 @@ class NetworkCommerceRepository @Inject constructor(
 
   override suspend fun loadAddresses(): AppResult<List<DeliveryAddress>> =
     executor.executeEnvelope { api.mobileAddresses() }
+      .map { result -> result.addresses.map(MobileAddressDto::toDomain) }
+
+  override suspend fun createAddress(draft: AddressDraft): AppResult<List<DeliveryAddress>> =
+    executor.executeEnvelope { api.createAddress(draft.toPayload()) }
+      .map { result -> result.addresses.map(MobileAddressDto::toDomain) }
+
+  override suspend fun updateAddress(addressId: String, draft: AddressDraft): AppResult<List<DeliveryAddress>> =
+    executor.executeEnvelope { api.updateAddress(addressId, draft.toPayload()) }
+      .map { result -> result.addresses.map(MobileAddressDto::toDomain) }
+
+  override suspend fun deleteAddress(addressId: String): AppResult<List<DeliveryAddress>> =
+    executor.executeEnvelope { api.deleteAddress(addressId) }
+      .map { result -> result.addresses.map(MobileAddressDto::toDomain) }
+
+  override suspend fun setDefaultAddress(addressId: String): AppResult<List<DeliveryAddress>> =
+    executor.executeEnvelope { api.setDefaultAddress(addressId) }
       .map { result -> result.addresses.map(MobileAddressDto::toDomain) }
 
   override suspend fun applyCoupon(code: String): AppResult<CouponApplication> =
@@ -133,6 +154,29 @@ private fun MobileCartDto.toDomain() = CartSnapshot(
   lines = lines.map(MobileCartLineDto::toDomain),
   couponCode = couponCode,
   couponUnavailable = couponUnavailable,
+  lineCount = lineCount.coerceAtLeast(0),
+  itemCount = itemCount.coerceAtLeast(0),
+)
+
+/**
+ * The validated draft → the wire payload.
+ *
+ * Blank optional fields travel as `null`, never as empty strings, because the
+ * server stores null and a second representation would make two rows that look
+ * identical compare differently.
+ */
+private fun AddressDraft.toPayload() = AddressPayloadDto(
+  label = label.trim(),
+  receiverName = receiverName.trim(),
+  phone = phone.trim(),
+  line1 = line1.trim(),
+  line2 = line2.trim().ifEmpty { null },
+  landmark = landmark.trim().ifEmpty { null },
+  city = city.trim(),
+  district = district.trim().ifEmpty { null },
+  state = state.trim().ifEmpty { AddressRules.DEFAULT_STATE },
+  pincode = pincode.trim(),
+  isDefault = isDefault,
 )
 
 private fun MobileCartLineDto.toDomain() = CartLine(
@@ -161,6 +205,13 @@ private fun MobileAddressDto.toDomain() = DeliveryAddress(
   receiverName = receiverName,
   phone = phone,
   isDefault = isDefault,
+  line1 = line1,
+  line2 = line2,
+  landmark = landmark,
+  city = city,
+  district = district,
+  state = state,
+  pincode = pincode,
 )
 
 private fun CheckoutQuoteDto.toDomain() = CheckoutQuote(

@@ -96,9 +96,13 @@ fun RetailerHomeScreen(
   viewModel: HomeViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val favorites by viewModel.favoriteState.collectAsStateWithLifecycle()
 
   HomeContent(
     state = state,
+    isFavorite = { product -> favorites.isFavorite(product.id, product.isFavorite) },
+    isFavoritePending = { product -> favorites.isPending(product.id) },
+    onToggleFavorite = viewModel::toggleFavorite,
     onRetry = viewModel::load,
     onOpenCatalog = { onOpenCatalog("", null, null, null) },
     onOpenCategory = { categoryId -> onOpenCatalog("", categoryId, null, null) },
@@ -118,6 +122,14 @@ fun HomeContent(
   state: HomeUiState,
   onRetry: () -> Unit,
   onOpenCatalog: () -> Unit,
+  /**
+   * Favourite state for one home card. Defaulted to the flag the SERVER put on
+   * the product row so a preview (or a caller without the store) still renders a
+   * truthful heart rather than a wrong one.
+   */
+  isFavorite: (CatalogProduct) -> Boolean = { it.isFavorite },
+  isFavoritePending: (CatalogProduct) -> Boolean = { false },
+  onToggleFavorite: ((String) -> Unit)? = null,
   onOpenCategory: (String) -> Unit,
   onOpenBrand: (CatalogBrand) -> Unit,
   onOpenCategories: () -> Unit,
@@ -231,7 +243,13 @@ fun HomeContent(
                   title = "Recently added",
                   subtitle = "Newest in your catalogue",
                 )
-                RecentRail(products = state.recent, onOpenProduct = onOpenProduct)
+                RecentRail(
+                  products = state.recent,
+                  onOpenProduct = onOpenProduct,
+                  isFavorite = isFavorite,
+                  isFavoritePending = isFavoritePending,
+                  onToggleFavorite = onToggleFavorite,
+                )
               }
             }
           }
@@ -245,7 +263,13 @@ fun HomeContent(
                 onAction = onOpenCatalog,
               )
             }
-            productCardItems(home.products, onOpenProduct)
+            productCardItems(
+              products = home.products,
+              onOpenProduct = onOpenProduct,
+              isFavorite = isFavorite,
+              isFavoritePending = isFavoritePending,
+              onToggleFavorite = onToggleFavorite,
+            )
           }
 
           item(span = full) {
@@ -363,6 +387,9 @@ private fun BrandRail(
 private fun RecentRail(
   products: List<CatalogProduct>,
   onOpenProduct: (String) -> Unit,
+  isFavorite: (CatalogProduct) -> Boolean,
+  isFavoritePending: (CatalogProduct) -> Boolean,
+  onToggleFavorite: ((String) -> Unit)?,
   modifier: Modifier = Modifier,
 ) {
   LazyRow(
@@ -375,6 +402,9 @@ private fun RecentRail(
       ProductCard(
         product = product,
         onClick = { onOpenProduct(product.id) },
+        isFavorite = isFavorite(product),
+        favoritePending = isFavoritePending(product),
+        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(product.id) } },
         modifier = Modifier.width(MaharaniDimens.railCardWidth),
       )
     }
