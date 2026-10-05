@@ -110,7 +110,7 @@ class WalletViewModelTest {
     viewModel.state.test {
       val state = awaitItem()
       assertThat(state.entries).hasSize(2)
-      assertThat(state.hasMore).isFalse()
+      assertThat(state.ledgerHasMore).isFalse()
     }
   }
 }
