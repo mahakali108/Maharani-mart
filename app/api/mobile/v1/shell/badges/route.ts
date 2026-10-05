@@ -18,8 +18,9 @@ export const dynamic = 'force-dynamic';
  * accumulates between screens. Only counts are returned — no cart contents, no
  * notification bodies — and both counts are owner-filtered and RLS-scoped.
  *
- * Deliberately cheap and pull-based: the app refreshes it on resume and on tab
- * changes, never on a timer.
+ * Deliberately cheap and pull-based: the app reads it when the shell appears, when
+ * it resumes, and when the shopper leaves the cart or the alert feed — never on a
+ * timer.
  */
 export async function GET(request: Request): Promise<Response> {
   const requestId = newRequestId();
