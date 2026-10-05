@@ -60,7 +60,7 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | CAT-05 | Pack / MOQ rules | PDP pack selector | pack payload on the detail row | `ProductDetailScreen` | IMPLEMENTED | MOQ and increment come from the server pack; the quantity stepper enforces them. |
 | CAT-06 | Stock badge | PDP + cards | `availability` on the pack | `StockBadge` | IMPLEMENTED | In Stock / Out of Stock only — no FEFO, GRN or multi-warehouse anywhere in the native app. |
 | CAT-07 | Add to cart from PDP | PDP | `POST /cart/lines` | `ProductDetailScreen` → `CartCheckoutViewModel` | IMPLEMENTED | Server re-prices; the response replaces the local cart. |
-| CAT-08 | Quick order | `app/retailer/quick-order/page.tsx` | `POST /cart/lines` | — | MISSING | A bulk entry grid. No native equivalent; the per-product path covers the same business action more slowly. |
+| CAT-08 | Quick order | `app/retailer/quick-order/page.tsx` | `GET /api/mobile/v1/quick-order`, `POST /quick-order/match` | `QuickOrderScreen` + `QuickOrderViewModel` | IMPLEMENTED | Name search and pasted-list matcher over the real catalogue, priced for the caller by the same engine the cart and checkout use. Every add goes through `POST /cart/lines` (the `mutate_retailer_cart_line` RPC revalidates MOQ, quantity bounds and pack activity) and any order still commits through the existing atomic checkout, whose 0054 triggers reject a stale or out-of-stock quote — quick order creates no order of its own and cannot be laxer than any other surface. The matcher itself never writes, and a line that matches nothing answers with its own error instead of a guess. |
 
 ## 4. Favourites
 
@@ -82,6 +82,7 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | CART-05 | Remove a coupon | cart | `DELETE /cart/coupon` | `CartScreen` | IMPLEMENTED | |
 | CART-06 | Unavailable-line handling | cart warnings | `orderable`/`message` on each line | `CartScreen` | IMPLEMENTED | A non-orderable line blocks checkout and shows the server's reason. |
 | CART-07 | Saved carts | `app/retailer/cart/saved/page.tsx` | server action | — | MISSING | No mobile endpoint exists for saved carts; the web feature uses a server action, not `/api/mobile/v1`. Adding it would need a new route plus RLS review. |
+| CART-08 | Shell cart badge | `components/layout/retailer-shell.tsx` (`cartCount` head count over `cart_items`) | `GET /cart` (`lineCount`) | `ShellBadgesViewModel` + `CartCountStore` | IMPLEMENTED | The badge shows the server's own `lineCount` from the same cart response the cart screen renders — the same fact the web shell badges — so a mutation moves both together. `null` until the server has answered, which renders no bubble rather than a confident "0"; cleared on sign-out. |
 
 ## 6. Checkout, order creation and confirmation
 
@@ -93,7 +94,7 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | CHK-04 | Place order | checkout submit | `POST /orders` | `CartScreen` | IMPLEMENTED | Idempotency key per attempt; the server re-quotes before writing. |
 | CHK-05 | Uncertain-submit recovery | checkout retry | `GET /orders/requests/{requestKey}` | `CartScreen` "Check order status" | IMPLEMENTED | A timed-out submit is resolved by asking the server what happened, instead of risking a second order. |
 | CHK-06 | Order confirmation | checkout success | `POST /orders` response | `CartScreen` confirmation | IMPLEMENTED | Shows the server-confirmed number, status, total, coins used and coin balance after. |
-| CHK-07 | Add a new address during checkout | `app/retailer/account/addresses` | — | — | BLOCKED | `GET /api/mobile/v1/addresses` is read-only. Address create/update/delete would need new mobile routes with ownership checks and validation mirroring the web server actions. |
+| CHK-07 | Add a new address during checkout | `app/retailer/account/addresses` | `POST /api/mobile/v1/addresses`, `PATCH`/`DELETE /addresses/{id}`, `POST /addresses/{id}/default` | `AddressBookScreen` (reached from Account) | PARTIAL | Full address CRUD now exists natively against real routes that reuse the web form's own `addressPayloadSchema`, with ownership by `id` + session retailer and RLS underneath. What is missing is only the entry point: the checkout step still lets the retailer SELECT a saved address, not add one mid-checkout, so a first-time address is created in the address book first. |
 
 ## 7. Orders
 
@@ -124,8 +125,8 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 |---|---|---|---|---|---|---|
 | NOTIF-01 | Notification feed | `app/retailer/notifications/page.tsx` | `GET /notifications` | `NotificationsScreen` + `NotificationsViewModel` | IMPLEMENTED | Cursor-paged, newest first. |
 | NOTIF-02 | Mark read | notifications page | `POST /notifications/read` | `NotificationsScreen` | IMPLEMENTED | Only the loaded unread ids are sent; a failure is reported and nothing is marked locally. A partial result re-reads the feed rather than guessing which rows the server marked. |
-| NOTIF-03 | Unread count | notification bell | — | `NotificationsScreen` header | PARTIAL | The feed endpoint returns no unread total, so the count is labelled "3+" until the last page has arrived and the action reads "Mark these read". An always-correct badge needs an `unreadCount` in the response meta (or a count endpoint). |
-| NOTIF-04 | Shell unread badge | web header bell | — | — | BLOCKED | Same missing count as NOTIF-03. A badge that silently omits a number is worse than no badge, so none is drawn. |
+| NOTIF-03 | Unread count | notification bell | `GET /notifications` first-page `meta.unreadCount` | `NotificationsScreen` header | IMPLEMENTED | The server counts the caller's own unread rows (`recipient_id = auth.uid()`, `is_read = false`) and returns the exact total with the first page. The screen prefers that number; only before it arrives does it show the loaded-page floor as "N+", and the action reads "Mark these read" until the total is known. Cursor pages deliberately omit the count rather than re-count. |
+| NOTIF-04 | Shell unread badge | web header bell | `GET /notifications` first-page `meta.unreadCount` | `ShellBadgesViewModel` + `UnreadStore` | IMPLEMENTED | Same single store the notifications screen reads and writes through, so the badge cannot disagree with the feed. `null` until the server has answered (no bubble rather than a false "0"), cleared on sign-out, and a mark-read that the server did not confirm in full re-reads the feed instead of guessing. |
 | NOTIF-05 | Notification preferences | `app/retailer/account/notification-preferences/page.tsx` | — | — | BLOCKED | No mobile endpoint for preferences. |
 
 ## 10. Coupons, offers and schemes
@@ -142,7 +143,7 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 | ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
 |---|---|---|---|---|---|---|
 | ACC-01 | Account overview | `app/retailer/account/page.tsx` | `GET /session` | `AccountScreen` | IMPLEMENTED | Identity, role and workspace from the session. |
-| ACC-02 | Address book | `app/retailer/account/addresses/page.tsx` | `GET /addresses` | — | PARTIAL | Addresses are read during checkout (CHK-01) but there is no address-book screen, and no endpoint to edit them (CHK-07). |
+| ACC-02 | Address book | `app/retailer/account/addresses/page.tsx` | `GET`/`POST /addresses`, `PATCH`/`DELETE /addresses/{id}`, `POST /addresses/{id}/default` | `AddressBookScreen` + `AddressBookViewModel` | IMPLEMENTED | Loading, empty, error-with-retry and offline states; create, edit, delete-behind-a-confirmation and an exclusive default. Writes reuse the web form's own zod schema and the same default-exclusivity rule the web server actions apply, so the two surfaces cannot drift. The checkout step's existing `GET /addresses` read is unchanged. |
 | ACC-03 | Edit profile | `app/retailer/account/edit/page.tsx` | — | — | BLOCKED | No mobile profile-update endpoint. |
 | ACC-04 | Security / change password | `app/retailer/account/security/page.tsx` | `POST /auth/password-update` | `AuthFlowScreen` | PARTIAL | The password-update call exists and is used in the reset flow; there is no in-account security screen. |
 | ACC-05 | Sign out | account page | `POST /auth/logout` | `AuthenticatedShell` | IMPLEMENTED | |
@@ -171,12 +172,12 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 
 | Status | Count |
 |---|---|
-| IMPLEMENTED | 56 |
-| PARTIAL | 5 |
-| MISSING | 5 |
-| BLOCKED | 9 |
+| IMPLEMENTED | 61 |
+| PARTIAL | 4 |
+| MISSING | 4 |
+| BLOCKED | 7 |
 | N/A | 1 |
-| **Total rows** | **76** |
+| **Total rows** | **77** |
 
 These counts are checked against the rows above by
 `tests/parity-doc-totals.test.ts`, because the previous version of this document
@@ -187,21 +188,15 @@ claimed totals that its own table contradicted.
 Each of these needs backend work that does not exist today. None of them is hidden
 behind a placeholder screen in the app.
 
-1. **CHK-07 — address create/update/delete.** `GET /api/mobile/v1/addresses` is
-   read-only. Needs POST/PATCH/DELETE routes with the same ownership checks and
-   validation the web server actions apply.
-2. **ORD-03 — invoice.** Needs `GET /api/mobile/v1/orders/{id}/invoice` returning the
+1. **ORD-03 — invoice.** Needs `GET /api/mobile/v1/orders/{id}/invoice` returning the
    lines already computed by `lib/retailer/invoice-tax.ts`. Re-deriving the GST split
    in Kotlin would duplicate tax arithmetic in a second language.
-3. **ORD-05 — delivery tracking.** Needs a mobile route over the delivery events the
+2. **ORD-05 — delivery tracking.** Needs a mobile route over the delivery events the
    web page reads.
-4. **NOTIF-04 — shell unread badge** (and the exact count behind NOTIF-03). Needs an
-   `unreadCount` in the notifications response meta, or a dedicated count endpoint.
-   Until then the app says "3+" rather than claiming a total it cannot know.
-5. **NOTIF-05 — notification preferences.** Needs read/write routes.
-6. **PROMO-04 — schemes.** Needs a mobile route for scheme data.
-7. **ACC-03 — profile editing.** Needs a mobile profile-update route.
-8. **MISC-01 / MISC-03 — support and reports.** Need mobile routes.
+3. **NOTIF-05 — notification preferences.** Needs read/write routes.
+4. **PROMO-04 — schemes.** Needs a mobile route for scheme data.
+5. **ACC-03 — profile editing.** Needs a mobile profile-update route.
+6. **MISC-01 / MISC-03 — support and reports.** Need mobile routes.
 
 ## Method
 
@@ -213,3 +208,11 @@ behind a placeholder screen in the app.
 - A row is IMPLEMENTED only where the native screen calls the stated endpoint and acts
   on the response. Reachability was checked against `DestinationSurface`, so a screen
   that exists but cannot be opened does not count.
+- Route behaviour for the rows changed on 2026-10-05 (CAT-08, CART-08, CHK-07, NOTIF-03,
+  NOTIF-04, ACC-02) was verified by running the endpoint tests under `tests/` (session,
+  role, ownership, validation, error and response-shape assertions), not by reading the
+  route alone. The Android side was verified by reading the screen, its state model and
+  the shell's render table. **Android compilation and unit tests could not be executed
+  in the verifying environment** (no JDK or Android SDK available), so no Kotlin build
+  result is claimed here; that gap is why the stale destination allow-list in
+  `MaharaniRouterTest` was found by reading rather than by a failing run.

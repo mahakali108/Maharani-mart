@@ -68,10 +68,15 @@ const PRODUCT = {
   ],
 };
 
-function install({ role = 'retailer', products = [PRODUCT] as object[] } = {}) {
+function install({
+  role = 'retailer',
+  products = [PRODUCT] as object[],
+  errors = {} as Record<string, string>,
+} = {}) {
+  const userId = role === 'retailer' ? RETAILER : STAFF;
   const client = supabaseFixture({
     profiles: [{
-      id: role === 'retailer' ? RETAILER : STAFF,
+      id: userId,
       role,
       full_name: 'Shop Owner',
       phone: '9876543210',
@@ -81,22 +86,24 @@ function install({ role = 'retailer', products = [PRODUCT] as object[] } = {}) {
       ? [{ id: RETAILER, status: 'active', area_id: null }]
       : [],
     products,
+    // Both tables are read while pricing a pack; empty means every price below
+    // comes from the pack itself, with no scheme and no selling tier.
     product_pricing_tiers: [],
     price_lists: [],
-    favorites: [],
-  });
+  }, errors);
   Object.assign(client, {
     auth: {
-      getUser: async () => ({ data: { user: { id: role === 'retailer' ? RETAILER : STAFF, email: 'shop@example.test' } }, error: null }),
+      getUser: async () => ({ data: { user: { id: userId, email: 'shop@example.test' } }, error: null }),
     },
   });
   mocks.client = client;
   return client;
 }
 
-function apiRequest(method: string, path: string, body?: unknown) {
+/** `token: null` builds a call with no Authorization header at all. */
+function apiRequest(method: string, path: string, body?: unknown, token: string | null = 'verified-token') {
   const headers = new Headers();
-  headers.set('authorization', 'Bearer verified-token');
+  if (token) headers.set('authorization', `Bearer ${token}`);
   if (body !== undefined) headers.set('content-type', 'application/json');
   return new Request(`https://api.test${path}`, {
     method,
@@ -155,11 +162,28 @@ describe('quick order search', () => {
     expect(client.queries.filter((query) => query.table === 'products')).toHaveLength(0);
   });
 
+  it('refuses a call with no bearer token before reading anything', async () => {
+    const client = mocks.client as ReturnType<typeof supabaseFixture>;
+    const response = await quickOrderSearch(
+      apiRequest('GET', '/api/mobile/v1/quick-order?q=parle', undefined, null),
+    );
+    expect(response.status).toBe(401);
+    expect((await json(response)).error).toMatchObject({ code: 'missing_token' });
+    expect(client.queries).toHaveLength(0);
+  });
+
   it('refuses a non-retailer session before touching the catalogue', async () => {
     const client = install({ role: 'staff' });
     const response = await quickOrderSearch(apiRequest('GET', '/api/mobile/v1/quick-order?q=parle'));
     expect(response.status).toBe(403);
     expect(client.queries.filter((query) => query.table === 'products')).toHaveLength(0);
+  });
+
+  it('answers 503 rather than an empty catalogue when the read fails', async () => {
+    install({ errors: { products: 'catalogue is unavailable' } });
+    const response = await quickOrderSearch(apiRequest('GET', '/api/mobile/v1/quick-order?q=parle'));
+    expect(response.status).toBe(503);
+    expect((await json(response)).error).toMatchObject({ code: 'database_unavailable' });
   });
 });
 
@@ -221,6 +245,24 @@ describe('bulk line matching', () => {
       apiRequest('POST', '/api/mobile/v1/quick-order/match', { raw: '   \n  \n' }),
     );
     expect(response.status).toBe(400);
+  });
+
+  it('refuses a payload that carries no list at all', async () => {
+    const response = await matchBulkLines(
+      apiRequest('POST', '/api/mobile/v1/quick-order/match', {}),
+    );
+    expect(response.status).toBe(400);
+    expect((await json(response)).error).toMatchObject({ code: 'validation_failed' });
+  });
+
+  it('refuses a call with no bearer token before matching anything', async () => {
+    const client = mocks.client as ReturnType<typeof supabaseFixture>;
+    const response = await matchBulkLines(
+      apiRequest('POST', '/api/mobile/v1/quick-order/match', { raw: '2 x parle' }, null),
+    );
+    expect(response.status).toBe(401);
+    expect((await json(response)).error).toMatchObject({ code: 'missing_token' });
+    expect(client.queries).toHaveLength(0);
   });
 
   it('refuses a non-retailer session before matching', async () => {
