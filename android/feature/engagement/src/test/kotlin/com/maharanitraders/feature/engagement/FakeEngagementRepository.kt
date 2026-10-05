@@ -12,7 +12,7 @@ class FakeEngagementRepository : EngagementRepository {
   )
   var markReadResult: AppResult<Int> = AppResult.Success(0)
   var walletSummaryResult: AppResult<WalletSummary> = AppResult.Success(
-    WalletSummary(0, 0, 0, false, false, false),
+    WalletSummary(coinsFundedPaise = 0, coinsSpentPaise = 0, hasConfiguredLimit = false, isOverLimit = false, allowOverdue = false),
   )
   var walletLedgerResult: AppResult<WalletLedgerPage> = AppResult.Success(
     WalletLedgerPage(entries = emptyList(), nextCursor = null, hasMore = false, total = 0),

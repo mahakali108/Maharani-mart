@@ -57,9 +57,11 @@ class NetworkEngagementRepository @Inject constructor(
   override suspend fun loadWalletSummary(): AppResult<WalletSummary> =
     executor.executeEnvelope { api.walletSummary() }.map { dto ->
       WalletSummary(
-        creditLimitPaise = dto.creditLimitPaise,
-        outstandingPaise = dto.outstandingPaise,
-        availablePaise = dto.availablePaise,
+        // Wire names in, coin names out. `availablePaise` is deliberately
+        // dropped: it is `funded − spent` unclamped, and `coinBalancePaise`
+        // recomputes it with the clamp the coin model requires.
+        coinsFundedPaise = dto.creditLimitPaise,
+        coinsSpentPaise = dto.outstandingPaise,
         hasConfiguredLimit = dto.hasConfiguredLimit,
         isOverLimit = dto.isOverLimit,
         allowOverdue = dto.allowOverdue,

@@ -35,9 +35,8 @@ class WalletViewModelTest {
   @Test
   fun `load shows wallet summary and ledger`() = runTest(testDispatcher) {
     val summary = WalletSummary(
-      creditLimitPaise = 100_000_00,
-      outstandingPaise = 25_000_00,
-      availablePaise = 75_000_00,
+      coinsFundedPaise = 100_000_00,
+      coinsSpentPaise = 25_000_00,
       hasConfiguredLimit = true,
       isOverLimit = false,
       allowOverdue = false,
@@ -114,5 +113,50 @@ class WalletViewModelTest {
       // also pages a summary: the field is `ledgerHasMore`, not `hasMore`.
       assertThat(state.ledgerHasMore).isFalse()
     }
+  }
+
+  @Test
+  fun `a shop that overspent has zero coins, never a negative balance`() {
+    // The server reports `availablePaise` as funded minus spent WITHOUT a
+    // clamp, so an overspent account arrives as a negative number. Showing it
+    // would tell a shopkeeper they hold minus five thousand coins.
+    val overspent = WalletSummary(
+      coinsFundedPaise = 10_000_00,
+      coinsSpentPaise = 15_000_00,
+      hasConfiguredLimit = true,
+      isOverLimit = true,
+      allowOverdue = false,
+    )
+
+    assertThat(overspent.coinBalancePaise).isEqualTo(0)
+  }
+
+  @Test
+  fun `the coin balance is funded minus spent`() {
+    // Same arithmetic as `coinBalancePaise()` in lib/coins/math.ts, which is
+    // what the server uses when it debits an order. If these ever disagree,
+    // checkout shows one number and charges another.
+    val summary = WalletSummary(
+      coinsFundedPaise = 100_000_00,
+      coinsSpentPaise = 25_000_00,
+      hasConfiguredLimit = true,
+      isOverLimit = false,
+      allowOverdue = false,
+    )
+
+    assertThat(summary.coinBalancePaise).isEqualTo(75_000_00)
+  }
+
+  @Test
+  fun `ledger rows are described in coins, matching the web labels`() {
+    assertThat(CoinVocabulary.typeLabel("ORDER_DEBIT")).isEqualTo("Coins spent")
+    assertThat(CoinVocabulary.typeLabel("PAYMENT_CREDIT")).isEqualTo("Coins added")
+    assertThat(CoinVocabulary.typeLabel("ORDER_REVERSAL")).isEqualTo("Coins refunded")
+    assertThat(CoinVocabulary.typeLabel("CREDIT_LIMIT_CHANGE")).isEqualTo("Coins funded")
+    // An unknown type is shown as-is rather than hidden or guessed at.
+    assertThat(CoinVocabulary.typeLabel("SOME_NEW_TYPE")).isEqualTo("SOME NEW TYPE")
+
+    assertThat(CoinVocabulary.addsCoins("credit")).isTrue()
+    assertThat(CoinVocabulary.addsCoins("debit")).isFalse()
   }
 }
