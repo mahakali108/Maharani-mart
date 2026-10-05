@@ -692,6 +692,120 @@ describe('Android test doubles keep up with the main sources', () => {
     expect(offenders.sort()).toEqual([]);
   });
 
+  /**
+   * Blanks block comments, preserving every offset.
+   *
+   * `splitArguments` skips `//` comments but not KDoc, and a KDoc sentence
+   * containing a comma splits one parameter into two — which is how a prose
+   * word ending in a colon got read as a parameter name.
+   */
+  function blankBlockComments(source: string): string {
+    const out = source.split('');
+    let i = 0;
+    while (i < source.length) {
+      if (source[i] === '/' && source[i + 1] === '*') {
+        const close = source.indexOf('*/', i + 2);
+        const end = close === -1 ? source.length : close + 2;
+        for (let k = i; k < end; k += 1) if (out[k] !== '\n') out[k] = ' ';
+        i = end;
+      } else {
+        i += 1;
+      }
+    }
+    return out.join('');
+  }
+
+  /**
+   * Every function an interface declares, with its parameter NAMES.
+   *
+   * Kotlin requires an override to match the signature exactly, so a parameter
+   * added to an interface breaks every double that implements it — even though
+   * the double still has a function of that name.
+   */
+  function interfaceFunctionParameters(): Map<string, Map<string, string[]>> {
+    const found = new Map<string, Map<string, string[]>>();
+    for (const file of mainSources()) {
+      const source = blankBlockComments(readFileSync(file, 'utf8'));
+      for (const match of source.matchAll(/\binterface\s+(\w+)/g)) {
+        const braceAt = source.indexOf('{', match.index);
+        if (braceAt === -1) continue;
+        let depth = 0;
+        let end = braceAt;
+        for (; end < source.length; end += 1) {
+          if (source[end] === '{') depth += 1;
+          else if (source[end] === '}') {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+        }
+        const body = source.slice(braceAt + 1, end);
+        const functions = new Map<string, string[]>();
+        for (const fn of body.matchAll(/(?:^|\n)\s*(?:suspend\s+)?fun\s+(\w+)\s*\(/g)) {
+          const open = body.indexOf('(', fn.index! + fn[0].length - 1);
+          const args = splitArguments(body, open);
+          if (!args) continue;
+          functions.set(fn[1]!, parameterNames(args));
+        }
+        if (functions.size > 0) found.set(match[1]!, functions);
+      }
+    }
+    return found;
+  }
+
+  /** Parameter names from a split argument list, annotations and docs removed. */
+  function parameterNames(args: string[]): string[] {
+    return args
+      .map((arg) =>
+        arg
+          // KDoc on a parameter is prose, and prose contains words followed by
+          // colons. Remove block and line comments before reading names.
+          .replace(/\/\*[\s\S]*?\*\//g, ' ')
+          .replace(/\/\/[^\n]*/g, ' ')
+          // `@Query("fav")` is not the parameter name either.
+          .replace(/@\w+\s*\([^)]*\)/g, ' ')
+          .replace(/@\w+/g, ' ')
+          .trim(),
+      )
+      .filter((arg) => arg.length > 0)
+      .map((arg) => /(?:^|\s)(\w+)\s*:/.exec(arg)?.[1])
+      .filter((name): name is string => Boolean(name));
+  }
+
+  it('matches the interface signature in every test double override', () => {
+    // WHY: adding `favoritesOnly` to `MaharaniApi.catalogProducts` compiled the
+    // catalogue fake (which was updated) but broke `:core:auth`'s FakeMaharaniApi,
+    // which still declared the OLD parameter list. The rule above only checks that
+    // a member of that NAME exists, so it passed and CI caught it instead.
+    const interfaces = interfaceFunctionParameters();
+    expect(interfaces.size).toBeGreaterThan(3);
+
+    const offenders: string[] = [];
+    for (const file of testSources()) {
+      const source = blankBlockComments(readFileSync(file, 'utf8'));
+      for (const match of source.matchAll(/class\s+(\w+)\s*(?:\([^)]*\))?\s*:\s*([\w.]+)/g)) {
+        const className = match[1]!;
+        const interfaceName = match[2]!.split('.').pop()!;
+        const functions = interfaces.get(interfaceName);
+        if (!functions) continue;
+
+        for (const override of source.matchAll(/override\s+(?:suspend\s+)?fun\s+(\w+)\s*\(/g)) {
+          const expected = functions.get(override[1]!);
+          if (!expected) continue;
+          const open = source.indexOf('(', override.index! + override[0].length - 1);
+          const args = splitArguments(source, open);
+          if (!args) continue;
+          const actual = parameterNames(args);
+          if (actual.join(',') !== expected.join(',')) {
+            offenders.push(
+              `${className}.${override[1]} takes (${actual.join(', ')}) but ${interfaceName} declares (${expected.join(', ')}) in ${relative(ROOT, file)}`,
+            );
+          }
+        }
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
   it('passes every required constructor parameter at every test call site', () => {
     const constructors = requiredConstructorParameters();
     expect(constructors.size).toBeGreaterThan(5);
