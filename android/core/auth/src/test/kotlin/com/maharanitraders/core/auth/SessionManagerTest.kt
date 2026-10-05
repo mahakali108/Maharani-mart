@@ -599,6 +599,15 @@ class FakeMaharaniApi : MaharaniApi {
   override suspend fun orderDetail(orderId: String): ApiEnvelope<MobileOrderDto> = unsupported("orderDetail")
   override suspend fun recoverOrderRequest(requestKey: String): ApiEnvelope<MobileOrderDto> = unsupported("recoverOrderRequest")
 
+  // Phase F engagement endpoints — not reachable from the session lifecycle.
+  override suspend fun notifications(cursor: String?, unreadOnly: String?): ApiEnvelope<List<com.maharanitraders.core.network.dto.MobileNotificationDto>> = unsupported("notifications")
+  override suspend fun markNotificationsRead(body: com.maharanitraders.core.network.dto.MarkReadRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MarkReadResponseDto> = unsupported("markNotificationsRead")
+  override suspend fun walletSummary(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileWalletSummaryDto> = unsupported("walletSummary")
+  override suspend fun walletLedger(cursor: String?): ApiEnvelope<List<com.maharanitraders.core.network.dto.MobileWalletLedgerEntryDto>> = unsupported("walletLedger")
+  override suspend fun favorites(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileFavoritesDto> = unsupported("favorites")
+  override suspend fun toggleFavorite(body: com.maharanitraders.core.network.dto.FavoriteToggleRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.FavoriteToggleResponseDto> = unsupported("toggleFavorite")
+  override suspend fun coupons(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileCouponsDto> = unsupported("coupons")
+
   private fun unsupported(endpoint: String): Nothing =
     throw UnsupportedOperationException("$endpoint is not used by the session layer")
 }
