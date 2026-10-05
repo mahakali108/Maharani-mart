@@ -14,9 +14,18 @@ import com.maharanitraders.core.network.dto.CheckoutQuoteRequestDto
 import com.maharanitraders.core.network.dto.CouponRequestDto
 import com.maharanitraders.core.network.dto.CouponResultDto
 import com.maharanitraders.core.network.dto.CouponRemovedDto
+import com.maharanitraders.core.network.dto.FavoriteToggleRequestDto
+import com.maharanitraders.core.network.dto.FavoriteToggleResponseDto
+import com.maharanitraders.core.network.dto.MarkReadRequestDto
+import com.maharanitraders.core.network.dto.MarkReadResponseDto
 import com.maharanitraders.core.network.dto.MobileAddressesDto
 import com.maharanitraders.core.network.dto.MobileCartDto
+import com.maharanitraders.core.network.dto.MobileCouponsDto
+import com.maharanitraders.core.network.dto.MobileFavoritesDto
+import com.maharanitraders.core.network.dto.MobileNotificationDto
 import com.maharanitraders.core.network.dto.MobileOrderDto
+import com.maharanitraders.core.network.dto.MobileWalletLedgerEntryDto
+import com.maharanitraders.core.network.dto.MobileWalletSummaryDto
 import com.maharanitraders.core.network.dto.OrderConfirmationDto
 import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
 import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
@@ -208,4 +217,37 @@ interface MaharaniApi {
   /** Recover a committed order when the submit response was uncertain. */
   @GET("api/mobile/v1/orders/requests/{requestKey}")
   suspend fun recoverOrderRequest(@Path("requestKey") requestKey: String): ApiEnvelope<MobileOrderDto>
+
+  // -------------------------------------------------------------------------Phase F — engagement: notifications, wallet, favorites, coupons
+  // -------------------------------------------------------------------------
+
+  @GET("api/mobile/v1/notifications")
+  suspend fun notifications(
+    @Query("cursor") cursor: String? = null,
+    @Query("unreadOnly") unreadOnly: String? = null,
+  ): ApiEnvelope<List<MobileNotificationDto>>
+
+  @POST("api/mobile/v1/notifications/read")
+  suspend fun markNotificationsRead(
+    @Body body: MarkReadRequestDto,
+  ): ApiEnvelope<MarkReadResponseDto>
+
+  @GET("api/mobile/v1/wallet")
+  suspend fun walletSummary(): ApiEnvelope<MobileWalletSummaryDto>
+
+  @GET("api/mobile/v1/wallet/ledger")
+  suspend fun walletLedger(
+    @Query("cursor") cursor: String? = null,
+  ): ApiEnvelope<List<MobileWalletLedgerEntryDto>>
+
+  @GET("api/mobile/v1/favorites")
+  suspend fun favorites(): ApiEnvelope<MobileFavoritesDto>
+
+  @POST("api/mobile/v1/favorites")
+  suspend fun toggleFavorite(
+    @Body body: FavoriteToggleRequestDto,
+  ): ApiEnvelope<FavoriteToggleResponseDto>
+
+  @GET("api/mobile/v1/coupons")
+  suspend fun coupons(): ApiEnvelope<MobileCouponsDto>
 }

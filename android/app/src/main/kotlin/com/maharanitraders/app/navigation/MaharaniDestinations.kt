@@ -54,6 +54,7 @@ object MaharaniRoutes {
   const val ORDERS = "orders"
   const val COINS = "coins"
   const val NOTIFICATIONS = "notifications"
+  const val COUPONS = "coupons"
   const val SALES_DESK = "sales_desk"
   const val WAREHOUSE = "warehouse"
   const val ADMINISTRATION = "administration"
@@ -121,15 +122,22 @@ object MaharaniCatalog {
       route = MaharaniRoutes.COINS,
       label = "Maharani Coins",
       workspace = Workspace.RETAILER,
-      phase = MigrationPhase.ENGAGEMENT,
+      phase = null,
       summary = "Coin balance and ledger-backed redemption — always computed by the server.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.NOTIFICATIONS,
       label = "Notifications",
       workspace = null,
-      phase = MigrationPhase.ENGAGEMENT,
-      summary = "In-app notifications and DB-driven banners; push delivery needs provider credentials.",
+      phase = null,
+      summary = "In-app notifications from order activity, account messages and marketplace news.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.COUPONS,
+      label = "Coupons",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Active coupons and offers you can apply to your next order.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.SALES_DESK,

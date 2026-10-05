@@ -83,6 +83,9 @@ import com.maharanitraders.feature.catalog.ui.CategoriesScreen
 import com.maharanitraders.feature.catalog.ui.HomeScreenTags
 import com.maharanitraders.feature.catalog.ui.ProductDetailScreen
 import com.maharanitraders.feature.catalog.ui.RetailerHomeScreen
+import com.maharanitraders.feature.engagement.ui.CouponsScreen
+import com.maharanitraders.feature.engagement.ui.NotificationsScreen
+import com.maharanitraders.feature.engagement.ui.WalletScreen
 import com.maharanitraders.feature.orders.CartCheckoutViewModel
 import com.maharanitraders.feature.orders.ui.CartScreen
 import com.maharanitraders.feature.orders.ui.OrderHistoryScreen
@@ -626,6 +629,12 @@ private fun DestinationSurface(
     )
 
     MaharaniRoutes.ORDERS -> OrderHistoryScreen()
+
+    MaharaniRoutes.COINS -> WalletScreen()
+
+    MaharaniRoutes.NOTIFICATIONS -> NotificationsScreen()
+
+    MaharaniRoutes.COUPONS -> CouponsScreen()
 
     MaharaniRoutes.ACCOUNT -> AccountScreen(
       snapshot = snapshot,

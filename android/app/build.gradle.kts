@@ -136,6 +136,7 @@ dependencies {
   implementation(project(":feature:auth"))
   implementation(project(":feature:catalog"))
   implementation(project(":feature:orders"))
+  implementation(project(":feature:engagement"))
 
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)

@@ -992,7 +992,12 @@ describe('Phase D wiring that only a Gradle build would otherwise catch', () => 
 
     const api = readFileSync(join(ANDROID, 'core', 'network', 'src', 'main', 'kotlin',
       'com', 'maharanitraders', 'core', 'network', 'MaharaniApi.kt'), 'utf8');
-    const sent = [...api.matchAll(/@Query\("([A-Za-z]+)"\)/g)].map((m) => m[1]!);
+    // Scope to the catalogue endpoints only: extract the section between the
+    // "Phase D" comment and the "Phase E" comment, then read all @Query params
+    // from that section. Other endpoints (orders, notifications, etc.) have their
+    // own server-side query contracts and are tested independently.
+    const phaseD = /Phase D[\s\S]*?Phase E/.exec(api)?.[0] ?? api;
+    const sent = [...phaseD.matchAll(/@Query\("([A-Za-z]+)"\)/g)].map((m) => m[1]!);
     expect(sent.length).toBeGreaterThan(3);
 
     const unknown = sent.filter((name) => !server.has(name));
