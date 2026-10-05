@@ -2,6 +2,12 @@
 
 > Auto-generated from a complete PWA inventory performed 2026-10-05.
 > Statuses: ✅ IMPLEMENTED · 🔶 PARTIAL · ⛔ BLOCKED · ➖ NOT APPLICABLE
+>
+> A row is ✅ IMPLEMENTED only when the screen, the navigation to it, a real mobile
+> endpoint, the server's own auth/RLS scoping, the loading/error/empty states and a
+> test for the behaviour all exist. A screen that merely renders is not parity;
+> nothing here is a placeholder. The Verification log at the end records the code
+> and tests behind the most recent status changes.
 
 ## Legend
 
@@ -46,7 +52,7 @@
 | Error/offline states | Inline banners | N/A | `ErrorState` / `OfflineState` / `InlineErrorBanner` | ✅ IMPLEMENTED | Cached content + retry |
 | Skeleton loading | Various | N/A | `HomeSkeleton` | ✅ IMPLEMENTED | Shimmer placeholders |
 | Home search submit | `SearchField` | Catalog screen param | `openCatalog(CatalogRequest)` | ✅ IMPLEMENTED | Navigates to catalog tab |
-| Coins balance card | `CoinsBalanceCard` | Wallet summary | `HomeCoinsSummary` | ⛔ BLOCKED | Needs wallet mobile API integration on home |
+| Coins balance card | `CoinsBalanceCard` | `GET /api/mobile/v1/wallet` (exists) | Not yet native | ⛔ BLOCKED | Build order only: the wallet API is live and `WalletScreen` reads it; the extra home card is not built |
 | Quick actions | `HomeQuickActions` | Various | Not yet native | ⛔ BLOCKED | Quick order, reports, etc. |
 | Buy again / reorder | `HomeReorderCard` | Order history + cart | Not yet native | ⛔ BLOCKED | Needs reorder API |
 | Offers & coupons section | Schemes cards | Schemes data | Not yet native | ⛔ BLOCKED | Needs schemes API |
@@ -106,7 +112,7 @@
 | Slab pricing | PDP | Pack tiers[] | PDP pack details | ✅ IMPLEMENTED | Quantity tiers |
 | Add to cart | PDP button | `POST /api/mobile/v1/cart/lines` | `onAddToCart` callback | ✅ IMPLEMENTED | MOQ-based quantity |
 | Pack selection | `PackSelector` | Pack list | Pack selection on PDP | ✅ IMPLEMENTED | Tap to select pack |
-| Favorite toggle | `FavoriteToggle` | Favorites API | Not yet native | ⛔ BLOCKED | Needs favorites mobile API |
+| Favorite toggle | `favorite-toggle.tsx` | `POST /api/mobile/v1/favorites` | Heart over `ProductGallery` (`ProductDetailScreen`) | ✅ IMPLEMENTED | The server's answer paints the heart; disabled while a write is in flight; a failed write is said inline |
 | Share button | `ShareButton` | N/A | Not yet native | ➖ NOT APPLICABLE | Android share intent (future) |
 | Product feedback | `ProductFeedback` | Stock alert API | Not yet native | ⛔ BLOCKED | Needs feedback mobile API |
 
@@ -200,7 +206,7 @@
 
 | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
 |---|---|---|---|---|---|
-| Coin balance display | `CoinsBalanceCard` | `GET /api/mobile/v1/wallet` | `WalletScreen` summary card | ✅ IMPLEMENTED | Server-authoritative balance |
+| Coin balance display | `CoinsBalanceCard` | `GET /api/mobile/v1/wallet` | `WalletScreen` "🪙 Coins available" card | ✅ IMPLEMENTED | Server-authoritative balance, coins-framed: no credit limit, no "outstanding", no over-limit chip — the retired `CreditSummary` framing is gone |
 | Coin history / ledger | `app/retailer/account/ledger/page.tsx` | `GET /api/mobile/v1/wallet/ledger` | `WalletScreen` ledger list | ✅ IMPLEMENTED | Cursor-paginated, all entry types |
 | Coins in checkout | `CoinsCheckoutSummary` | Checkout quote coinsUsedPaise | `QuoteTotals` coins rows | ✅ IMPLEMENTED | Server-computed |
 | Coins in order confirmation | Order confirmation | Order coinsUsedPaise | Confirmation display | ✅ IMPLEMENTED | |
@@ -215,9 +221,11 @@
 | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
 |---|---|---|---|---|---|
 | Notification list | `app/retailer/notifications/page.tsx` | `GET /api/mobile/v1/notifications` | `NotificationsScreen` | ✅ IMPLEMENTED | Cursor-paginated, newest first |
-| Read/unread state | Notification list | `POST /api/mobile/v1/notifications/read` | `markAllRead` action | ✅ IMPLEMENTED | Batch mark-as-read |
+| Read/unread state | Notification list | `POST /api/mobile/v1/notifications/read` | "Mark all read" + per-alert tap | ✅ IMPLEMENTED | One batch endpoint; tapping an alert writes only that id |
+| Unread-only view | Filter on the web feed | `unreadOnly=1` on the list endpoint | All / Unread `FilterChip` row | ✅ IMPLEMENTED | The filter is the server's, never a client-side trim of the loaded page |
 | Notification details | Notification body | Notification data | `NotificationCard` body | ✅ IMPLEMENTED | Full title + body |
-| Unread badge count | `RetailerShell` | Count query | Not yet native | 🔶 PARTIAL | Count available from state |
+| Notification action (link) | Alert `link_url` → web page | Notification data | `NotificationLinkRouter` → in-app route | ✅ IMPLEMENTED | Relative retailer paths only; a link with no native screen navigates nowhere rather than escaping to a browser |
+| Failed read state | — | 503 from the read endpoint | `actionMessage` line above the feed | ✅ IMPLEMENTED | The feed stays on screen and the row is not marked read locally |
 | Push notifications | N/A | Not yet implemented | Not yet native | ➖ NOT APPLICABLE | Future: FCM/APNs |
 
 ---
@@ -240,9 +248,13 @@
 
 | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
 |---|---|---|---|---|---|
-| Favorites list | `app/retailer/favorites/page.tsx` | Favorites query | Not yet native | ⛔ BLOCKED | Needs favorites mobile API |
-| Add/remove favorite | `FavoriteToggle` | Favorite toggle RPC | Not yet native | ⛔ BLOCKED | |
-| Stock alerts for favorites | `StockAlertButton` | Alert subscription | Not yet native | ⛔ BLOCKED | |
+| Favourites screen | `app/retailer/favorites/page.tsx` | `GET /api/mobile/v1/catalog/products?fav=1` | `FavoritesScreen` (`:feature:catalog`) | ✅ IMPLEMENTED | Server-filtered list at live prices; skeleton, error/offline, empty, cursor paging that stops on a repeated cursor |
+| Favourites header count | "N products" | `meta.resultCount` / `resultCapped` | `favorites_count` + cap line | ✅ IMPLEMENTED | The server's own count, with the cap disclosed when it bound |
+| Remove from the list | Heart on the favourites card | `POST /api/mobile/v1/favorites` | `ProductCard` heart (`catalog_product_favorite:<id>`) | ✅ IMPLEMENTED | The row leaves when the server confirms the un-save — no local delete |
+| Add/remove favourite | `FavoriteToggle` | `POST /api/mobile/v1/favorites` | `FavoritesStore` + `FavoritesViewModel` | ✅ IMPLEMENTED | One store for grid, list and PDP; the server's answer is the published state; a second tap mid-write is dropped |
+| Heart on catalogue cards | `product-card.tsx` heart | `isFavorite` on the list payload | `ProductCard` / `ProductGrid` | ✅ IMPLEMENTED | Home rails keep no heart, mirroring the web home, whose payload has no `isFavorite` |
+| Favourites destination | `/retailer/favorites` | Retailer-only rows | `MaharaniRoutes.FAVORITES` + drawer + masthead heart | ✅ IMPLEMENTED | `MaharaniRouter` grants it to the RETAILER role only |
+| Stock alerts for favourites | `StockAlertButton` | Alert subscription | Not yet native | ⛔ BLOCKED | No mobile stock-alert API exists yet; later phase |
 
 ---
 
@@ -265,8 +277,9 @@
 | Navigation drawer | `Sidebar` | N/A | `ModalNavigationDrawer` | ✅ IMPLEMENTED | Extra destinations |
 | Role-based routing | `MaharaniRouter` | Session policy | `MaharaniRouter.resolveSession` | ✅ IMPLEMENTED | Server-driven navigation |
 | Back navigation | Browser back | N/A | System back + `popBackStack` | ✅ IMPLEMENTED | Native back stack |
-| Cart badge | `RetailerShell` cartCount | Cart count | Not yet native | 🔶 PARTIAL | Count known from cart state |
-| Notification badge | `RetailerShell` unreadCount | Unread count | Not yet native | ⛔ BLOCKED | Needs notification count API |
+| Cart badge | `app/retailer/layout.tsx` head count | `GET /api/mobile/v1/shell/badges` | `CountBadge` on the bottom-nav cart item | ✅ IMPLEMENTED | Server count; hidden at zero; drawn as 99+ past 99 |
+| Notification badge | `app/retailer/layout.tsx` head count | `GET /api/mobile/v1/shell/badges` | `CountBadge` on the masthead bell | ✅ IMPLEMENTED | Same single read; refreshed on resume and on leaving the cart or the alert feed, never on a timer |
+| Shared shell counters | Server component (per request) | `ShellBadgesDto` → `ShellBadgeStore` | `ShellBadgesViewModel` in the shell | ✅ IMPLEMENTED | One flow for bar, masthead and drawer; a failed read keeps the last known counts instead of blinking to zero |
 
 ---
 
@@ -289,22 +302,98 @@
 
 ## Summary
 
+Counted from the status column of every feature row in this file (the
+design-system table at §16 is a capability list, not a parity row, and is excluded):
+
 | Status | Count |
 |--------|-------|
-| ✅ IMPLEMENTED | 79 |
+| ✅ IMPLEMENTED | 130 |
 | 🔶 PARTIAL | 4 |
-| ⛔ BLOCKED | 14 |
+| ⛔ BLOCKED | 19 |
 | ➖ NOT APPLICABLE | 4 |
 
-### Priority Roadmap for BLOCKED Items
+⛔ BLOCKED in this document means "not built in the native app yet". Most of those
+rows need no new backend at all — the mobile endpoint already exists and the work
+is a Compose screen. Only the rows whose note names a missing endpoint (`schemes`,
+`invoice`, `reorder`, `support`, `profile edit`, `security`, `notification
+preferences`, `saved carts`, `stock alerts`, `reports`) require server work first.
 
-1. **Support** — Add `GET/POST /api/mobile/v1/support` + native screens
-2. **Schemes** — Add `GET /api/mobile/v1/schemes` + native screen
-3. **Invoice** — Add `GET /api/mobile/v1/orders/{id}/invoice` + native screen
+### Priority Roadmap for the remaining rows
+
+1. **Order detail + invoice** — `GET /api/mobile/v1/orders/{id}` is live; the native
+   per-order screen and its invoice action are not built
+2. **Support** — Add `GET/POST /api/mobile/v1/support` + native screens
+3. **Schemes** — Add `GET /api/mobile/v1/schemes` + native screen
 4. **Reorder** — Add `POST /api/mobile/v1/orders/{id}/reorder` + native flow
-5. **Address Book** — Add CRUD endpoints + native screen
-6. **Profile Edit** — Add `PATCH /api/mobile/v1/profile` + native screen
-7. **Delivery Tracking** — Add delivery status endpoint + native screen
-8. **Home Quick Actions** — Wire quick order/reports shortcuts on home
-9. **Favorites UI** — Wire favorites toggle on PDP + favorites list screen
-10. **Notification Badge** — Show unread count in bottom nav badge
+5. **Address Book** — `GET /api/mobile/v1/addresses` is live; the CRUD screens are not
+6. **Profile Edit / Security** — Add `PATCH /api/mobile/v1/profile` + password UI
+7. **Delivery Tracking** — Add a delivery status endpoint + native screen
+8. **Home Quick Actions + home coins card** — pure UI on existing reads
+9. **Notification preferences** — Add the prefs mobile API + native screen
+10. **Stock alerts for favourites** — Add the alert mobile API + native button
+
+---
+
+## Verification log
+
+### 2026-10-05 — favourites, shell badges, notification UX
+
+Three gaps closed; the PR #84 engagement backend was reused, not rewritten.
+
+**Backend (one new endpoint, nothing else added):**
+
+| Endpoint | Status | Notes |
+|---|---|---|
+| `GET /api/mobile/v1/shell/badges` | new | `{ cartCount, unreadNotificationCount }`; retailer-gated (`requireRetailerCommerceSession`), rate-limited `read.orders`, counts only (no cart rows, no notification bodies); the two head-count queries of `app/retailer/layout.tsx`, verbatim |
+| `GET/POST /api/mobile/v1/favorites` | reused | unchanged |
+| `GET /api/mobile/v1/catalog/products?fav=1` | reused | the filter existed server-side (`lib/retailer/catalog-batches.ts` `query.in('id', favoriteIds)`); the mobile query parser already read `fav` — the app simply never sent it |
+| `GET /api/mobile/v1/notifications?unreadOnly=1`, `POST /notifications/read` | reused | unchanged |
+
+**Native (Kotlin/Compose — no WebView, no new Hilt module):**
+
+- `:feature:catalog`: `FavoritesStore` (`@Singleton`, the only owner of the
+  favourite write), `FavoritesViewModel`, `ui/FavoritesScreen.kt` (header count +
+  cap disclosure, skeleton, offline/error, empty → "Browse catalogue", grid with
+  hearts, load-more that stops on a repeated cursor, refresh).
+- `ProductCard` / `ProductGrid` gained trailing `isFavorite` / `favoriteBusy` /
+  `onToggleFavorite` parameters with defaults, and `CatalogScreen` /
+  `ProductDetailScreen` gained a trailing `favoritesViewModel` — every existing
+  call site (including the home rails) keeps its old behaviour.
+- `:feature:engagement`: `NotificationsViewModel` gained `unreadOnly` (a server
+  query) and `markRead(id)`; `NotificationsScreen` gained the All / Unread chips,
+  tap-to-mark-read, a Refresh action and an `actionMessage` line that does not
+  destroy the loaded feed; `WalletScreen` now shows "🪙 Coins available" with no
+  credit-limit/outstanding/over-limit framing.
+- `:app`: `ShellBadgesViewModel` + `:feature:engagement`'s `ShellBadgeStore`
+  (counts from `GET /shell/badges` only — nothing accumulates on the device, a
+  failed read keeps the last counts, sign-out clears them); `CountBadge` on the
+  bottom-nav cart item and the masthead bell; masthead heart → `FAVORITES`;
+  `NotificationLinkRouter` maps alert links onto in-app routes.
+
+**Tests:**
+
+| Layer | Test | Covers |
+|---|---|---|
+| web | `tests/mobile-shell-engagement-api.test.ts` (new, 24 tests) | badge counts are owner-filtered and body-free; empty feed is two zeros not an error; 401/403/503 gates; `unreadOnly=1` reaches the query; a read-marking update carries `recipient_id` + the exact ids and rejects `[]`, non-UUID, 101 ids, unknown keys, bad JSON; the favourites toggle inserts `{retailer_id, product_id}` only, flips state on a second call, and a failed write invents nothing |
+| web | `tests/mobile-catalog-api.test.ts` | `fav=1` parses to `onlyFavorites`, `fav=0`/absent does not turn the filter on |
+| Android | `FavoritesStoreTest` (7) | server answer published; no client-side toggle guess; in-flight tap dropped; failure keeps last state + message; blank id costs no request |
+| Android | `FavoritesViewModelTest` (6) | `fav=1` sent and nothing else; count/cap carried; dedupe + repeated-cursor stop; failed refresh keeps rows; offline/retryable; message dismissal |
+| Android | `CatalogRepositoryTest` (4 added) | `favoritesOnly` omitted vs `1`; trimmed id write returns the server state; empty id never reaches the network; transport failure is offline + retryable |
+| Android | `NotificationsViewModelTest` (5 added) | unread filter is a server query; switching filters starts empty; per-alert read writes only that id; a read row is not rewritten; a failed write keeps the feed |
+| Android | `ShellBadgeStoreTest` (7) | published counts; failure keeps last known; first failure is not a badge; negative clamps to none; loading only while in flight; concurrent triggers collapse to one read; sign-out clears |
+| Android | `NotificationLinkRouterTest` (7), `MaharaniRouterTest` (3 assertions added) | only relative retailer routes map; admin/staff/absolute/protocol-relative links open nothing; `FAVORITES` is retailer-only and absent for a salesman holding the retailer workspace |
+
+**Not faked / still open, stated plainly:**
+
+- `/retailer/orders/<id>` alert links open the **Orders tab**, not a per-order
+  screen: the native order-detail screen is roadmap item 1. Nothing was invented
+  for it.
+- An alert link with no native destination is **not tappable** (no chevron, no
+  browser hop) — there is no WebView and no external browser intent in this app.
+- Home rails carry **no heart**, because the web home payload carries no
+  `isFavorite`; adding one to the rail cards would mean inventing a field the
+  server does not send there.
+- Favourite writes are still `POST /favorites`-only: no optimistic flip, so a slow
+  link shows the busy state rather than a heart that may be wrong.
+- Push notifications remain out of scope (no FCM); the badge is a pull on resume /
+  tab change only.
