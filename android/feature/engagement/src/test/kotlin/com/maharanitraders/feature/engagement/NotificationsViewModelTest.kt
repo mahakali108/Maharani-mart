@@ -123,4 +123,116 @@ class NotificationsViewModelTest {
       assertThat(state.items.all { it.isRead }).isTrue()
     }
   }
+
+  @Test
+  fun `the unread filter is a server query, not a client-side trim`() = runTest(testDispatcher) {
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(AppNotification("n1", "Unread", "Body", null, false, "2026-01-01")),
+        nextCursor = null,
+        hasMore = false,
+      ),
+    )
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.setUnreadOnly(true)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    assertThat(viewModel.state.value.unreadOnly).isTrue()
+    // Two reads: the unfiltered start, then the filtered one — each carrying the
+    // flag, and never a cursor from the previous filter.
+    assertThat(fakeRepository.notificationQueries).containsExactly(null to false, null to true)
+  }
+
+  @Test
+  fun `switching the filter starts from an empty list`() = runTest(testDispatcher) {
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(AppNotification("n1", "One", "Body", null, true, "2026-01-01")),
+        nextCursor = "next",
+        hasMore = true,
+      ),
+    )
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.setUnreadOnly(true)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // Rows from the other query are gone while the new one is in flight: showing
+    // them would imply they matched a filter they were never fetched with.
+    assertThat(viewModel.state.value.items).isEmpty()
+    assertThat(viewModel.state.value.hasMore).isFalse()
+    assertThat(viewModel.state.value.nextCursor).isNull()
+  }
+
+  @Test
+  fun `tapping one alert marks only that alert read`() = runTest(testDispatcher) {
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(
+          AppNotification("n1", "Unread", "Body", null, false, "2026-01-01"),
+          AppNotification("n2", "Other unread", "Body", null, false, "2026-01-02"),
+        ),
+        nextCursor = null,
+        hasMore = false,
+      ),
+    )
+    fakeRepository.markReadResult = AppResult.Success(1)
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.markRead("n1")
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    assertThat(fakeRepository.readBatches).containsExactly(listOf("n1"))
+    assertThat(viewModel.state.value.items.map { it.id to it.isRead })
+      .containsExactly("n1" to true, "n2" to false).inOrder()
+    assertThat(viewModel.state.value.actionMessage).isNull()
+  }
+
+  @Test
+  fun `a read alert is not written to again`() = runTest(testDispatcher) {
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(AppNotification("n1", "Read", "Body", null, true, "2026-01-01")),
+        nextCursor = null,
+        hasMore = false,
+      ),
+    )
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.markRead("n1")
+    viewModel.markRead("does-not-exist")
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    assertThat(fakeRepository.readBatches).isEmpty()
+  }
+
+  @Test
+  fun `a failed read state keeps the feed and says so`() = runTest(testDispatcher) {
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(AppNotification("n1", "Unread", "Body", null, false, "2026-01-01")),
+        nextCursor = null,
+        hasMore = false,
+      ),
+    )
+    fakeRepository.markReadResult = AppResult.Failure(
+      AppError.Api(code = ApiErrorCode.DATABASE_UNAVAILABLE, message = "Nope."),
+    )
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.markRead("n1")
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // The alert stays unread (the server never accepted the write) and the feed
+    // stays on screen: a failed PATCH is not a reason to lose the list.
+    assertThat(viewModel.state.value.items.single().isRead).isFalse()
+    assertThat(viewModel.state.value.errorMessage).isNull()
+    assertThat(viewModel.state.value.actionMessage).isNotNull()
+  }
 }

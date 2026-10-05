@@ -22,11 +22,21 @@ class FakeEngagementRepository : EngagementRepository {
   var toggleResult: AppResult<Boolean> = AppResult.Success(false)
   var couponsResult: AppResult<CouponsState> = AppResult.Success(CouponsState())
 
-  override suspend fun loadNotifications(cursor: String?, unreadOnly: Boolean): AppResult<NotificationPage> =
-    notificationsResult
+  /** Every read the screen asked for, so a test can see WHICH query was run. */
+  val notificationQueries: MutableList<Pair<String?, Boolean>> = mutableListOf()
 
-  override suspend fun markNotificationsRead(ids: List<String>): AppResult<Int> =
-    markReadResult
+  /** Every batch of ids the screen tried to mark read, in order. */
+  val readBatches: MutableList<List<String>> = mutableListOf()
+
+  override suspend fun loadNotifications(cursor: String?, unreadOnly: Boolean): AppResult<NotificationPage> {
+    notificationQueries += cursor to unreadOnly
+    return notificationsResult
+  }
+
+  override suspend fun markNotificationsRead(ids: List<String>): AppResult<Int> {
+    readBatches += ids
+    return markReadResult
+  }
 
   override suspend fun loadWalletSummary(): AppResult<WalletSummary> =
     walletSummaryResult

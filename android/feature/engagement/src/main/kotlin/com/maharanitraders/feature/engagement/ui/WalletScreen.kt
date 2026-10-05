@@ -90,6 +90,11 @@ fun WalletContent(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      Text(
+        "Spendable on your next order.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
 
     state.summary?.let { summary ->
@@ -112,13 +117,15 @@ fun WalletContent(
 
     item {
       Text(
-        "Transaction history",
+        "Coin transactions",
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold,
       )
       if (state.ledgerTotal > 0) {
+        // The server's own count of recorded rows, and nothing estimated: the web
+        // ledger says "recorded data only" for exactly this reason.
         Text(
-          "${state.ledgerTotal} transactions",
+          "${state.ledgerTotal} entr${if (state.ledgerTotal == 1) "y" else "ies"} · recorded data only",
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -133,7 +140,7 @@ fun WalletContent(
       item {
         com.maharanitraders.core.designsystem.components.EmptyState(
           title = "No transactions yet",
-          message = "Coin debits, credits and reversals will appear here.",
+          message = "Coins added, coins spent and reversals will appear here.",
           actionLabel = "Refresh",
           onAction = onRefresh,
           modifier = Modifier.fillMaxWidth(),
@@ -160,6 +167,10 @@ fun WalletContent(
   }
 }
 
+/**
+ * The shop's one balance, in the only framing this product uses: coins, 1:1 with
+ * rupees, spendable on any order.
+ */
 @Composable
 private fun WalletSummaryCard(summary: WalletSummary, modifier: Modifier = Modifier) {
   Surface(
@@ -173,7 +184,7 @@ private fun WalletSummaryCard(summary: WalletSummary, modifier: Modifier = Modif
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Text(
-        "🪙 Coin balance",
+        "🪙 Coins available",
         style = MaterialTheme.typography.labelLarge,
       )
       Text(
@@ -182,35 +193,17 @@ private fun WalletSummaryCard(summary: WalletSummary, modifier: Modifier = Modif
         fontWeight = FontWeight.Bold,
       )
       HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f))
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Credit limit", style = MaterialTheme.typography.bodySmall)
-        Text(MoneyFormat.formatPaise(summary.creditLimitPaise), style = MaterialTheme.typography.bodySmall)
-      }
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Outstanding", style = MaterialTheme.typography.bodySmall)
-        Text(MoneyFormat.formatPaise(summary.outstandingPaise), style = MaterialTheme.typography.bodySmall)
-      }
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Available", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Text(
-          MoneyFormat.formatPaise(summary.availablePaise),
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.SemiBold,
-        )
-      }
-      if (summary.isOverLimit) {
-        Surface(
-          color = MaterialTheme.colorScheme.error,
-          contentColor = MaterialTheme.colorScheme.onError,
-          shape = RoundedCornerShape(8.dp),
-        ) {
-          Text(
-            "Over limit",
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-          )
-        }
-      }
+      Text(
+        "Spend coins on any order — 1 coin = ₹1.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+      )
+      // No credit limit, no "outstanding", no over-limit warning, no pay-later
+      // affordance: Maharani Traders retired retailer credit, and the web card
+      // this one mirrors (`components/retailer/coins-balance-card.tsx`) shows the
+      // same single number. The balance is still the server's — the app only
+      // formats what `availablePaise` said, clamped at zero so a shop that has
+      // spent more than it was funded sees no spendable coins rather than a debt.
     }
   }
 }

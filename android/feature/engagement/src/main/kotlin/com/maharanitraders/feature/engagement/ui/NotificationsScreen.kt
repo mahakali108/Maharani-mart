@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,11 +41,23 @@ object NotificationTags {
   const val ITEM = "notification_item"
   const val MARK_READ = "notification_mark_read"
   const val LOAD_MORE = "notification_load_more"
+  const val UNREAD_FILTER = "notifications_unread_filter"
+  const val ALL_FILTER = "notifications_all_filter"
+  const val REFRESH = "notifications_refresh"
 }
 
+/**
+ * The retailer's alert feed.
+ *
+ * Tapping an alert is the same pair of actions the web list performs: it marks
+ * that one row read, and — when the alert carries a link the app can actually
+ * open — it goes there. A link this build has no screen for is deliberately not
+ * turned into a browser hop: the row still marks read, and nothing pretends.
+ */
 @Composable
 fun NotificationsScreen(
   modifier: Modifier = Modifier,
+  onOpenLink: (String) -> Unit = {},
   viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -53,6 +66,9 @@ fun NotificationsScreen(
     onRefresh = viewModel::load,
     onLoadMore = viewModel::loadMore,
     onMarkAllRead = viewModel::markAllRead,
+    onMarkRead = viewModel::markRead,
+    onSetUnreadOnly = viewModel::setUnreadOnly,
+    onOpenLink = onOpenLink,
     modifier = modifier,
   )
 }
@@ -63,6 +79,9 @@ fun NotificationsContent(
   onRefresh: () -> Unit,
   onLoadMore: () -> Unit,
   onMarkAllRead: () -> Unit,
+  onMarkRead: (String) -> Unit = {},
+  onSetUnreadOnly: (Boolean) -> Unit = {},
+  onOpenLink: (String) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   if (state.loading && state.items.isEmpty()) {
@@ -75,11 +94,17 @@ fun NotificationsContent(
     return
   }
   if (state.items.isEmpty()) {
+    // With the unread filter on, "nothing here" means "nothing unread" — so the
+    // way out is the filter, not another reload of the same empty query.
     EmptyState(
-      title = "You're all caught up",
-      message = "Order updates, scheme alerts and coin messages will appear here.",
-      actionLabel = "Refresh",
-      onAction = onRefresh,
+      title = if (state.unreadOnly) "Nothing unread" else "You're all caught up",
+      message = if (state.unreadOnly) {
+        "Every alert you have is read. Show all updates to see the full feed."
+      } else {
+        "Order updates, scheme alerts and coin messages will appear here."
+      },
+      actionLabel = if (state.unreadOnly) "Show all updates" else "Refresh",
+      onAction = { if (state.unreadOnly) onSetUnreadOnly(false) else onRefresh() },
       modifier = modifier.fillMaxSize().testTag(NotificationTags.SCREEN),
     )
     return
@@ -114,9 +139,46 @@ fun NotificationsContent(
           ) { Text("Mark all read") }
         }
       }
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+      ) {
+        FilterChip(
+          selected = !state.unreadOnly,
+          onClick = { onSetUnreadOnly(false) },
+          label = { Text("All") },
+          modifier = Modifier.testTag(NotificationTags.ALL_FILTER),
+        )
+        FilterChip(
+          selected = state.unreadOnly,
+          onClick = { onSetUnreadOnly(true) },
+          label = { Text(if (state.unreadOnly && unreadCount > 0) "Unread · $unreadCount" else "Unread") },
+          modifier = Modifier.testTag(NotificationTags.UNREAD_FILTER),
+        )
+        TextButton(
+          onClick = onRefresh,
+          enabled = !state.refreshing,
+          modifier = Modifier.testTag(NotificationTags.REFRESH),
+        ) { Text(if (state.refreshing) "Refreshing…" else "Refresh") }
+      }
+
+      state.actionMessage?.let { message ->
+        Text(
+          message,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.error,
+        )
+      }
     }
     items(state.items, key = { it.id }) { notification ->
-      NotificationCard(notification = notification)
+      NotificationCard(
+        notification = notification,
+        onTap = {
+          if (!notification.isRead) onMarkRead(notification.id)
+          notification.linkUrl?.let(onOpenLink)
+        },
+      )
     }
     if (state.hasMore) {
       item {
@@ -137,6 +199,7 @@ fun NotificationsContent(
 private fun NotificationCard(
   notification: AppNotification,
   modifier: Modifier = Modifier,
+  onTap: () -> Unit = {},
 ) {
   Surface(
     modifier = modifier
@@ -153,6 +216,7 @@ private fun NotificationCard(
       if (notification.isRead) MaterialTheme.colorScheme.outlineVariant
       else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
     ),
+    onClick = onTap,
   ) {
     Column(
       modifier = Modifier.padding(16.dp),

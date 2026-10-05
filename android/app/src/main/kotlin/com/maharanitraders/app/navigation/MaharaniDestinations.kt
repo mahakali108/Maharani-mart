@@ -52,6 +52,8 @@ object MaharaniRoutes {
 
   const val CART = "cart"
   const val ORDERS = "orders"
+  /** The saved-products list (`/api/mobile/v1/catalog/products?fav=1`). */
+  const val FAVORITES = "favorites"
   const val COINS = "coins"
   const val NOTIFICATIONS = "notifications"
   const val COUPONS = "coupons"
@@ -138,6 +140,13 @@ object MaharaniCatalog {
       workspace = Workspace.RETAILER,
       phase = null,
       summary = "Active coupons and offers you can apply to your next order.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.FAVORITES,
+      label = "Favourites",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Products you saved, shown at today's price and stock status.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.SALES_DESK,

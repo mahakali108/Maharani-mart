@@ -73,6 +73,9 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.COINS in routes)
     assertTrue(MaharaniRoutes.ORDERS in routes) // retailer-only history
     assertTrue(MaharaniRoutes.NOTIFICATIONS in routes)
+    // Saved products are a retailer relationship (`retailer_favorites`), so the
+    // destination is here — and nowhere else.
+    assertTrue(MaharaniRoutes.FAVORITES in routes)
 
     assertTrue("retailers must not see the admin workspace", MaharaniRoutes.ADMINISTRATION !in routes)
     assertTrue(MaharaniRoutes.WAREHOUSE !in routes)
@@ -113,6 +116,7 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.CART !in routes)
     assertTrue(MaharaniRoutes.ORDERS !in routes)
     assertTrue(MaharaniRoutes.COINS !in routes)
+    assertTrue(MaharaniRoutes.FAVORITES !in routes)
   }
 
   @Test
@@ -146,6 +150,9 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.CATALOG in routes)
     assertTrue(MaharaniRoutes.CART !in routes)
     assertTrue(MaharaniRoutes.ORDERS !in routes)
+    // A granted RETAILER workspace widens the catalogue, not the shopping cart:
+    // the saved list is gated on the account's role exactly like the cart is.
+    assertTrue(MaharaniRoutes.FAVORITES !in routes)
   }
 
   @Test
@@ -205,6 +212,7 @@ class MaharaniRouterTest {
       MaharaniRoutes.COINS,
       MaharaniRoutes.NOTIFICATIONS,
       MaharaniRoutes.COUPONS,
+      MaharaniRoutes.FAVORITES,
       MaharaniRoutes.ACCOUNT,
     )
 
@@ -232,6 +240,7 @@ class MaharaniRouterTest {
       MaharaniRoutes.COINS,
       MaharaniRoutes.NOTIFICATIONS,
       MaharaniRoutes.COUPONS,
+      MaharaniRoutes.FAVORITES,
       MaharaniRoutes.ACCOUNT,
     )
 

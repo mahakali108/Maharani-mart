@@ -37,17 +37,22 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +63,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.maharanitraders.app.shell.ShellBadgesViewModel
 import com.maharanitraders.app.ui.AccountScreen
 import com.maharanitraders.app.ui.SessionHomeScreen
 import com.maharanitraders.app.ui.UnsupportedAccountScreen
@@ -67,6 +73,8 @@ import com.maharanitraders.core.designsystem.components.BackGlyph
 import com.maharanitraders.core.designsystem.components.CartGlyph
 import com.maharanitraders.core.designsystem.components.CategoryGlyph
 import com.maharanitraders.core.designsystem.components.CrownGlyph
+import com.maharanitraders.core.designsystem.components.BellGlyph
+import com.maharanitraders.core.designsystem.components.HeartGlyph
 import com.maharanitraders.core.designsystem.components.HomeGlyph
 import com.maharanitraders.core.designsystem.components.MaharaniSearchBar
 import com.maharanitraders.core.designsystem.components.MenuGlyph
@@ -81,6 +89,7 @@ import com.maharanitraders.feature.catalog.ProductDetailViewModel
 import com.maharanitraders.feature.catalog.ui.CatalogScreen
 import com.maharanitraders.feature.catalog.ui.CategoriesScreen
 import com.maharanitraders.feature.catalog.ui.HomeScreenTags
+import com.maharanitraders.feature.catalog.ui.FavoritesScreen
 import com.maharanitraders.feature.catalog.ui.ProductDetailScreen
 import com.maharanitraders.feature.catalog.ui.RetailerHomeScreen
 import com.maharanitraders.feature.engagement.ui.CouponsScreen
@@ -100,6 +109,10 @@ object ShellTags {
   const val ACCOUNT_SHEET = "shell_account_sheet"
   const val BRAND = "shell_brand"
   const val BOTTOM_BAR = "shell_bottom_bar"
+  const val OPEN_NOTIFICATIONS = "shell_open_notifications"
+  const val OPEN_FAVORITES = "shell_open_favorites"
+  const val CART_BADGE = "shell_cart_badge"
+  const val NOTIFICATION_BADGE = "shell_notification_badge"
 }
 
 /**
@@ -167,6 +180,13 @@ private fun RoutedShell(
   var catalogRequest by remember { mutableStateOf(CatalogRequest()) }
   var homeSearch by rememberSaveable { mutableStateOf("") }
 
+  // The cart and unread-alert counters belong to the shell, not to whichever tab
+  // is on screen — the same pair the web retailer layout paints. They are read
+  // from the server on entry, whenever the app resumes, and whenever the shopper
+  // leaves a screen that can change them. Never on a timer.
+  val badgesViewModel: ShellBadgesViewModel = hiltViewModel()
+  val badges by badgesViewModel.state.collectAsStateWithLifecycle()
+
   // A retailer gets the shopping home; everyone else keeps the session home.
   // The role comes from the SERVER-verified snapshot, not from anything the
   // shopper can influence.
@@ -174,6 +194,34 @@ private fun RoutedShell(
     routing.destinations.any { it.route == MaharaniRoutes.CATALOG }
   val canUseRetailerCommerce = snapshot.role == UserRole.RETAILER &&
     snapshot.navigation.can("orders.create") && snapshot.navigation.can("orders.view.own")
+
+  val canSeeShopBadges = retailerHome && canUseRetailerCommerce
+  var previousRoute by rememberSaveable { mutableStateOf<String?>(null) }
+
+  if (canSeeShopBadges) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+      // A badge left on screen while the app was backgrounded must not be trusted,
+      // and a signed-out shell must not keep the previous account's numbers alive.
+      val observer = LifecycleEventObserver { _, event ->
+        if (event == Lifecycle.Event.ON_RESUME) badgesViewModel.refresh()
+      }
+      lifecycleOwner.lifecycle.addObserver(observer)
+      onDispose {
+        lifecycleOwner.lifecycle.removeObserver(observer)
+        badgesViewModel.clear()
+      }
+    }
+
+    LaunchedEffect(currentRoute) {
+      val previous = previousRoute
+      previousRoute = currentRoute
+      // Only the two screens that can change a count trigger a re-read on exit.
+      if (previous == MaharaniRoutes.CART || previous == MaharaniRoutes.NOTIFICATIONS) {
+        badgesViewModel.refresh()
+      }
+    }
+  }
 
   val bottomItems = routing.destinations.filter { it.route in BOTTOM_NAV_ROUTES }
   val drawerItems = routing.destinations.filter { it.route !in BOTTOM_NAV_ROUTES }
@@ -185,19 +233,30 @@ private fun RoutedShell(
     scope.launch { drawerState.open() }
   }
 
-  fun openCatalog(request: CatalogRequest) {
-    catalogRequest = request
-    navController.navigate(MaharaniRoutes.CATALOG) {
+  fun selectTab(destination: MaharaniDestination) {
+    if (destination.route == currentRoute) return
+    navController.navigate(destination.route) {
+      // One entry per destination, state preserved across switches.
       launchSingleTop = true
       restoreState = true
       popUpTo(navController.graph.findStartDestination().id) { saveState = true }
     }
   }
 
-  fun selectTab(destination: MaharaniDestination) {
-    if (destination.route == currentRoute) return
-    navController.navigate(destination.route) {
-      // One entry per destination, state preserved across switches.
+  /** Opens a native destination from an alert link, if this account may see it. */
+  fun openRoute(route: String) {
+    if (route == currentRoute) return
+    if (routing.destinations.none { it.route == route }) return
+    if (route in BOTTOM_NAV_ROUTES) {
+      MaharaniCatalog.byRoute(route)?.let(::selectTab)
+    } else {
+      navController.navigate(route) { launchSingleTop = true }
+    }
+  }
+
+  fun openCatalog(request: CatalogRequest) {
+    catalogRequest = request
+    navController.navigate(MaharaniRoutes.CATALOG) {
       launchSingleTop = true
       restoreState = true
       popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -236,6 +295,10 @@ private fun RoutedShell(
             onSearchSubmit = { openCatalog(CatalogRequest(search = homeSearch.trim())) },
             onOpenDrawer = ::openDrawer,
             onOpenAccount = { showAccount.value = true },
+            onOpenFavorites = { openRoute(MaharaniRoutes.FAVORITES) },
+            canOpenFavorites = routing.destinations.any { it.route == MaharaniRoutes.FAVORITES },
+            onOpenNotifications = { openRoute(MaharaniRoutes.NOTIFICATIONS) },
+            unreadNotifications = if (canSeeShopBadges) badges.unreadNotifications else 0,
           )
 
           currentRoute == MaharaniRoutes.PRODUCT_DETAIL -> TopAppBar(
@@ -297,7 +360,16 @@ private fun RoutedShell(
               NavigationBarItem(
                 selected = destination.route == currentRoute,
                 onClick = { selectTab(destination) },
-                icon = { BottomBarIcon(route = destination.route) },
+                icon = {
+                  BottomBarIcon(
+                    route = destination.route,
+                    badgeCount = if (canSeeShopBadges && destination.route == MaharaniRoutes.CART) {
+                      badges.cartCount
+                    } else {
+                      0
+                    },
+                  )
+                },
                 label = {
                   Text(
                     text = destination.label,
@@ -332,6 +404,7 @@ private fun RoutedShell(
               retailerHome = retailerHome,
               catalogRequest = catalogRequest,
               onOpenCatalog = ::openCatalog,
+              onOpenRoute = ::openRoute,
               onOpenCategories = {
                 navController.navigate(MaharaniRoutes.CATEGORIES) {
                   launchSingleTop = true
@@ -409,6 +482,10 @@ private fun RetailerHomeTopBar(
   onSearchSubmit: () -> Unit,
   onOpenDrawer: () -> Unit,
   onOpenAccount: () -> Unit,
+  onOpenFavorites: () -> Unit,
+  canOpenFavorites: Boolean,
+  onOpenNotifications: () -> Unit,
+  unreadNotifications: Int,
   modifier: Modifier = Modifier,
 ) {
   val tokens = MaharaniThemeTokens.colors
@@ -468,6 +545,36 @@ private fun RetailerHomeTopBar(
           )
         }
 
+        // Saved products, then unread alerts — the two masthead actions the web
+        // retailer shell has. Both are reads of server state: the heart opens the
+        // saved list, the bell opens the feed, and only the alert count is painted
+        // here because the server counted it.
+        if (canOpenFavorites) {
+          IconButton(
+            onClick = onOpenFavorites,
+            modifier = Modifier.testTag(ShellTags.OPEN_FAVORITES),
+          ) {
+            HeartGlyph(
+              modifier = Modifier.size(22.dp),
+              tint = tokens.onAppBar,
+              filled = false,
+            )
+          }
+        }
+        Box(contentAlignment = Alignment.TopEnd) {
+          IconButton(
+            onClick = onOpenNotifications,
+            modifier = Modifier.testTag(ShellTags.OPEN_NOTIFICATIONS),
+          ) {
+            BellGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
+          }
+          ShellCountBadge(
+            count = unreadNotifications,
+            modifier = Modifier
+              .padding(top = 2.dp, end = 1.dp)
+              .testTag(ShellTags.NOTIFICATION_BADGE),
+          )
+        }
         IconButton(
           onClick = onOpenAccount,
           modifier = Modifier.testTag(ShellTags.OPEN_ACCOUNT),
@@ -488,7 +595,28 @@ private fun RetailerHomeTopBar(
 }
 
 @Composable
-private fun BottomBarIcon(route: String, modifier: Modifier = Modifier) {
+private fun BottomBarIcon(
+  route: String,
+  badgeCount: Int = 0,
+  modifier: Modifier = Modifier,
+) {
+  if (badgeCount <= 0) {
+    BottomBarGlyph(route = route, modifier = modifier)
+    return
+  }
+  // The cart's line count rides the tab the cart is opened from, and disappears
+  // with it: a badge that survived an emptied cart would be a lie about stock.
+  Box(contentAlignment = Alignment.TopEnd) {
+    BottomBarGlyph(route = route, modifier = modifier)
+    ShellCountBadge(
+      count = badgeCount,
+      modifier = Modifier.testTag(ShellTags.CART_BADGE),
+    )
+  }
+}
+
+@Composable
+private fun BottomBarGlyph(route: String, modifier: Modifier = Modifier) {
   val iconModifier = modifier.size(24.dp)
   when (route) {
     MaharaniRoutes.HOME -> HomeGlyph(modifier = iconModifier)
@@ -497,6 +625,33 @@ private fun BottomBarIcon(route: String, modifier: Modifier = Modifier) {
     MaharaniRoutes.ORDERS -> OrdersGlyph(modifier = iconModifier)
     MaharaniRoutes.ACCOUNT -> AccountGlyph(modifier = iconModifier)
     else -> HomeGlyph(modifier = iconModifier)
+  }
+}
+
+/**
+ * A server-counted number pinned to an icon's corner, capped at 99+ because a
+ * three-digit badge is unreadable at this size and no honest reader wants one.
+ * Renders nothing at zero, so an empty cart is not drawn as a problem.
+ */
+@Composable
+private fun ShellCountBadge(
+  count: Int,
+  modifier: Modifier = Modifier,
+) {
+  if (count <= 0) return
+  Surface(
+    color = MaterialTheme.colorScheme.errorContainer,
+    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    shape = RoundedCornerShape(MaharaniDimens.radiusPill),
+    modifier = modifier,
+  ) {
+    Text(
+      text = if (count > 99) "99+" else count.toString(),
+      style = MaterialTheme.typography.labelSmall,
+      fontWeight = FontWeight.Bold,
+      maxLines = 1,
+      modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+    )
   }
 }
 
@@ -590,6 +745,7 @@ private fun DestinationSurface(
   retailerHome: Boolean,
   catalogRequest: CatalogRequest,
   onOpenCatalog: (CatalogRequest) -> Unit,
+  onOpenRoute: (String) -> Unit,
   onOpenCategories: () -> Unit,
   onOpenProduct: (String) -> Unit,
   onViewOrders: () -> Unit,
@@ -630,9 +786,18 @@ private fun DestinationSurface(
 
     MaharaniRoutes.ORDERS -> OrderHistoryScreen()
 
+    MaharaniRoutes.FAVORITES -> FavoritesScreen(
+      onOpenProduct = onOpenProduct,
+      onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
+    )
+
     MaharaniRoutes.COINS -> WalletScreen()
 
-    MaharaniRoutes.NOTIFICATIONS -> NotificationsScreen()
+    MaharaniRoutes.NOTIFICATIONS -> NotificationsScreen(
+      // An alert's link opens the native screen for the same content. Links this
+      // build has no screen for open nothing rather than escaping to a browser.
+      onOpenLink = { link -> NotificationLinkRouter.routeFor(link)?.let(onOpenRoute) },
+    )
 
     MaharaniRoutes.COUPONS -> CouponsScreen()
 

@@ -81,6 +81,9 @@ object MaharaniRouter {
     }
 
   private fun isRoleAndPermissionAllowed(route: String, snapshot: SessionSnapshot): Boolean = when (route) {
+    // `retailer_favorites` is a retailer table and its mobile endpoints are
+    // retailer-scoped, so the destination follows the same boundary.
+    MaharaniRoutes.FAVORITES -> snapshot.role == UserRole.RETAILER
     MaharaniRoutes.CART -> snapshot.role == UserRole.RETAILER
       && snapshot.navigation.can("orders.create")
       && snapshot.navigation.can("orders.view.own")
