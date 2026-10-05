@@ -11,6 +11,9 @@ class FakeEngagementRepository : EngagementRepository {
     NotificationPage(items = emptyList(), nextCursor = null, hasMore = false),
   )
   var markReadResult: AppResult<Int> = AppResult.Success(0)
+
+  /** Ids passed to [markNotificationsRead], newest call last. */
+  val markReadRequests: MutableList<List<String>> = mutableListOf()
   var walletSummaryResult: AppResult<WalletSummary> = AppResult.Success(
     WalletSummary(coinsFundedPaise = 0, coinsSpentPaise = 0, hasConfiguredLimit = false, isOverLimit = false, allowOverdue = false),
   )
@@ -22,8 +25,10 @@ class FakeEngagementRepository : EngagementRepository {
   override suspend fun loadNotifications(cursor: String?, unreadOnly: Boolean): AppResult<NotificationPage> =
     notificationsResult
 
-  override suspend fun markNotificationsRead(ids: List<String>): AppResult<Int> =
-    markReadResult
+  override suspend fun markNotificationsRead(ids: List<String>): AppResult<Int> {
+    markReadRequests.add(ids)
+    return markReadResult
+  }
 
   override suspend fun loadWalletSummary(): AppResult<WalletSummary> =
     walletSummaryResult

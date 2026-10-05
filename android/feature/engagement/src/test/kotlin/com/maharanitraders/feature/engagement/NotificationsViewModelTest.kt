@@ -102,7 +102,7 @@ class NotificationsViewModelTest {
   }
 
   @Test
-  fun `markAllRead updates local state`() = runTest(testDispatcher) {
+  fun `markAllRead sends only the unread ids and marks them read`() = runTest(testDispatcher) {
     val notifications = listOf(
       AppNotification("n1", "Unread", "Body", null, false, "2026-01-01"),
       AppNotification("n2", "Already read", "Body", null, true, "2025-12-31"),
@@ -118,9 +118,113 @@ class NotificationsViewModelTest {
     viewModel.markAllRead()
     testDispatcher.scheduler.advanceUntilIdle()
 
+    // Already-read notifications are not re-sent.
+    assertThat(fakeRepository.markReadRequests).containsExactly(listOf("n1"))
+
     viewModel.state.test {
       val state = awaitItem()
       assertThat(state.items.all { it.isRead }).isTrue()
+      assertThat(state.unreadLoaded).isEqualTo(0)
+      assertThat(state.markingRead).isFalse()
+      assertThat(state.actionMessage).isNull()
     }
+  }
+
+  @Test
+  fun `a failed markAllRead is reported, not swallowed`() = runTest(testDispatcher) {
+    val notifications = listOf(
+      AppNotification("n1", "Unread", "Body", null, false, "2026-01-01"),
+    )
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(items = notifications, nextCursor = null, hasMore = false),
+    )
+    fakeRepository.markReadResult = AppResult.Failure(
+      AppError.Api(code = ApiErrorCode.DATABASE_UNAVAILABLE, message = "Could not update your updates."),
+    )
+
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.markAllRead()
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.state.test {
+      val state = awaitItem()
+      // Nothing was marked on the server, so nothing may look marked here.
+      assertThat(state.items.single().isRead).isFalse()
+      assertThat(state.unreadLoaded).isEqualTo(1)
+      assertThat(state.markingRead).isFalse()
+      assertThat(state.actionMessage).isEqualTo("Could not update your updates.")
+    }
+
+    viewModel.consumeActionMessage()
+    assertThat(viewModel.state.value.actionMessage).isNull()
+  }
+
+  @Test
+  fun `a partial mark re-reads the feed instead of guessing`() = runTest(testDispatcher) {
+    val notifications = listOf(
+      AppNotification("n1", "Unread", "Body", null, false, "2026-01-01"),
+      AppNotification("n2", "Also unread", "Body", null, false, "2025-12-31"),
+    )
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(items = notifications, nextCursor = null, hasMore = false),
+    )
+    // Two were sent, the server marked one. Which one is the server's business.
+    fakeRepository.markReadResult = AppResult.Success(1)
+
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(
+          AppNotification("n1", "Unread", "Body", null, true, "2026-01-01"),
+          AppNotification("n2", "Also unread", "Body", null, false, "2025-12-31"),
+        ),
+        nextCursor = null,
+        hasMore = false,
+      ),
+    )
+    viewModel.markAllRead()
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.state.test {
+      val state = awaitItem()
+      assertThat(state.items.map { it.isRead }).containsExactly(true, false).inOrder()
+      assertThat(state.unreadLoaded).isEqualTo(1)
+    }
+  }
+
+  @Test
+  fun `the unread count is only exact once the last page has arrived`() = runTest(testDispatcher) {
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(AppNotification("n1", "Unread", "Body", null, false, "2026-01-01")),
+        nextCursor = "cursor1",
+        hasMore = true,
+      ),
+    )
+
+    viewModel = NotificationsViewModel(fakeRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // The feed endpoint returns no unread total, so with pages still unseen
+    // the screen may only claim "at least one".
+    assertThat(viewModel.state.value.unreadLoaded).isEqualTo(1)
+    assertThat(viewModel.state.value.unreadCountIsExact).isFalse()
+
+    fakeRepository.notificationsResult = AppResult.Success(
+      NotificationPage(
+        items = listOf(AppNotification("n2", "Unread too", "Body", null, false, "2025-12-31")),
+        nextCursor = null,
+        hasMore = false,
+      ),
+    )
+    viewModel.loadMore()
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    assertThat(viewModel.state.value.unreadLoaded).isEqualTo(2)
+    assertThat(viewModel.state.value.unreadCountIsExact).isTrue()
   }
 }

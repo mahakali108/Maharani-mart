@@ -21,7 +21,25 @@ data class NotificationsUiState(
   val offline: Boolean = false,
   val loadingMore: Boolean = false,
   val refreshing: Boolean = false,
-)
+  /** True while a mark-read request is in flight. */
+  val markingRead: Boolean = false,
+  /** Message from a failed mark-read, for a snackbar. */
+  val actionMessage: String? = null,
+) {
+
+  /** Unread notifications among the pages that have been LOADED. */
+  val unreadLoaded: Int get() = items.count { !it.isRead }
+
+  /**
+   * Whether [unreadLoaded] is the shop's whole unread total.
+   *
+   * It only is once the last page has arrived. `GET /notifications` returns no
+   * unread count, so while more pages exist the honest statement is "at least
+   * this many" — see the BLOCKED row in the parity doc for the server-side
+   * count a true badge would need.
+   */
+  val unreadCountIsExact: Boolean get() = !hasMore
+}
 
 @HiltViewModel
 class NotificationsViewModel @Inject constructor(
@@ -87,16 +105,43 @@ class NotificationsViewModel @Inject constructor(
     }
   }
 
+  /**
+   * Mark the loaded notifications read.
+   *
+   * Only the notifications the app has actually loaded can be sent, because
+   * the endpoint takes explicit ids. A failure is REPORTED: a silently
+   * swallowed one leaves "3 unread" on screen with no explanation, and the
+   * shopkeeper taps again forever.
+   */
   fun markAllRead() {
     val unread = _state.value.items.filter { !it.isRead }
-    if (unread.isEmpty()) return
+    if (unread.isEmpty() || _state.value.markingRead) return
+
+    _state.update { it.copy(markingRead = true, actionMessage = null) }
     viewModelScope.launch {
-      when (repository.markNotificationsRead(unread.map { it.id })) {
-        is AppResult.Success -> _state.update { state ->
-          state.copy(items = state.items.map { if (it.isRead) it else it.copy(isRead = true) })
+      when (val result = repository.markNotificationsRead(unread.map { it.id })) {
+        is AppResult.Success -> if (result.value == unread.size) {
+          _state.update { state ->
+            state.copy(
+              markingRead = false,
+              items = state.items.map { if (it.isRead) it else it.copy(isRead = true) },
+            )
+          }
+        } else {
+          // The server marked a different number than was asked for and only it
+          // knows which, so re-read the feed rather than guess at the rest.
+          _state.update { it.copy(markingRead = false) }
+          load()
         }
-        is AppResult.Failure -> { /* silently fail — the user can retry */ }
+
+        is AppResult.Failure -> _state.update {
+          it.copy(markingRead = false, actionMessage = result.error.message)
+        }
       }
     }
+  }
+
+  fun consumeActionMessage() {
+    _state.update { it.copy(actionMessage = null) }
   }
 }
