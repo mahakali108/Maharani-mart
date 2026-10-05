@@ -16,6 +16,7 @@ import com.maharanitraders.core.model.ProductDetail
 import com.maharanitraders.core.model.RetailerHome
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi
+import com.maharanitraders.core.network.dto.FavoriteToggleRequestDto
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,6 +52,15 @@ interface CatalogRepository {
   suspend fun loadProducts(query: CatalogQuery, cursor: String?): AppResult<CatalogPage>
 
   suspend fun loadProduct(id: String): AppResult<ProductDetail>
+
+  /**
+   * Adds or removes one product in the caller's favourites.
+   *
+   * The request carries a product id and nothing else — no retailer id, no
+   * desired state — and the server's answer IS the new state. A device that
+   * guessed "now favourited" would drift the moment the write failed.
+   */
+  suspend fun toggleFavorite(productId: String): AppResult<Boolean>
 }
 
 @Singleton
@@ -79,6 +89,7 @@ class NetworkCatalogRepository @Inject constructor(
           brandId = query.brandId,
           sort = query.sortParam,
           inStock = query.inStockParam,
+          favoritesOnly = query.favoritesParam,
           // A blank cursor is the first batch. Retrofit drops nulls, so the
           // server never sees `cursor=` and never has to guess what it meant.
           cursor = cursor?.trim()?.ifEmpty { null },
@@ -99,6 +110,16 @@ class NetworkCatalogRepository @Inject constructor(
 
   override suspend fun loadProduct(id: String): AppResult<ProductDetail> =
     executor.execute { api.catalogProduct(id) }.map { CatalogMapper.detail(it.data) }
+
+  override suspend fun toggleFavorite(productId: String): AppResult<Boolean> {
+    val id = productId.trim()
+    if (id.isEmpty()) {
+      return AppResult.Failure(AppError.Unexpected("favorite_without_product"))
+    }
+    return executor
+      .executeEnvelope { api.toggleFavorite(FavoriteToggleRequestDto(productId = id)) }
+      .map { it.isFavorite }
+  }
 }
 
 /** True when the failure means "no connection", so the UI can say so plainly. */

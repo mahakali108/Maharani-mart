@@ -1,6 +1,7 @@
 package com.maharanitraders.feature.catalog.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,11 +22,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.maharanitraders.core.designsystem.components.FactChip
+import com.maharanitraders.core.designsystem.components.HeartGlyph
 import com.maharanitraders.core.designsystem.components.PriceBlock
 import com.maharanitraders.core.designsystem.components.PriceEmphasis
 import com.maharanitraders.core.designsystem.components.StockBadge
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
+import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.PackAvailability
 import com.maharanitraders.feature.catalog.ui.CatalogTags
@@ -32,6 +38,12 @@ import com.maharanitraders.feature.catalog.ui.OfferBadge
 
 /** Test tag of one product tile, used by Compose UI tests to find a card. */
 const val PRODUCT_CARD_TAG = "catalog_product_tile"
+
+/**
+ * Prefix of the favourite control's tag, suffixed with the product id, so a test
+ * can address one card's heart without depending on card order.
+ */
+const val PRODUCT_FAVORITE_TAG = "catalog_product_favorite"
 
 /**
  * One product card — the atom every rail and grid in the app is built from.
@@ -53,6 +65,15 @@ fun ProductCard(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
   emphasis: PriceEmphasis = PriceEmphasis.Card,
+  /**
+   * The heart's state. Defaults to what this card's own server payload said;
+   * a screen that tracks fresher state (a toggle made on the product page) passes
+   * it in, so the two surfaces can never disagree until the next read.
+   */
+  isFavorite: Boolean = product.isFavorite,
+  favoriteBusy: Boolean = false,
+  /** Null hides the control: a surface without the favourites write shows no dead heart. */
+  onToggleFavorite: (() -> Unit)? = null,
 ) {
   val pack = product.pack
   val outOfStock = pack?.availability == PackAvailability.OUT_OF_STOCK
@@ -100,6 +121,35 @@ fun ProductCard(
           ) {
             if (product.isNewLaunch) NewLaunchBadge()
             if (product.hasOffer) OfferBadge()
+          }
+        }
+
+        // The same write the product page offers, so a shopper can save a pack
+        // while scanning results instead of opening it first. Disabled while a
+        // toggle is in flight: the endpoint is a server-side toggle, so a second
+        // tap would silently undo the first.
+        onToggleFavorite?.let { toggle ->
+          Box(
+            modifier = Modifier
+              .align(Alignment.TopEnd)
+              .padding(MaharaniDimens.spaceSm)
+              .size(32.dp)
+              .clip(CircleShape)
+              .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+              .clickable(enabled = !favoriteBusy, onClick = toggle),
+            contentAlignment = Alignment.Center,
+          ) {
+            HeartGlyph(
+              modifier = Modifier
+                .size(18.dp)
+                .testTag("$PRODUCT_FAVORITE_TAG:${product.id}"),
+              tint = if (isFavorite) {
+                MaharaniThemeTokens.colors.brandMark
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              },
+              filled = isFavorite,
+            )
           }
         }
       }

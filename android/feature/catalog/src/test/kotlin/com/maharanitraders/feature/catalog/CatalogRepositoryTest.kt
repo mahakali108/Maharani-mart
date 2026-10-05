@@ -314,4 +314,62 @@ class CatalogRepositoryTest {
     assertThat(home.products).hasSize(1)
     assertThat(home.nextCursor).isEqualTo("next")
   }
+
+  @Test
+  fun `sends the favourite filter only when the query asks for it`() = runTest(dispatcher) {
+    val api = FakeCatalogApi()
+    api.productPages.addLast(envelope(emptyList()))
+    api.productPages.addLast(envelope(emptyList()))
+    val repository = catalogRepository(api, dispatcher)
+
+    repository.loadProducts(CatalogQuery.DEFAULT, cursor = null)
+    repository.loadProducts(CatalogQuery(onlyFavorites = true), cursor = null)
+    advanceUntilIdle()
+
+    // The favourites screen sends `fav=1`; the ordinary catalogue must not, or an
+    // unfiltered search would silently become "only what I saved".
+    assertThat(api.productRequests.map { it.favoritesOnly }).containsExactly(null, "1").inOrder()
+  }
+
+  @Test
+  fun `a favourite write sends the trimmed id and answers with the server state`() = runTest(dispatcher) {
+    val api = FakeCatalogApi()
+    val repository = catalogRepository(api, dispatcher)
+
+    val saved = repository.toggleFavorite("  p1  ")
+    advanceUntilIdle()
+    assertThat((saved as AppResult.Success).value).isTrue()
+    // The fake holds the server's own rows, so the second call is a real toggle.
+    assertThat(api.favoriteToggles).containsExactly("p1")
+
+    val removed = repository.toggleFavorite("p1")
+    advanceUntilIdle()
+    assertThat((removed as AppResult.Success).value).isFalse()
+  }
+
+  @Test
+  fun `a favourite write without a product id never reaches the network`() = runTest(dispatcher) {
+    val api = FakeCatalogApi()
+
+    val result = catalogRepository(api, dispatcher).toggleFavorite("   ")
+    advanceUntilIdle()
+
+    assertThat(result is AppResult.Failure).isTrue()
+    assertThat(api.favoriteToggles).isEmpty()
+  }
+
+  @Test
+  fun `a favourite write that cannot reach the server is an offline failure`() = runTest(dispatcher) {
+    val api = FakeCatalogApi()
+    api.nextFavoriteFailure = IOException("no route to host")
+
+    val result = catalogRepository(api, dispatcher).toggleFavorite("p1")
+    advanceUntilIdle()
+
+    val error = (result as AppResult.Failure).error
+    assertThat(error.isOffline).isTrue()
+    assertThat(error.retryable).isTrue()
+    // No state was proven, so none is claimed: the product is not in the set.
+    assertThat(api.favoriteIds).isEmpty()
+  }
 }

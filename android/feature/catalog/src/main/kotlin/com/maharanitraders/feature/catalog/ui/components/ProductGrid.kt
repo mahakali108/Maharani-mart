@@ -26,11 +26,23 @@ const val PRODUCT_GRID_TAG = "catalog_product_grid"
 fun LazyGridScope.productCardItems(
   products: List<CatalogProduct>,
   onOpenProduct: (String) -> Unit,
+  /**
+   * The caller's known favourite states, by product id. Cards fall back to their
+   * own server payload when an id is absent, so a partial map only ever overrides
+   * with fresher information — it can never invent a favourite.
+   */
+  favorites: Map<String, Boolean> = emptyMap(),
+  favoriteBusyIds: Set<String> = emptySet(),
+  /** Null keeps the hearts away entirely (the home rails do exactly that). */
+  onToggleFavorite: ((String) -> Unit)? = null,
 ) {
   items(products, key = { it.id }) { product ->
     ProductCard(
       product = product,
       onClick = { onOpenProduct(product.id) },
+      isFavorite = favorites[product.id] ?: product.isFavorite,
+      favoriteBusy = product.id in favoriteBusyIds,
+      onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(product.id) } },
       modifier = Modifier.fillMaxWidth(),
     )
   }
@@ -55,6 +67,9 @@ fun ProductGrid(
     vertical = MaharaniDimens.spaceSm,
   ),
   footer: (LazyGridScope.() -> Unit)? = null,
+  favorites: Map<String, Boolean> = emptyMap(),
+  favoriteBusyIds: Set<String> = emptySet(),
+  onToggleFavorite: ((String) -> Unit)? = null,
 ) {
   LazyVerticalGrid(
     columns = GridCells.Adaptive(minSize = 158.dp),
@@ -64,7 +79,13 @@ fun ProductGrid(
     horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
     verticalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
   ) {
-    productCardItems(products, onOpenProduct)
+    productCardItems(
+      products = products,
+      onOpenProduct = onOpenProduct,
+      favorites = favorites,
+      favoriteBusyIds = favoriteBusyIds,
+      onToggleFavorite = onToggleFavorite,
+    )
     footer?.invoke(this)
   }
 }

@@ -75,11 +75,22 @@ data class CatalogQuery(
   val brandId: String? = null,
   val sort: CatalogSort = CatalogSort.RECOMMENDED,
   val inStockOnly: Boolean = false,
+  /**
+   * Restricts the batch to the shopper's favourites.
+   *
+   * The filter is the SERVER's (`fav=1` on the catalogue endpoint, backed by the
+   * same `retailer_favorites` rows the web favourites page reads), so the app
+   * never assembles a wishlist from ids it cached on the device — an app-side
+   * list would go stale the moment the same shop favourites something from a
+   * browser.
+   */
+  val onlyFavorites: Boolean = false,
 ) {
   /** Blank-for-default, so a parameter is only sent when it means something. */
   val searchParam: String? get() = search.trim().ifEmpty { null }
   val sortParam: String? get() = sort.takeIf { it != CatalogSort.RECOMMENDED }?.wireValue
   val inStockParam: String? get() = if (inStockOnly) "1" else null
+  val favoritesParam: String? get() = if (onlyFavorites) "1" else null
 
   companion object {
     val DEFAULT = CatalogQuery()

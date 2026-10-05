@@ -46,6 +46,8 @@ import com.maharanitraders.core.designsystem.components.SortGlyph
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.model.CatalogSort
 import com.maharanitraders.feature.catalog.CatalogUiState
+import com.maharanitraders.feature.catalog.FavoritesUiState
+import com.maharanitraders.feature.catalog.FavoritesViewModel
 import com.maharanitraders.feature.catalog.CatalogViewModel
 import androidx.compose.material3.CircularProgressIndicator
 import com.maharanitraders.feature.catalog.ui.components.ProductGrid
@@ -85,8 +87,12 @@ fun CatalogScreen(
   onOpenProduct: (productId: String) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: CatalogViewModel = hiltViewModel(),
+  favoritesViewModel: FavoritesViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  // Hearts come from the shared favourites state, so saving something on a
+  // product page updates the grid behind it instead of waiting for a reload.
+  val favorites by favoritesViewModel.favorites.collectAsStateWithLifecycle()
 
   // Deep links from the home screen arrive as arguments, not as state the
   // ViewModel guesses at.
@@ -113,6 +119,8 @@ fun CatalogScreen(
     onRetry = viewModel::retry,
     onLoadMore = viewModel::loadMore,
     onOpenProduct = onOpenProduct,
+    favorites = favorites,
+    onToggleFavorite = favoritesViewModel::toggleFavorite,
     modifier = modifier,
   )
 }
@@ -130,6 +138,8 @@ fun CatalogContent(
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
   modifier: Modifier = Modifier,
+  favorites: FavoritesUiState = FavoritesUiState(),
+  onToggleFavorite: ((String) -> Unit)? = null,
 ) {
   Column(modifier = modifier.fillMaxSize()) {
     CatalogFilterBar(
@@ -178,6 +188,9 @@ fun CatalogContent(
       else -> ProductGrid(
         products = state.products,
         onOpenProduct = onOpenProduct,
+        favorites = favorites.overrides,
+        favoriteBusyIds = favorites.busyIds,
+        onToggleFavorite = onToggleFavorite,
         state = rememberLazyGridState(),
         modifier = Modifier.fillMaxSize(),
         footer = {

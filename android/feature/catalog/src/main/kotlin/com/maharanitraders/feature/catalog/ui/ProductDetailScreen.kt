@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -39,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maharanitraders.core.designsystem.MoneyFormat
 import com.maharanitraders.core.designsystem.components.EmptyState
+import com.maharanitraders.core.designsystem.components.HeartGlyph
 import com.maharanitraders.core.designsystem.components.ErrorState
 import com.maharanitraders.core.designsystem.components.FactChip
 import com.maharanitraders.core.designsystem.components.LoadingState
@@ -53,6 +56,8 @@ import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.model.PackAvailability
 import com.maharanitraders.core.model.ProductDetail
 import com.maharanitraders.core.model.ProductPackDetail
+import com.maharanitraders.feature.catalog.FavoritesUiState
+import com.maharanitraders.feature.catalog.FavoritesViewModel
 import com.maharanitraders.feature.catalog.ProductDetailUiState
 import com.maharanitraders.feature.catalog.ProductDetailViewModel
 import com.maharanitraders.feature.catalog.ui.components.ProductImage
@@ -70,6 +75,7 @@ object ProductDetailTags {
   const val AVAILABILITY = "product_availability"
   const val ADD_TO_CART = "product_add_to_cart"
   const val NOT_FOUND = "product_not_found"
+  const val FAVORITE = "product_favorite_toggle"
 }
 
 /**
@@ -97,11 +103,15 @@ fun ProductDetailScreen(
   cartError: String? = null,
   cartNeedsRefresh: Boolean = false,
   onRefreshCart: () -> Unit = {},
+  favoritesViewModel: FavoritesViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val favorites by favoritesViewModel.favorites.collectAsStateWithLifecycle()
 
   ProductDetailContent(
     state = state,
+    favorites = favorites,
+    onToggleFavorite = favoritesViewModel::toggleFavorite,
     onRetry = viewModel::load,
     onSelectPack = viewModel::selectPack,
     onBack = onBack,
@@ -132,6 +142,10 @@ fun ProductDetailContent(
   cartError: String? = null,
   cartNeedsRefresh: Boolean = false,
   onRefreshCart: () -> Unit = {},
+  /** Heart states from the shared favourites store; the product payload seeds them. */
+  favorites: FavoritesUiState = FavoritesUiState(),
+  /** Null hides the heart: an account or build without the write shows no dead control. */
+  onToggleFavorite: (() -> Unit)? = null,
 ) {
   when {
     state.loading && state.detail == null -> LoadingState(message = "Loading product…")
@@ -161,7 +175,13 @@ fun ProductDetailContent(
               .weight(1f)
               .verticalScroll(rememberScrollState()),
           ) {
-            ProductGallery(images = state.gallery, productName = detail.name)
+            ProductGallery(
+              images = state.gallery,
+              productName = detail.name,
+              isFavorite = favorites.isFavorite(detail.id, detail.isFavorite),
+              favoriteBusy = favorites.isBusy(detail.id),
+              onToggleFavorite = onToggleFavorite,
+            )
 
             Column(
               modifier = Modifier.padding(MaharaniDimens.pageGutter),
@@ -206,6 +226,9 @@ fun ProductDetailContent(
               cartError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
               }
+              favorites.message?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+              }
             }
           }
 
@@ -231,12 +254,43 @@ private fun ProductGallery(
   images: List<String>,
   productName: String,
   modifier: Modifier = Modifier,
+  isFavorite: Boolean = false,
+  favoriteBusy: Boolean = false,
+  onToggleFavorite: (() -> Unit)? = null,
 ) {
   Surface(
     color = MaterialTheme.colorScheme.surface,
     modifier = modifier.fillMaxWidth(),
   ) {
     Box(modifier = Modifier.fillMaxWidth().testTag(ProductDetailTags.GALLERY)) {
+      // The heart sits over the media, top-left, where the pager's own counter
+      // cannot crowd it. Saving a product is a catalogue relationship, not an
+      // order intent, so it stays available even when this account cannot order.
+      onToggleFavorite?.let { toggle ->
+        Box(
+          modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(MaharaniDimens.spaceMd)
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
+            .clickable(enabled = !favoriteBusy, onClick = toggle),
+          contentAlignment = Alignment.Center,
+        ) {
+          HeartGlyph(
+            modifier = Modifier
+              .size(20.dp)
+              .testTag(ProductDetailTags.FAVORITE),
+            tint = if (isFavorite) {
+              MaharaniThemeTokens.colors.brandMark
+            } else {
+              MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            filled = isFavorite,
+          )
+        }
+      }
+
       if (images.isEmpty()) {
         ProductImage(
           url = null,

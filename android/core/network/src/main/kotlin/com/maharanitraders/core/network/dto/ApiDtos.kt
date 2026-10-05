@@ -118,3 +118,18 @@ data class NavigationDto(
   val workspaces: List<String> = emptyList(),
   val permissions: List<String> = emptyList(),
 )
+
+/**
+ * `/api/mobile/v1/shell/badges` — the shell's two live counters.
+ *
+ * Counts only, by design: the endpoint exists so a badge is a server fact rather
+ * than a number the device accumulates between screens, and so the shell never
+ * has to download a cart or a notification feed to paint one digit.
+ */
+@Serializable
+data class ShellBadgesDto(
+  /** Saved cart LINES, exactly as the web retailer layout counts them. */
+  val cartCount: Int = 0,
+  /** Notifications the caller has not read. */
+  val unreadNotificationCount: Int = 0,
+)

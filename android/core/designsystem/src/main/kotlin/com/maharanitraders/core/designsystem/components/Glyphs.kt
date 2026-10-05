@@ -326,3 +326,64 @@ fun SortGlyph(
     drawPath(polygon(13.4f, 8.4f, 18.6f, 8.4f, 16f, 3.6f), tint)
   }
 }
+
+/**
+ * Heart: the favourite control, on a product card and on the product page.
+ *
+ * Two states rather than two icons — [filled] is the server's "this product is
+ * saved", the outline is "not saved". Both are drawn from the same geometry so
+ * the control never shifts by a pixel as the shopper taps it.
+ */
+@Composable
+fun HeartGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+  filled: Boolean = true,
+) {
+  Glyph(if (filled) "Saved to favourites" else "Save to favourites", modifier) {
+    val radius = px(4.2f)
+    val leftCenter = point(9.1f, 9.5f)
+    val rightCenter = point(14.9f, 9.5f)
+    val apex = point(12f, 20.1f)
+    if (filled) {
+      drawCircle(tint, radius = radius, center = leftCenter)
+      drawCircle(tint, radius = radius, center = rightCenter)
+      drawPath(polygon(5.3f, 11.1f, 12f, 20.1f, 18.7f, 11.1f), tint)
+    } else {
+      val stroke = Stroke(px(1.9f), cap = StrokeCap.Round, join = StrokeJoin.Round)
+      drawCircle(tint, radius = radius, center = leftCenter, style = stroke)
+      drawCircle(tint, radius = radius, center = rightCenter, style = stroke)
+      drawLine(tint, point(5.6f, 12.1f), apex, px(1.9f), cap = StrokeCap.Round)
+      drawLine(tint, point(18.4f, 12.1f), apex, px(1.9f), cap = StrokeCap.Round)
+    }
+  }
+}
+
+/** Bell: the notification centre, with an optional unread marker. */
+@Composable
+fun BellGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Notifications", modifier) {
+    val stroke = Stroke(px(1.9f), cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val body = Path()
+    body.moveTo(px(5.4f), px(16.6f))
+    body.cubicTo(px(6.9f), px(16.6f), px(6.9f), px(12.6f), px(6.9f), px(10.6f))
+    body.cubicTo(px(6.9f), px(7.8f), px(9.2f), px(5.6f), px(12f), px(5.6f))
+    body.cubicTo(px(14.8f), px(5.6f), px(17.1f), px(7.8f), px(17.1f), px(10.6f))
+    body.cubicTo(px(17.1f), px(12.6f), px(17.1f), px(16.6f), px(18.6f), px(16.6f))
+    body.close()
+    drawPath(body, tint, style = stroke)
+    drawLine(tint, point(4.6f, 16.6f), point(19.4f, 16.6f), px(1.9f), cap = StrokeCap.Round)
+    drawArc(
+      color = tint,
+      startAngle = 20f,
+      sweepAngle = 140f,
+      useCenter = false,
+      topLeft = point(9.4f, 16.9f),
+      size = Size(px(5.2f), px(4.4f)),
+      style = stroke,
+    )
+  }
+}

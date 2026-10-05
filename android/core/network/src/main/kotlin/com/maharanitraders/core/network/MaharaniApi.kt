@@ -40,6 +40,7 @@ import com.maharanitraders.core.network.dto.RefreshSessionDto
 import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
 import com.maharanitraders.core.network.dto.RegisterRetailerResponseDto
 import com.maharanitraders.core.network.dto.SessionDto
+import com.maharanitraders.core.network.dto.ShellBadgesDto
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -132,6 +133,8 @@ interface MaharaniApi {
     @Query("brandId") brandId: String? = null,
     @Query("sort") sort: String? = null,
     @Query("inStock") inStock: String? = null,
+    /** `1` restricts the batch to the caller's favourites — the same filter the web catalogue uses. */
+    @Query("fav") favoritesOnly: String? = null,
     @Query("cursor") cursor: String? = null,
   ): ApiEnvelope<List<CatalogProductDto>>
 
@@ -250,4 +253,18 @@ interface MaharaniApi {
 
   @GET("api/mobile/v1/coupons")
   suspend fun coupons(): ApiEnvelope<MobileCouponsDto>
+
+  // -------------------------------------------------------------------------
+  // Shell counters — the cart and unread-notification badges the web layout paints
+  // -------------------------------------------------------------------------
+
+  /**
+   * The two live counters of the signed-in shell.
+   *
+   * Server-computed head-counts under the caller's own RLS scope, so a badge is
+   * never a number the device accumulates. Counts only: no cart contents and no
+   * notification bodies cross this call.
+   */
+  @GET("api/mobile/v1/shell/badges")
+  suspend fun shellBadges(): ApiEnvelope<ShellBadgesDto>
 }

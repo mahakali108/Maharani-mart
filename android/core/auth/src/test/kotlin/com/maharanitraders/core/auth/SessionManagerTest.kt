@@ -608,6 +608,10 @@ class FakeMaharaniApi : MaharaniApi {
   override suspend fun toggleFavorite(body: com.maharanitraders.core.network.dto.FavoriteToggleRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.FavoriteToggleResponseDto> = unsupported("toggleFavorite")
   override suspend fun coupons(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileCouponsDto> = unsupported("coupons")
 
+  // Shell counters are read by the authenticated shell, never by the session layer.
+  override suspend fun shellBadges(): ApiEnvelope<com.maharanitraders.core.network.dto.ShellBadgesDto> =
+    unsupported("shellBadges")
+
   private fun unsupported(endpoint: String): Nothing =
     throw UnsupportedOperationException("$endpoint is not used by the session layer")
 }
