@@ -93,23 +93,32 @@ describe('notifications unread badge', () => {
     expect(payload.meta?.unreadCount).toBeUndefined();
   });
 
-  it('answers a non-retailer session with 403 and no feed read', async () => {
+  it('serves every authenticated role its own feed, never another user\'s rows', async () => {
+    const STAFF = '33333333-3333-4333-8333-333333333333';
     const client = supabaseFixture({
-      profiles: [{ id: OTHER_RETAILER, role: 'staff', full_name: 'Staff', phone: '9876543210', is_active: true }],
+      profiles: [{ id: STAFF, role: 'staff', full_name: 'Staff', phone: '9876543210', is_active: true }],
       retailers: [],
-      notifications: [],
+      notifications: [
+        { id: 'own', recipient_id: STAFF, title: 'Assigned to you', body: 'Body', link_url: null, is_read: false, created_at: '2026-10-05T06:00:00Z' },
+        { id: 'foreign', recipient_id: OTHER_RETAILER, title: 'Someone else', body: 'Not yours', link_url: null, is_read: false, created_at: '2026-10-04T06:00:00Z' },
+      ],
     });
     Object.assign(client, {
-      auth: { getUser: async () => ({ data: { user: { id: OTHER_RETAILER, email: 'staff@example.test' } }, error: null }) },
+      auth: { getUser: async () => ({ data: { user: { id: STAFF, email: 'staff@example.test' } }, error: null }) },
     });
     mocks.client = client;
 
     const response = await listNotifications(apiRequest('/api/mobile/v1/notifications'));
 
-    // Staff roles have no retailer feed; the route is retailer-scoped.
-    expect([200, 403]).toContain(response.status);
-    if (response.status === 403) {
-      expect(client.queries.some((query) => query.table === 'notifications')).toBe(false);
+    // The contract opens the feed to any role (§2.5) and RLS narrows it to
+    // `recipient_id = auth.uid()`, so a non-retailer reads their OWN feed
+    // rather than being refused — but never anyone else's rows.
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { data: { id: string }[]; meta?: { unreadCount?: number } };
+    expect(payload.data.map((item) => item.id)).toEqual(['own']);
+    expect(payload.meta?.unreadCount).toBe(1);
+    for (const query of client.queries.filter((query) => query.table === 'notifications')) {
+      expect(query.filters).toContainEqual({ op: 'eq', column: 'recipient_id', value: STAFF });
     }
   });
 });
