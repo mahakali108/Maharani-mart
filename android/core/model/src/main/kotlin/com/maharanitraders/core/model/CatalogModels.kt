@@ -75,11 +75,21 @@ data class CatalogQuery(
   val brandId: String? = null,
   val sort: CatalogSort = CatalogSort.RECOMMENDED,
   val inStockOnly: Boolean = false,
+  /**
+   * Restrict the list to this retailer's saved favourites.
+   *
+   * The server resolves "whose favourites" from the verified token — there is
+   * no retailer id here — and answers the same priced catalogue rows, so the
+   * favourites screen is the real catalogue filtered, not a second list that
+   * could price a product differently.
+   */
+  val favoritesOnly: Boolean = false,
 ) {
   /** Blank-for-default, so a parameter is only sent when it means something. */
   val searchParam: String? get() = search.trim().ifEmpty { null }
   val sortParam: String? get() = sort.takeIf { it != CatalogSort.RECOMMENDED }?.wireValue
   val inStockParam: String? get() = if (inStockOnly) "1" else null
+  val favoritesParam: String? get() = if (favoritesOnly) "1" else null
 
   companion object {
     val DEFAULT = CatalogQuery()

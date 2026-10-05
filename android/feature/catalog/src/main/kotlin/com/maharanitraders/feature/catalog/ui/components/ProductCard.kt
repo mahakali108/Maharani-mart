@@ -20,6 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import com.maharanitraders.core.designsystem.components.FactChip
+import com.maharanitraders.core.designsystem.components.FavoriteButton
 import com.maharanitraders.core.designsystem.components.PriceBlock
 import com.maharanitraders.core.designsystem.components.PriceEmphasis
 import com.maharanitraders.core.designsystem.components.StockBadge
@@ -32,6 +33,9 @@ import com.maharanitraders.feature.catalog.ui.OfferBadge
 
 /** Test tag of one product tile, used by Compose UI tests to find a card. */
 const val PRODUCT_CARD_TAG = "catalog_product_tile"
+
+/** Test tag of the favourite control drawn on a product tile. */
+const val FAVORITE_TOGGLE_TAG = "catalog_favorite_toggle"
 
 /**
  * One product card — the atom every rail and grid in the app is built from.
@@ -53,6 +57,15 @@ fun ProductCard(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
   emphasis: PriceEmphasis = PriceEmphasis.Card,
+  /**
+   * Favourite state for this card. Defaults to the flag the SERVER put on the
+   * product row, so a card is correct even before the shared favourites set has
+   * loaded; the favourites-aware screens pass the store's answer instead.
+   */
+  isFavorite: Boolean = product.isFavorite,
+  favoritePending: Boolean = false,
+  /** Null hides the control entirely — a surface with no favourite affordance. */
+  onToggleFavorite: (() -> Unit)? = null,
 ) {
   val pack = product.pack
   val outOfStock = pack?.availability == PackAvailability.OUT_OF_STOCK
@@ -101,6 +114,17 @@ fun ProductCard(
             if (product.isNewLaunch) NewLaunchBadge()
             if (product.hasOffer) OfferBadge()
           }
+        }
+
+        if (onToggleFavorite != null) {
+          FavoriteButton(
+            isFavorite = isFavorite,
+            pending = favoritePending,
+            onToggle = onToggleFavorite,
+            modifier = Modifier
+              .align(Alignment.TopEnd)
+              .testTag(FAVORITE_TOGGLE_TAG),
+          )
         }
       }
 

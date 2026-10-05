@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import com.maharanitraders.core.common.AppError
 import com.maharanitraders.core.common.AppResult
+import com.maharanitraders.core.model.ApiErrorCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -68,7 +69,7 @@ class CouponsViewModelTest {
   @Test
   fun `load shows error on failure`() = runTest(testDispatcher) {
     fakeRepository.couponsResult = AppResult.Failure(
-      AppError.Api(code = "database_unavailable", message = "Try again.", status = 503, retryable = true),
+      AppError.Api(code = ApiErrorCode.DATABASE_UNAVAILABLE, message = "Try again."),
     )
 
     viewModel = CouponsViewModel(fakeRepository)

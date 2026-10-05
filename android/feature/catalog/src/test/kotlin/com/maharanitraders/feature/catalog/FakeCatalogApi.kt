@@ -36,6 +36,7 @@ import com.maharanitraders.core.network.dto.MobileCartDto
 import com.maharanitraders.core.network.dto.MobileOrderDto
 import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
 import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
+import kotlinx.coroutines.CompletableDeferred
 
 /**
  * A [MaharaniApi] double for the catalogue tests.
@@ -75,12 +76,30 @@ class FakeCatalogApi : MaharaniApi {
   var detailResult: ApiEnvelope<ProductDetailDto>? = null
   var nextDetailFailure: Throwable? = null
 
+  /** Server-side favourite set; [toggleFavorite] mutates it like the API does. */
+  val favoriteIds: MutableSet<String> = mutableSetOf()
+  val toggleRequests: MutableList<String> = mutableListOf()
+  var favoritesCalls: Int = 0
+    private set
+  var nextFavoritesFailure: Throwable? = null
+  var nextToggleFailure: Throwable? = null
+
+  /**
+   * When set, [toggleFavorite] waits on it before answering.
+   *
+   * The fake is otherwise instantaneous, which makes the in-flight window
+   * invisible to a test. A gate lets a test hold one toggle open and assert
+   * what the UI shows while the server has not replied yet.
+   */
+  var toggleGate: CompletableDeferred<Unit>? = null
+
   data class ProductRequest(
     val search: String?,
     val categoryId: String?,
     val brandId: String?,
     val sort: String?,
     val inStock: String?,
+    val favoritesOnly: String?,
     val cursor: String?,
   )
 
@@ -90,9 +109,12 @@ class FakeCatalogApi : MaharaniApi {
     brandId: String?,
     sort: String?,
     inStock: String?,
+    favoritesOnly: String?,
     cursor: String?,
   ): ApiEnvelope<List<CatalogProductDto>> {
-    productRequests.add(ProductRequest(search, categoryId, brandId, sort, inStock, cursor))
+    productRequests.add(
+      ProductRequest(search, categoryId, brandId, sort, inStock, favoritesOnly, cursor),
+    )
     nextProductFailure?.let { throw it }
     return productPages.removeFirstOrNull() ?: ApiEnvelope(emptyList(), page = PageDto(hasMore = false))
   }
@@ -164,8 +186,30 @@ class FakeCatalogApi : MaharaniApi {
   override suspend fun markNotificationsRead(body: com.maharanitraders.core.network.dto.MarkReadRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MarkReadResponseDto> = unsupported("markNotificationsRead")
   override suspend fun walletSummary(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileWalletSummaryDto> = unsupported("walletSummary")
   override suspend fun walletLedger(cursor: String?): ApiEnvelope<List<com.maharanitraders.core.network.dto.MobileWalletLedgerEntryDto>> = unsupported("walletLedger")
-  override suspend fun favorites(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileFavoritesDto> = unsupported("favorites")
-  override suspend fun toggleFavorite(body: com.maharanitraders.core.network.dto.FavoriteToggleRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.FavoriteToggleResponseDto> = unsupported("toggleFavorite")
+  // Favourites ARE reachable from the catalogue layer: `FavoritesStore` lives
+  // here because the catalogue owns products, so these two answer for real.
+  override suspend fun favorites(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileFavoritesDto> {
+    favoritesCalls += 1
+    nextFavoritesFailure?.let { throw it }
+    return ApiEnvelope(
+      com.maharanitraders.core.network.dto.MobileFavoritesDto(productIds = favoriteIds.toList()),
+    )
+  }
+
+  override suspend fun toggleFavorite(
+    body: com.maharanitraders.core.network.dto.FavoriteToggleRequestDto,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.FavoriteToggleResponseDto> {
+    toggleRequests.add(body.productId)
+    toggleGate?.await()
+    nextToggleFailure?.let { throw it }
+    // Mirror the server: toggling flips the stored state and REPORTS the result.
+    val nowFavorite = !favoriteIds.contains(body.productId)
+    if (nowFavorite) favoriteIds.add(body.productId) else favoriteIds.remove(body.productId)
+    return ApiEnvelope(
+      com.maharanitraders.core.network.dto.FavoriteToggleResponseDto(isFavorite = nowFavorite),
+    )
+  }
+
   override suspend fun coupons(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileCouponsDto> = unsupported("coupons")
 
   private fun unsupported(endpoint: String): Nothing =

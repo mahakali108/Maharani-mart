@@ -32,6 +32,7 @@ import com.maharanitraders.core.designsystem.components.ErrorState
 import com.maharanitraders.core.designsystem.components.LoadingState
 import com.maharanitraders.core.designsystem.components.OfflineState
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
+import com.maharanitraders.feature.engagement.CoinVocabulary
 import com.maharanitraders.feature.engagement.WalletLedgerEntry
 import com.maharanitraders.feature.engagement.WalletSummary
 import com.maharanitraders.feature.engagement.WalletViewModel
@@ -41,6 +42,7 @@ object WalletTags {
   const val SUMMARY = "wallet_summary"
   const val LEDGER = "wallet_ledger"
   const val LOAD_MORE = "wallet_load_more"
+  const val BALANCE = "wallet_coin_balance"
 }
 
 @Composable
@@ -133,7 +135,7 @@ fun WalletContent(
       item {
         com.maharanitraders.core.designsystem.components.EmptyState(
           title = "No transactions yet",
-          message = "Coin debits, credits and reversals will appear here.",
+          message = "Coins spent, added and refunded will appear here.",
           actionLabel = "Refresh",
           onAction = onRefresh,
           modifier = Modifier.fillMaxWidth(),
@@ -173,39 +175,44 @@ private fun WalletSummaryCard(summary: WalletSummary, modifier: Modifier = Modif
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Text(
-        "🪙 Coin balance",
+        "🪙 Coins available",
         style = MaterialTheme.typography.labelLarge,
       )
       Text(
         MoneyFormat.formatPaise(summary.coinBalancePaise),
         style = MaterialTheme.typography.headlineLarge,
         fontWeight = FontWeight.Bold,
+        modifier = Modifier.testTag(WalletTags.BALANCE),
+      )
+      Text(
+        "Spendable on your next order (1 coin = ₹1)",
+        style = MaterialTheme.typography.labelSmall,
       )
       HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f))
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Credit limit", style = MaterialTheme.typography.bodySmall)
-        Text(MoneyFormat.formatPaise(summary.creditLimitPaise), style = MaterialTheme.typography.bodySmall)
-      }
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Outstanding", style = MaterialTheme.typography.bodySmall)
-        Text(MoneyFormat.formatPaise(summary.outstandingPaise), style = MaterialTheme.typography.bodySmall)
-      }
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Available", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text("Coins funded", style = MaterialTheme.typography.bodySmall)
         Text(
-          MoneyFormat.formatPaise(summary.availablePaise),
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.SemiBold,
+          MoneyFormat.formatPaise(summary.coinsFundedPaise),
+          style = MaterialTheme.typography.bodySmall,
+        )
+      }
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Coins spent", style = MaterialTheme.typography.bodySmall)
+        Text(
+          MoneyFormat.formatPaise(summary.coinsSpentPaise),
+          style = MaterialTheme.typography.bodySmall,
         )
       }
       if (summary.isOverLimit) {
+        // Spent past what was funded. The balance above already reads zero;
+        // this says why, instead of showing a negative number.
         Surface(
           color = MaterialTheme.colorScheme.error,
           contentColor = MaterialTheme.colorScheme.onError,
           shape = RoundedCornerShape(8.dp),
         ) {
           Text(
-            "Over limit",
+            "You have spent more coins than are funded. Ask Maharani Traders to top up.",
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
           )
@@ -217,7 +224,8 @@ private fun WalletSummaryCard(summary: WalletSummary, modifier: Modifier = Modif
 
 @Composable
 private fun LedgerEntryCard(entry: WalletLedgerEntry, modifier: Modifier = Modifier) {
-  val isCredit = entry.direction == "credit"
+  val addsCoins = CoinVocabulary.addsCoins(entry.direction)
+  val typeLabel = CoinVocabulary.typeLabel(entry.type)
   Surface(
     modifier = modifier.fillMaxWidth(),
     shape = RoundedCornerShape(14.dp),
@@ -230,14 +238,17 @@ private fun LedgerEntryCard(entry: WalletLedgerEntry, modifier: Modifier = Modif
     ) {
       Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-          entry.description.ifEmpty { entry.type.replace('_', ' ') },
+          typeLabel,
           style = MaterialTheme.typography.bodyMedium,
+          fontWeight = FontWeight.SemiBold,
         )
-        Text(
-          entry.type.replace('_', ' '),
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        entry.description.takeIf { it.isNotBlank() }?.let { description ->
+          Text(
+            description,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
         entry.reason?.takeIf { it.isNotBlank() }?.let {
           Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -250,10 +261,10 @@ private fun LedgerEntryCard(entry: WalletLedgerEntry, modifier: Modifier = Modif
         }
       }
       Text(
-        text = (if (isCredit) "+" else "−") + MoneyFormat.formatPaise(entry.amountPaise),
+        text = (if (addsCoins) "+" else "−") + MoneyFormat.formatPaise(entry.amountPaise),
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
-        color = if (isCredit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+        color = if (addsCoins) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
       )
     }
   }

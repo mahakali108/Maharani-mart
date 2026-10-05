@@ -32,6 +32,8 @@ data class ProductDetailUiState(
   val retryable: Boolean = true,
   /** True when the server answered 404: the product is gone, not merely failing. */
   val notFound: Boolean = false,
+  /** Message from a failed favourite toggle, for a snackbar. */
+  val actionMessage: String? = null,
 ) {
   val selectedPack: ProductPackDetail?
     get() {
@@ -61,15 +63,27 @@ data class ProductDetailUiState(
 @HiltViewModel
 class ProductDetailViewModel @Inject constructor(
   private val repository: CatalogRepository,
+  private val favorites: FavoritesStore,
   savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
+  /**
+   * The route argument. It may be a PRODUCT id or a PACK id — the catalogue
+   * links to whichever variant the shopper was looking at and the detail
+   * endpoint accepts both. It must therefore never be used as the favourite
+   * key; favourites are keyed by product, and the product id is only known
+   * once the server has answered (see [toggleFavorite]).
+   */
   private val productId: String = savedStateHandle.get<String>(ARG_PRODUCT_ID).orEmpty()
 
   private val _state = MutableStateFlow(ProductDetailUiState())
   val state: StateFlow<ProductDetailUiState> = _state.asStateFlow()
 
+  /** The shared favourite set — this screen keeps no copy of its own. */
+  val favoriteState: StateFlow<FavoritesSnapshot> = favorites.state
+
   init {
+    viewModelScope.launch { favorites.ensureLoaded() }
     load()
   }
 
@@ -119,6 +133,29 @@ class ProductDetailViewModel @Inject constructor(
         }
       }
     }
+  }
+
+  /**
+   * Save or unsave the product currently on screen.
+   *
+   * Keyed on `detail.id` — the real PRODUCT id from the server — and never on
+   * the route argument, which may be a pack id. Toggling a pack id would make
+   * the server reject the write (it validates a product uuid) or, worse,
+   * favourite something the shopper never asked for. Nothing happens until the
+   * detail has loaded, because before then there is no product id to send.
+   */
+  fun toggleFavorite() {
+    val id = _state.value.detail?.id ?: return
+    viewModelScope.launch {
+      when (val result = favorites.toggle(id)) {
+        is AppResult.Success -> Unit
+        is AppResult.Failure -> _state.update { it.copy(actionMessage = result.error.message) }
+      }
+    }
+  }
+
+  fun consumeActionMessage() {
+    _state.update { it.copy(actionMessage = null) }
   }
 
   /** Select one of the packs the server returned. Unknown ids are ignored. */

@@ -132,6 +132,14 @@ interface MaharaniApi {
     @Query("brandId") brandId: String? = null,
     @Query("sort") sort: String? = null,
     @Query("inStock") inStock: String? = null,
+    /**
+     * `1` restricts the page to the caller's saved favourites.
+     *
+     * The web catalogue's own `fav=1` filter, reused rather than reimplemented:
+     * the favourites screen is this list filtered, so a favourited product is
+     * priced and stocked exactly as it is everywhere else.
+     */
+    @Query("fav") favoritesOnly: String? = null,
     @Query("cursor") cursor: String? = null,
   ): ApiEnvelope<List<CatalogProductDto>>
 

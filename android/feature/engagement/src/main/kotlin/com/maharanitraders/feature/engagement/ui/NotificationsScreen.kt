@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,11 +16,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +46,7 @@ object NotificationTags {
   const val ITEM = "notification_item"
   const val MARK_READ = "notification_mark_read"
   const val LOAD_MORE = "notification_load_more"
+  const val UNREAD_COUNT = "notification_unread_count"
 }
 
 @Composable
@@ -48,13 +55,30 @@ fun NotificationsScreen(
   viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  NotificationsContent(
-    state = state,
-    onRefresh = viewModel::load,
-    onLoadMore = viewModel::loadMore,
-    onMarkAllRead = viewModel::markAllRead,
+  val snackbarHostState = remember { SnackbarHostState() }
+
+  // A mark-read that did not reach the server is reported. Swallowing it
+  // leaves the unread badge up with no explanation.
+  LaunchedEffect(state.actionMessage) {
+    val message = state.actionMessage
+    if (message != null) {
+      snackbarHostState.showSnackbar(message)
+      viewModel.consumeActionMessage()
+    }
+  }
+
+  Scaffold(
+    snackbarHost = { SnackbarHost(snackbarHostState) },
     modifier = modifier,
-  )
+  ) { padding ->
+    NotificationsContent(
+      state = state,
+      onRefresh = viewModel::load,
+      onLoadMore = viewModel::loadMore,
+      onMarkAllRead = viewModel::markAllRead,
+      modifier = Modifier.padding(padding),
+    )
+  }
 }
 
 @Composable
@@ -85,7 +109,7 @@ fun NotificationsContent(
     return
   }
 
-  val unreadCount = state.items.count { !it.isRead }
+  val unreadCount = state.unreadLoaded
 
   LazyColumn(
     modifier = modifier.fillMaxSize().testTag(NotificationTags.SCREEN),
@@ -101,17 +125,32 @@ fun NotificationsContent(
           Text("Updates & alerts", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
           if (unreadCount > 0) {
             Text(
-              "$unreadCount unread update${if (unreadCount == 1) "" else "s"}",
+              // "3+" while later pages are still unseen: the feed endpoint
+              // returns no unread total, so a flat "3" would be a guess.
+              if (state.unreadCountIsExact) {
+                "$unreadCount unread update${if (unreadCount == 1) "" else "s"}"
+              } else {
+                "$unreadCount+ unread updates"
+              },
               style = MaterialTheme.typography.labelMedium,
               color = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.testTag(NotificationTags.UNREAD_COUNT),
             )
           }
         }
         if (unreadCount > 0) {
           TextButton(
             onClick = onMarkAllRead,
+            enabled = !state.markingRead,
             modifier = Modifier.testTag(NotificationTags.MARK_READ),
-          ) { Text("Mark all read") }
+          ) {
+            if (state.markingRead) {
+              CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+            } else {
+              // Honest label: only what has been loaded can be sent.
+              Text(if (state.unreadCountIsExact) "Mark all read" else "Mark these read")
+            }
+          }
         }
       }
     }

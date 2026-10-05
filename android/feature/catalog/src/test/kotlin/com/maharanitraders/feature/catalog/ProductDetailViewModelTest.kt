@@ -84,6 +84,7 @@ class ProductDetailViewModelTest {
 
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
       savedStateHandle = handle("pack-1"),
     )
     advanceUntilIdle()
@@ -103,6 +104,7 @@ class ProductDetailViewModelTest {
     val api = FakeCatalogApi().apply { detailResult = ApiEnvelope(detailDto()) }
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
       savedStateHandle = handle("p1"),
     )
     advanceUntilIdle()
@@ -127,6 +129,7 @@ class ProductDetailViewModelTest {
 
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
       savedStateHandle = handle("missing"),
     )
     advanceUntilIdle()
@@ -143,6 +146,7 @@ class ProductDetailViewModelTest {
 
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
       savedStateHandle = handle("p1"),
     )
     advanceUntilIdle()
@@ -159,6 +163,7 @@ class ProductDetailViewModelTest {
 
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
       savedStateHandle = handle(null),
     )
     advanceUntilIdle()

@@ -4,7 +4,6 @@ import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.common.map
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi
-import com.maharanitraders.core.network.dto.FavoriteToggleRequestDto
 import com.maharanitraders.core.network.dto.MarkReadRequestDto
 import com.maharanitraders.core.network.dto.MobileNotificationDto
 import com.maharanitraders.core.network.dto.MobileWalletLedgerEntryDto
@@ -13,16 +12,20 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Reads engagement data from the server: notifications, wallet,
- * favorites and coupons. Every value is server-authoritative.
+ * Reads engagement data from the server: notifications, wallet and coupons.
+ * Every value is server-authoritative.
+ *
+ * Favourites deliberately live in `:feature:catalog`'s `FavoritesStore`, not
+ * here. They were briefly implemented in both places, and two implementations
+ * of "is this product saved" is exactly how a heart ends up disagreeing with
+ * the server. Favourites are a catalogue concept, so the catalogue owns them
+ * and every surface reads that one store.
  */
 interface EngagementRepository {
   suspend fun loadNotifications(cursor: String?, unreadOnly: Boolean): AppResult<NotificationPage>
   suspend fun markNotificationsRead(ids: List<String>): AppResult<Int>
   suspend fun loadWalletSummary(): AppResult<WalletSummary>
   suspend fun loadWalletLedger(cursor: String?): AppResult<WalletLedgerPage>
-  suspend fun loadFavorites(): AppResult<FavoritesState>
-  suspend fun toggleFavorite(productId: String): AppResult<Boolean>
   suspend fun loadCoupons(): AppResult<CouponsState>
 }
 
@@ -54,9 +57,11 @@ class NetworkEngagementRepository @Inject constructor(
   override suspend fun loadWalletSummary(): AppResult<WalletSummary> =
     executor.executeEnvelope { api.walletSummary() }.map { dto ->
       WalletSummary(
-        creditLimitPaise = dto.creditLimitPaise,
-        outstandingPaise = dto.outstandingPaise,
-        availablePaise = dto.availablePaise,
+        // Wire names in, coin names out. `availablePaise` is deliberately
+        // dropped: it is `funded − spent` unclamped, and `coinBalancePaise`
+        // recomputes it with the clamp the coin model requires.
+        coinsFundedPaise = dto.creditLimitPaise,
+        coinsSpentPaise = dto.outstandingPaise,
         hasConfiguredLimit = dto.hasConfiguredLimit,
         isOverLimit = dto.isOverLimit,
         allowOverdue = dto.allowOverdue,
@@ -74,16 +79,6 @@ class NetworkEngagementRepository @Inject constructor(
         total = (envelope.meta?.resultCount ?: envelope.data.size),
       )
     }
-
-  override suspend fun loadFavorites(): AppResult<FavoritesState> =
-    executor.executeEnvelope { api.favorites() }.map { dto ->
-      FavoritesState(productIds = dto.productIds.toSet())
-    }
-
-  override suspend fun toggleFavorite(productId: String): AppResult<Boolean> =
-    executor.executeEnvelope {
-      api.toggleFavorite(FavoriteToggleRequestDto(productId = productId))
-    }.map { it.isFavorite }
 
   override suspend fun loadCoupons(): AppResult<CouponsState> =
     executor.executeEnvelope { api.coupons() }.map { dto ->

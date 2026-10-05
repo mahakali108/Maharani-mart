@@ -565,6 +565,7 @@ class FakeMaharaniApi : MaharaniApi {
     brandId: String?,
     sort: String?,
     inStock: String?,
+    favoritesOnly: String?,
     cursor: String?,
   ): ApiEnvelope<List<CatalogProductDto>> = unsupported("catalogProducts")
 

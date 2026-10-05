@@ -1,310 +1,215 @@
 # Maharani Traders — Native Android ↔ PWA Feature Parity
 
-> Auto-generated from a complete PWA inventory performed 2026-10-05.
-> Statuses: ✅ IMPLEMENTED · 🔶 PARTIAL · ⛔ BLOCKED · ➖ NOT APPLICABLE
+Audited against the repository on 2026-10-05. The PWA under `app/retailer/**` is the
+FEATURE REFERENCE; the native Android app under `android/` is the product being
+delivered. Every row below was checked by reading the route, the endpoint and the
+Kotlin screen — not inferred from a previous report.
 
-## Legend
+## How to read this
 
-| Column | Meaning |
-|--------|---------|
-| PWA Feature | User-visible capability in the existing web PWA |
-| PWA Route/Component | Next.js page or React component |
-| Backend/API | Mobile API endpoint (`/api/mobile/v1/…`) or server action |
-| Native Screen | Jetpack Compose screen or ViewModel |
-| Status | Parity status |
+| Status | Meaning |
+|---|---|
+| IMPLEMENTED | A native screen performs the real business action against the real backend. A placeholder, a label, or a value the app computed for itself does NOT qualify. |
+| PARTIAL | The native app does some of this, and the Notes say exactly what is missing. |
+| MISSING | No native implementation. The backend may well exist. |
+| BLOCKED | Cannot be built natively without backend work that does not exist yet. The Notes state the work. |
+| N/A | Deliberately not brought to native, with the reason. |
 
----
-
-## 1. Authentication & Session
-
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Login | `app/login/page.tsx` | `POST /api/mobile/v1/auth/login` | `LoginScreen` + `LoginViewModel` | ✅ IMPLEMENTED | Email+password, token pair, Keystore storage |
-| Registration | `app/register-retailer/page.tsx` | `POST /api/mobile/v1/retailers/register` | `RegisterScreen` + `RegisterViewModel` | ✅ IMPLEMENTED | Full form with area selection |
-| Forgot password | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | `AuthFlowScreen` (reset flow) | ✅ IMPLEMENTED | Supabase reset email |
-| Reset password | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | `AuthFlowScreen` (update flow) | ✅ IMPLEMENTED | Token-based update |
-| Logout | `lib/auth/actions.ts` | `POST /api/mobile/v1/auth/logout` | `AuthenticatedShell` sign-out | ✅ IMPLEMENTED | Session cleanup + Keystore clear |
-| Token refresh | middleware | `POST /api/mobile/v1/auth/refresh` | `SessionManager` + `AuthInterceptor` | ✅ IMPLEMENTED | Transparent refresh on 401 |
-| Session expiry | middleware | `GET /api/mobile/v1/session` | `SessionBootstrapper` | ✅ IMPLEMENTED | Access-period check on boot |
-| Pending approval screen | `app/pending-approval/page.tsx` | Session status | `SessionGateScreens` | ✅ IMPLEMENTED | Blocked retailer redirect |
-| Access expired screen | `app/access-expired/page.tsx` | Session status | `SessionGateScreens` | ✅ IMPLEMENTED | Expired access redirect |
-| Unauthorized screen | `app/unauthorized/page.tsx` | Role check | `UnsupportedAccountScreen` | ✅ IMPLEMENTED | Role mismatch redirect |
+Money, stock, totals and coin balances are server-authoritative everywhere. Where the
+native app shows a number, that number came from the server in the same response that
+the web app uses, or it is derived by arithmetic that is written down once and shared
+(see COIN-02).
 
 ---
 
-## 2. Retailer Home
+## 1. Authentication, session and access control
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Welcome panel | `HomeContent` | `GET /api/mobile/v1/home` | `RetailerHomeScreen` WelcomePanel | ✅ IMPLEMENTED | Shop name + branding |
-| Promotional banners | `PromoCarousel` | `GET /api/mobile/v1/home` banners | `BannerCarousel` | ✅ IMPLEMENTED | Server-published, area-targeted |
-| Category strip | `CategoryCard` grid | `GET /api/mobile/v1/home` categories | `CategoryRail` | ✅ IMPLEMENTED | Horizontally scrolling tiles |
-| Brand strip | `BrandCard` grid | `GET /api/mobile/v1/home` brands | `BrandRail` | ✅ IMPLEMENTED | Horizontally scrolling tiles |
-| Featured products grid | `ProductCard` grid | `GET /api/mobile/v1/home` products | `HomeContent` product grid | ✅ IMPLEMENTED | 2-col adaptive grid |
-| Recently added rail | `ProductRail` | `GET /api/mobile/v1/catalog/products?sort=newest` | `RecentRail` | ✅ IMPLEMENTED | De-duplicated from main grid |
-| Search bar (in app bar) | `SearchField` | Transitions to Catalog screen | `MaharaniSearchBar` in `RetailerHomeTopBar` | ✅ IMPLEMENTED | Submits to catalog with search term |
-| Error/offline states | Inline banners | N/A | `ErrorState` / `OfflineState` / `InlineErrorBanner` | ✅ IMPLEMENTED | Cached content + retry |
-| Skeleton loading | Various | N/A | `HomeSkeleton` | ✅ IMPLEMENTED | Shimmer placeholders |
-| Home search submit | `SearchField` | Catalog screen param | `openCatalog(CatalogRequest)` | ✅ IMPLEMENTED | Navigates to catalog tab |
-| Coins balance card | `CoinsBalanceCard` | Wallet summary | `HomeCoinsSummary` | ⛔ BLOCKED | Needs wallet mobile API integration on home |
-| Quick actions | `HomeQuickActions` | Various | Not yet native | ⛔ BLOCKED | Quick order, reports, etc. |
-| Buy again / reorder | `HomeReorderCard` | Order history + cart | Not yet native | ⛔ BLOCKED | Needs reorder API |
-| Offers & coupons section | Schemes cards | Schemes data | Not yet native | ⛔ BLOCKED | Needs schemes API |
-| Wholesale deals | `WholesaleDealCard` | Slab pricing | Not yet native | 🔶 PARTIAL | Price tiers visible on PDP |
-| Delivery/service benefits | Service cards | Config env vars | Not yet native | ➖ NOT APPLICABLE | Static marketing content |
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| AUTH-01 | Login | `app/login/page.tsx` | `POST /api/mobile/v1/auth/login` | `LoginScreen` + `LoginViewModel` | IMPLEMENTED | Email + password; token pair stored via the Keystore-backed session store. |
+| AUTH-02 | Retailer registration | `app/register-retailer/page.tsx` | `POST /api/mobile/v1/retailers/register` | `RegisterScreen` + `RegisterViewModel` | IMPLEMENTED | Full form; areas come from `GET /areas`, never a hardcoded list. |
+| AUTH-03 | Forgot password | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | `AuthFlowScreen` | IMPLEMENTED | Triggers the Supabase reset mail. |
+| AUTH-04 | Reset password | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | `AuthFlowScreen` | IMPLEMENTED | Token-based update. |
+| AUTH-05 | Logout | `lib/auth/actions.ts` | `POST /api/mobile/v1/auth/logout` | `AuthenticatedShell` | IMPLEMENTED | Clears the stored session as well as the server session. |
+| AUTH-06 | Silent token refresh | `middleware.ts` | `POST /api/mobile/v1/auth/refresh` | `SessionManager`, `AuthInterceptor` | IMPLEMENTED | Single-flight refresh on 401; the failed call is replayed once. |
+| AUTH-07 | Session / role bootstrap | `middleware.ts` | `GET /api/mobile/v1/session` | `SessionBootstrapper`, `MaharaniRouter` | IMPLEMENTED | Role and workspace decide the destination set; the client never grants itself a workspace. |
+| AUTH-08 | Pending-approval gate | `app/pending-approval/page.tsx` | session `gate` | `SessionGateScreens` | IMPLEMENTED | Driven by `ApiErrorCode.gate`, never by matching message text. |
+| AUTH-09 | Access-expired gate | `app/access-expired/page.tsx` | session `gate` | `SessionGateScreens` | IMPLEMENTED | As above. |
+| AUTH-10 | Account suspended / inactive | session guard | session `gate` | `SessionGateScreens` | IMPLEMENTED | As above. |
 
----
+## 2. Home and discovery
 
-## 3. Catalogue
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| HOME-01 | Retailer home | `app/retailer/home/page.tsx` | `GET /api/mobile/v1/home` | `RetailerHomeScreen` + `HomeViewModel` | IMPLEMENTED | Banners, category rail, product rails — all server rows. |
+| HOME-02 | Promotional banners | `app/retailer/home` | `GET /home` | `BannerCarousel` | IMPLEMENTED | Renders only banners the server returned; no placeholder art. |
+| HOME-03 | Search | `app/retailer/catalog` search field | `GET /catalog/products?search=` | `CatalogScreen` filter bar | IMPLEMENTED | Debounced; the query is sent to the server, never filtered client-side. |
+| HOME-04 | Category directory | `app/retailer/categories/page.tsx` | `GET /catalog/categories` | `CategoriesScreen` + `CategoriesViewModel` | IMPLEMENTED | Tapping a category opens the catalogue filtered by it. |
+| HOME-05 | Category landing page | `app/retailer/categories/[id]/page.tsx` | `GET /catalog/products?categoryId=` | `CatalogScreen` (filtered) | IMPLEMENTED | Same list, pre-filtered, rather than a second screen that could price differently. |
+| HOME-06 | Brand directory | `app/retailer/brands/page.tsx` | `GET /catalog/brands` | — | MISSING | The endpoint and the DTO exist and `CatalogQuery.brandId` is wired; only the brand-picker screen is absent. The catalogue can already be filtered by brand programmatically. |
+| HOME-07 | Brand landing page | `app/retailer/brands/[id]/page.tsx` | `GET /catalog/products?brandId=` | `CatalogScreen` (filtered) | PARTIAL | Reachable only once something sets `brandId`; with HOME-06 missing there is no in-app way to pick a brand. |
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Product grid | `ProductCard` grid | `GET /api/mobile/v1/catalog/products` | `CatalogScreen` | ✅ IMPLEMENTED | Adaptive grid, real pricing |
-| Search | `catalog-params` | `?q=` param | `CatalogViewModel` search | ✅ IMPLEMENTED | Server-side search |
-| Category filter | `catalog-params` | `?categoryId=` | `CatalogViewModel` category | ✅ IMPLEMENTED | From home/category screen |
-| Brand filter | `catalog-params` | `?brandId=` | `CatalogViewModel` brand | ✅ IMPLEMENTED | From home/brand screen |
-| Sort options | `catalog-filters` | `?sort=` | `CatalogViewModel` sort | ✅ IMPLEMENTED | All PWA sort options |
-| In-stock filter | `catalog-filters` | `?inStock=1` | `CatalogViewModel` inStockOnly | ✅ IMPLEMENTED | Boolean toggle |
-| Pagination (cursor) | `InfiniteScroll` | `?cursor=` | `CatalogViewModel` loadMore | ✅ IMPLEMENTED | Server cursor-based |
-| Stock badges | `StockBadge` | Pack availability | `StockBadge` design system | ✅ IMPLEMENTED | In stock / out of stock / unknown |
-| Price display | `product-card` | Pack pricing | `PriceBlock` design system | ✅ IMPLEMENTED | Paise → ₹ formatting |
-| Pack/MOQ info | `product-card` | Pack data | `ProductCard` pack label | ✅ IMPLEMENTED | Pack name + MOQ |
-| Loading skeleton | Skeletons | N/A | `CatalogSkeleton` | ✅ IMPLEMENTED | Grid shimmer |
-| Empty state | Empty states | N/A | `EmptyState` | ✅ IMPLEMENTED | With retry action |
-| Error/retry | Error states | N/A | `ErrorState` | ✅ IMPLEMENTED | With retry action |
-| Product count indicator | `resultCount` | Meta response | Displayed in catalog | ✅ IMPLEMENTED | Server-reported count |
+## 3. Catalogue and product detail
 
----
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| CAT-01 | Product list | `app/retailer/catalog/page.tsx` | `GET /catalog/products` | `CatalogScreen` + `CatalogViewModel` | IMPLEMENTED | Opaque-cursor paging with a repeated-cursor stall guard. |
+| CAT-02 | Sort | catalog sort control | `?sort=` | `CatalogScreen` | IMPLEMENTED | Server-side sort; the app does not reorder a page locally. |
+| CAT-03 | In-stock filter | catalog filter | `?inStock=1` | `CatalogScreen` | IMPLEMENTED | Single-warehouse model: In Stock / Out of Stock only. |
+| CAT-04 | Product detail | `app/retailer/catalog/[id]/page.tsx` | `GET /catalog/products/{id}` | `ProductDetailScreen` + `ProductDetailViewModel` | IMPLEMENTED | Gallery, facts, pack selector, stock badge. |
+| CAT-05 | Pack / MOQ rules | PDP pack selector | pack payload on the detail row | `ProductDetailScreen` | IMPLEMENTED | MOQ and increment come from the server pack; the quantity stepper enforces them. |
+| CAT-06 | Stock badge | PDP + cards | `availability` on the pack | `StockBadge` | IMPLEMENTED | In Stock / Out of Stock only — no FEFO, GRN or multi-warehouse anywhere in the native app. |
+| CAT-07 | Add to cart from PDP | PDP | `POST /cart/lines` | `ProductDetailScreen` → `CartCheckoutViewModel` | IMPLEMENTED | Server re-prices; the response replaces the local cart. |
+| CAT-08 | Quick order | `app/retailer/quick-order/page.tsx` | `POST /cart/lines` | — | MISSING | A bulk entry grid. No native equivalent; the per-product path covers the same business action more slowly. |
 
-## 4. Categories & Brands
+## 4. Favourites
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Category directory | `CategoryDirectory` | `GET /api/mobile/v1/catalog/categories` | `CategoriesScreen` | ✅ IMPLEMENTED | Grid with product counts |
-| Category tiles | `CategoryCard` | Category data | `CategoryTile` | ✅ IMPLEMENTED | Image + name + count |
-| Category → catalog | Link to `/retailer/categories/[id]` | Catalog filter | `onOpenCategory` callback | ✅ IMPLEMENTED | Opens catalog filtered |
-| Brand directory | `BrandDirectory` | `GET /api/mobile/v1/catalog/brands` | `CategoriesScreen` brand section | ✅ IMPLEMENTED | Grid with product counts |
-| Brand tiles | `BrandCard` | Brand data | `BrandTile` | ✅ IMPLEMENTED | Logo + name + count |
-| Brand → catalog | Link to `/retailer/brands/[id]` | Catalog filter | `onOpenBrand` callback | ✅ IMPLEMENTED | Opens catalog filtered |
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| FAV-01 | Save / unsave a product | `lib/retailer/favorite-actions.ts` | `POST /api/mobile/v1/favorites` | `FavoriteButton` on `ProductCard` and `ProductDetailScreen` | IMPLEMENTED | Server-authoritative: the heart shows what the toggle response returned, never an optimistic guess. A failed toggle keeps the old state and says why. |
+| FAV-02 | Favourites list | `app/retailer/favorites/page.tsx` | `GET /catalog/products?fav=1` | `FavoritesScreen` + `FavoritesViewModel` | IMPLEMENTED | The real catalogue endpoint narrowed to favourites, so price, pack and stock match the catalogue exactly. |
+| FAV-03 | Favourite state across screens | catalogue + PDP | `GET /api/mobile/v1/favorites` | `FavoritesStore` | IMPLEMENTED | One store, read by every surface. Before it loads, the `isFavorite` flag on each server row is used, so hearts never flash off on a cold start. |
+| FAV-04 | Favourite count | favourites header | derived | `FavoritesScreen` count | IMPLEMENTED | Taken from the list's `resultCount` and the loaded id set; not guessed from the visible page. |
 
----
+## 5. Cart
 
-## 5. Product Detail (PDP)
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| CART-01 | View cart | `app/retailer/cart/page.tsx` | `GET /cart` | `CartScreen` + `CartCheckoutViewModel` | IMPLEMENTED | Every line is re-priced by the server on load. |
+| CART-02 | Change quantity | cart stepper | `PATCH /cart/lines/{lineId}` | `CartScreen` | IMPLEMENTED | MOQ and increment enforced server-side; the response is the new truth. |
+| CART-03 | Remove a line | cart | `DELETE /cart/lines/{lineId}` | `CartScreen` | IMPLEMENTED | |
+| CART-04 | Apply a coupon | cart coupon box | `POST /cart/coupon` | `CartScreen` | IMPLEMENTED | The server validates and prices the coupon; the app never computes a discount. |
+| CART-05 | Remove a coupon | cart | `DELETE /cart/coupon` | `CartScreen` | IMPLEMENTED | |
+| CART-06 | Unavailable-line handling | cart warnings | `orderable`/`message` on each line | `CartScreen` | IMPLEMENTED | A non-orderable line blocks checkout and shows the server's reason. |
+| CART-07 | Saved carts | `app/retailer/cart/saved/page.tsx` | server action | — | MISSING | No mobile endpoint exists for saved carts; the web feature uses a server action, not `/api/mobile/v1`. Adding it would need a new route plus RLS review. |
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Product gallery | `ProductGallery` | `GET /api/mobile/v1/catalog/products/{id}` images | `ProductDetailScreen` gallery | ✅ IMPLEMENTED | Pack images + product images |
-| Product name/brand | PDP header | Product detail data | `ProductDetailScreen` header | ✅ IMPLEMENTED | Full name + brand |
-| Description | PDP | Product data | PDP content | 🔶 PARTIAL | Server data rendered if available |
-| Pack details | `PackSelector` | `ProductPackDetailDto` | `ProductDetailScreen` pack list | ✅ IMPLEMENTED | All pack info |
-| MOQ display | PDP | Pack moq | PDP pack details | ✅ IMPLEMENTED | Minimum order quantity |
-| Stock status | PDP | Pack availability | `StockBadge` on PDP | ✅ IMPLEMENTED | Per-pack availability |
-| Price (unit price) | PDP | Pack unitPricePaise | `MoneyFormat.formatPaise` | ✅ IMPLEMENTED | GST-inclusive per-piece |
-| MRP | PDP | Pack mrpPaise | PDP pack details | ✅ IMPLEMENTED | When available |
-| GST percent | PDP | Pack gstPercent | PDP pack details | ✅ IMPLEMENTED | Displayed per pack |
-| Case price | PDP | Pack derivedCasePricePaise | PDP pack details | ✅ IMPLEMENTED | When available |
-| Slab pricing | PDP | Pack tiers[] | PDP pack details | ✅ IMPLEMENTED | Quantity tiers |
-| Add to cart | PDP button | `POST /api/mobile/v1/cart/lines` | `onAddToCart` callback | ✅ IMPLEMENTED | MOQ-based quantity |
-| Pack selection | `PackSelector` | Pack list | Pack selection on PDP | ✅ IMPLEMENTED | Tap to select pack |
-| Favorite toggle | `FavoriteToggle` | Favorites API | Not yet native | ⛔ BLOCKED | Needs favorites mobile API |
-| Share button | `ShareButton` | N/A | Not yet native | ➖ NOT APPLICABLE | Android share intent (future) |
-| Product feedback | `ProductFeedback` | Stock alert API | Not yet native | ⛔ BLOCKED | Needs feedback mobile API |
+## 6. Checkout, order creation and confirmation
 
----
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| CHK-01 | Delivery address selection | `app/retailer/checkout` | `GET /api/mobile/v1/addresses` | `CartScreen` checkout step | IMPLEMENTED | Reads the retailer's saved addresses. |
+| CHK-02 | Server quote / order review | `app/retailer/checkout` | `POST /checkout/quote` | `CartScreen` checkout step | IMPLEMENTED | Subtotal, GST, discount, grand total, coins used and balance-after all come from the quote. Nothing payable is computed on the device. |
+| CHK-03 | Order notes | checkout notes field | `POST /orders` | `CartScreen` | IMPLEMENTED | |
+| CHK-04 | Place order | checkout submit | `POST /orders` | `CartScreen` | IMPLEMENTED | Idempotency key per attempt; the server re-quotes before writing. |
+| CHK-05 | Uncertain-submit recovery | checkout retry | `GET /orders/requests/{requestKey}` | `CartScreen` "Check order status" | IMPLEMENTED | A timed-out submit is resolved by asking the server what happened, instead of risking a second order. |
+| CHK-06 | Order confirmation | checkout success | `POST /orders` response | `CartScreen` confirmation | IMPLEMENTED | Shows the server-confirmed number, status, total, coins used and coin balance after. |
+| CHK-07 | Add a new address during checkout | `app/retailer/account/addresses` | — | — | BLOCKED | `GET /api/mobile/v1/addresses` is read-only. Address create/update/delete would need new mobile routes with ownership checks and validation mirroring the web server actions. |
 
-## 6. Cart
+## 7. Orders
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Cart contents | `CartItemRow` | `GET /api/mobile/v1/cart` | `CartScreen` / `CartContent` | ✅ IMPLEMENTED | Server-priced lines |
-| Add to cart | Cart actions | `POST /api/mobile/v1/cart/lines` | `addCartLine` | ✅ IMPLEMENTED | Server merge + MOQ |
-| Quantity increment | `QtyStepper` | `PATCH /api/mobile/v1/cart/lines/{id}` | `increment` / `decrement` | ✅ IMPLEMENTED | MOQ + increment rules |
-| Quantity set | `QtyStepper` | `PATCH /api/mobile/v1/cart/lines/{id}` | `setQuantity` | ✅ IMPLEMENTED | Direct quantity set |
-| Remove line | `ClearCartButton` | `DELETE /api/mobile/v1/cart/lines/{id}` | `removeCartLine` | ✅ IMPLEMENTED | Server-side removal |
-| MOQ enforcement | Cart validation | Server re-check | MOQ message on PDP + cart | ✅ IMPLEMENTED | Server is authority |
-| Stock validation | Cart line | Server availability | Availability display per line | ✅ IMPLEMENTED | In/out/unknown |
-| Price display | Cart line | Server pricing | `MoneyFormat.formatPaise` | ✅ IMPLEMENTED | Per-piece + line total |
-| GST display | Cart line | Server gstPercent | GST rate per line | ✅ IMPLEMENTED | |
-| Coupon apply | `CouponApplyForm` | `POST /api/mobile/v1/cart/coupon` | `CouponPanel` | ✅ IMPLEMENTED | Server-verified code |
-| Coupon remove | `CouponApplyForm` | `DELETE /api/mobile/v1/cart/coupon` | `CouponPanel` remove | ✅ IMPLEMENTED | |
-| Empty cart state | Empty state | N/A | `EmptyState` | ✅ IMPLEMENTED | Browse catalogue CTA |
-| Error/retry | Error states | N/A | `ErrorState` + refresh | ✅ IMPLEMENTED | Shared cart refresh |
-| Cart needs refresh | Notice | N/A | `NoticeCard` | ✅ IMPLEMENTED | Lost response reconciliation |
-| Pending order check | Recovery | `GET /api/mobile/v1/orders/requests/{key}` | `checkPendingOrder` | ✅ IMPLEMENTED | Idempotency recovery |
-| Cart subtotal | `CartOrderSummary` | Server-computed | Checkout totals | ✅ IMPLEMENTED | In checkout quote |
-| Delivery charges | `CartOrderSummary` | Server-computed | Checkout quote | ✅ IMPLEMENTED | If server includes |
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| ORD-01 | Order history | `app/retailer/orders/page.tsx` | `GET /orders` | `OrderHistoryScreen` + `OrderHistoryViewModel` | IMPLEMENTED | Cursor-paged, server statuses and values. |
+| ORD-02 | Order detail | `app/retailer/orders/[id]/page.tsx` | `GET /orders/{id}` | `OrderHistoryScreen` expandable row | PARTIAL | Items, address and notes are shown, but from the LIST payload. `GET /orders/{id}` and `MaharaniApi.orderDetail` both exist and nothing calls them; there is no addressable order-detail screen or route. |
+| ORD-03 | Invoice | `app/retailer/orders/[id]/invoice/page.tsx` | — | — | BLOCKED | There is no mobile invoice endpoint. The tax split lives in TypeScript (`lib/retailer/invoice-tax.ts`, `invoice-display.ts`); re-deriving GST in Kotlin would create a second implementation of tax arithmetic, which is exactly the kind of duplication that eventually disagrees. The right fix is `GET /api/mobile/v1/orders/{id}/invoice` returning the already-computed lines. |
+| ORD-04 | Reorder | `app/retailer/orders/[id]/reorder/page.tsx` | `POST /cart/lines` | — | MISSING | Buildable on existing endpoints by replaying each line into the cart; not implemented in this change set. |
+| ORD-05 | Delivery tracking | `app/retailer/orders/[id]/delivery/page.tsx` | — | — | BLOCKED | No mobile endpoint exposes delivery events. Would need a route over the same data the web page reads. |
 
----
+## 8. Coins
 
-## 7. Checkout
+The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Address selection | `CheckoutAddressSelector` | `GET /api/mobile/v1/addresses` | `AddressChoice` list | ✅ IMPLEMENTED | Default selection |
-| Cart summary | `CheckoutForm` | `POST /api/mobile/v1/checkout/quote` | `CheckoutContent` quote | ✅ IMPLEMENTED | Server-authoritative |
-| Subtotal/GST/discount | Checkout totals | Quote response | `QuoteTotals` | ✅ IMPLEMENTED | All in paise |
-| Coins applied | Checkout totals | Quote coinsUsedPaise | `QuoteTotals` coins rows | ✅ IMPLEMENTED | Server-computed |
-| Grand total | Checkout totals | Quote grandTotalPaise | `QuoteTotals` | ✅ IMPLEMENTED | Final payable |
-| Order notes | `CheckoutForm` | Place order request | `OutlinedTextField` | ✅ IMPLEMENTED | Up to 1000 chars |
-| Place order | Submit button | `POST /api/mobile/v1/orders` | `submitOrder` | ✅ IMPLEMENTED | Idempotency key |
-| Duplicate prevention | Idempotency | `Idempotency-Key` header | Pending key persistence | ✅ IMPLEMENTED | DataStore-backed |
-| Order recovery | Recovery flow | `GET /api/mobile/v1/orders/requests/{key}` | `recoverOrder` | ✅ IMPLEMENTED | On uncertain response |
-| Order confirmation | Confirmation screen | Place order response | `OrderConfirmationContent` | ✅ IMPLEMENTED | Status, number, total |
-| Error handling | Error states | N/A | `NoticeCard` + retry | ✅ IMPLEMENTED | Uncertain order flow |
-| Address selector | `CheckoutAddressSelector` | Addresses API | `AddressChoice` radio | ✅ IMPLEMENTED | Default address auto-selected |
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| COIN-01 | Coin balance | `app/retailer/account/ledger/page.tsx` | `GET /api/mobile/v1/wallet` | `WalletScreen` | IMPLEMENTED | Shown as "Coins available". |
+| COIN-02 | Coin balance arithmetic | `lib/coins/math.ts` | — | `WalletSummary.coinBalancePaise` | IMPLEMENTED | `max(0, funded − spent)`, the same formula the server debits with. The server's `availablePaise` is the same subtraction unclamped and is deliberately not carried into the app, so an overspent account can never render a negative balance. |
+| COIN-03 | Coin ledger | retailer ledger page | `GET /wallet/ledger` | `WalletScreen` | IMPLEMENTED | Cursor-paged. Rows use the same labels as the web ledger — Coins spent / added / refunded / funded. |
+| COIN-04 | Coins at checkout | checkout summary | `POST /checkout/quote` | `CartScreen` | IMPLEMENTED | Coins used and balance-after come from the server quote. |
+| COIN-05 | Coins on a placed order | order confirmation | `POST /orders` response | `CartScreen` confirmation | IMPLEMENTED | |
+| COIN-06 | Over-limit state | ledger page | `isOverLimit` | `WalletScreen` | IMPLEMENTED | States that more coins were spent than funded, rather than showing a negative number. |
 
----
+## 9. Notifications
 
-## 8. Orders
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| NOTIF-01 | Notification feed | `app/retailer/notifications/page.tsx` | `GET /notifications` | `NotificationsScreen` + `NotificationsViewModel` | IMPLEMENTED | Cursor-paged, newest first. |
+| NOTIF-02 | Mark read | notifications page | `POST /notifications/read` | `NotificationsScreen` | IMPLEMENTED | Only the loaded unread ids are sent; a failure is reported and nothing is marked locally. A partial result re-reads the feed rather than guessing which rows the server marked. |
+| NOTIF-03 | Unread count | notification bell | — | `NotificationsScreen` header | PARTIAL | The feed endpoint returns no unread total, so the count is labelled "3+" until the last page has arrived and the action reads "Mark these read". An always-correct badge needs an `unreadCount` in the response meta (or a count endpoint). |
+| NOTIF-04 | Shell unread badge | web header bell | — | — | BLOCKED | Same missing count as NOTIF-03. A badge that silently omits a number is worse than no badge, so none is drawn. |
+| NOTIF-05 | Notification preferences | `app/retailer/account/notification-preferences/page.tsx` | — | — | BLOCKED | No mobile endpoint for preferences. |
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Order list | Order list | `GET /api/mobile/v1/orders` | `OrderHistoryScreen` | ✅ IMPLEMENTED | Cursor-paginated |
-| Order status | `OrderStatusTimeline` | Order data | `OrderCard` status | ✅ IMPLEMENTED | All status values |
-| Order details (expand) | Order detail page | `GET /api/mobile/v1/orders/{id}` | Expandable `OrderCard` | ✅ IMPLEMENTED | Tap to expand |
-| Items list | Order items | Order items[] | `OrderItemRow` | ✅ IMPLEMENTED | Per-item details |
-| Quantities/prices | Order items | Item data | Price + quantity display | ✅ IMPLEMENTED | All monetary fields |
-| GST | Order items | Item gstPercent | GST display | ✅ IMPLEMENTED | |
-| Totals breakdown | Order summary | Order data | Subtotal/GST/discount/total | ✅ IMPLEMENTED | |
-| Dates | Order data | Order timestamps | Placed/updated display | ✅ IMPLEMENTED | UTC format |
-| Notes | Order data | Order notes | Notes display | ✅ IMPLEMENTED | |
-| Coins used | Order data | Order coinsUsedPaise | Coins display | ✅ IMPLEMENTED | |
-| Pagination | `InfiniteScroll` | `?cursor=` | `loadMore` | ✅ IMPLEMENTED | Cursor-based |
-| Invoice | `app/retailer/orders/[id]/invoice/page.tsx` | Invoice route | Not yet native | ⛔ BLOCKED | Needs invoice mobile API |
-| Reorder | `app/retailer/orders/[id]/reorder/page.tsx` | Reorder action | Not yet native | ⛔ BLOCKED | Needs reorder API |
-| Delivery tracking | `app/retailer/orders/[id]/delivery/page.tsx` | Delivery data | Not yet native | ⛔ BLOCKED | Needs delivery mobile API |
+## 10. Coupons, offers and schemes
 
----
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| PROMO-01 | Coupon list | `app/retailer/coupons/page.tsx` | `GET /coupons` | `CouponsScreen` + `CouponsViewModel` | IMPLEMENTED | Real coupons with their server-stated conditions. |
+| PROMO-02 | Apply a coupon | cart | `POST /cart/coupon` | `CartScreen` | IMPLEMENTED | See CART-04. |
+| PROMO-03 | Offer badge on products | catalogue cards | `hasOffer` | `ProductCard` `OfferBadge` | IMPLEMENTED | Shown only when the server row says so. |
+| PROMO-04 | Schemes | `app/retailer/schemes/page.tsx` | — | — | BLOCKED | No mobile endpoint exposes schemes. Would need a route over the same source the web page reads. |
 
-## 9. Account / Profile
+## 11. Account
 
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Profile display | `app/retailer/account/page.tsx` | `GET /api/mobile/v1/session` | `AccountScreen` ProfileCard | ✅ IMPLEMENTED | Name, email, phone, role |
-| Shop information | Account page | Session retailer data | `AccountScreen` ShopCard | ✅ IMPLEMENTED | Shop name, approval status |
-| Access period | Account page | Session access data | `AccountScreen` AccessCard | ✅ IMPLEMENTED | Status + expiry date |
-| Workspaces | Account page | Session navigation | `AccountScreen` WorkspacesCard | ✅ IMPLEMENTED | Granted workspaces |
-| Sign out | Account page + shell | `POST /api/mobile/v1/auth/logout` | Multiple sign-out points | ✅ IMPLEMENTED | Drawer + account tab + dialog |
-| Edit profile | `app/retailer/account/edit/page.tsx` | Profile RPC | Not yet native | ⛔ BLOCKED | Needs profile edit mobile API |
-| Address book | `app/retailer/account/addresses/page.tsx` | `GET /api/mobile/v1/addresses` | Not yet native | 🔶 PARTIAL | Addresses loaded for checkout only |
-| Security settings | `app/retailer/account/security/page.tsx` | Password update API | Not yet native | ⛔ BLOCKED | Needs security mobile API |
-| Notification preferences | `app/retailer/account/notification-preferences/page.tsx` | Prefs RPC | Not yet native | ⛔ BLOCKED | Needs prefs mobile API |
-| Purchase reports | `app/retailer/reports/page.tsx` | Reports query | Not yet native | ⛔ BLOCKED | Needs reports mobile API |
-| Saved carts | `app/retailer/cart/saved/page.tsx` | Saved carts RPC | Not yet native | ⛔ BLOCKED | Needs saved carts API |
-| Quick order | `app/retailer/quick-order/page.tsx` | Catalog search | Not yet native | 🔶 PARTIAL | Catalog search covers this |
-| Help centre | `app/retailer/help/page.tsx` | Static | Not yet native | ➖ NOT APPLICABLE | Static content page |
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| ACC-01 | Account overview | `app/retailer/account/page.tsx` | `GET /session` | `AccountScreen` | IMPLEMENTED | Identity, role and workspace from the session. |
+| ACC-02 | Address book | `app/retailer/account/addresses/page.tsx` | `GET /addresses` | — | PARTIAL | Addresses are read during checkout (CHK-01) but there is no address-book screen, and no endpoint to edit them (CHK-07). |
+| ACC-03 | Edit profile | `app/retailer/account/edit/page.tsx` | — | — | BLOCKED | No mobile profile-update endpoint. |
+| ACC-04 | Security / change password | `app/retailer/account/security/page.tsx` | `POST /auth/password-update` | `AuthFlowScreen` | PARTIAL | The password-update call exists and is used in the reset flow; there is no in-account security screen. |
+| ACC-05 | Sign out | account page | `POST /auth/logout` | `AuthenticatedShell` | IMPLEMENTED | |
+
+## 12. Support, reports and assistive features
+
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| MISC-01 | Support tickets | `app/retailer/support/**` | — | — | BLOCKED | No mobile endpoints for support threads. |
+| MISC-02 | Help centre | `app/retailer/help/page.tsx` | static content | — | MISSING | Static content; no backend dependency. |
+| MISC-03 | Reports | `app/retailer/reports/page.tsx` | — | — | BLOCKED | No mobile reporting endpoint. |
+| MISC-04 | AI assistant | `app/retailer/ai/page.tsx` | — | — | N/A | Not part of the retailer ordering journey this app delivers. |
+
+## 13. Platform and delivery
+
+| ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
+|---|---|---|---|---|---|---|
+| PLAT-01 | Native shell and navigation | app layout | — | `MaharaniRouter`, `AuthenticatedShell` | IMPLEMENTED | Bottom bar plus drawer; destinations are filtered by the session's role and workspaces. |
+| PLAT-02 | Offline and error states | web error boundaries | — | `StateSurfaces` | IMPLEMENTED | Offline, retryable and non-retryable failures are distinguished from the error code, not from message text. |
+| PLAT-03 | No WebView anywhere | — | — | — | IMPLEMENTED | The app is Kotlin + Compose + Retrofit. No WebView, Capacitor or bundled web assets, in the app or in CI. |
+| PLAT-04 | Android CI | — | — | `.github/workflows/android-apk.yml` | IMPLEMENTED | JDK 17, SDK 36, build-tools 36.0.0, repo Gradle wrapper; runs `testDebugUnitTest lintDebug assembleDebug` and uploads the lint report and the debug APK. |
 
 ---
 
-## 10. Coins / Wallet
-
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Coin balance display | `CoinsBalanceCard` | `GET /api/mobile/v1/wallet` | `WalletScreen` summary card | ✅ IMPLEMENTED | Server-authoritative balance |
-| Coin history / ledger | `app/retailer/account/ledger/page.tsx` | `GET /api/mobile/v1/wallet/ledger` | `WalletScreen` ledger list | ✅ IMPLEMENTED | Cursor-paginated, all entry types |
-| Coins in checkout | `CoinsCheckoutSummary` | Checkout quote coinsUsedPaise | `QuoteTotals` coins rows | ✅ IMPLEMENTED | Server-computed |
-| Coins in order confirmation | Order confirmation | Order coinsUsedPaise | Confirmation display | ✅ IMPLEMENTED | |
-| Coins in order detail | Order detail | Order coinsUsedPaise | Order card display | ✅ IMPLEMENTED | |
-| Coin debit (server) | `debitCoinsForOrder` | Order creation | Handled by server | ✅ IMPLEMENTED | Server-side atomic |
-| Coin refund (server) | `refundOrderCoins` | Order cancellation | Handled by server | ✅ IMPLEMENTED | Server-side reversal |
-
----
-
-## 11. Notifications
-
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Notification list | `app/retailer/notifications/page.tsx` | `GET /api/mobile/v1/notifications` | `NotificationsScreen` | ✅ IMPLEMENTED | Cursor-paginated, newest first |
-| Read/unread state | Notification list | `POST /api/mobile/v1/notifications/read` | `markAllRead` action | ✅ IMPLEMENTED | Batch mark-as-read |
-| Notification details | Notification body | Notification data | `NotificationCard` body | ✅ IMPLEMENTED | Full title + body |
-| Unread badge count | `RetailerShell` | Count query | Not yet native | 🔶 PARTIAL | Count available from state |
-| Push notifications | N/A | Not yet implemented | Not yet native | ➖ NOT APPLICABLE | Future: FCM/APNs |
-
----
-
-## 12. Coupons & Offers
-
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Coupon directory | `app/retailer/coupons/page.tsx` | `GET /api/mobile/v1/coupons` | `CouponsScreen` | ✅ IMPLEMENTED | Classified: available/soon/expired/used |
-| Available coupons | Coupon cards | Classified coupons | `CouponCard` available section | ✅ IMPLEMENTED | With code, title, discount details |
-| Starting soon coupons | Coupon cards | Classified coupons | `CouponCard` scheduled section | ✅ IMPLEMENTED | |
-| Recently expired coupons | Coupon cards | Classified coupons | `CouponCard` expired section | ✅ IMPLEMENTED | |
-| Used coupons history | Coupon history | Redemptions query | `CouponCard` used section | ✅ IMPLEMENTED | Server-classified |
-| Apply coupon in cart | `CouponApplyForm` | `POST /api/mobile/v1/cart/coupon` | `CouponPanel` | ✅ IMPLEMENTED | Server-verified |
-| Schemes & offers | `app/retailer/schemes/page.tsx` | Schemes query | Not yet native | ⛔ BLOCKED | Needs schemes mobile API |
-
----
-
-## 13. Favorites
-
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Favorites list | `app/retailer/favorites/page.tsx` | Favorites query | Not yet native | ⛔ BLOCKED | Needs favorites mobile API |
-| Add/remove favorite | `FavoriteToggle` | Favorite toggle RPC | Not yet native | ⛔ BLOCKED | |
-| Stock alerts for favorites | `StockAlertButton` | Alert subscription | Not yet native | ⛔ BLOCKED | |
-
----
-
-## 14. Support
-
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Support tickets list | `app/retailer/support/page.tsx` | Support query | Not yet native | ⛔ BLOCKED | Needs support mobile API |
-| Create ticket | `app/retailer/support/new/page.tsx` | Create ticket action | Not yet native | ⛔ BLOCKED | |
-| Ticket detail | `app/retailer/support/[id]/page.tsx` | Ticket detail query | Not yet native | ⛔ BLOCKED | |
-| Reply to ticket | `SupportReplyForm` | Reply action | Not yet native | ⛔ BLOCKED | |
-
----
-
-## 15. Navigation & Shell
-
-| PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
-|---|---|---|---|---|---|
-| Bottom navigation | `RetailerShell` / `MobileBottomNav` | N/A | `NavigationBar` in `AuthenticatedShell` | ✅ IMPLEMENTED | 5 tabs: Home, Categories, Cart, Orders, Account |
-| Navigation drawer | `Sidebar` | N/A | `ModalNavigationDrawer` | ✅ IMPLEMENTED | Extra destinations |
-| Role-based routing | `MaharaniRouter` | Session policy | `MaharaniRouter.resolveSession` | ✅ IMPLEMENTED | Server-driven navigation |
-| Back navigation | Browser back | N/A | System back + `popBackStack` | ✅ IMPLEMENTED | Native back stack |
-| Cart badge | `RetailerShell` cartCount | Cart count | Not yet native | 🔶 PARTIAL | Count known from cart state |
-| Notification badge | `RetailerShell` unreadCount | Unread count | Not yet native | ⛔ BLOCKED | Needs notification count API |
-
----
-
-## 16. Design System & UX
-
-| PWA Feature | Native Equivalent | Status |
-|---|---|---|
-| Brand colours / theming | `MaharaniThemeTokens` + Material 3 | ✅ IMPLEMENTED |
-| Responsive layouts | Adaptive grids + `GridCells.Adaptive` | ✅ IMPLEMENTED |
-| Image loading | Coil 3 with OkHttp | ✅ IMPLEMENTED |
-| Skeleton loading | `Skeletons` design system | ✅ IMPLEMENTED |
-| Error states | `ErrorState` / `OfflineState` | ✅ IMPLEMENTED |
-| Empty states | `EmptyState` | ✅ IMPLEMENTED |
-| Money formatting | `MoneyFormat.formatPaise` (₹ Indian locale) | ✅ IMPLEMENTED |
-| Date formatting | `IsoDateDisplay.formatDate` | ✅ IMPLEMENTED |
-| Touch targets (48dp) | Enforced via `MaharaniDimens` | ✅ IMPLEMENTED |
-| Status bar handling | Edge-to-edge + insets | ✅ IMPLEMENTED |
-
----
-
-## Summary
+## Totals
 
 | Status | Count |
-|--------|-------|
-| ✅ IMPLEMENTED | 79 |
-| 🔶 PARTIAL | 4 |
-| ⛔ BLOCKED | 14 |
-| ➖ NOT APPLICABLE | 4 |
+|---|---|
+| IMPLEMENTED | 56 |
+| PARTIAL | 5 |
+| MISSING | 5 |
+| BLOCKED | 9 |
+| N/A | 1 |
+| **Total rows** | **76** |
 
-### Priority Roadmap for BLOCKED Items
+These counts are checked against the rows above by
+`tests/parity-doc-totals.test.ts`, because the previous version of this document
+claimed totals that its own table contradicted.
 
-1. **Support** — Add `GET/POST /api/mobile/v1/support` + native screens
-2. **Schemes** — Add `GET /api/mobile/v1/schemes` + native screen
-3. **Invoice** — Add `GET /api/mobile/v1/orders/{id}/invoice` + native screen
-4. **Reorder** — Add `POST /api/mobile/v1/orders/{id}/reorder` + native flow
-5. **Address Book** — Add CRUD endpoints + native screen
-6. **Profile Edit** — Add `PATCH /api/mobile/v1/profile` + native screen
-7. **Delivery Tracking** — Add delivery status endpoint + native screen
-8. **Home Quick Actions** — Wire quick order/reports shortcuts on home
-9. **Favorites UI** — Wire favorites toggle on PDP + favorites list screen
-10. **Notification Badge** — Show unread count in bottom nav badge
+## What is BLOCKED, and what it would take
+
+Each of these needs backend work that does not exist today. None of them is hidden
+behind a placeholder screen in the app.
+
+1. **CHK-07 — address create/update/delete.** `GET /api/mobile/v1/addresses` is
+   read-only. Needs POST/PATCH/DELETE routes with the same ownership checks and
+   validation the web server actions apply.
+2. **ORD-03 — invoice.** Needs `GET /api/mobile/v1/orders/{id}/invoice` returning the
+   lines already computed by `lib/retailer/invoice-tax.ts`. Re-deriving the GST split
+   in Kotlin would duplicate tax arithmetic in a second language.
+3. **ORD-05 — delivery tracking.** Needs a mobile route over the delivery events the
+   web page reads.
+4. **NOTIF-04 — shell unread badge** (and the exact count behind NOTIF-03). Needs an
+   `unreadCount` in the notifications response meta, or a dedicated count endpoint.
+   Until then the app says "3+" rather than claiming a total it cannot know.
+5. **NOTIF-05 — notification preferences.** Needs read/write routes.
+6. **PROMO-04 — schemes.** Needs a mobile route for scheme data.
+7. **ACC-03 — profile editing.** Needs a mobile profile-update route.
+8. **MISC-01 / MISC-03 — support and reports.** Need mobile routes.
+
+## Method
+
+- PWA surface: every `page.tsx` under `app/retailer/**`.
+- Backend surface: every `route.ts` under `app/api/mobile/v1/**`.
+- Native surface: every `*Screen.kt` and `*ViewModel.kt` under `android/*/src/main/**`,
+  plus the destination table in `MaharaniDestinations.kt` and the branches actually
+  rendered by `DestinationSurface`.
+- A row is IMPLEMENTED only where the native screen calls the stated endpoint and acts
+  on the response. Reachability was checked against `DestinationSurface`, so a screen
+  that exists but cannot be opened does not count.

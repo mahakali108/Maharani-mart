@@ -48,6 +48,8 @@ data class CatalogUiState(
    * brand filter arrives already chosen, so its name travels with the request.
    */
   val brandLabel: String? = null,
+  /** Message from a failed favourite toggle, for a snackbar. */
+  val actionMessage: String? = null,
 ) {
   val isEmpty: Boolean get() = !loading && errorMessage == null && products.isEmpty()
   val selectedCategoryName: String?
@@ -71,17 +73,42 @@ data class CatalogUiState(
 @HiltViewModel
 class CatalogViewModel @Inject constructor(
   private val repository: CatalogRepository,
+  private val favorites: FavoritesStore,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(CatalogUiState())
   val state: StateFlow<CatalogUiState> = _state.asStateFlow()
 
+  /** The shared favourite set. The catalogue keeps no copy of its own. */
+  val favoriteState: StateFlow<FavoritesSnapshot> = favorites.state
+
   private var searchJob: Job? = null
   private var listJob: Job? = null
 
   init {
+    viewModelScope.launch { favorites.ensureLoaded() }
     loadCategories()
     reload()
+  }
+
+  /**
+   * Save or unsave a product from the grid.
+   *
+   * The id is a product id taken from the card the shopper tapped, and the
+   * store records only what the server confirmed — a failed toggle leaves the
+   * heart as it was and reports the reason.
+   */
+  fun toggleFavorite(productId: String) {
+    viewModelScope.launch {
+      when (val result = favorites.toggle(productId)) {
+        is AppResult.Success -> Unit
+        is AppResult.Failure -> _state.update { it.copy(actionMessage = result.error.message) }
+      }
+    }
+  }
+
+  fun consumeActionMessage() {
+    _state.update { it.copy(actionMessage = null) }
   }
 
   fun loadCategories() {

@@ -100,7 +100,24 @@ class CatalogRepositoryTest {
     assertThat(request.brandId).isNull()
     assertThat(request.sort).isNull()
     assertThat(request.inStock).isNull()
+    assertThat(request.favoritesOnly).isNull()
     assertThat(request.cursor).isNull()
+  }
+
+  @Test
+  fun `narrows the list to favourites with the parameter the server reads`() = runTest(dispatcher) {
+    val api = FakeCatalogApi()
+    api.productPages.addLast(envelope(listOf(productDto())))
+
+    catalogRepository(api, dispatcher).loadProducts(
+      CatalogQuery(favoritesOnly = true),
+      cursor = null,
+    )
+    advanceUntilIdle()
+
+    // `fav=1` is the flag `lib/mobile/catalog.ts` parses. Sending anything else
+    // would silently return the whole catalogue on the favourites screen.
+    assertThat(api.productRequests.single().favoritesOnly).isEqualTo("1")
   }
 
   @Test
@@ -126,6 +143,7 @@ class CatalogRepositoryTest {
         brandId = null,
         sort = "price-low",
         inStock = "1",
+        favoritesOnly = null,
         cursor = "opaque-cursor",
       ),
     )

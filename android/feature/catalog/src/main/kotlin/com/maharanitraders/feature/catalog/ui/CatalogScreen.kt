@@ -24,6 +24,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +50,7 @@ import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.model.CatalogSort
 import com.maharanitraders.feature.catalog.CatalogUiState
 import com.maharanitraders.feature.catalog.CatalogViewModel
+import com.maharanitraders.feature.catalog.FavoritesSnapshot
 import androidx.compose.material3.CircularProgressIndicator
 import com.maharanitraders.feature.catalog.ui.components.ProductGrid
 
@@ -102,24 +106,43 @@ fun CatalogScreen(
     }
   }
 
-  CatalogContent(
-    state = state,
-    onSearchChange = viewModel::onSearchChange,
-    onSelectCategory = viewModel::selectCategory,
-    onSelectSort = viewModel::selectSort,
-    onToggleInStock = viewModel::toggleInStockOnly,
-    onClearBrand = { viewModel.selectBrand(null) },
-    onClearFilters = viewModel::clearFilters,
-    onRetry = viewModel::retry,
-    onLoadMore = viewModel::loadMore,
-    onOpenProduct = onOpenProduct,
+  val favorites by viewModel.favoriteState.collectAsStateWithLifecycle()
+  val snackbarHostState = remember { SnackbarHostState() }
+
+  LaunchedEffect(state.actionMessage) {
+    val message = state.actionMessage
+    if (message != null) {
+      snackbarHostState.showSnackbar(message)
+      viewModel.consumeActionMessage()
+    }
+  }
+
+  Scaffold(
+    snackbarHost = { SnackbarHost(snackbarHostState) },
     modifier = modifier,
-  )
+  ) { padding ->
+    CatalogContent(
+      state = state,
+      favorites = favorites,
+      onSearchChange = viewModel::onSearchChange,
+      onSelectCategory = viewModel::selectCategory,
+      onSelectSort = viewModel::selectSort,
+      onToggleInStock = viewModel::toggleInStockOnly,
+      onClearBrand = { viewModel.selectBrand(null) },
+      onClearFilters = viewModel::clearFilters,
+      onRetry = viewModel::retry,
+      onLoadMore = viewModel::loadMore,
+      onOpenProduct = onOpenProduct,
+      onToggleFavorite = viewModel::toggleFavorite,
+      modifier = Modifier.padding(padding),
+    )
+  }
 }
 
 @Composable
 fun CatalogContent(
   state: CatalogUiState,
+  favorites: FavoritesSnapshot = FavoritesSnapshot(),
   onSearchChange: (String) -> Unit,
   onSelectCategory: (String?) -> Unit,
   onSelectSort: (CatalogSort) -> Unit,
@@ -129,6 +152,7 @@ fun CatalogContent(
   onRetry: () -> Unit,
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
+  onToggleFavorite: ((String) -> Unit)? = null,
   modifier: Modifier = Modifier,
 ) {
   Column(modifier = modifier.fillMaxSize()) {
@@ -180,6 +204,9 @@ fun CatalogContent(
         onOpenProduct = onOpenProduct,
         state = rememberLazyGridState(),
         modifier = Modifier.fillMaxSize(),
+        isFavorite = { product -> favorites.isFavorite(product.id, product.isFavorite) },
+        isFavoritePending = { product -> favorites.isPending(product.id) },
+        onToggleFavorite = onToggleFavorite,
         footer = {
           item(span = { GridItemSpan(maxLineSpan) }) {
             ContinuationFooter(state = state, onLoadMore = onLoadMore, onRetry = onRetry)

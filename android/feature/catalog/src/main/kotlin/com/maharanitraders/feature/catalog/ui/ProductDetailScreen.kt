@@ -23,11 +23,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +46,7 @@ import com.maharanitraders.core.designsystem.MoneyFormat
 import com.maharanitraders.core.designsystem.components.EmptyState
 import com.maharanitraders.core.designsystem.components.ErrorState
 import com.maharanitraders.core.designsystem.components.FactChip
+import com.maharanitraders.core.designsystem.components.FavoriteButton
 import com.maharanitraders.core.designsystem.components.LoadingState
 import com.maharanitraders.core.designsystem.components.OfflineState
 import com.maharanitraders.core.designsystem.components.PagerDots
@@ -70,6 +76,7 @@ object ProductDetailTags {
   const val AVAILABILITY = "product_availability"
   const val ADD_TO_CART = "product_add_to_cart"
   const val NOT_FOUND = "product_not_found"
+  const val FAVORITE_TOGGLE = "product_favorite_toggle"
 }
 
 /**
@@ -99,22 +106,46 @@ fun ProductDetailScreen(
   onRefreshCart: () -> Unit = {},
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val favorites by viewModel.favoriteState.collectAsStateWithLifecycle()
+  val snackbarHostState = remember { SnackbarHostState() }
+  val productId = state.detail?.id
 
-  ProductDetailContent(
-    state = state,
-    onRetry = viewModel::load,
-    onSelectPack = viewModel::selectPack,
-    onBack = onBack,
-    onAddToCart = onAddToCart,
-    canAddToCart = canAddToCart,
-    addingToCart = addingToCart,
-    cartLoading = cartLoading,
-    cartMessage = cartMessage,
-    cartError = cartError,
-    cartNeedsRefresh = cartNeedsRefresh,
-    onRefreshCart = onRefreshCart,
+  // A favourite that did not save is reported, never swallowed.
+  LaunchedEffect(state.actionMessage) {
+    val message = state.actionMessage
+    if (message != null) {
+      snackbarHostState.showSnackbar(message)
+      viewModel.consumeActionMessage()
+    }
+  }
+
+  Scaffold(
+    snackbarHost = { SnackbarHost(snackbarHostState) },
     modifier = modifier,
-  )
+  ) { padding ->
+    ProductDetailContent(
+      state = state,
+      onRetry = viewModel::load,
+      onSelectPack = viewModel::selectPack,
+      onBack = onBack,
+      onAddToCart = onAddToCart,
+      canAddToCart = canAddToCart,
+      addingToCart = addingToCart,
+      cartLoading = cartLoading,
+      cartMessage = cartMessage,
+      cartError = cartError,
+      cartNeedsRefresh = cartNeedsRefresh,
+      onRefreshCart = onRefreshCart,
+      // Favourite state comes from the shared store, keyed on the PRODUCT id
+      // the server returned — never on the route argument, which may be a pack.
+      isFavorite = productId?.let { id ->
+        favorites.isFavorite(id, state.detail?.isFavorite == true)
+      } ?: false,
+      favoritePending = productId?.let(favorites::isPending) == true,
+      onToggleFavorite = viewModel::toggleFavorite,
+      modifier = Modifier.padding(padding),
+    )
+  }
 }
 
 @Composable
@@ -132,6 +163,10 @@ fun ProductDetailContent(
   cartError: String? = null,
   cartNeedsRefresh: Boolean = false,
   onRefreshCart: () -> Unit = {},
+  isFavorite: Boolean = false,
+  favoritePending: Boolean = false,
+  /** Null hides the favourite control (for surfaces that cannot save). */
+  onToggleFavorite: (() -> Unit)? = null,
 ) {
   when {
     state.loading && state.detail == null -> LoadingState(message = "Loading product…")
@@ -161,7 +196,21 @@ fun ProductDetailContent(
               .weight(1f)
               .verticalScroll(rememberScrollState()),
           ) {
-            ProductGallery(images = state.gallery, productName = detail.name)
+            Box(modifier = Modifier.fillMaxWidth()) {
+              ProductGallery(images = state.gallery, productName = detail.name)
+
+              if (onToggleFavorite != null) {
+                FavoriteButton(
+                  isFavorite = isFavorite,
+                  pending = favoritePending,
+                  onToggle = onToggleFavorite,
+                  modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(MaharaniDimens.spaceMd)
+                    .testTag(ProductDetailTags.FAVORITE_TOGGLE),
+                )
+              }
+            }
 
             Column(
               modifier = Modifier.padding(MaharaniDimens.pageGutter),
