@@ -51,7 +51,10 @@ class HomeViewModelTest {
   fun `loads the payload on start`() = runTest(dispatcher) {
     val api = FakeCatalogApi().apply { homeResult = home() }
 
-    val viewModel = HomeViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = HomeViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     val state = viewModel.state.value
@@ -67,7 +70,10 @@ class HomeViewModelTest {
   fun `reports an offline state rather than an empty shop`() = runTest(dispatcher) {
     val api = FakeCatalogApi().apply { nextHomeFailure = IOException("offline") }
 
-    val viewModel = HomeViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = HomeViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     val state = viewModel.state.value
@@ -83,7 +89,10 @@ class HomeViewModelTest {
   @Test
   fun `keeps loaded content when a refresh fails`() = runTest(dispatcher) {
     val api = FakeCatalogApi().apply { homeResult = home() }
-    val viewModel = HomeViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = HomeViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     api.nextHomeFailure = IOException("offline")
@@ -100,7 +109,10 @@ class HomeViewModelTest {
   @Test
   fun `collapses concurrent loads into one request`() = runTest(dispatcher) {
     val api = FakeCatalogApi().apply { homeResult = home() }
-    val viewModel = HomeViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = HomeViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
 
     viewModel.load()
     viewModel.load()
@@ -113,7 +125,10 @@ class HomeViewModelTest {
   fun `recognises a genuinely empty shop as empty`() = runTest(dispatcher) {
     val api = FakeCatalogApi().apply { homeResult = home(banners = 0, categories = 0, products = 0) }
 
-    val viewModel = HomeViewModel(repository = catalogRepository(api, dispatcher))
+    val viewModel = HomeViewModel(
+      repository = catalogRepository(api, dispatcher),
+      favorites = favoritesStore(api, dispatcher),
+    )
     advanceUntilIdle()
 
     assertThat(viewModel.state.value.isEmpty).isTrue()

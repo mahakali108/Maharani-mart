@@ -70,15 +70,34 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
   private val repository: CatalogRepository,
+  /**
+   * The ONE source of favourite state. The home rails and grid read it (and
+   * toggle through it) exactly like the catalogue and product detail, so a heart
+   * tapped here is already correct on the product page and in the saved list.
+   */
+  private val favorites: FavoritesStore,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(HomeUiState())
   val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
+  /** Observed directly by the screen; the home keeps no favourite copy. */
+  val favoriteState: StateFlow<FavoritesSnapshot> = favorites.state
+
   private var request: Job? = null
 
   init {
+    viewModelScope.launch { favorites.ensureLoaded() }
     load()
+  }
+
+  /** Toggle one product from a home card. Server-authoritative, like everywhere. */
+  fun toggleFavorite(productId: String) {
+    viewModelScope.launch { favorites.toggle(productId) }
+  }
+
+  fun consumeFavoriteMessage() {
+    favorites.clearError()
   }
 
   /** Load or reload the home payload. Concurrent calls collapse into one. */

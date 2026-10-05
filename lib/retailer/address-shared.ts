@@ -22,7 +22,15 @@ export function formatAddressLine(input: {
     .join(', ');
 }
 
-const addressSchema = z.object({
+/**
+ * The address field rules.
+ *
+ * Exported so the NATIVE mobile API validates an address with exactly the same
+ * rules as the web form: one rule set, one error vocabulary, no second
+ * definition to drift. `addressId` is optional because the same shape serves
+ * both create and update; update routes always take the id from the path.
+ */
+export const addressSchema = z.object({
   addressId: z.string().uuid().optional(),
   label: z.string().trim().min(1, 'Give the address a label, e.g. Shop or Godown.').max(40),
   receiverName: z.string().trim().min(2, 'Enter the receiver name.').max(120),
@@ -42,12 +50,14 @@ const addressSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
+/** Fields of a saved address, without the optional `addressId`. */
+export const addressPayloadSchema = addressSchema.omit({ addressId: true });
+
 export type AddressInput = z.input<typeof addressSchema>;
 
-/**
- * Parses and normalizes an address form submission. Shared by the server
- * action and the tests — one rule set, one error vocabulary.
- */
+/** The validated, normalized address payload shared by both surfaces. */
+export type AddressPayload = z.output<typeof addressPayloadSchema>;
+
 export function parseAddressForm(formData: FormData): { ok: true; value: AddressInput & { addressId?: string } } | { ok: false; error: string } {
   const parsed = addressSchema.safeParse({
     addressId: typeof formData.get('addressId') === 'string' && formData.get('addressId') ? formData.get('addressId') : undefined,

@@ -30,6 +30,12 @@ export function supabaseFixture(
         if (op === 'neq') return row[column] !== value;
         if (op === 'in') return (value as unknown[]).includes(row[column]);
         if (op === 'is') return row[column] === value;
+        if (op === 'ilike') {
+          // Case-insensitive contains; `%`/`_` are the only wildcards the
+          // mobile routes use, and `_` never appears in a sanitized term.
+          const needle = String(value).replace(/[%_]/g, '').toLowerCase();
+          return String(row[column] ?? '').toLowerCase().includes(needle);
+        }
         if (op === 'lte') return String(row[column]) <= String(value);
         if (op === 'gte') return String(row[column]) >= String(value);
         return true;
@@ -64,6 +70,7 @@ export function supabaseFixture(
     const chain = {
       select: (select: string) => { query.select = select; return chain; },
       eq: (column: string, value: unknown) => { query.filters.push({ op: 'eq', column, value }); return chain; },
+      ilike: (column: string, value: unknown) => { query.filters.push({ op: 'ilike', column, value }); return chain; },
       neq: (column: string, value: unknown) => { query.filters.push({ op: 'neq', column, value }); return chain; },
       in: (column: string, value: unknown[]) => { query.filters.push({ op: 'in', column, value }); return chain; },
       is: (column: string, value: unknown) => { query.filters.push({ op: 'is', column, value }); return chain; },

@@ -51,8 +51,20 @@ object MaharaniRoutes {
   fun productDetail(productId: String): String = "catalog/product/$productId"
 
   const val FAVORITES = "favorites"
+  /**
+   * Quick order. A retailer shopping tool reached from the drawer: it searches
+   * the real catalogue and adds through the real cart, exactly like the web
+   * quick-order page.
+   */
+  const val QUICK_ORDER = "quick_order"
   const val CART = "cart"
   const val ORDERS = "orders"
+  /**
+   * The delivery address book. A sub-screen of the account tab, reached from
+   * the account screen (and conceptually the same list checkout picks from), so
+   * it is not a drawer destination of its own.
+   */
+  const val ADDRESS_BOOK = "account/addresses"
   const val COINS = "coins"
   const val NOTIFICATIONS = "notifications"
   const val COUPONS = "coupons"
@@ -104,6 +116,15 @@ object MaharaniCatalog {
       // server-owned favourite set behind it. No planned-phase label.
       phase = null,
       summary = "The products you saved, priced and stocked exactly as the catalogue shows them.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.QUICK_ORDER,
+      label = "Quick order",
+      workspace = Workspace.RETAILER,
+      // Shipped: a name search and a pasted-list matcher over the quick-order
+      // endpoints, with every add going through the revalidating cart API.
+      phase = null,
+      summary = "Restock known items fast: search by name or paste a list, priced by the server.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.CART,

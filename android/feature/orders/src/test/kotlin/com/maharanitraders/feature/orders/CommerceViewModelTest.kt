@@ -34,7 +34,7 @@ class CommerceViewModelTest {
   fun `cart quantity changes obey server MOQ and retain the last server snapshot on failure`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
     val preferences = AppPreferences(MemoryPreferenceStore())
-    val viewModel = CartCheckoutViewModel(repository, preferences)
+    val viewModel = CartCheckoutViewModel(repository, preferences, CartCountStore(repository))
     advanceUntilIdle()
 
     viewModel.setQuantity(CART_LINE.id, 5)
@@ -65,7 +65,7 @@ class CommerceViewModelTest {
     val repository = FakeCommerceRepository().apply {
       addResults += AppResult.Failure(AppError.Network("response lost"))
     }
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
     advanceUntilIdle()
 
     viewModel.addCartLine("pack-1", 6)
@@ -92,7 +92,7 @@ class CommerceViewModelTest {
   @Test
   fun `checkout refresh reloads the shared cart before requesting a replacement quote`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -112,7 +112,7 @@ class CommerceViewModelTest {
     val repository = FakeCommerceRepository().apply {
       addressResults += AppResult.Failure(AppError.Network("offline"))
     }
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
     advanceUntilIdle()
 
     viewModel.beginCheckout()
@@ -133,7 +133,7 @@ class CommerceViewModelTest {
     val repository = FakeCommerceRepository().apply {
       placeResults += AppResult.Failure(AppError.Api(ApiErrorCode.INSUFFICIENT_STOCK, "Stock changed."))
     }
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -158,7 +158,7 @@ class CommerceViewModelTest {
       )
     }
     val preferences = AppPreferences(MemoryPreferenceStore())
-    val viewModel = CartCheckoutViewModel(repository, preferences)
+    val viewModel = CartCheckoutViewModel(repository, preferences, CartCountStore(repository))
     advanceUntilIdle()
 
     viewModel.beginCheckout()
@@ -180,7 +180,7 @@ class CommerceViewModelTest {
       recoveryResults += AppResult.Success(actualOrder)
     }
     val store = MemoryPreferenceStore()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store), CartCountStore(repository))
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -216,7 +216,7 @@ class CommerceViewModelTest {
       recoveryResults += AppResult.Failure(AppError.Api(ApiErrorCode.NOT_FOUND, "No completed order yet."))
     }
     val store = MemoryPreferenceStore()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store), CartCountStore(repository))
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -336,6 +336,10 @@ class CommerceViewModelTest {
     val recoveryResults = mutableListOf<AppResult<RetailerOrder>>()
     val quoteResults = mutableListOf<AppResult<CheckoutQuote>>()
     val historyResults = mutableListOf<AppResult<OrderHistoryPage>>()
+    val createAddressCalls = mutableListOf<AddressDraft>()
+    val updateAddressCalls = mutableListOf<Pair<String, AddressDraft>>()
+    val deleteAddressCalls = mutableListOf<String>()
+    val setDefaultAddressCalls = mutableListOf<String>()
     var commitCartOnNetworkFailure: Boolean = false
 
     override suspend fun loadCart(): AppResult<CartSnapshot> {
@@ -355,6 +359,22 @@ class CommerceViewModelTest {
       addressCalls += 1
       return if (addressResults.isNotEmpty()) addressResults.removeAt(0)
       else AppResult.Success(listOf(CommerceViewModelTest.Companion.address))
+    }
+    override suspend fun createAddress(draft: AddressDraft): AppResult<List<DeliveryAddress>> {
+      createAddressCalls += draft
+      return AppResult.Success(listOf(CommerceViewModelTest.Companion.address))
+    }
+    override suspend fun updateAddress(addressId: String, draft: AddressDraft): AppResult<List<DeliveryAddress>> {
+      updateAddressCalls += addressId to draft
+      return AppResult.Success(listOf(CommerceViewModelTest.Companion.address))
+    }
+    override suspend fun deleteAddress(addressId: String): AppResult<List<DeliveryAddress>> {
+      deleteAddressCalls += addressId
+      return AppResult.Success(emptyList())
+    }
+    override suspend fun setDefaultAddress(addressId: String): AppResult<List<DeliveryAddress>> {
+      setDefaultAddressCalls += addressId
+      return AppResult.Success(listOf(CommerceViewModelTest.Companion.address))
     }
     override suspend fun applyCoupon(code: String): AppResult<CouponApplication> = AppResult.Success(CouponApplication(code, 0))
     override suspend fun removeCoupon(): AppResult<Unit> = AppResult.Success(Unit)

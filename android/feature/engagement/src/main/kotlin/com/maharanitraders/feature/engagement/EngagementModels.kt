@@ -20,6 +20,13 @@ data class NotificationPage(
   val items: List<AppNotification>,
   val nextCursor: String?,
   val hasMore: Boolean,
+  /**
+   * The caller's exact unread total, as the server reported it on the FIRST
+   * page. Null on cursor pages (the server does not re-count) and null when an
+   * older server does not send it — in both cases the app says "at least",
+   * never "all read".
+   */
+  val unreadCount: Int? = null,
 )
 
 // ---- Coins ----

@@ -1019,7 +1019,17 @@ function objectKeys(value: unknown): Set<string> {
     : []);
 }
 
-function assertSameFields(actual: Set<string>, declared: Set<string>, label: string): void {
+function assertSameFields(
+  actual: Set<string>,
+  declared: Set<string>,
+  label: string,
+  /**
+   * Fields this DTO declares for OTHER endpoints of the same envelope. Empty for
+   * every endpoint-specific DTO; only the shared list meta uses it, and any value
+   * here must be asserted as really sent by the endpoint that serves it.
+   */
+  kotlinOnly: string[] = [],
+): void {
   // Guard against a regex change silently emptying one side, which would turn
   // this contract lock into a test that can no longer fail.
   expect(actual.size, `${label}: no fields observed on the wire`).toBeGreaterThanOrEqual(2);
@@ -1028,7 +1038,9 @@ function assertSameFields(actual: Set<string>, declared: Set<string>, label: str
   const missingInKotlin = [...actual].filter((key) => !declared.has(key)).sort();
   const neverSentByServer = [...declared].filter((key) => !actual.has(key)).sort();
   expect(missingInKotlin, `${label}: server sends fields no Kotlin DTO declares`).toEqual([]);
-  expect(neverSentByServer, `${label}: Kotlin DTO declares fields the server never sends`).toEqual([]);
+  expect(neverSentByServer, `${label}: Kotlin DTO declares fields the server never sends`).toEqual(
+    [...kotlinOnly].sort(),
+  );
 }
 
 describe('the Android DTOs and the mobile catalogue payloads agree field for field', () => {
@@ -1041,7 +1053,15 @@ describe('the Android DTOs and the mobile catalogue payloads agree field for fie
     assertSameFields(objectKeys(card), kotlinDtoFields('CatalogProductDto'), 'CatalogProductDto');
     assertSameFields(objectKeys(card.pack), kotlinDtoFields('CatalogPackDto'), 'CatalogPackDto');
     assertSameFields(objectKeys(payload.page), envelopeFields('PageDto'), 'PageDto');
-    assertSameFields(objectKeys(payload.meta), envelopeFields('ListMetaDto'), 'ListMetaDto');
+    // `ListMetaDto` is the shared list envelope, and the notifications endpoint
+    // serves `unreadCount` on its first page (asserted in `mobile-badges.test.ts`),
+    // so that one field is not part of the CATALOGUE meta.
+    assertSameFields(
+      objectKeys(payload.meta),
+      envelopeFields('ListMetaDto'),
+      'ListMetaDto',
+      ['unreadCount'],
+    );
 
     // With no slab rows configured the engine prices off the case price and
     // emits NO tiers — an honest empty array, not an invented slab.

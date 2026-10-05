@@ -46,6 +46,7 @@ class NetworkEngagementRepository @Inject constructor(
         items = envelope.data.map(MobileNotificationDto::toDomain),
         nextCursor = envelope.page?.nextCursor,
         hasMore = envelope.page?.hasMore == true,
+        unreadCount = envelope.meta?.unreadCount,
       )
     }
 

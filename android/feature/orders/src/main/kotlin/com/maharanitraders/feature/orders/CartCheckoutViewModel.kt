@@ -56,6 +56,12 @@ data class CartCheckoutUiState(
 class CartCheckoutViewModel @Inject constructor(
   private val repository: CommerceRepository,
   private val preferences: AppPreferences,
+  /**
+   * Receives the counts from every cart response this ViewModel gets, so the
+   * shell badge counts the same server rows the cart screen renders. The badge
+   * state is not duplicated here — the store owns it.
+   */
+  private val cartCounts: CartCountStore,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(CartCheckoutUiState())
@@ -423,6 +429,7 @@ class CartCheckoutViewModel @Inject constructor(
     viewModelScope.launch {
       when (val result = operation()) {
         is AppResult.Success -> {
+          cartCounts.record(result.value)
           _state.update {
             it.copy(
               isCartMutating = false,
@@ -454,6 +461,7 @@ class CartCheckoutViewModel @Inject constructor(
     _state.update { it.copy(cartLoading = true, cartError = null, cartErrorCode = null) }
     return when (val result = repository.loadCart()) {
       is AppResult.Success -> {
+        cartCounts.record(result.value)
         _state.update {
           it.copy(
             cartLoading = false,
@@ -530,6 +538,9 @@ class CartCheckoutViewModel @Inject constructor(
 
   private suspend fun acceptConfirmedOrder(order: OrderConfirmation) {
     clearPendingKeyQuietly()
+    // The order consumed the cart; the badge must not keep counting it, so the
+    // store is told immediately rather than waiting for the reload below.
+    cartCounts.record(CartSnapshot(emptyList(), couponCode = null, couponUnavailable = false))
     _state.update {
       it.copy(
         orderSubmitting = false,
@@ -548,6 +559,7 @@ class CartCheckoutViewModel @Inject constructor(
 
   private suspend fun acceptRecoveredOrder(order: RetailerOrder) {
     clearPendingKeyQuietly()
+    cartCounts.record(CartSnapshot(emptyList(), couponCode = null, couponUnavailable = false))
     _state.update {
       it.copy(
         orderSubmitting = false,

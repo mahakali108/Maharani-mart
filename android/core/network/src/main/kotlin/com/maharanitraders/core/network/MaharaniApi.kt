@@ -1,6 +1,7 @@
 package com.maharanitraders.core.network
 
 import com.maharanitraders.core.network.dto.AckDto
+import com.maharanitraders.core.network.dto.AddressPayloadDto
 import com.maharanitraders.core.network.dto.ApiEnvelope
 import com.maharanitraders.core.network.dto.AreasDto
 import com.maharanitraders.core.network.dto.AuthSessionDto
@@ -18,8 +19,12 @@ import com.maharanitraders.core.network.dto.FavoriteToggleRequestDto
 import com.maharanitraders.core.network.dto.FavoriteToggleResponseDto
 import com.maharanitraders.core.network.dto.MarkReadRequestDto
 import com.maharanitraders.core.network.dto.MarkReadResponseDto
+import com.maharanitraders.core.network.dto.MobileAddressMutationDto
 import com.maharanitraders.core.network.dto.MobileAddressesDto
+import com.maharanitraders.core.network.dto.MobileBulkMatchDto
+import com.maharanitraders.core.network.dto.MobileBulkMatchRequestDto
 import com.maharanitraders.core.network.dto.MobileCartDto
+import com.maharanitraders.core.network.dto.MobileQuickOrderDto
 import com.maharanitraders.core.network.dto.MobileCouponsDto
 import com.maharanitraders.core.network.dto.MobileFavoritesDto
 import com.maharanitraders.core.network.dto.MobileNotificationDto
@@ -202,6 +207,28 @@ interface MaharaniApi {
   @GET("api/mobile/v1/addresses")
   suspend fun mobileAddresses(): ApiEnvelope<MobileAddressesDto>
 
+  /**
+   * Save a new delivery address. The body carries only the address fields —
+   * the owner is the verified session on the server, never a client value.
+   */
+  @POST("api/mobile/v1/addresses")
+  suspend fun createAddress(@Body body: AddressPayloadDto): ApiEnvelope<MobileAddressMutationDto>
+
+  /** Edit one of the caller's own saved addresses. */
+  @PATCH("api/mobile/v1/addresses/{addressId}")
+  suspend fun updateAddress(
+    @Path("addressId") addressId: String,
+    @Body body: AddressPayloadDto,
+  ): ApiEnvelope<MobileAddressMutationDto>
+
+  /** Remove one of the caller's own saved addresses. */
+  @DELETE("api/mobile/v1/addresses/{addressId}")
+  suspend fun deleteAddress(@Path("addressId") addressId: String): ApiEnvelope<MobileAddressesDto>
+
+  /** Make one saved address the exclusive default. */
+  @POST("api/mobile/v1/addresses/{addressId}/default")
+  suspend fun setDefaultAddress(@Path("addressId") addressId: String): ApiEnvelope<MobileAddressMutationDto>
+
   /** A no-write server quote over the exact shared-cart intent. */
   @POST("api/mobile/v1/checkout/quote")
   suspend fun checkoutQuote(@Body body: CheckoutQuoteRequestDto): ApiEnvelope<CheckoutQuoteDto>
@@ -247,6 +274,14 @@ interface MaharaniApi {
   suspend fun walletLedger(
     @Query("cursor") cursor: String? = null,
   ): ApiEnvelope<List<MobileWalletLedgerEntryDto>>
+
+  @GET("api/mobile/v1/quick-order")
+  suspend fun quickOrder(@Query("q") q: String): ApiEnvelope<MobileQuickOrderDto>
+
+  @POST("api/mobile/v1/quick-order/match")
+  suspend fun matchBulkLines(
+    @Body body: MobileBulkMatchRequestDto,
+  ): ApiEnvelope<MobileBulkMatchDto>
 
   @GET("api/mobile/v1/favorites")
   suspend fun favorites(): ApiEnvelope<MobileFavoritesDto>

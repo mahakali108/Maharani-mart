@@ -58,6 +58,20 @@ export async function GET(request: Request): Promise<Response> {
   const supabase = session.supabase;
 
   try {
+    /**
+     * The unread count is computed with the SAME owned feed as the page
+     * (RLS scopes `notifications` to the caller), on the first page only —
+     * that is the request the native shell makes to badge the notifications
+     * entry, and re-counting on every cursor page would be wasted work.
+     */
+    const unreadCountPromise = parsed.data.cursor
+      ? null
+      : (supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('recipient_id', session.userId)
+          .eq('is_read', false) as unknown as Promise<{ count: number | null }>);
+
     let query = supabase
       .from('notifications')
       .select('id, title, body, link_url, is_read, created_at')
@@ -93,6 +107,8 @@ export async function GET(request: Request): Promise<Response> {
       ? Buffer.from(JSON.stringify({ created_at: nextRow.created_at, id: nextRow.id })).toString('base64')
       : null;
 
+    const unreadCount = unreadCountPromise ? (await unreadCountPromise).count : null;
+
     return jsonOkPage(
       items.map((row) => ({
         id: row.id,
@@ -103,7 +119,12 @@ export async function GET(request: Request): Promise<Response> {
         createdAt: row.created_at,
       })),
       { nextCursor, hasMore, limit: BATCH_SIZE },
-      { requestId },
+      {
+        requestId,
+        meta: {
+          ...(unreadCount === null ? {} : { unreadCount: Math.max(0, unreadCount) }),
+        },
+      },
     );
   } catch (cause) {
     logServerError('notifications', requestId, cause);

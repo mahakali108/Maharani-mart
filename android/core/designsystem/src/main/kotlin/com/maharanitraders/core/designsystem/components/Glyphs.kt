@@ -356,3 +356,31 @@ fun HeartGlyph(
     }
   }
 }
+
+/**
+ * Bell: the notifications affordance, drawn in the same 24dp grid and stroke
+ * weight as every other glyph so the app bar reads as one family. The shell
+ * badges it with the server's unread count.
+ */
+@Composable
+fun BellGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Notifications", modifier) {
+    val body = Path().apply {
+      moveTo(px(5.4f), px(16.4f))
+      lineTo(px(6.6f), px(14.6f))
+      lineTo(px(6.6f), px(10.4f))
+      cubicTo(px(6.6f), px(7.4f), px(8.9f), px(5.2f), px(12f), px(5.2f))
+      cubicTo(px(15.1f), px(5.2f), px(17.4f), px(7.4f), px(17.4f), px(10.4f))
+      lineTo(px(17.4f), px(14.6f))
+      lineTo(px(18.6f), px(16.4f))
+      close()
+    }
+    drawPath(body, tint, style = Stroke(px(1.8f), join = StrokeJoin.Round))
+    drawLine(tint, point(4.6f, 16.4f), point(19.4f, 16.4f), px(1.8f), cap = StrokeCap.Round)
+    drawLine(tint, point(10.2f, 19.2f), point(13.8f, 19.2f), px(1.8f), cap = StrokeCap.Round)
+    drawCircle(tint, radius = px(1.5f), center = point(12f, 2.9f))
+  }
+}
