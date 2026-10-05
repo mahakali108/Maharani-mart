@@ -75,6 +75,7 @@ fun NotificationsScreen(
   ) { padding ->
     NotificationsContent(
       state = state,
+      serverUnread = serverUnread,
       onRefresh = viewModel::load,
       onLoadMore = viewModel::loadMore,
       onMarkAllRead = viewModel::markAllRead,
@@ -86,6 +87,8 @@ fun NotificationsScreen(
 @Composable
 fun NotificationsContent(
   state: com.maharanitraders.feature.engagement.NotificationsUiState,
+  /** The shared store's exact unread total, or null until the server answers. */
+  serverUnread: Int?,
   onRefresh: () -> Unit,
   onLoadMore: () -> Unit,
   onMarkAllRead: () -> Unit,
