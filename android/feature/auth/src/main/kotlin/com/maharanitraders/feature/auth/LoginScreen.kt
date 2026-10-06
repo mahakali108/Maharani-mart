@@ -2,6 +2,7 @@ package com.maharanitraders.feature.auth
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,7 @@ object LoginTags {
   const val SUBMIT = "login_submit"
   const val ERROR = "login_error"
   const val OPEN_REGISTER = "login_open_register"
+  const val OPEN_FORGOT_PASSWORD = "login_open_forgot_password"
 }
 
 /**
@@ -47,6 +49,7 @@ fun LoginScreen(
   onPasswordChange: (String) -> Unit,
   onSubmit: () -> Unit,
   onOpenRegister: () -> Unit,
+  onOpenForgotPassword: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -108,6 +111,18 @@ fun LoginScreen(
         .padding(top = 8.dp)
         .testTag(LoginTags.PASSWORD),
     )
+
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.End,
+    ) {
+      TertiaryAction(
+        label = "Forgot password?",
+        onClick = onOpenForgotPassword,
+        enabled = !state.submitting,
+        modifier = Modifier.testTag(LoginTags.OPEN_FORGOT_PASSWORD),
+      )
+    }
 
     state.formError?.let { message ->
       Text(

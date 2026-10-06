@@ -81,4 +81,11 @@ dependencies {
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.turbine)
   testImplementation(libs.truth)
+  // Only for forging `retrofit2.HttpException` failures in the executor —
+  // the same technique `core:network`'s own executor tests use.
+  testImplementation(platform(libs.retrofit.bom))
+  testImplementation(platform(libs.okhttp.bom))
+  testImplementation(libs.retrofit)
+  testImplementation(libs.okhttp)
+  testImplementation(libs.kotlinx.serialization.json)
 }

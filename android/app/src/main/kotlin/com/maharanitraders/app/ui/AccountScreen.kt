@@ -45,6 +45,8 @@ object AccountScreenTags {
   const val SIGN_OUT = "account_sign_out"
   const val ADDRESS_BOOK = "account_address_book"
   const val SHORTCUTS = "account_shortcuts"
+  const val SECURITY = "account_security"
+  const val HELP = "account_help"
 }
 
 /**
@@ -70,6 +72,13 @@ fun AccountScreen(
   onOpenOrders: () -> Unit = {},
   /** Opens another destination of this account, by route. */
   onOpenDestination: (String) -> Unit = {},
+  /**
+   * Opens the in-account security screen — a real screen over the
+   * authenticated password-update endpoint.
+   */
+  onOpenSecurity: () -> Unit = {},
+  /** Opens the help centre — static FAQs, no invented answers. */
+  onOpenHelp: () -> Unit = {},
 ) {
   LazyColumn(
     modifier = modifier
@@ -132,6 +141,13 @@ fun AccountScreen(
           onOpenDestination = onOpenDestination,
         )
       }
+    }
+
+    item {
+      AccountSecurityCard(
+        onOpenSecurity = onOpenSecurity,
+        onOpenHelp = onOpenHelp,
+      )
     }
 
     item { WorkspacesCard(snapshot = snapshot) }
@@ -222,6 +238,43 @@ private fun ShortcutsCard(
   }
 }
 
+/**
+ * Account security and help, in one card, for every signed-in role.
+ *
+ * The password change is the real authenticated endpoint
+ * (`POST /auth/password-update` — the server acts on the caller's own token);
+ * the help centre is static content mirroring the web FAQs. The web security
+ * page's "log out of all sessions" and account-deletion/data-export requests
+ * have no mobile endpoint and are therefore not offered here.
+ */
+@Composable
+private fun AccountSecurityCard(
+  onOpenSecurity: () -> Unit,
+  onOpenHelp: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  AccountCard(modifier = modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+      SectionHeader(
+        title = "Account & security",
+        subtitle = "Password, help and support",
+      )
+      ShortcutRow(
+        label = "Password & security",
+        detail = "Change the password of this account",
+        onClick = onOpenSecurity,
+        tag = AccountScreenTags.SECURITY,
+      )
+      ShortcutRow(
+        label = "Help centre",
+        detail = "FAQs about prices, MOQ, coins and invoices",
+        onClick = onOpenHelp,
+        tag = AccountScreenTags.HELP,
+      )
+    }
+  }
+}
+
 /** One tappable account shortcut: title, one-line detail, chevron, 48dp target. */
 @Composable
 private fun ShortcutRow(
@@ -229,6 +282,7 @@ private fun ShortcutRow(
   detail: String,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  tag: String? = null,
 ) {
   Surface(
     onClick = onClick,
@@ -236,7 +290,8 @@ private fun ShortcutRow(
     color = MaterialTheme.colorScheme.surfaceContainerLow,
     modifier = modifier
       .fillMaxWidth()
-      .heightIn(min = MaharaniDimens.touchTarget),
+      .heightIn(min = MaharaniDimens.touchTarget)
+      .then(if (tag != null) Modifier.testTag(tag) else Modifier),
   ) {
     Row(
       modifier = Modifier.padding(

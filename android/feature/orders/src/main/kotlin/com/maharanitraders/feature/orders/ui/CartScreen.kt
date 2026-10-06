@@ -24,6 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ object CommerceTags {
   const val CHECKOUT_SCREEN = "commerce_checkout_screen"
   const val CHECKOUT_QUOTE = "commerce_checkout_quote"
   const val CHECKOUT_SUBMIT = "commerce_checkout_submit"
+  const val CHECKOUT_ADD_ADDRESS = "commerce_checkout_add_address"
   const val ORDER_CONFIRMATION = "commerce_order_confirmation"
 }
 
@@ -65,6 +67,11 @@ fun CartScreen(
   onViewOrders: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: CartCheckoutViewModel = hiltViewModel(),
+  /**
+   * Opens the address book from the checkout step — the entry point a
+   * first-time buyer needs to create the address checkout requires.
+   */
+  onOpenAddressBook: () -> Unit = {},
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   when {
@@ -77,6 +84,7 @@ fun CartScreen(
     state.checkoutOpen -> CheckoutContent(
       state = state,
       viewModel = viewModel,
+      onOpenAddressBook = onOpenAddressBook,
       modifier = modifier,
     )
     else -> CartContent(
@@ -353,8 +361,16 @@ private fun CouponPanel(
 private fun CheckoutContent(
   state: CartCheckoutUiState,
   viewModel: CartCheckoutViewModel,
+  onOpenAddressBook: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  // Returning here from the address book re-reads the saved addresses from
+  // the server, so an address created there is immediately selectable. The
+  // call is a no-op while the initial load, a quote or a submit is in flight.
+  LaunchedEffect(Unit) {
+    viewModel.reloadAddressesIfStale()
+  }
+
   Column(
     modifier = modifier
       .fillMaxSize()
@@ -387,6 +403,38 @@ private fun CheckoutContent(
             selected = state.hasAddressSelection && address.id == state.selectedAddressId,
             onSelect = { viewModel.selectAddress(address) },
           )
+        }
+        OutlinedButton(
+          onClick = onOpenAddressBook,
+          enabled = !state.orderSubmitting,
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp)
+            .testTag(CommerceTags.CHECKOUT_ADD_ADDRESS),
+        ) {
+          Text("Add a new address")
+        }
+      }
+    } else {
+      // No saved address yet: a first-time buyer must not hit a dead end
+      // here — the address book is one tap away and checkout re-reads the
+      // list when it comes back.
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Delivery address", style = MaterialTheme.typography.titleMedium)
+        Text(
+          "You have no saved delivery address yet. Add one to continue — checkout " +
+            "re-reads your addresses when you return.",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+          onClick = onOpenAddressBook,
+          enabled = !state.orderSubmitting,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag(CommerceTags.CHECKOUT_ADD_ADDRESS),
+        ) {
+          Text("Add delivery address")
         }
       }
     }

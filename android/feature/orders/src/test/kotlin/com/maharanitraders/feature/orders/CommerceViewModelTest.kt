@@ -108,6 +108,93 @@ class CommerceViewModelTest {
   }
 
   @Test
+  fun `reloadAddressesIfStale picks up an address created in the address book`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository().apply {
+      // First read (checkout entry): the retailer has no saved address yet.
+      addressResults += AppResult.Success(emptyList())
+    }
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    advanceUntilIdle()
+    viewModel.beginCheckout()
+    advanceUntilIdle()
+
+    assertNull(viewModel.state.value.selectedAddressId)
+    assertEquals(
+      CartCheckoutViewModel.NO_ADDRESSES_MESSAGE,
+      viewModel.state.value.quoteError,
+    )
+    assertTrue(repository.quoteCalls.isEmpty())
+
+    // The retailer adds their first address in the address book and comes
+    // back: checkout re-reads the server list and becomes orderable.
+    repository.addressResults += AppResult.Success(listOf(address))
+    viewModel.reloadAddressesIfStale()
+    advanceUntilIdle()
+
+    assertEquals(2, repository.addressCalls)
+    assertEquals(address.id, viewModel.state.value.selectedAddressId)
+    assertTrue(viewModel.state.value.hasAddressSelection)
+    assertNull(viewModel.state.value.quoteError)
+    assertEquals(address.id, repository.quoteCalls.single().second)
+  }
+
+  @Test
+  fun `reloadAddressesIfStale keeps an unchanged selection without a redundant quote`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    advanceUntilIdle()
+    viewModel.beginCheckout()
+    advanceUntilIdle()
+    assertEquals(1, repository.quoteCalls.size)
+    assertEquals(address.id, viewModel.state.value.selectedAddressId)
+
+    // Returning from the address book with no changes must not re-quote.
+    repository.addressResults += AppResult.Success(listOf(address))
+    viewModel.reloadAddressesIfStale()
+    advanceUntilIdle()
+
+    assertEquals(2, repository.addressCalls)
+    assertEquals(1, repository.quoteCalls.size)
+    assertEquals(address.id, viewModel.state.value.selectedAddressId)
+    assertTrue(viewModel.state.value.hasAddressSelection)
+  }
+
+  @Test
+  fun `reloadAddressesIfStale reselects and re-quotes when the selected address vanished`() = runTest(dispatcher) {
+    val replacement = address.copy(id = "address-2", label = "Warehouse", isDefault = true)
+    val repository = FakeCommerceRepository()
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    advanceUntilIdle()
+    viewModel.beginCheckout()
+    advanceUntilIdle()
+    assertEquals(address.id, viewModel.state.value.selectedAddressId)
+
+    repository.addressResults += AppResult.Success(listOf(replacement))
+    viewModel.reloadAddressesIfStale()
+    advanceUntilIdle()
+
+    assertEquals(replacement.id, viewModel.state.value.selectedAddressId)
+    assertTrue(viewModel.state.value.hasAddressSelection)
+    // The quote must be re-requested for the new address — the old one was
+    // priced for an address that no longer belongs to this selection.
+    assertEquals(2, repository.quoteCalls.size)
+    assertEquals(replacement.id, repository.quoteCalls.last().second)
+  }
+
+  @Test
+  fun `reloadAddressesIfStale does nothing outside checkout`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    advanceUntilIdle()
+
+    viewModel.reloadAddressesIfStale()
+    advanceUntilIdle()
+
+    assertEquals(0, repository.addressCalls)
+    assertFalse(viewModel.state.value.checkoutOpen)
+  }
+
+  @Test
   fun `address loading failure can be retried without a quote or stale address`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository().apply {
       addressResults += AppResult.Failure(AppError.Network("offline"))

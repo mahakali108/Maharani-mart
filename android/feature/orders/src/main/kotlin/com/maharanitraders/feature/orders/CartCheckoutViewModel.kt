@@ -211,9 +211,7 @@ class CartCheckoutViewModel @Inject constructor(
             )
           }
           if (selected != null) refreshQuote()
-          else _state.update {
-            it.copy(quoteError = "Add a saved delivery address or registered shop address before placing an order.")
-          }
+          else _state.update { it.copy(quoteError = NO_ADDRESSES_MESSAGE) }
         }
         is AppResult.Failure -> _state.update {
           it.copy(
@@ -249,6 +247,65 @@ class CartCheckoutViewModel @Inject constructor(
       )
     }
     refreshQuote()
+  }
+
+  /**
+   * Re-reads the retailer's saved addresses from the server when checkout
+   * becomes visible again — the case that matters is the shopper returning
+   * from the address book, where they added the address checkout was missing.
+   *
+   * Deliberately narrow:
+   *  - it only runs while checkout is open and nothing else is in flight, so
+   *    it cannot race `beginCheckout`, a quote request or an order submit;
+   *  - a selection that still exists is kept, otherwise the default (or
+   *    first) address becomes selected — the same rule `beginCheckout` uses;
+   *  - the quote is only re-requested when the selection actually changed or
+   *    none exists yet, so coming back without changes costs nothing extra;
+   *  - the addresses are the server's own rows from `GET /addresses`, never a
+   *    local cache, and RLS scopes them to the caller's retailer.
+   */
+  fun reloadAddressesIfStale() {
+    val current = _state.value
+    if (!current.checkoutOpen || current.addressesLoading) return
+    if (current.quoteLoading || current.orderSubmitting || current.orderChecking) return
+    _state.update { it.copy(addressesLoading = true) }
+    viewModelScope.launch {
+      when (val result = repository.loadAddresses()) {
+        is AppResult.Success -> {
+          val addresses = result.value
+          val previousId = _state.value.selectedAddressId
+          val selected = addresses.firstOrNull { it.id == previousId }
+            ?: addresses.firstOrNull { it.isDefault }
+            ?: addresses.firstOrNull()
+          val selectionChanged = selected?.id != previousId
+          _state.update {
+            it.copy(
+              addressesLoading = false,
+              addresses = addresses,
+              selectedAddressId = selected?.id,
+              hasAddressSelection = selected != null,
+              quote = if (selected == null || selectionChanged) null else it.quote,
+              quoteError = when {
+                selected == null -> NO_ADDRESSES_MESSAGE
+                selectionChanged -> null
+                else -> it.quoteError
+              },
+            )
+          }
+          if (selected != null && (selectionChanged || _state.value.quote == null)) {
+            refreshQuote()
+          }
+        }
+        is AppResult.Failure -> _state.update {
+          it.copy(
+            addressesLoading = false,
+            quoteError = result.error.message,
+            quoteErrorCode = errorCode(result.error),
+            quoteOffline = result.error is AppError.Network,
+          )
+        }
+      }
+    }
   }
 
   fun updateNotes(value: String) {
@@ -626,5 +683,15 @@ class CartCheckoutViewModel @Inject constructor(
     is AppError.Network, is AppError.Unexpected -> true
     is AppError.Api -> error.retryable || error.code == ApiErrorCode.CONFLICT ||
       error.code == ApiErrorCode.IDEMPOTENCY_CONFLICT
+  }
+
+  companion object {
+    /**
+     * Shown when checkout has no saved address to offer — both on first entry
+     * and when a reload still finds none. The address book (one navigation
+     * away from checkout) is where the address gets created.
+     */
+    const val NO_ADDRESSES_MESSAGE =
+      "Add a saved delivery address or registered shop address before placing an order."
   }
 }
