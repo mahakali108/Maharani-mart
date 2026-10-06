@@ -190,10 +190,18 @@ class CatalogViewModel @Inject constructor(
     _state.update { it.copy(actionMessage = null) }
   }
 
-  /** Switch pane. Free: every pane is rendered from state this screen already has. */
+  /**
+   * Switch pane. Free: every pane is rendered from state this screen already
+   * has.
+   *
+   * The directory filter is a LOCAL narrowing of the pane being looked at, so
+   * it is dropped on the way out: a shopper who typed "ri" in Categories and
+   * then opened Brands must not be shown an empty brand list filtered by a term
+   * they typed for a different list.
+   */
   fun selectTab(tab: CatalogTab) {
     if (_state.value.tab == tab) return
-    _state.update { it.copy(tab = tab) }
+    _state.update { it.copy(tab = tab, directoryFilter = "") }
   }
 
   /** Narrow the directory panes to names the server already sent. No request. */

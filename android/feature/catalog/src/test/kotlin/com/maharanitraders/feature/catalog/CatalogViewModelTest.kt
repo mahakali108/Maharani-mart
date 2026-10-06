@@ -508,6 +508,30 @@ class CatalogViewModelTest {
   }
 
   @Test
+  fun `switching panes drops the previous pane's local filter`() = runTest(dispatcher) {
+    val api = api()
+    repeat(2) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }
+
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.selectTab(CatalogTab.CATEGORIES)
+    viewModel.onDirectoryFilterChange("ri")
+    advanceUntilIdle()
+    assertThat(viewModel.state.value.directoryFilter).isEqualTo("ri")
+    assertThat(viewModel.state.value.visibleCategories.map { it.name }).containsExactly("Rice")
+    val requests = api.productRequests.size
+
+    viewModel.selectTab(CatalogTab.BRANDS)
+    advanceUntilIdle()
+
+    // The term belonged to the category list, and switching panes is still free.
+    assertThat(viewModel.state.value.directoryFilter).isEmpty()
+    assertThat(viewModel.state.value.visibleBrands).hasSize(2)
+    assertThat(api.productRequests).hasSize(requests)
+  }
+
+  @Test
   fun `clearing the scope drops the category and the brand in one request`() =
     runTest(dispatcher) {
       val api = api()
