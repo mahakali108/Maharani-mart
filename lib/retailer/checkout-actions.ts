@@ -127,6 +127,7 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
       title: 'Order placed',
       body: `Your order ${result.order.orderNumber} has been placed and is awaiting confirmation.`,
       linkUrl: `/retailer/orders/${result.order.id}`,
+      category: 'order',
     });
   } catch (error) {
     console.error('Order placed but notification creation failed.', error);

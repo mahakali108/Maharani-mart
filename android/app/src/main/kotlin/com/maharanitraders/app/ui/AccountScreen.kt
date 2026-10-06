@@ -72,13 +72,8 @@ fun AccountScreen(
   onOpenOrders: () -> Unit = {},
   /** Opens another destination of this account, by route. */
   onOpenDestination: (String) -> Unit = {},
-  /**
-   * Opens the in-account security screen — a real screen over the
-   * authenticated password-update endpoint.
-   */
-  onOpenSecurity: () -> Unit = {},
-  /** Opens the help centre — static FAQs, no invented answers. */
-  onOpenHelp: () -> Unit = {},
+  /** The server-filtered routes in this shell; restricted shortcuts are hidden. */
+  availableRoutes: Set<String>? = null,
 ) {
   LazyColumn(
     modifier = modifier
@@ -139,15 +134,9 @@ fun AccountScreen(
         ShortcutsCard(
           onOpenOrders = onOpenOrders,
           onOpenDestination = onOpenDestination,
+          availableRoutes = availableRoutes,
         )
       }
-    }
-
-    item {
-      AccountSecurityCard(
-        onOpenSecurity = onOpenSecurity,
-        onOpenHelp = onOpenHelp,
-      )
     }
 
     item { WorkspacesCard(snapshot = snapshot) }
@@ -196,81 +185,27 @@ fun AccountScreen(
 private fun ShortcutsCard(
   onOpenOrders: () -> Unit,
   onOpenDestination: (String) -> Unit,
+  availableRoutes: Set<String>?,
   modifier: Modifier = Modifier,
 ) {
+  fun allowed(route: String): Boolean = availableRoutes == null || route in availableRoutes
   AccountCard(modifier = modifier.testTag(AccountScreenTags.SHORTCUTS)) {
     Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-      SectionHeader(
-        title = "Your shop",
-        subtitle = "Orders, savings and messages",
-      )
-      ShortcutRow(
-        label = "My orders",
-        detail = "Track, re-order and download invoices",
-        onClick = onOpenOrders,
-      )
-      ShortcutRow(
-        label = "Favourites",
-        detail = "The products you saved",
-        onClick = { onOpenDestination(MaharaniRoutes.FAVORITES) },
-      )
-      ShortcutRow(
-        label = "Quick order",
-        detail = "Restock a known list in seconds",
-        onClick = { onOpenDestination(MaharaniRoutes.QUICK_ORDER) },
-      )
-      ShortcutRow(
-        label = "Maharani Coins",
-        detail = "Balance and ledger",
-        onClick = { onOpenDestination(MaharaniRoutes.COINS) },
-      )
-      ShortcutRow(
-        label = "Coupons and offers",
-        detail = "Apply a code at checkout",
-        onClick = { onOpenDestination(MaharaniRoutes.COUPONS) },
-      )
-      ShortcutRow(
-        label = "Notifications",
-        detail = "Order and account updates",
-        onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATIONS) },
-      )
-    }
-  }
-}
-
-/**
- * Account security and help, in one card, for every signed-in role.
- *
- * The password change is the real authenticated endpoint
- * (`POST /auth/password-update` — the server acts on the caller's own token);
- * the help centre is static content mirroring the web FAQs. The web security
- * page's "log out of all sessions" and account-deletion/data-export requests
- * have no mobile endpoint and are therefore not offered here.
- */
-@Composable
-private fun AccountSecurityCard(
-  onOpenSecurity: () -> Unit,
-  onOpenHelp: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  AccountCard(modifier = modifier) {
-    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-      SectionHeader(
-        title = "Account & security",
-        subtitle = "Password, help and support",
-      )
-      ShortcutRow(
-        label = "Password & security",
-        detail = "Change the password of this account",
-        onClick = onOpenSecurity,
-        tag = AccountScreenTags.SECURITY,
-      )
-      ShortcutRow(
-        label = "Help centre",
-        detail = "FAQs about prices, MOQ, coins and invoices",
-        onClick = onOpenHelp,
-        tag = AccountScreenTags.HELP,
-      )
+      SectionHeader(title = "Your shop", subtitle = "Orders, savings and messages")
+      if (allowed(MaharaniRoutes.ORDERS)) ShortcutRow("My orders", "Track, re-order and download invoices", onOpenOrders)
+      if (allowed(MaharaniRoutes.FAVORITES)) ShortcutRow(label = "Favourites", detail = "The products you saved", onClick = { onOpenDestination(MaharaniRoutes.FAVORITES) })
+      if (allowed(MaharaniRoutes.QUICK_ORDER)) ShortcutRow(label = "Quick order", detail = "Restock a known list in seconds", onClick = { onOpenDestination(MaharaniRoutes.QUICK_ORDER) })
+      if (allowed(MaharaniRoutes.COINS)) ShortcutRow(label = "Maharani Coins", detail = "Balance and ledger", onClick = { onOpenDestination(MaharaniRoutes.COINS) })
+      if (allowed(MaharaniRoutes.COUPONS)) ShortcutRow(label = "Coupons and offers", detail = "Apply a code at checkout", onClick = { onOpenDestination(MaharaniRoutes.COUPONS) })
+      if (allowed(MaharaniRoutes.NOTIFICATIONS)) ShortcutRow(label = "Notifications", detail = "Order and account updates", onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATIONS) })
+      if (allowed(MaharaniRoutes.SAVED_CARTS)) ShortcutRow(label = "Saved carts", detail = "Keep and restore restock lists", onClick = { onOpenDestination(MaharaniRoutes.SAVED_CARTS) })
+      if (allowed(MaharaniRoutes.PROFILE)) ShortcutRow(label = "Shop profile", detail = "Edit shop and contact details", onClick = { onOpenDestination(MaharaniRoutes.PROFILE) })
+      if (allowed(MaharaniRoutes.NOTIFICATION_PREFERENCES)) ShortcutRow(label = "Notification settings", detail = "Choose in-app update categories", onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATION_PREFERENCES) })
+      if (allowed(MaharaniRoutes.REPORTS)) ShortcutRow(label = "Purchase reports", detail = "Weekly, monthly and CSV statements", onClick = { onOpenDestination(MaharaniRoutes.REPORTS) })
+      if (allowed(MaharaniRoutes.SCHEMES)) ShortcutRow(label = "Active schemes", detail = "Live schemes for your shop", onClick = { onOpenDestination(MaharaniRoutes.SCHEMES) })
+      if (allowed(MaharaniRoutes.SUPPORT)) ShortcutRow(label = "Support tickets", detail = "Private conversations with support", onClick = { onOpenDestination(MaharaniRoutes.SUPPORT) })
+      if (allowed(MaharaniRoutes.HELP)) ShortcutRow(label = "Help centre", detail = "Support contacts and help", onClick = { onOpenDestination(MaharaniRoutes.HELP) }, tag = AccountScreenTags.HELP)
+      if (allowed(MaharaniRoutes.SECURITY)) ShortcutRow(label = "Security & privacy", detail = "Password, sessions and data requests", onClick = { onOpenDestination(MaharaniRoutes.SECURITY) }, tag = AccountScreenTags.SECURITY)
     }
   }
 }

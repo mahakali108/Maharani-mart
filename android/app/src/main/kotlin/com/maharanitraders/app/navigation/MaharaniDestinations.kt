@@ -95,11 +95,26 @@ object MaharaniRoutes {
    */
   const val SECURITY = "account/security"
 
-  /**
-   * The help centre: static FAQs mirroring the web help page, plus the
-   * account's real shortcuts. No backend data, no invented answers.
-   */
+  /** The help centre: static FAQs mirroring the web help page, plus the account's real shortcuts. */
   const val HELP = "help"
+
+  /** The retailer's own shop profile (GET/PATCH /api/mobile/v1/profile). */
+  const val PROFILE = "account/profile"
+
+  /** Notification preferences (GET/PUT /api/mobile/v1/notifications/preferences). */
+  const val NOTIFICATION_PREFERENCES = "account/notification-preferences"
+
+  /** Saved carts: the caller's stored baskets (GET /api/mobile/v1/saved-carts). */
+  const val SAVED_CARTS = "saved_carts"
+
+  /** Support tickets and replies (GET/POST /api/mobile/v1/support/tickets). */
+  const val SUPPORT = "support"
+
+  /** Running schemes (GET /api/mobile/v1/schemes). */
+  const val SCHEMES = "schemes"
+
+  /** Purchase reports and statements (GET /api/mobile/v1/reports, /reports/statement). */
+  const val REPORTS = "reports"
   const val COINS = "coins"
   const val NOTIFICATIONS = "notifications"
   const val COUPONS = "coupons"
@@ -183,6 +198,62 @@ object MaharaniCatalog {
       // as a profile screen. No new data, no new endpoint.
       phase = null,
       summary = "Your signed-in profile, shop status and access period, exactly as the server reports them.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.PROFILE,
+      label = "Shop profile",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Edit owner contact and shop identity through the retailer-scoped profile API.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.NOTIFICATION_PREFERENCES,
+      label = "Notification settings",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Choose the in-app order, payment, Coins and offer update categories you receive.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.SECURITY,
+      label = "Security & privacy",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Change your password, revoke sessions, and submit data or account requests.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.SAVED_CARTS,
+      label = "Saved carts",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Save and restore owner-scoped cart lists, revalidated against current packs and minimums.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.SCHEMES,
+      label = "Active schemes",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Active schemes returned by the existing retailer service.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.REPORTS,
+      label = "Purchase reports",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Weekly and monthly purchase summaries and server-generated CSV statements.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.SUPPORT,
+      label = "Support tickets",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Private support tickets and owner-scoped retailer conversations.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.HELP,
+      label = "Help centre",
+      workspace = Workspace.RETAILER,
+      phase = null,
+      summary = "Configured support contact details and help for retailer commerce flows.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.COINS,

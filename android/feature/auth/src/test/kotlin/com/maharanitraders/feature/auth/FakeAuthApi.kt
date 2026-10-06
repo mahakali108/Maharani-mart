@@ -37,6 +37,30 @@ import com.maharanitraders.core.network.dto.MobileQuickOrderDto
 import com.maharanitraders.core.network.dto.MobileWalletLedgerEntryDto
 import com.maharanitraders.core.network.dto.MobileWalletSummaryDto
 import com.maharanitraders.core.network.dto.PasswordResetRequestDto
+import com.maharanitraders.core.network.dto.PasswordChangeRequestDto
+import com.maharanitraders.core.network.dto.MobileRetailerProfileDto
+import com.maharanitraders.core.network.dto.MobileProfilePatchDto
+import com.maharanitraders.core.network.dto.MobileNotificationPreferencesDto
+import com.maharanitraders.core.network.dto.MobileSchemesDto
+import com.maharanitraders.core.network.dto.MobileHelpDto
+import com.maharanitraders.core.network.dto.MobileAccountRequestsDto
+import com.maharanitraders.core.network.dto.MobileAccountRequestDto
+import com.maharanitraders.core.network.dto.MobileAccountRequestCreateDto
+import com.maharanitraders.core.network.dto.MobileReportsDto
+import com.maharanitraders.core.network.dto.MobileSupportTicketDto
+import com.maharanitraders.core.network.dto.MobileSupportCreateResponseDto
+import com.maharanitraders.core.network.dto.MobileSupportTicketDetailDto
+import com.maharanitraders.core.network.dto.MobileSupportMessageDto
+import com.maharanitraders.core.network.dto.MobileSupportCreateRequestDto
+import com.maharanitraders.core.network.dto.MobileSupportReplyRequestDto
+import com.maharanitraders.core.network.dto.MobileSavedCartsDto
+import com.maharanitraders.core.network.dto.MobileSavedCartCreateRequestDto
+import com.maharanitraders.core.network.dto.MobileSavedCartMutationDto
+import com.maharanitraders.core.network.dto.MobileSavedCartRenameRequestDto
+import com.maharanitraders.core.network.dto.MobileSavedCartRestoreDto
+import com.maharanitraders.core.network.dto.MobileSaveForLaterRequestDto
+import com.maharanitraders.core.network.dto.MobileOrderActionRequestDto
+import com.maharanitraders.core.network.dto.MobileReturnRequestResponseDto
 import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
 import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
 import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
@@ -48,6 +72,7 @@ import com.maharanitraders.core.network.dto.RegisterRetailerResponseDto
 import com.maharanitraders.core.network.dto.RetailerHomeDto
 import com.maharanitraders.core.network.dto.SessionDto
 import kotlinx.coroutines.CompletableDeferred
+import okhttp3.ResponseBody
 
 /**
  * A [MaharaniApi] double for the auth-feature ViewModel tests.
@@ -222,4 +247,105 @@ class FakeAuthApi : MaharaniApi {
   ): ApiEnvelope<FavoriteToggleResponseDto> = unexpected("toggleFavorite")
 
   override suspend fun coupons(): ApiEnvelope<MobileCouponsDto> = unexpected("coupons")
+
+  // ---------------------------------------------------------------------------
+  // Native retailer upgrade endpoints
+  // ---------------------------------------------------------------------------
+  //
+  // The auth-feature tests never call these, so each one fails loudly rather
+  // than answering with invented data. They are declared because MaharaniApi
+  // added them and this double claims to implement it — the static guard in
+  // tests/android-project-integrity.test.ts asserts the whole interface is
+  // covered, which is what keeps a new endpoint from silently drifting away
+  // from the doubles.
+
+  override suspend fun changePassword(body: PasswordChangeRequestDto): ApiEnvelope<AckDto> =
+    unexpected("changePassword")
+
+  override suspend fun revokeAllSessions(): ApiEnvelope<AckDto> = unexpected("revokeAllSessions")
+
+  override suspend fun retailerProfile(): ApiEnvelope<MobileRetailerProfileDto> =
+    unexpected("retailerProfile")
+
+  override suspend fun updateRetailerProfile(body: MobileProfilePatchDto): ApiEnvelope<AckDto> =
+    unexpected("updateRetailerProfile")
+
+  override suspend fun notificationPreferences(): ApiEnvelope<MobileNotificationPreferencesDto> =
+    unexpected("notificationPreferences")
+
+  override suspend fun updateNotificationPreferences(
+    body: MobileNotificationPreferencesDto,
+  ): ApiEnvelope<AckDto> = unexpected("updateNotificationPreferences")
+
+  override suspend fun schemes(): ApiEnvelope<MobileSchemesDto> = unexpected("schemes")
+
+  override suspend fun helpDetails(): ApiEnvelope<MobileHelpDto> = unexpected("helpDetails")
+
+  override suspend fun accountRequests(): ApiEnvelope<MobileAccountRequestsDto> =
+    unexpected("accountRequests")
+
+  override suspend fun createAccountRequest(
+    body: MobileAccountRequestCreateDto,
+  ): ApiEnvelope<MobileAccountRequestDto> = unexpected("createAccountRequest")
+
+  override suspend fun purchaseReports(): ApiEnvelope<MobileReportsDto> =
+    unexpected("purchaseReports")
+
+  /** Streaming CSV, so it does not answer with the JSON envelope. */
+  override suspend fun reportStatementCsv(type: String, from: String?, to: String?): ResponseBody =
+    unexpected("reportStatementCsv")
+
+  override suspend fun supportTickets(
+    cursor: String?,
+    status: String?,
+  ): ApiEnvelope<List<MobileSupportTicketDto>> = unexpected("supportTickets")
+
+  override suspend fun createSupportTicket(
+    body: MobileSupportCreateRequestDto,
+  ): ApiEnvelope<MobileSupportCreateResponseDto> = unexpected("createSupportTicket")
+
+  override suspend fun supportTicket(ticketId: String): ApiEnvelope<MobileSupportTicketDetailDto> =
+    unexpected("supportTicket")
+
+  override suspend fun replyToSupportTicket(
+    ticketId: String,
+    body: MobileSupportReplyRequestDto,
+  ): ApiEnvelope<MobileSupportMessageDto> = unexpected("replyToSupportTicket")
+
+  override suspend fun savedCarts(): ApiEnvelope<MobileSavedCartsDto> = unexpected("savedCarts")
+
+  override suspend fun saveCurrentCart(
+    body: MobileSavedCartCreateRequestDto,
+  ): ApiEnvelope<MobileSavedCartMutationDto> = unexpected("saveCurrentCart")
+
+  override suspend fun renameSavedCart(
+    savedCartId: String,
+    body: MobileSavedCartRenameRequestDto,
+  ): ApiEnvelope<AckDto> = unexpected("renameSavedCart")
+
+  override suspend fun deleteSavedCart(savedCartId: String): ApiEnvelope<AckDto> =
+    unexpected("deleteSavedCart")
+
+  override suspend fun restoreSavedCart(savedCartId: String): ApiEnvelope<MobileSavedCartRestoreDto> =
+    unexpected("restoreSavedCart")
+
+  override suspend fun saveCartItemForLater(
+    body: MobileSaveForLaterRequestDto,
+  ): ApiEnvelope<MobileSavedCartMutationDto> = unexpected("saveCartItemForLater")
+
+  override suspend fun deleteSavedCartItem(itemId: String): ApiEnvelope<AckDto> =
+    unexpected("deleteSavedCartItem")
+
+  override suspend fun restoreSavedCartItem(itemId: String): ApiEnvelope<MobileSavedCartRestoreDto> =
+    unexpected("restoreSavedCartItem")
+
+  override suspend fun cancelOrder(
+    orderId: String,
+    body: MobileOrderActionRequestDto,
+  ): ApiEnvelope<AckDto> = unexpected("cancelOrder")
+
+  override suspend fun requestOrderReturn(
+    orderId: String,
+    body: MobileOrderActionRequestDto,
+  ): ApiEnvelope<MobileReturnRequestResponseDto> = unexpected("requestOrderReturn")
 }

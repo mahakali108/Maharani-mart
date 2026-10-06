@@ -207,10 +207,23 @@ function indiaOffsetMs(at: Date): number {
 
 const DATE_KEY_PARTS = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+/** True only for a real Gregorian calendar day (not a Date parser's rollover). */
+export function isValidIndiaDateKey(key: string): boolean {
+  const match = DATE_KEY_PARTS.exec(key);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1000 || month < 1 || month > 12 || day < 1) return false;
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysByMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= (daysByMonth[month - 1] ?? 0);
+}
+
 /** UTC instant marking 00:00:00.000 IST (start of the India calendar day) for a `YYYY-MM-DD` key. */
 export function indiaDayStart(key: string): Date | null {
   const match = DATE_KEY_PARTS.exec(key);
-  if (!match) return null;
+  if (!match || !isValidIndiaDateKey(key)) return null;
   const midnightUtc = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0);
   return new Date(midnightUtc - indiaOffsetMs(new Date(midnightUtc)));
 }

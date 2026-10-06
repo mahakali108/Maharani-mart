@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maharanitraders.core.designsystem.MoneyFormat
+import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.designsystem.components.EmptyState
 import com.maharanitraders.core.designsystem.components.ErrorState
 import com.maharanitraders.core.designsystem.components.LoadingState
@@ -46,6 +48,7 @@ import com.maharanitraders.feature.orders.CartCheckoutViewModel
 import com.maharanitraders.feature.orders.CartLine
 import com.maharanitraders.feature.orders.DeliveryAddress
 import com.maharanitraders.feature.orders.OrderConfirmation
+import com.maharanitraders.feature.orders.SavedCartsViewModel
 
 object CommerceTags {
   const val CART_SCREEN = "commerce_cart_screen"
@@ -54,6 +57,7 @@ object CommerceTags {
   const val CART_CHECKOUT = "commerce_cart_checkout"
   const val CART_ADD = "commerce_cart_add"
   const val CART_QUANTITY = "commerce_cart_quantity"
+  const val SAVE_FOR_LATER = "commerce_save_for_later"
   const val CHECKOUT_SCREEN = "commerce_checkout_screen"
   const val CHECKOUT_QUOTE = "commerce_checkout_quote"
   const val CHECKOUT_SUBMIT = "commerce_checkout_submit"
@@ -74,6 +78,8 @@ fun CartScreen(
   onOpenAddressBook: () -> Unit = {},
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val savedCartsViewModel: SavedCartsViewModel = hiltViewModel()
+  val savedCartsState by savedCartsViewModel.state.collectAsStateWithLifecycle()
   when {
     state.confirmation != null -> OrderConfirmationContent(
       order = state.confirmation!!,
@@ -91,6 +97,10 @@ fun CartScreen(
       state = state,
       viewModel = viewModel,
       onBrowseCatalog = onBrowseCatalog,
+      onSaveForLater = { lineId -> savedCartsViewModel.saveForLater(lineId, viewModel::refreshCart) },
+      saveForLaterBusy = savedCartsState.savingKey?.startsWith("save-for-later:") == true,
+      saveForLaterMessage = savedCartsState.message,
+      saveForLaterError = savedCartsState.error,
       modifier = modifier,
     )
   }
@@ -101,6 +111,10 @@ private fun CartContent(
   state: CartCheckoutUiState,
   viewModel: CartCheckoutViewModel,
   onBrowseCatalog: () -> Unit,
+  onSaveForLater: (String) -> Unit,
+  saveForLaterBusy: Boolean,
+  saveForLaterMessage: String?,
+  saveForLaterError: String?,
   modifier: Modifier = Modifier,
 ) {
   if (state.cartLoading && state.cart == null) {
@@ -159,6 +173,8 @@ private fun CartContent(
       ) { Text(if (state.cartLoading) "Refreshing cart…" else "Refresh shared cart") }
     }
     state.message?.let { InlineMessage(it, onDismiss = viewModel::clearMessage) }
+    saveForLaterError?.let { InlineMessage(it, isError = true) }
+    saveForLaterMessage?.let { InlineMessage(it) }
 
     if (cart?.lines.isNullOrEmpty()) {
       EmptyState(
@@ -176,6 +192,8 @@ private fun CartContent(
           onIncrease = { viewModel.increment(line.id) },
           onDecrease = { viewModel.decrement(line.id) },
           onRemove = { viewModel.removeCartLine(line.id) },
+          onSaveForLater = { onSaveForLater(line.id) },
+          saveForLaterBusy = saveForLaterBusy,
         )
       }
 
@@ -224,6 +242,8 @@ private fun CartLineCard(
   onIncrease: () -> Unit,
   onDecrease: () -> Unit,
   onRemove: () -> Unit,
+  onSaveForLater: () -> Unit,
+  saveForLaterBusy: Boolean,
   modifier: Modifier = Modifier,
 ) {
   Surface(
@@ -302,6 +322,11 @@ private fun CartLineCard(
           Text("MOQ $it pcs · increment ${line.quantityIncrement}", style = MaterialTheme.typography.labelSmall)
         }
       }
+      TextButton(
+        onClick = onSaveForLater,
+        enabled = !busy && !saveForLaterBusy,
+        modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget).testTag("${CommerceTags.SAVE_FOR_LATER}_${line.id}"),
+      ) { Text(if (saveForLaterBusy) "Saving for later…" else "Save for later") }
     }
   }
 }

@@ -256,6 +256,7 @@ data class OrderDelivery(
   val returnWindowOpen: Boolean?,
   val proof: DeliveryProof,
   val items: List<DeliveryItem>,
+  val returnRequestStatus: String? = null,
 ) {
   /** True when any line was short or damaged — the refund case. */
   val hasShortfall: Boolean

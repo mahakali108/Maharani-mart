@@ -293,6 +293,7 @@ export async function regenerateDeliveryOtpAction(orderId: string): Promise<Deli
     // The OTP is shown only in the retailer's in-app notification — never persisted in the channel queue.
     channelBody: `A new delivery OTP for order ${order.order_number} is ready. Open the Maharani app to view it.`,
     linkUrl: `/retailer/orders/${orderId}/delivery`,
+    category: 'order',
   });
 
   revalidateDeliveryPaths(orderId);
@@ -578,6 +579,7 @@ export async function completeDeliveryAction(
       ? `Your order ${order.order_number} was delivered to ${receiver}. Return window: ${returnWindowDays} day(s).`
       : `Your order ${order.order_number} was partially delivered to ${receiver}. ₹${(settlement.creditBackPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })} was credited back to your wallet for missing/damaged items.`,
     linkUrl: `/retailer/orders/${orderId}/delivery`,
+    category: 'order',
   });
 
   revalidateDeliveryPaths(orderId);
@@ -659,6 +661,7 @@ export async function recordFailedDeliveryAction(
     title: 'Delivery could not be completed',
     body: `Your order ${order.order_number} could not be delivered (${failureReason}). It has been returned to the warehouse queue and will be re-attempted.`,
     linkUrl: `/retailer/orders/${orderId}`,
+    category: 'order',
   });
 
   revalidateDeliveryPaths(orderId);
@@ -753,6 +756,7 @@ export async function recordReturnToWarehouseAction(
     title: 'Order returned to warehouse',
     body: `Your order ${order.order_number} was returned to the warehouse. The order amount has been credited back to your wallet.`,
     linkUrl: `/retailer/orders/${orderId}`,
+    category: 'wallet',
   });
 
   revalidateDeliveryPaths(orderId);
