@@ -5,6 +5,7 @@ import com.maharanitraders.core.network.ApiErrorMapper
 import com.maharanitraders.core.network.AuthInterceptor
 import com.maharanitraders.core.network.MaharaniApi
 import com.maharanitraders.core.network.TokenProvider
+import com.maharanitraders.core.network.TokenRefreshCoordinator
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -85,5 +86,12 @@ object NetworkModule {
   fun provideApiCallExecutor(
     errorMapper: ApiErrorMapper,
     @com.maharanitraders.core.common.di.IoDispatcher ioDispatcher: kotlinx.coroutines.CoroutineDispatcher,
-  ): ApiCallExecutor = ApiCallExecutor(errorMapper, ioDispatcher)
+    tokenProvider: TokenProvider,
+    tokenRefreshCoordinator: TokenRefreshCoordinator,
+  ): ApiCallExecutor = ApiCallExecutor(
+    errorMapper = errorMapper,
+    ioDispatcher = ioDispatcher,
+    tokenProvider = tokenProvider,
+    tokenRefreshCoordinator = tokenRefreshCoordinator,
+  )
 }

@@ -160,8 +160,10 @@ private fun BannerCard(
         val cta = banner.ctaLabel
         if (cta != null && clickable) {
           Surface(
-            color = Color.White,
-            contentColor = MaterialTheme.colorScheme.primary,
+            // Gold call to action: the accent that makes a live promotion read
+            // as an event rather than as one more white chip.
+            color = MaterialTheme.colorScheme.secondary,
+            contentColor = MaterialTheme.colorScheme.onSecondary,
             shape = RoundedCornerShape(MaharaniDimens.radiusPill),
           ) {
             Text(

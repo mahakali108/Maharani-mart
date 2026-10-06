@@ -28,6 +28,15 @@ object CatalogTags {
   const val PACK_NAME = "catalog_pack_name"
   const val NEW_LAUNCH = "catalog_new_launch"
   const val OFFER = "catalog_offer"
+
+  /**
+   * Directory surfaces. Tags live here (next to the other catalogue tags) even
+   * though the panes themselves are drawn by `CatalogScreen`, because a Compose
+   * UI test addresses a card the same way wherever it is rendered.
+   */
+  const val DIRECTORY_TILE = "catalog_directory_tile"
+  const val DIRECTORY_ALL = "catalog_directory_all"
+  const val DIRECTORY_SELECTED = "catalog_directory_selected"
 }
 
 /**
@@ -37,8 +46,10 @@ object CatalogTags {
 @Composable
 fun NewLaunchBadge(modifier: Modifier = Modifier) {
   Surface(
-    color = MaterialTheme.colorScheme.secondary,
-    contentColor = MaterialTheme.colorScheme.onSecondary,
+    // Brand red, not the gold accent: "New" is identity (the same red as the
+    // crown and the launcher), while gold belongs to offers and highlights.
+    color = MaterialTheme.colorScheme.tertiary,
+    contentColor = MaterialTheme.colorScheme.onTertiary,
     shape = RoundedCornerShape(MaharaniDimens.radiusChip),
     modifier = modifier.testTag(CatalogTags.NEW_LAUNCH),
   ) {

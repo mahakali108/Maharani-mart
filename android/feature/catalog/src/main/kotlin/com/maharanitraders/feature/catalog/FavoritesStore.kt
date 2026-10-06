@@ -1,6 +1,7 @@
 package com.maharanitraders.feature.catalog
 
 import com.maharanitraders.core.common.AppResult
+import com.maharanitraders.core.common.SessionScopedStore
 import com.maharanitraders.core.common.map
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi
@@ -74,7 +75,7 @@ data class FavoritesSnapshot(
 class FavoritesStore @Inject constructor(
   private val api: MaharaniApi,
   private val executor: ApiCallExecutor,
-) {
+) : SessionScopedStore {
 
   private val _state = MutableStateFlow(FavoritesSnapshot())
   val state: StateFlow<FavoritesSnapshot> = _state.asStateFlow()
@@ -160,5 +161,20 @@ class FavoritesStore @Inject constructor(
   /** Clear a message the UI has already shown, so it is not shown twice. */
   fun clearError() {
     _state.update { it.copy(errorMessage = null) }
+  }
+
+  /**
+   * Session ended (sign-out, a rejected token, or a different account signing
+   * in): forget the ids this account had saved.
+   *
+   * This store is a process-wide singleton, so without this the heart on a
+   * product would still be filled for the NEXT account that signs in on the
+   * same device until a reload happened to replace the set — a heart that says
+   * "saved" for a product the server never told this shop about. Clearing
+   * resets [FavoritesSnapshot.loaded] to false as well, so the next
+   * [ensureLoaded] asks the server again instead of trusting the empty cache.
+   */
+  override suspend fun onSessionEnded() {
+    _state.value = FavoritesSnapshot()
   }
 }

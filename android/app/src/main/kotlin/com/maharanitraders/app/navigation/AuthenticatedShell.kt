@@ -82,11 +82,11 @@ import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.model.SessionSnapshot
 import com.maharanitraders.core.model.UserRole
+import com.maharanitraders.feature.catalog.CatalogTab
 import com.maharanitraders.feature.catalog.ProductDetailViewModel
 import com.maharanitraders.feature.catalog.ui.CatalogScreen
 import com.maharanitraders.feature.orders.ui.AddressBookScreen
 import com.maharanitraders.feature.orders.ui.QuickOrderScreen
-import com.maharanitraders.feature.catalog.ui.CategoriesScreen
 import com.maharanitraders.feature.catalog.ui.FavoritesScreen
 import com.maharanitraders.feature.catalog.ui.HomeScreenTags
 import com.maharanitraders.feature.catalog.ui.ProductDetailScreen
@@ -130,12 +130,22 @@ data class CatalogRequest(
   val categoryId: String? = null,
   val brandId: String? = null,
   val brandLabel: String? = null,
+  /** Which pane to open on. A home rail's "View all" lands on the pane it summarises. */
+  val tab: CatalogTab = CatalogTab.PRODUCTS,
 )
 
-/** The five tabs of the shopping bottom bar, in drawer order. */
+/**
+ * The five tabs of the shopping bottom bar, in drawer order.
+ *
+ * `CATALOG` (not `CATEGORIES`) is the second tab: the catalogue is the app's one
+ * discovery surface and it contains the Categories and Brands panes, so the bar
+ * does not need — and must not have — a second, competing directory tab. The
+ * Categories drawer entry stays, and opens the same screen on its Categories
+ * pane.
+ */
 private val BOTTOM_NAV_ROUTES = listOf(
   MaharaniRoutes.HOME,
-  MaharaniRoutes.CATEGORIES,
+  MaharaniRoutes.CATALOG,
   MaharaniRoutes.CART,
   MaharaniRoutes.ORDERS,
   MaharaniRoutes.ACCOUNT,
@@ -206,7 +216,16 @@ private fun RoutedShell(
 
   val bottomItems = routing.destinations.filter { it.route in BOTTOM_NAV_ROUTES }
   val drawerItems = routing.destinations.filter { it.route !in BOTTOM_NAV_ROUTES }
-  val showBottomBar = currentRoute in BOTTOM_NAV_ROUTES
+  // The drawer's "Categories" entry renders the SAME catalogue on its Categories
+  // pane, so it counts as the Catalog tab: the bar stays visible and keeps its
+  // selection instead of vanishing because a second route to one screen is open.
+  val selectedTabRoute = if (currentRoute == MaharaniRoutes.CATEGORIES) {
+    MaharaniRoutes.CATALOG
+  } else {
+    currentRoute
+  }
+  val showBottomBar = currentRoute in BOTTOM_NAV_ROUTES ||
+    currentRoute == MaharaniRoutes.CATEGORIES
   val currentLabel = routing.destinations.firstOrNull { it.route == currentRoute }?.label
     ?: routing.start.label
 
@@ -354,7 +373,7 @@ private fun RoutedShell(
           ) {
             bottomItems.forEach { destination ->
               NavigationBarItem(
-                selected = destination.route == currentRoute,
+                selected = destination.route == selectedTabRoute,
                 onClick = { selectTab(destination) },
                 icon = {
                   if (destination.route == MaharaniRoutes.CART) {
@@ -407,13 +426,6 @@ private fun RoutedShell(
               retailerHome = retailerHome,
               catalogRequest = catalogRequest,
               onOpenCatalog = ::openCatalog,
-              onOpenCategories = {
-                navController.navigate(MaharaniRoutes.CATEGORIES) {
-                  launchSingleTop = true
-                  restoreState = true
-                  popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                }
-              },
               onOpenProduct = { productId ->
                 navController.navigate(MaharaniRoutes.productDetail(productId))
               },
@@ -423,6 +435,13 @@ private fun RoutedShell(
               onSignOut = handleSignOut,
               onOpenAddresses = { navController.navigate(MaharaniRoutes.ADDRESS_BOOK) { launchSingleTop = true } },
               onOpenOrder = { orderId -> navController.navigate(MaharaniRoutes.orderDetail(orderId)) },
+              onOpenDestination = { route ->
+                navController.navigate(route) {
+                  launchSingleTop = true
+                  restoreState = true
+                  popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                }
+              },
             )
           }
         }
@@ -715,12 +734,13 @@ private fun DestinationSurface(
   retailerHome: Boolean,
   catalogRequest: CatalogRequest,
   onOpenCatalog: (CatalogRequest) -> Unit,
-  onOpenCategories: () -> Unit,
   onOpenProduct: (String) -> Unit,
   onViewOrders: () -> Unit,
   onSignOut: () -> Unit,
   onOpenAddresses: () -> Unit,
   onOpenOrder: (String) -> Unit,
+  /** Open another destination of this account (the Account tab's shortcuts). */
+  onOpenDestination: (String) -> Unit,
 ) {
   when (destination.route) {
     MaharaniRoutes.HOME -> if (retailerHome) {
@@ -729,7 +749,8 @@ private fun DestinationSurface(
           onOpenCatalog(CatalogRequest(search, categoryId, brandId, brandLabel))
         },
         onOpenProduct = onOpenProduct,
-        onOpenCategories = onOpenCategories,
+        // "View all" on a home rail opens the catalogue on that rail's pane.
+        onOpenDirectory = { tab -> onOpenCatalog(CatalogRequest(tab = tab)) },
       )
     } else {
       SessionHomeScreen(snapshot = snapshot, onSignOut = onSignOut)
@@ -740,14 +761,16 @@ private fun DestinationSurface(
       initialCategoryId = catalogRequest.categoryId,
       initialBrandId = catalogRequest.brandId,
       initialBrandLabel = catalogRequest.brandLabel,
+      initialTab = catalogRequest.tab,
       onOpenProduct = onOpenProduct,
     )
 
-    MaharaniRoutes.CATEGORIES -> CategoriesScreen(
-      onOpenCategory = { categoryId -> onOpenCatalog(CatalogRequest(categoryId = categoryId)) },
-      onOpenBrand = { brand ->
-        onOpenCatalog(CatalogRequest(brandId = brand.id, brandLabel = brand.name))
-      },
+    // One catalogue implementation, opened on its Categories pane. The drawer's
+    // "Categories" entry and the home rail's "View all" both land here, and the
+    // shopper can switch to Products or Brands without leaving the screen.
+    MaharaniRoutes.CATEGORIES -> CatalogScreen(
+      initialTab = CatalogTab.CATEGORIES,
+      onOpenProduct = onOpenProduct,
     )
 
     MaharaniRoutes.FAVORITES -> FavoritesScreen(
@@ -774,6 +797,8 @@ private fun DestinationSurface(
       snapshot = snapshot,
       onSignOut = onSignOut,
       onOpenAddresses = onOpenAddresses,
+      onOpenOrders = onViewOrders,
+      onOpenDestination = { route -> onOpenDestination(route) },
     )
 
     else -> {

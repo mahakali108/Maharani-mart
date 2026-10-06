@@ -2,6 +2,7 @@ package com.maharanitraders.core.auth
 
 import com.maharanitraders.core.common.AppError
 import com.maharanitraders.core.common.AppResult
+import com.maharanitraders.core.common.SessionScopedStore
 import com.maharanitraders.core.common.TimeSource
 import com.maharanitraders.core.datastore.AppPreferences
 import com.maharanitraders.core.model.AccountGate
@@ -10,12 +11,14 @@ import com.maharanitraders.core.model.SessionTokens
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi
 import com.maharanitraders.core.network.ActiveTokenHolder
+import com.maharanitraders.core.network.TokenRefreshCoordinator
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.jvm.JvmSuppressWildcards
 
 /**
  * What the app shell is allowed to ask of the session layer.
@@ -92,10 +95,78 @@ class SessionManager @Inject constructor(
    * MaharaniApi → SessionManager a dependency cycle.
    */
   private val tokenHolder: ActiveTokenHolder,
+  /**
+   * The in-memory caches that belong to ONE account (favourites, the cart badge,
+   * the unread count). They are cleared whenever a session ends, so nothing the
+   * previous account loaded can be shown to the next one. Multibound, so this
+   * class never has to know which features have caches.
+   *
+   * `@JvmSuppressWildcards` is required: Kotlin's `Set<out E>` would otherwise
+   * emit `Set<? extends SessionScopedStore>`, which Dagger cannot match to the
+   * declared `Set<SessionScopedStore>` multibinding.
+   */
+  private val sessionScopedStores: Set<@JvmSuppressWildcards SessionScopedStore>,
+  /**
+   * Where the network layer asks for a fresh access token when a request comes
+   * back `401 invalid_token`. The session layer installs the block below, so the
+   * network layer never has to know who owns the refresh token.
+   */
+  private val tokenRefreshCoordinator: TokenRefreshCoordinator,
 ) : SessionController {
 
   private val _state = MutableStateFlow<SessionState>(SessionState.Restoring)
   override val state: StateFlow<SessionState> = _state.asStateFlow()
+
+  init {
+    // Installed once, for the life of the process. The block reads the refresh
+    // token from the encrypted store at call time (never a captured value), so a
+    // sign-in or sign-out that happened in between is always respected.
+    tokenRefreshCoordinator.install { refreshAccessToken() }
+  }
+
+  /**
+   * Exchange the stored refresh token for a new access token, for a request that
+   * was rejected with `401 invalid_token` while the app was running.
+   *
+   * Policy is identical to [restore]'s one launch-time attempt:
+   *  - success → the new pair is persisted and published to the interceptor;
+   *  - a REFUSED refresh token (401 / expired) → terminal: the session is
+   *    cleared and the shell is told to sign in again;
+   *  - a refresh that could not reach the server → the stored tokens stay, the
+   *    published session state is left ALONE (a network blip mid-screen must not
+   *    tear the screen down), and the request's original error is reported.
+   *
+   * The refresh call itself runs through the same API client; the coordinator's
+   * re-entrancy guard stops it from starting a second refresh on its own 401.
+   */
+  suspend fun refreshAccessToken(): String? {
+    val tokens = try {
+      tokenStore.read()
+    } catch (cancellation: CancellationException) {
+      throw cancellation
+    } catch (_: Exception) {
+      null
+    } ?: return null
+
+    return when (val refreshed = authRepository.refresh(tokens.refreshToken)) {
+      is AppResult.Success -> {
+        storeQuietly(refreshed.value)
+        tokenHolder.set(refreshed.value.accessToken)
+        refreshed.value.accessToken
+      }
+
+      is AppResult.Failure -> {
+        val transient = refreshed.error is AppError.Network || refreshed.error.retryable
+        if (!transient) {
+          clearStoredSession()
+          publish(SessionState.SignedOut(SignOutReason.SESSION_EXPIRED))
+        }
+        // A transient failure returns null without touching the published state:
+        // the screen keeps its content and the caller reports its own error.
+        null
+      }
+    }
+  }
 
   override fun accessToken(): String? = tokenHolder.accessToken()
 
@@ -145,6 +216,22 @@ class SessionManager @Inject constructor(
       tokens
     }
 
+    // THE ORDERING THAT MAKES RESTORE POSSIBLE.
+    //
+    // `GET /api/mobile/v1/session` is a bearer-authenticated endpoint, and the
+    // Authorization header comes from the interceptor reading this holder — so
+    // the token has to be published BEFORE the verification call, not after it.
+    // Setting it afterwards (the way this method originally read) sent every
+    // restore request anonymously: the server answered 401, the session layer
+    // obeyed its own "the token is dead" rule, and a shopper who had signed in
+    // yesterday was asked to sign in again on every cold start.
+    //
+    // Publishing it here is not a privilege escalation: this token arrived from
+    // Keystore-encrypted storage, the call that follows is the verification, and
+    // every failure path below (and every path in [handleFailure]) clears the
+    // holder again via [clearStoredSession]/[clearActiveToken].
+    tokenHolder.set(usable.accessToken)
+
     return when (val result = executor.executeEnvelope { api.session() }) {
       is AppResult.Success -> {
         val snapshot = mapper.toSnapshot(result.value)
@@ -152,9 +239,6 @@ class SessionManager @Inject constructor(
           clearStoredSession()
           publish(SessionState.SignedOut(SignOutReason.UNSUPPORTED_ACCOUNT))
         } else {
-          // The network layer may now use the token: this is the only place the
-          // in-memory token is ever set.
-          tokenHolder.set(usable.accessToken)
           publish(SessionState.Authenticated(snapshot))
         }
       }
@@ -186,14 +270,18 @@ class SessionManager @Inject constructor(
    * Sign in and publish the resulting state.
    *
    * The tokens are written to encrypted storage ONLY after the server has
-   * confirmed the credentials, and the in-memory token is set only after the
-   * session has been verified by [applyVerifiedSession] — so a half-finished
-   * sign-in leaves nothing usable behind.
+   * confirmed the credentials, and the in-memory token is published before the
+   * session is verified (see [restore] for why that ordering is required) — the
+   * verification call is what decides whether the account may proceed, and it
+   * needs the token to be authenticated at all.
+   *
+   * Unlike [restore], this does NOT publish [SessionState.Restoring] while the
+   * credentials are in flight: the shell would replace the sign-in screen (and
+   * its own progress state) with the brand splash and then have to come back.
+   * The screen keeps its own spinner, and the state changes exactly once.
    */
-  override suspend fun signIn(identifier: String, password: String): SessionState {
-    _state.value = SessionState.Restoring
-
-    return when (val result = authRepository.login(identifier, password)) {
+  override suspend fun signIn(identifier: String, password: String): SessionState =
+    when (val result = authRepository.login(identifier, password)) {
       is AppResult.Success -> {
         // A device can lose its encrypted token while the non-sensitive
         // idempotency key remains in DataStore. Clear session-scoped commerce
@@ -225,7 +313,6 @@ class SessionManager @Inject constructor(
 
       is AppResult.Failure -> publish(handleSignInFailure(result.error))
     }
-  }
 
   /**
    * Registration never grants access: a new retailer is pending approval until
@@ -339,13 +426,48 @@ class SessionManager @Inject constructor(
     }
   }
 
-  private fun publish(state: SessionState): SessionState {
+  /**
+   * Publish the one session state the shell observes.
+   *
+   * INVARIANT, enforced here rather than at each call site: session-scoped
+   * caches (favourites, cart badge, unread count) are only meaningful while the
+   * state is [SessionState.Authenticated]. The moment the session layer
+   * publishes anything else — signed out for any reason, or a stored session it
+   * could not verify — those caches are dropped. That is what makes "log out,
+   * then log in as another shop on the same phone" safe: the second account can
+   * only ever read data it fetched itself.
+   */
+  private suspend fun publish(state: SessionState): SessionState {
+    if (state !is SessionState.Authenticated) endSessionScopedState()
     _state.value = state
     return state
   }
 
+  /**
+   * Ask every session-scoped store to forget the account that was signed in.
+   *
+   * Failures are swallowed on purpose: a cache that could not be cleared is not
+   * authorization (every read still goes to the server with the current token),
+   * and a sign-out must never be blocked by it.
+   */
+  private suspend fun endSessionScopedState() {
+    for (store in sessionScopedStores) {
+      try {
+        store.onSessionEnded()
+      } catch (cancellation: CancellationException) {
+        throw cancellation
+      } catch (_: Exception) {
+        // See doc comment.
+      }
+    }
+  }
+
   private suspend fun clearSessionScopedForNewLogin(): Boolean {
     try {
+      // Both kinds of session-scoped state, before the new account is accepted:
+      // the persisted commerce recovery key in DataStore, and the in-memory
+      // caches that belong to whoever was signed in before.
+      endSessionScopedState()
       appPreferences.clearSessionScoped()
       return true
     } catch (cancellation: CancellationException) {
@@ -386,5 +508,8 @@ class SessionManager @Inject constructor(
 
   private fun clearActiveToken() {
     tokenHolder.clear()
+    // The coordinator caches the last token it produced; drop it with the token
+    // itself, so one account's access token can never be handed to another.
+    tokenRefreshCoordinator.reset()
   }
 }

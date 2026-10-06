@@ -53,9 +53,11 @@ data class MaharaniExtraColors(
 )
 
 internal val LightExtraColors = MaharaniExtraColors(
-  action = MaharaniPalette.ActionBlue500,
-  actionContainer = MaharaniPalette.ActionBlue50,
-  onActionContainer = MaharaniPalette.ActionBlue700,
+  // The buy actions (add to cart, place order) are the primary royal blue:
+  // one blue family across chrome and commerce, so nothing has to be learned.
+  action = MaharaniPalette.RoyalBlue600,
+  actionContainer = MaharaniPalette.RoyalBlue50,
+  onActionContainer = MaharaniPalette.RoyalBlue700,
   inStock = MaharaniPalette.Success600,
   inStockSurface = MaharaniPalette.Success50,
   outOfStock = MaharaniPalette.OutOfStockRose,
@@ -66,9 +68,11 @@ internal val LightExtraColors = MaharaniExtraColors(
   brandMarkSurface = MaharaniPalette.BrandRed50,
   saffron = MaharaniPalette.Saffron600,
   saffronSurface = MaharaniPalette.Saffron50,
-  onSaffronSurface = MaharaniPalette.Saffron700,
-  appBarStart = MaharaniPalette.ActionBlue600,
-  appBarEnd = MaharaniPalette.ActionBlue500,
+  onSaffronSurface = MaharaniPalette.Saffron800,
+  // The app bar's two-stop royal gradient: deep at the top edge, lighter behind
+  // the search field, so the header reads as premium without a loud gradient.
+  appBarStart = MaharaniPalette.RoyalBlue700,
+  appBarEnd = MaharaniPalette.RoyalBlue500,
   onAppBar = MaharaniPalette.White,
   onAppBarMuted = Color(0xD9FFFFFF),
   appBarField = MaharaniPalette.White,
@@ -82,9 +86,9 @@ internal val LightExtraColors = MaharaniExtraColors(
 )
 
 internal val DarkExtraColors = MaharaniExtraColors(
-  action = MaharaniPalette.ActionBlue400,
-  actionContainer = MaharaniPalette.ActionBlue900,
-  onActionContainer = MaharaniPalette.ActionBlue100,
+  action = MaharaniPalette.RoyalBlue400,
+  actionContainer = MaharaniPalette.RoyalBlue900,
+  onActionContainer = MaharaniPalette.RoyalBlue100,
   inStock = MaharaniPalette.Success50,
   inStockSurface = MaharaniPalette.Success900,
   outOfStock = MaharaniPalette.OutOfStockRoseDark,
@@ -96,8 +100,8 @@ internal val DarkExtraColors = MaharaniExtraColors(
   saffron = MaharaniPalette.Saffron300,
   saffronSurface = MaharaniPalette.Saffron900,
   onSaffronSurface = MaharaniPalette.Saffron100,
-  appBarStart = MaharaniPalette.ActionBlue800,
-  appBarEnd = MaharaniPalette.ActionBlue700,
+  appBarStart = MaharaniPalette.RoyalBlue900,
+  appBarEnd = MaharaniPalette.RoyalBlue800,
   onAppBar = MaharaniPalette.White,
   onAppBarMuted = Color(0xB3FFFFFF),
   appBarField = MaharaniPalette.SurfaceDarkHigh,
