@@ -25,12 +25,11 @@ const val BRAND_SPLASH_TAG = "brand_splash"
  * In-app continuation of the system splash: the same brand red, the same
  * wordmark, while stored credentials are verified with the server.
  *
- * The red here is pinned rather than themed. The system splash
- * (`themes.xml` → `@color/brand_red`) and the launcher icon are brand red, and
- * the native shopping redesign makes the in-app chrome Maharani blue; if this
- * surface followed `colorScheme.primary` the handoff would be red → blue → red
- * as the app restores the session. Identity stays red, commerce chrome is blue:
- * see `docs/NATIVE_UI_REDESIGN.md`.
+ * The red here is pinned rather than themed, so this surface cannot change if
+ * the scheme is ever re-tuned. It also happens to MATCH the chrome now: the
+ * native shopping app's app bars and selected controls are brand red too, so
+ * the launcher icon → system splash → this surface → home screen sequence reads
+ * as one product with no colour seam. See `docs/NATIVE_UI_REDESIGN.md` §2.
  *
  * It shows no account data — nothing about the user is displayed until the
  * server has confirmed the session.

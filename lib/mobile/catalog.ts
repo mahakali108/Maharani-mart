@@ -255,13 +255,22 @@ export function toMobileCatalogProducts(cards: PricedCatalogCard[]): MobileCatal
 // Categories / brands
 // ---------------------------------------------------------------------------
 
-/** The row shape the retailer home already reads for the category strip. */
+/**
+ * The columns the taxonomy read selects.
+ *
+ * Deliberately PLAIN columns: no `products(count)` aggregate embed. Counting
+ * through an aggregate is a second, optional PostgREST capability
+ * (`db-aggregates-enabled`), and when it is unavailable the *whole* query fails
+ * — which would take the category list down with it, not just its counts. The
+ * taxonomy is read the same way the catalogue's own filter scope reads it
+ * (`loadTaxonomyRows`), i.e. through the one query shape this API has already
+ * proven against the caller's RLS, and the counts are derived separately.
+ */
 export interface MobileCategoryRow {
   id: string;
   name: string;
   image_url: string | null;
   parent_id: string | null;
-  products: { count: number }[] | null;
 }
 
 export interface MobileCatalogCategory {
@@ -277,24 +286,31 @@ export interface MobileCatalogCategory {
  * Parent categories with their rolled-up active product count.
  *
  * Mirrors `homeCategories` in `lib/retailer/home-data.ts` — the same scope
- * (parent + its active immediate children) and the same honesty rule: a missing
- * aggregate yields `null`, never an invented zero.
+ * (parent + its active immediate children) and the same honesty rule: a count
+ * the server could not read completely is `null`, never an invented zero. A
+ * category that genuinely has no active products is a real `0` (the scan
+ * completed, so the absence of a row IS the answer).
+ *
+ * A flat taxonomy (no parent rows at all) is listed in full rather than
+ * silently emptied.
  */
-export function toMobileCategories(rows: MobileCategoryRow[]): MobileCatalogCategory[] {
+export function toMobileCategories(
+  rows: MobileCategoryRow[],
+  counts: ReadonlyMap<string, number> | null
+): MobileCatalogCategory[] {
   const parents = rows.filter((row) => !row.parent_id);
   const shown = parents.length > 0 ? parents : rows;
 
   return shown.map((row) => {
     const scope = rows.filter((candidate) => candidate.id === row.id || candidate.parent_id === row.id);
-    const known = scope.every((candidate) => candidate.products?.[0]?.count != null);
     return {
       id: row.id,
       name: row.name,
       imageUrl: resolveMediaUrl(row.image_url),
       parentName: null,
-      productCount: known
-        ? scope.reduce((sum, candidate) => sum + (candidate.products?.[0]?.count ?? 0), 0)
-        : null,
+      productCount: counts === null
+        ? null
+        : scope.reduce((sum, candidate) => sum + (counts.get(candidate.id) ?? 0), 0),
     };
   });
 }
@@ -303,7 +319,6 @@ export interface MobileBrandRow {
   id: string;
   name: string;
   logo_url: string | null;
-  products: { count: number }[] | null;
 }
 
 export interface MobileCatalogBrand {
@@ -313,12 +328,15 @@ export interface MobileCatalogBrand {
   productCount: number | null;
 }
 
-export function toMobileBrands(rows: MobileBrandRow[]): MobileCatalogBrand[] {
+export function toMobileBrands(
+  rows: MobileBrandRow[],
+  counts: ReadonlyMap<string, number> | null
+): MobileCatalogBrand[] {
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     logoUrl: resolveMediaUrl(row.logo_url),
-    productCount: row.products?.[0]?.count ?? null,
+    productCount: counts === null ? null : counts.get(row.id) ?? 0,
   }));
 }
 

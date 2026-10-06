@@ -1,5 +1,6 @@
 package com.maharanitraders.feature.catalog.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.maharanitraders.core.designsystem.components.FactChip
 import com.maharanitraders.core.designsystem.components.FavoriteButton
@@ -40,16 +42,31 @@ const val FAVORITE_TOGGLE_TAG = "catalog_favorite_toggle"
 /**
  * One product card — the atom every rail and grid in the app is built from.
  *
+ * INFORMATION HIERARCHY (top to bottom, the order the eye reads a shelf in):
+ *   1. artwork, centred on its own light surface — never stretched, never
+ *      cropped into an unreadable label;
+ *   2. brand, small and muted (the shop's own grouping);
+ *   3. product name, two lines, dark and semibold — the loudest text;
+ *   4. pack size and case configuration as chips;
+ *   5. the PRICE, bold, with the printed MRP struck through beside it when the
+ *      server published one;
+ *   6. MOQ under the price ("Min order 4 pcs");
+ *   7. the stock state as a chip, green in stock / rose unavailable.
+ *
  * Every field is server-supplied: the image URL the media resolver produced,
  * the pack size, units per case and MOQ from the pack row, the GST-inclusive
  * per-piece price the pricing engine returned, and the two-state stock status.
- * Nothing is estimated on the device, and nothing that the server did not send
- * is drawn: no rating, no review count, no discount percentage, no crossed-out
- * price unless the server actually published an MRP.
+ * Nothing is estimated on the device, and nothing the server did not send is
+ * drawn: no rating, no review count, no invented discount percentage, no
+ * crossed-out price unless an MRP really exists.
  *
  * A product with no active pack renders its name and an explicit "No pack
  * available" line: it stays browsable, but there is no price to misread and no
  * affordance that suggests it can be ordered.
+ *
+ * HEIGHT STABILITY: the name block is pinned to two lines and the artwork to a
+ * 1:1 band, so cards in a row line up instead of forming a ragged wall — the
+ * "unfinished grid" look this redesign removes.
  */
 @Composable
 fun ProductCard(
@@ -74,11 +91,12 @@ fun ProductCard(
     onClick = onClick,
     shape = RoundedCornerShape(MaharaniDimens.radiusCard),
     color = MaterialTheme.colorScheme.surface,
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     shadowElevation = MaharaniDimens.cardElevation,
     modifier = modifier.testTag(PRODUCT_CARD_TAG),
   ) {
     Column(
-      modifier = Modifier.padding(MaharaniDimens.spaceMd),
+      modifier = Modifier.padding(CARD_PADDING),
       verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
     ) {
       Box(modifier = Modifier.fillMaxWidth()) {
@@ -92,15 +110,16 @@ fun ProductCard(
             .clip(RoundedCornerShape(MaharaniDimens.radiusTile)),
         )
 
-        // An out-of-stock pack dims the artwork so a scrolling shopper sees the
-        // state before reading the label.
+        // An out-of-stock pack is washed out, so a scrolling shopper sees the
+        // state before reading the label. Kept light — the artwork stays
+        // recognisable and the chip below carries the words.
         if (outOfStock) {
           Box(
             modifier = Modifier
               .fillMaxWidth()
               .aspectRatio(MaharaniDimens.productImageRatio)
               .clip(RoundedCornerShape(MaharaniDimens.radiusTile))
-              .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
+              .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)),
           )
         }
 
@@ -123,6 +142,7 @@ fun ProductCard(
             onToggle = onToggleFavorite,
             modifier = Modifier
               .align(Alignment.TopEnd)
+              .padding(MaharaniDimens.spaceXs)
               .testTag(FAVORITE_TOGGLE_TAG),
           )
         }
@@ -131,9 +151,10 @@ fun ProductCard(
       Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs)) {
         product.brandName?.let { brand ->
           Text(
-            text = brand,
+            text = brand.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
@@ -144,6 +165,8 @@ fun ProductCard(
           color = MaterialTheme.colorScheme.onSurface,
           maxLines = 2,
           overflow = TextOverflow.Ellipsis,
+          // Pinned to two lines: one product with a long name must not make
+          // every other card in the row a different height.
           minLines = 2,
         )
       }
@@ -201,3 +224,11 @@ fun ProductCard(
     }
   }
 }
+
+/**
+ * Card padding, one value for every grid and rail.
+ *
+ * 10dp rather than 12dp: at 360dp two cards leave ~159dp each, and this is the
+ * difference between a 2-line product name fitting and being clipped.
+ */
+private val CARD_PADDING = 10.dp

@@ -1,5 +1,6 @@
 package com.maharanitraders.core.designsystem.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
@@ -59,9 +60,15 @@ fun MaharaniSearchBar(
   Surface(
     modifier = modifier.fillMaxWidth(),
     shape = RoundedCornerShape(MaharaniDimens.radiusField),
-    color = if (onBar) tokens.appBarField else MaterialTheme.colorScheme.surface,
+    // On a page the field is a soft neutral well with a hairline edge, not a
+    // white pill on a white header: a shadow alone made it read as a blank strip
+    // in the middle of the catalogue.
+    color = if (onBar) tokens.appBarField else MaterialTheme.colorScheme.surfaceContainerLow,
     contentColor = if (onBar) tokens.onAppBarField else MaterialTheme.colorScheme.onSurface,
-    shadowElevation = if (onBar) 0.dp else MaharaniDimens.cardElevation,
+    border = if (onBar) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    // No shadow on either variant: depth on a page comes from the field's own
+    // tone and hairline edge, and on the app bar there is nothing to cast onto.
+    shadowElevation = 0.dp,
   ) {
     Row(
       modifier = Modifier

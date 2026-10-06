@@ -508,6 +508,73 @@ class CatalogViewModelTest {
   }
 
   @Test
+  fun `clearing the scope drops the category and the brand in one request`() =
+    runTest(dispatcher) {
+      val api = api()
+      repeat(4) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }
+
+      val viewModel = viewModel(api)
+      advanceUntilIdle()
+
+      // A category from the Categories pane, then a brand on top of it: exactly
+      // the state the "All" control exists to undo.
+      viewModel.selectCategory("c1")
+      advanceUntilIdle()
+      viewModel.selectBrand("b1", "India Gate")
+      advanceUntilIdle()
+      assertThat(viewModel.state.value.brandLabel).isEqualTo("India Gate")
+      val before = api.productRequests.size
+
+      viewModel.clearScope()
+      advanceUntilIdle()
+
+      // ONE read. Clearing both through selectCategory(null) + selectBrand(null)
+      // fired two, and the first response could land after the second.
+      assertThat(api.productRequests).hasSize(before + 1)
+      val cleared = api.productRequests.last()
+      assertThat(cleared.categoryId).isNull()
+      assertThat(cleared.brandId).isNull()
+      assertThat(viewModel.state.value.query.categoryId).isNull()
+      assertThat(viewModel.state.value.query.brandId).isNull()
+      assertThat(viewModel.state.value.brandLabel).isNull()
+    }
+
+  @Test
+  fun `clearing an empty scope costs no request`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1"), resultCount = 1))
+
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    val requests = api.productRequests.size
+
+    viewModel.clearScope()
+    advanceUntilIdle()
+
+    assertThat(api.productRequests).hasSize(requests)
+  }
+
+  @Test
+  fun `the search action searches at once instead of waiting for the debounce`() =
+    runTest(dispatcher) {
+      val api = api()
+      repeat(3) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }
+
+      val viewModel = viewModel(api)
+      advanceUntilIdle()
+      val before = api.productRequests.size
+
+      // Typing schedules a debounced read; the keyboard's search action must
+      // replace it, not add to it: one term, one read.
+      viewModel.onSearchChange("rice")
+      viewModel.submitSearch()
+      advanceUntilIdle()
+
+      assertThat(api.productRequests).hasSize(before + 1)
+      assertThat(api.productRequests.last().search).isEqualTo("rice")
+    }
+
+  @Test
   fun `does not re-request when the same pane is selected twice`() = runTest(dispatcher) {
     val api = api()
     api.productPages.addLast(envelope(listOf("p1"), resultCount = 1))

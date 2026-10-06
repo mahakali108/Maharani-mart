@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,12 +39,15 @@ import com.maharanitraders.feature.catalog.ui.CatalogTags
  * The directory tiles the Catalogue's Categories and Brands panes are built
  * from.
  *
- * Both tiles are the SAME component shape on purpose — image, name, server
- * count, and a selected state that is visible before it is read (a check badge
- * and the primary border, not colour alone). A shopper who learns one pane has
- * learned the other, and neither tile can show a count the server did not send:
- * a missing `productCount` is omitted rather than rounded into "0 items".
+ * Both tiles are the SAME component shape on purpose — artwork, name, server
+ * count, and a selected state that is visible before it is read (a filled tick
+ * badge, a red border AND the soft pink surface, not colour alone). A shopper
+ * who learns one pane has learned the other, and neither tile can show a count
+ * the server did not send: a missing `productCount` is omitted rather than
+ * rounded into "0 items".
  *
+ * Sizes are fixed rather than content-driven, so a two-column grid at 360dp
+ * lines up: 96dp artwork band on top, a two-line name block, one count line.
  * Tapping a tile applies that filter and moves to the product list, so the
  * selection the shopper just made is immediately visible in real products.
  */
@@ -63,31 +67,35 @@ fun DirectoryAllCard(
     contentDescription = "All products",
     modifier = modifier.testTag(CatalogTags.DIRECTORY_ALL),
   ) {
-    Column(
-      modifier = Modifier.padding(MaharaniDimens.spaceMd),
-      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
-    ) {
+    Column {
       Box(
         modifier = Modifier
-          .size(48.dp)
-          .clip(CircleShape)
+          .fillMaxWidth()
+          .height(TILE_ART_HEIGHT)
           .background(tokens.appBarStart),
         contentAlignment = Alignment.Center,
       ) {
-        CheckGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
+        Box(
+          modifier = Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(tokens.onAppBar.copy(alpha = 0.16f)),
+          contentAlignment = Alignment.Center,
+        ) {
+          CheckGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
+        }
       }
-      Text(
-        text = "All products",
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-      Text(
-        text = totalCount?.let { count -> "Browse all $count items" } ?: "Browse the whole catalogue",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 2,
+      TileCaption(
+        title = "All products",
+        // The count is the CATALOGUE TOTAL and is only ever shown when this tile
+        // is the applied scope — otherwise the number would belong to the
+        // filtered result set and would be a lie about the whole shop. With no
+        // count from the server the subtitle stays in words.
+        subtitle = when {
+          selected && totalCount != null -> "$totalCount products in the catalogue"
+          selected -> "Every published product"
+          else -> "Clear this filter"
+        },
       )
     }
   }
@@ -112,16 +120,11 @@ fun CategoryCard(
         ProductImage(
           url = category.imageUrl,
           fallbackLabel = category.name,
-          contentScale = ContentScale.Crop,
+          contentScale = ContentScale.Fit,
+          brandedMonogram = true,
           modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 88.dp, max = 104.dp)
-            .clip(
-              RoundedCornerShape(
-                topStart = MaharaniDimens.radiusCard,
-                topEnd = MaharaniDimens.radiusCard,
-              )
-            ),
+            .height(TILE_ART_HEIGHT),
         )
         if (selected) {
           SelectionBadge(
@@ -131,24 +134,10 @@ fun CategoryCard(
           )
         }
       }
-      Column(
-        modifier = Modifier.padding(MaharaniDimens.spaceMd),
-        verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
-      ) {
-        Text(
-          text = category.name,
-          style = MaterialTheme.typography.titleSmall,
-          color = MaterialTheme.colorScheme.onSurface,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-          text = category.productCount?.let { count -> "$count items" } ?: "Tap to browse",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 1,
-        )
-      }
+      TileCaption(
+        title = category.name,
+        subtitle = category.productCount?.let { count -> countLabel(count) } ?: "Tap to browse",
+      )
     }
   }
 }
@@ -172,7 +161,7 @@ fun BrandCard(
         Box(
           modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 88.dp, max = 104.dp)
+            .height(TILE_ART_HEIGHT)
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(MaharaniDimens.spaceMd),
           contentAlignment = Alignment.Center,
@@ -181,8 +170,9 @@ fun BrandCard(
             url = brand.logoUrl,
             fallbackLabel = brand.name,
             contentScale = ContentScale.Fit,
+            brandedMonogram = true,
             modifier = Modifier
-              .size(64.dp)
+              .size(60.dp)
               .clip(RoundedCornerShape(MaharaniDimens.radiusTile)),
           )
         }
@@ -194,24 +184,10 @@ fun BrandCard(
           )
         }
       }
-      Column(
-        modifier = Modifier.padding(MaharaniDimens.spaceMd),
-        verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
-      ) {
-        Text(
-          text = brand.name,
-          style = MaterialTheme.typography.titleSmall,
-          color = MaterialTheme.colorScheme.onSurface,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-          text = brand.productCount?.let { count -> "$count items" } ?: "Tap to browse",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 1,
-        )
-      }
+      TileCaption(
+        title = brand.name,
+        subtitle = brand.productCount?.let { count -> countLabel(count) } ?: "Tap to browse",
+      )
     }
   }
 }
@@ -220,9 +196,9 @@ fun BrandCard(
  * The one card shape both directory tiles use.
  *
  * [selected] is carried by three cues at once — a thicker primary border, the
- * primary-tinted surface and the check badge — because a single colour change
- * is easy to miss on a 2-column grid, and colour alone would say nothing to a
- * shopper who cannot distinguish it.
+ * primary-tinted surface and the filled tick badge — because a single colour
+ * change is easy to miss on a 2-column grid, and colour alone would say nothing
+ * to a shopper who cannot distinguish it.
  */
 @Composable
 private fun TileSurface(
@@ -242,7 +218,7 @@ private fun TileSurface(
     border = if (selected) {
       BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
     } else {
-      null
+      BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     },
     shadowElevation = MaharaniDimens.cardElevation,
     modifier = modifier
@@ -256,15 +232,47 @@ private fun TileSurface(
   }
 }
 
-/** The gold-ringed tick that marks the filter currently applied. */
+/** Name (two lines, so tiles align) plus the one server-supplied fact line. */
+@Composable
+private fun TileCaption(title: String, subtitle: String) {
+  Column(
+    modifier = Modifier.padding(
+      start = MaharaniDimens.spaceMd,
+      end = MaharaniDimens.spaceMd,
+      top = MaharaniDimens.spaceSm,
+      bottom = MaharaniDimens.spaceMd,
+    ),
+    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
+  ) {
+    Text(
+      text = title,
+      style = MaterialTheme.typography.titleSmall,
+      color = MaterialTheme.colorScheme.onSurface,
+      maxLines = 2,
+      overflow = TextOverflow.Ellipsis,
+      minLines = 2,
+    )
+    Text(
+      text = subtitle,
+      style = MaterialTheme.typography.labelSmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+}
+
+/** One count, one vocabulary: "1 item" never reads as "1 items". */
+private fun countLabel(count: Int): String = if (count == 1) "1 item" else "$count items"
+
+/** The filled brand tick that marks the filter currently applied. */
 @Composable
 private fun SelectionBadge(modifier: Modifier = Modifier) {
-  val tokens = MaharaniThemeTokens.colors
   Surface(
     shape = CircleShape,
-    color = tokens.saffronSurface,
-    contentColor = tokens.onSaffronSurface,
-    border = BorderStroke(1.dp, tokens.saffron),
+    color = MaterialTheme.colorScheme.primary,
+    contentColor = MaterialTheme.colorScheme.onPrimary,
+    border = BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
     modifier = modifier
       .size(26.dp)
       .testTag(CatalogTags.DIRECTORY_SELECTED),
@@ -274,10 +282,13 @@ private fun SelectionBadge(modifier: Modifier = Modifier) {
       horizontalArrangement = Arrangement.Center,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      CheckGlyph(modifier = Modifier.size(14.dp), tint = tokens.onSaffronSurface)
+      CheckGlyph(modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary)
     }
   }
 }
+
+/** The one artwork band height both tiles use, so a mixed row still lines up. */
+private val TILE_ART_HEIGHT = 96.dp
 
 /** A short label used above each directory pane's grid. */
 @Composable

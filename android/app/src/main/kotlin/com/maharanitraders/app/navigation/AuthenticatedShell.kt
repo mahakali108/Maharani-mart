@@ -295,6 +295,10 @@ private fun RoutedShell(
             onSearchSubmit = { openCatalog(CatalogRequest(search = homeSearch.trim())) },
             onOpenDrawer = ::openDrawer,
             onOpenAccount = { showAccount.value = true },
+            onOpenNotifications = {
+              navController.navigate(MaharaniRoutes.NOTIFICATIONS) { launchSingleTop = true }
+            },
+            unreadCount = unreadCount,
           )
 
           currentRoute == MaharaniRoutes.PRODUCT_DETAIL ||
@@ -324,8 +328,14 @@ private fun RoutedShell(
 
           else -> TopAppBar(
             title = {
+              // The two browse surfaces carry the brand lockup itself; the
+              // catalogue's own tab strip already answers "which catalogue
+              // pane am I on", so the app bar spends its width on the name that
+              // must never be cut off. Every other route names itself.
               if (currentRoute == MaharaniRoutes.HOME) {
                 BrandLockup()
+              } else if (currentRoute == MaharaniRoutes.CATALOG) {
+                BrandLockup(subtitle = currentLabel)
               } else {
                 Text(currentLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
               }
@@ -549,13 +559,18 @@ private fun RoutedShell(
 }
 
 /**
- * The shopping app bar: brand, the shop the server verified, the account entry
- * and the always-visible search field — the reference UX's signature layout,
- * drawn in Maharani blue with the crown mark.
+ * The shopping app bar: brand, the shop the server verified, the notification
+ * and account entries, and the always-visible search field.
  *
- * The bar extends behind the status bar (edge-to-edge) and pads its own
- * content, so the blue is continuous from the top of the window down to the
- * search field.
+ * It is drawn in the MAHARANI BRAND RED (the app-bar gradient pair in
+ * `ExtraColors`) rather than a marketplace blue, and it extends behind the
+ * status bar (edge-to-edge) and pads its own content, so the brand colour is
+ * continuous from the top of the window down to the search field.
+ *
+ * Width discipline at 360dp: the menu, the bell and the account action are
+ * three fixed 48dp targets, and everything left over goes to the shop's name —
+ * which is why the title is no longer truncated and why the lockup carries no
+ * second brand mark of its own.
  */
 @Composable
 private fun RetailerHomeTopBar(
@@ -565,6 +580,8 @@ private fun RetailerHomeTopBar(
   onSearchSubmit: () -> Unit,
   onOpenDrawer: () -> Unit,
   onOpenAccount: () -> Unit,
+  onOpenNotifications: () -> Unit,
+  unreadCount: Int?,
   modifier: Modifier = Modifier,
 ) {
   val tokens = MaharaniThemeTokens.colors
@@ -591,18 +608,10 @@ private fun RetailerHomeTopBar(
           MenuGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
         }
 
-        Box(
-          modifier = Modifier
-            .size(34.dp)
-            .background(
-              color = tokens.onAppBar.copy(alpha = 0.16f),
-              shape = RoundedCornerShape(10.dp),
-            ),
-          contentAlignment = Alignment.Center,
-        ) {
-          CrownGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
-        }
-
+        // No separate brand mark here: the title beside it already says
+        // "Maharani Traders", and the 34dp badge it replaced was the reason the
+        // shop's name ellipsised at 360dp. The bar now gives its width to the
+        // name, the bell and the account action, in that order.
         Column(
           modifier = Modifier.weight(1f),
           verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
@@ -622,6 +631,25 @@ private fun RetailerHomeTopBar(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
+        }
+
+        IconButton(
+          onClick = onOpenNotifications,
+          modifier = Modifier.testTag(ShellTags.NOTIFICATIONS),
+        ) {
+          BadgedBox(
+            badge = {
+              // Same rule as the standard bar: only a server-reported count is
+              // ever drawn, and 99+ caps the bubble.
+              if (unreadCount != null && unreadCount!! > 0) {
+                Badge(modifier = Modifier.testTag(ShellTags.NOTIFICATIONS_BADGE)) {
+                  Text(if (unreadCount!! > 99) "99+" else unreadCount.toString())
+                }
+              }
+            },
+          ) {
+            BellGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
+          }
         }
 
         IconButton(
@@ -662,21 +690,39 @@ private fun BottomBarIcon(route: String, modifier: Modifier = Modifier) {
  * with the theme.
  */
 @Composable
-private fun BrandLockup(modifier: Modifier = Modifier) {
+private fun BrandLockup(
+  modifier: Modifier = Modifier,
+  subtitle: String = "Wholesale for retailers",
+) {
   Row(
     modifier = modifier
+      .fillMaxWidth()
       .padding(vertical = 6.dp)
       .testTag(ShellTags.BRAND),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
-    CrownGlyph(modifier = Modifier.size(26.dp))
-    Column {
-      Text(text = "Maharani Traders", style = MaterialTheme.typography.titleMedium)
+    CrownGlyph(modifier = Modifier.size(24.dp))
+    Column(modifier = Modifier.weight(1f)) {
+      // The name is the one string on this bar that must not be cut off: it
+      // takes the leftover width (the two actions and the menu are fixed 48dp
+      // targets) and it is the FIRST thing to get that width, because the marks
+      // beside it are deliberately compact. At 360dp the name needs ~130dp of
+      // the ~205dp available, which leaves headroom for the largest system font
+      // scale a shop phone is likely to run.
       Text(
-        text = "Wholesale for retailers",
+        text = "Maharani Traders",
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        text = subtitle,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
       )
     }
   }

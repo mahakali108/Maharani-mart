@@ -1,5 +1,6 @@
 package com.maharanitraders.feature.catalog.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -40,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -162,6 +165,7 @@ fun CatalogScreen(
       state = state,
       favorites = favorites,
       onSearchChange = viewModel::onSearchChange,
+      onSearchSubmit = viewModel::submitSearch,
       onSelectTab = viewModel::selectTab,
       onDirectoryFilterChange = viewModel::onDirectoryFilterChange,
       onRetryDirectories = viewModel::retryDirectories,
@@ -170,6 +174,7 @@ fun CatalogScreen(
       onSelectSort = viewModel::selectSort,
       onToggleInStock = viewModel::toggleInStockOnly,
       onClearBrand = { viewModel.selectBrand(null) },
+      onClearScope = viewModel::clearScope,
       onClearFilters = viewModel::clearFilters,
       onRetry = viewModel::retry,
       onLoadMore = viewModel::loadMore,
@@ -185,11 +190,14 @@ fun CatalogContent(
   state: CatalogUiState,
   favorites: FavoritesSnapshot = FavoritesSnapshot(),
   onSearchChange: (String) -> Unit,
+  /** The keyboard's search action: search immediately instead of debouncing. */
+  onSearchSubmit: () -> Unit = {},
   onSelectTab: (CatalogTab) -> Unit = {},
   onDirectoryFilterChange: (String) -> Unit = {},
   onRetryDirectories: () -> Unit = {},
   onSelectCategory: (String?) -> Unit,
   onSelectBrand: (String, String?) -> Unit = { _, _ -> },
+  onClearScope: () -> Unit = {},
   onSelectSort: (CatalogSort) -> Unit,
   onToggleInStock: () -> Unit,
   onClearBrand: () -> Unit,
@@ -204,6 +212,7 @@ fun CatalogContent(
     CatalogHeader(
       state = state,
       onSearchChange = onSearchChange,
+      onSearchSubmit = onSearchSubmit,
       onDirectoryFilterChange = onDirectoryFilterChange,
       onSelectTab = onSelectTab,
     )
@@ -216,6 +225,7 @@ fun CatalogContent(
         onSelectSort = onSelectSort,
         onToggleInStock = onToggleInStock,
         onClearBrand = onClearBrand,
+        onClearScope = onClearScope,
         onClearFilters = onClearFilters,
         onRetry = onRetry,
         onLoadMore = onLoadMore,
@@ -253,57 +263,71 @@ fun CatalogContent(
  * the Products pane, and an on-device filter over the names the server already
  * sent on the directory panes. Both are the same component, so the two never
  * look or behave differently apart from that one, stated difference.
+ *
+ * The header is white with a hairline divider rather than a coloured block: the
+ * brand colour belongs to the app bar above it, and two saturated bands stacked
+ * on top of each other is what made the old screen read as "blue everywhere".
  */
 @Composable
 private fun CatalogHeader(
   state: CatalogUiState,
   onSearchChange: (String) -> Unit,
+  onSearchSubmit: () -> Unit,
   onDirectoryFilterChange: (String) -> Unit,
   onSelectTab: (CatalogTab) -> Unit,
 ) {
   Surface(
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = MaharaniDimens.appBarElevation,
     modifier = Modifier.fillMaxWidth(),
   ) {
-    Column(
-      modifier = Modifier.padding(
-        horizontal = MaharaniDimens.pageGutter,
-        vertical = MaharaniDimens.spaceSm,
-      ),
-      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
-    ) {
-      if (state.tab == CatalogTab.PRODUCTS) {
-        MaharaniSearchBar(
-          value = state.query.search,
-          onValueChange = onSearchChange,
-          onSubmit = { },
-          loading = state.loading && state.products.isNotEmpty(),
-          testTag = CatalogScreenTags.SEARCH_FIELD,
-        )
-      } else {
-        MaharaniSearchBar(
-          value = state.directoryFilter,
-          onValueChange = onDirectoryFilterChange,
-          onSubmit = { },
-          placeholder = if (state.tab == CatalogTab.BRANDS) {
-            "Filter brands"
-          } else {
-            "Filter categories"
-          },
-          loading = state.directoryLoading,
-          testTag = CatalogScreenTags.DIRECTORY_FILTER,
-        )
-      }
+    Column {
+      Column(
+        modifier = Modifier.padding(
+          start = MaharaniDimens.pageGutter,
+          end = MaharaniDimens.pageGutter,
+          top = MaharaniDimens.spaceSm,
+          bottom = MaharaniDimens.spaceMd,
+        ),
+        verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
+      ) {
+        if (state.tab == CatalogTab.PRODUCTS) {
+          MaharaniSearchBar(
+            value = state.query.search,
+            onValueChange = onSearchChange,
+            onSubmit = onSearchSubmit,
+            loading = state.loading && state.products.isNotEmpty(),
+            testTag = CatalogScreenTags.SEARCH_FIELD,
+          )
+        } else {
+          MaharaniSearchBar(
+            value = state.directoryFilter,
+            onValueChange = onDirectoryFilterChange,
+            onSubmit = { },
+            placeholder = if (state.tab == CatalogTab.BRANDS) {
+              "Filter brands"
+            } else {
+              "Filter categories"
+            },
+            loading = state.directoryLoading,
+            testTag = CatalogScreenTags.DIRECTORY_FILTER,
+          )
+        }
 
-      CatalogTabStrip(selected = state.tab, onSelect = onSelectTab)
+        CatalogTabStrip(selected = state.tab, onSelect = onSelectTab)
+      }
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
   }
 }
 
 /**
- * The Products pane: the filter chips the catalogue has always had, plus the
+ * The Products pane: the scope chips, the sort/stock controls, and the
  * paginated grid.
+ *
+ * The scope row is the answer to "where am I": whichever category or brand the
+ * shopper tapped is shown as a removable chip with the brand's own name, so the
+ * filtered list can never look like an unfiltered one. "All" is the same scope
+ * control with nothing selected.
  */
 @Composable
 private fun CatalogProductsPane(
@@ -313,38 +337,61 @@ private fun CatalogProductsPane(
   onSelectSort: (CatalogSort) -> Unit,
   onToggleInStock: () -> Unit,
   onClearBrand: () -> Unit,
+  onClearScope: () -> Unit,
   onClearFilters: () -> Unit,
   onRetry: () -> Unit,
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
   onToggleFavorite: ((String) -> Unit)?,
 ) {
-  Column(modifier = Modifier.fillMaxSize()) {
-    CatalogFilterBar(
-      state = state,
-      onSelectCategory = onSelectCategory,
-      onSelectSort = onSelectSort,
-      onToggleInStock = onToggleInStock,
-      onClearBrand = onClearBrand,
-    )
+  // The controls and the count live INSIDE the scroller, in the grid's header
+  // slot, so the cards get the whole screen once the shopper scrolls. They are
+  // still present in every non-list state below, because a failed or empty list
+  // must never also remove the filters that could fix it.
+  val controls: @Composable () -> Unit = {
+    Column(modifier = Modifier.fillMaxWidth()) {
+      CatalogScopeBar(
+        state = state,
+        onSelectCategory = onSelectCategory,
+        onClearBrand = onClearBrand,
+        onClearScope = onClearScope,
+        onSelectSort = onSelectSort,
+        onToggleInStock = onToggleInStock,
+      )
+      ResultSummary(
+        state = state,
+        onClearFilters = onClearFilters,
+        modifier = Modifier.padding(
+          horizontal = MaharaniDimens.pageGutter,
+          vertical = MaharaniDimens.spaceSm,
+        ),
+      )
+    }
+  }
 
-    ResultSummary(
-      state = state,
-      onClearFilters = onClearFilters,
-      modifier = Modifier.padding(
-        horizontal = MaharaniDimens.pageGutter,
-        vertical = MaharaniDimens.spaceSm,
-      ),
-    )
+  when {
+    // First load with nothing on screen yet: the skeleton IS the content, but
+    // the controls stay so the shopper is not trapped in a query they did not
+    // want while it loads.
+    state.products.isEmpty() && state.loading && state.errorMessage == null -> Column(
+      modifier = Modifier.fillMaxSize(),
+    ) {
+      controls()
+      ProductGridSkeleton(
+        columns = 2,
+        rows = 3,
+        modifier = Modifier.padding(
+          horizontal = MaharaniDimens.pageGutter,
+          vertical = MaharaniDimens.spaceSm,
+        ),
+      )
+    }
 
-    when {
-      state.loading && state.products.isEmpty() -> Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .padding(MaharaniDimens.pageGutter),
-      ) { ProductGridSkeleton(columns = 2, rows = 3) }
-
-      state.products.isEmpty() && state.errorMessage != null -> if (state.offline) {
+    state.products.isEmpty() && state.errorMessage != null -> Column(
+      modifier = Modifier.fillMaxSize(),
+    ) {
+      controls()
+      if (state.offline) {
         OfflineState(onRetry = onRetry)
       } else {
         ErrorState(
@@ -353,32 +400,180 @@ private fun CatalogProductsPane(
           onRetry = onRetry,
         )
       }
+    }
 
-      state.products.isEmpty() -> EmptyState(
-        title = "No products found",
-        message = "Nothing matches these filters. Try a different search term, or clear the " +
-          "filters to see the whole catalogue.",
-        actionLabel = "Clear filters",
-        onAction = onClearFilters,
-      )
+    // Empty is not an error, and a filtered empty list names the filter that
+    // emptied it instead of blaming "the filters" in general.
+    state.products.isEmpty() -> Column(modifier = Modifier.fillMaxSize()) {
+      controls()
+      val scope = state.selectedCategoryName ?: state.brandLabel ?: state.selectedBrand?.name
+      if (scope != null) {
+        EmptyState(
+          title = "Nothing in $scope yet",
+          message = "This ${if (state.selectedCategoryName != null) "category" else "brand"} " +
+            "has no products matching the current search. Show everything to keep browsing.",
+          actionLabel = "Show all products",
+          onAction = onClearScope,
+        )
+      } else {
+        EmptyState(
+          title = "No products found",
+          message = "Nothing matches these filters. Try a different search term, or clear the " +
+            "filters to see the whole catalogue.",
+          actionLabel = "Clear filters",
+          onAction = onClearFilters,
+        )
+      }
+    }
 
-      else -> ProductGrid(
-        products = state.products,
-        onOpenProduct = onOpenProduct,
-        state = rememberLazyGridState(),
-        modifier = Modifier.fillMaxSize(),
-        isFavorite = { product -> favorites.isFavorite(product.id, product.isFavorite) },
-        isFavoritePending = { product -> favorites.isPending(product.id) },
-        onToggleFavorite = onToggleFavorite,
-        footer = {
+    else -> ProductGrid(
+      products = state.products,
+      onOpenProduct = onOpenProduct,
+      state = rememberLazyGridState(),
+      modifier = Modifier.fillMaxSize(),
+      isFavorite = { product -> favorites.isFavorite(product.id, product.isFavorite) },
+      isFavoritePending = { product -> favorites.isPending(product.id) },
+      onToggleFavorite = onToggleFavorite,
+      header = {
+        item(span = { GridItemSpan(maxLineSpan) }) { controls() }
+      },
+      footer = {
+        // Rendered only when the footer has something to say: a continuation in
+        // flight, a continuation that failed, or a list that has ended. A blank
+        // 72dp strip under the last row would be exactly the "excessive empty
+        // space" this redesign removes.
+        if (state.loadingMore || state.errorMessage != null || !state.hasMore) {
           item(span = { GridItemSpan(maxLineSpan) }) {
             ContinuationFooter(state = state, onLoadMore = onLoadMore, onRetry = onRetry)
           }
-        },
+        }
+      },
+    )
+  }
+}
+
+/**
+ * The scope chips: All | Categories | Brands, each removable.
+ *
+ * Every chip sets a real server filter (or clears one) through the same
+ * callbacks the directory tiles use, so there is no control here that only
+ * looks interactive.
+ */
+@Composable
+private fun CatalogScopeBar(
+  state: CatalogUiState,
+  onSelectCategory: (String?) -> Unit,
+  onClearBrand: () -> Unit,
+  onClearScope: () -> Unit,
+  onSelectSort: (CatalogSort) -> Unit,
+  onToggleInStock: () -> Unit,
+) {
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(
+        start = MaharaniDimens.pageGutter,
+        end = MaharaniDimens.pageGutter,
+        top = MaharaniDimens.spaceSm,
+      ),
+    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+  ) {
+    // Row one: the scope, and nothing else. It scrolls because the shop's real
+    // taxonomy can be long, and the selected chip is the same control that
+    // clears it — no separate "remove filter" affordance to hunt for.
+    LazyRow(
+      modifier = Modifier
+        .fillMaxWidth()
+        .testTag(CatalogScreenTags.CATEGORY_CHIPS),
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      item(key = "all") {
+        FilterChip(
+          selected = state.query.categoryId == null && state.query.brandId == null,
+          onClick = onClearScope,
+          label = { Text("All") },
+          colors = catalogChipColors(),
+        )
+      }
+
+      // One chip per category the SERVER published, in the server's order. The
+      // list is already in memory — the directory panes and this row are two
+      // views of one read — so this costs no request at all.
+      items(state.categories, key = { "category-${it.id}" }) { category ->
+        val selected = state.query.categoryId == category.id
+        FilterChip(
+          selected = selected,
+          onClick = {
+            // Tapping the applied category clears it; tapping another switches.
+            // Both are one real query change.
+            onSelectCategory(if (selected) null else category.id)
+          },
+          label = {
+            Text(category.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          },
+          trailingIcon = if (selected) {
+            { CloseGlyph(modifier = Modifier.size(16.dp)) }
+          } else {
+            null
+          },
+          colors = catalogChipColors(),
+        )
+      }
+
+      // A brand scope arrives from the Brands pane or the home brand rail. It
+      // carries its own name, because with a long category row the brand chip
+      // can be scrolled off-screen and the summary line must still be truthful.
+      val brandLabel = state.brandLabel ?: state.selectedBrand?.name
+      if (state.query.brandId != null && brandLabel != null) {
+        item(key = "brand-${state.query.brandId}") {
+          FilterChip(
+            selected = true,
+            onClick = onClearBrand,
+            label = { Text(brandLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            trailingIcon = { CloseGlyph(modifier = Modifier.size(16.dp)) },
+            modifier = Modifier.testTag(CatalogScreenTags.BRAND_CHIP),
+            colors = catalogChipColors(),
+          )
+        }
+      }
+    }
+
+    // Row two: the controls that are not scope. Sort names the order it is using
+    // (never a generic "Sort" that hides the state), and the in-stock switch is
+    // filled when it is on.
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    ) {
+      SortMenu(
+        current = state.query.sort,
+        onSelect = onSelectSort,
+        modifier = Modifier.weight(1f, fill = false),
+      )
+      FilterChip(
+        selected = state.query.inStockOnly,
+        onClick = onToggleInStock,
+        label = { Text("In stock") },
+        modifier = Modifier.testTag(CatalogScreenTags.IN_STOCK_CHIP),
+        colors = catalogChipColors(),
       )
     }
   }
 }
+
+/** One chip treatment for the whole screen: brand red selected, neutral track. */
+@Composable
+private fun catalogChipColors() = FilterChipDefaults.filterChipColors(
+  containerColor = MaterialTheme.colorScheme.surface,
+  labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+  iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+  selectedContainerColor = MaterialTheme.colorScheme.primary,
+  selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+  selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+  selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimary,
+)
 
 /**
  * The Categories and Brands panes: one directory, two taxonomies.
@@ -450,16 +645,21 @@ private fun CatalogDirectoryPane(
         .fillMaxSize()
         .testTag(CatalogScreenTags.DIRECTORY_GRID),
       contentPadding = PaddingValues(
-        horizontal = MaharaniDimens.pageGutter,
-        vertical = MaharaniDimens.spaceMd,
+        start = MaharaniDimens.pageGutter,
+        end = MaharaniDimens.pageGutter,
+        top = MaharaniDimens.spaceSm,
+        bottom = MaharaniDimens.spaceLg,
       ),
       horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
       verticalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
     ) {
       item(span = { GridItemSpan(maxLineSpan) }) {
         Column(
-          verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
-          modifier = Modifier.testTag(CatalogScreenTags.DIRECTORY_SCOPE),
+          verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = MaharaniDimens.spaceXxs)
+            .testTag(CatalogScreenTags.DIRECTORY_SCOPE),
         ) {
           DirectoryScopeLabel(
             text = if (showingCategories) {
@@ -475,19 +675,23 @@ private fun CatalogDirectoryPane(
       }
 
       item {
+        // "All" clears the scope THIS pane controls — the other pane's filter is
+        // left alone, because a shopper who came to Brands to choose a brand
+        // should not lose the category they were browsing.
+        val allSelected = if (showingCategories) {
+          state.query.categoryId == null
+        } else {
+          state.query.brandId == null
+        }
         DirectoryAllCard(
-          selected = if (showingCategories) {
-            state.query.categoryId == null
-          } else {
-            state.query.brandId == null
-          },
+          selected = allSelected,
           onClick = {
-            // "All" clears whichever scope this pane controls; categories clear
-            // through the same null filter the chip row uses, brands through the
-            // brand chip's own clear action.
             if (showingCategories) onSelectCategory(null) else onClearBrand()
           },
-          totalCount = state.resultCount,
+          // A real catalogue total, and only when nothing is filtered: with a
+          // scope applied this number would describe the filtered list, not the
+          // shop.
+          totalCount = state.resultCount.takeIf { allSelected },
         )
       }
 
@@ -512,102 +716,6 @@ private fun CatalogDirectoryPane(
   }
 }
 
-/**
- * The category chips, the sort menu, the in-stock toggle and the active brand
- * chip. Unchanged behaviour: every one of them sets a server-side filter.
- */
-@Composable
-private fun CatalogFilterBar(
-  state: CatalogUiState,
-  onSelectCategory: (String?) -> Unit,
-  onSelectSort: (CatalogSort) -> Unit,
-  onToggleInStock: () -> Unit,
-  onClearBrand: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .padding(
-        horizontal = MaharaniDimens.pageGutter,
-        vertical = MaharaniDimens.spaceSm,
-      ),
-    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
-  ) {
-    LazyRow(
-      modifier = Modifier
-        .fillMaxWidth()
-        .testTag(CatalogScreenTags.CATEGORY_CHIPS),
-      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
-    ) {
-      item {
-        FilterChip(
-          selected = state.query.categoryId == null,
-          onClick = { onSelectCategory(null) },
-          label = { Text("All") },
-          colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-          ),
-        )
-      }
-      items(state.categories, key = { it.id }) { category ->
-        FilterChip(
-          selected = state.query.categoryId == category.id,
-          onClick = { onSelectCategory(category.id) },
-          label = { Text(category.name) },
-          colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-          ),
-        )
-      }
-    }
-
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
-    ) {
-      SortMenu(current = state.query.sort, onSelect = onSelectSort)
-      FilterChip(
-        selected = state.query.inStockOnly,
-        onClick = onToggleInStock,
-        label = { Text("In stock") },
-        modifier = Modifier.testTag(CatalogScreenTags.IN_STOCK_CHIP),
-        colors = FilterChipDefaults.filterChipColors(
-          selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-          selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-      )
-      val brand = state.brandLabel ?: state.selectedBrand?.name
-      if (state.query.brandId != null && brand != null) {
-        FilterChip(
-          selected = true,
-          onClick = onClearBrand,
-          label = { Text(brand, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-          trailingIcon = {
-            CloseGlyph(
-              modifier = Modifier.size(16.dp),
-              tint = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-          },
-          // A long brand name shares the header row with the sort button and
-          // the in-stock chip, so it takes only what is left and ellipsises.
-          modifier = Modifier
-            .weight(1f, fill = false)
-            .testTag(CatalogScreenTags.BRAND_CHIP),
-          colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-          ),
-        )
-      }
-    }
-  }
-}
-
 @Composable
 private fun SortMenu(
   current: CatalogSort,
@@ -617,23 +725,32 @@ private fun SortMenu(
   var expanded by remember { mutableStateOf(false) }
 
   Box(modifier = modifier) {
-    TextButton(
+    Surface(
       onClick = { expanded = true },
+      shape = RoundedCornerShape(MaharaniDimens.radiusPill),
+      color = MaterialTheme.colorScheme.surface,
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
       modifier = Modifier
-        .heightIn(min = MaharaniDimens.touchTarget)
+        .heightIn(min = 40.dp)
         .testTag(CatalogScreenTags.SORT_BUTTON),
     ) {
-      SortGlyph(
-        modifier = Modifier.size(16.dp),
-        tint = MaterialTheme.colorScheme.primary,
-      )
-      Text(
-        text = current.label,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        maxLines = 1,
-        modifier = Modifier.padding(start = MaharaniDimens.spaceXs),
-      )
+      Row(
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+      ) {
+        SortGlyph(
+          modifier = Modifier.size(16.dp),
+          tint = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+          text = current.label,
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
       CatalogSort.entries.forEach { sort ->
@@ -651,7 +768,7 @@ private fun SortMenu(
 
 /**
  * "N products", plus the two honest disclosures the catalogue service makes:
- * a capped working set, and an active filter set that can be cleared in one tap.
+ * a capped working set, and the active filter scope.
  */
 @Composable
 private fun ResultSummary(
@@ -659,6 +776,8 @@ private fun ResultSummary(
   onClearFilters: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val scope = listOfNotNull(state.selectedCategoryName, state.brandLabel ?: state.selectedBrand?.name)
+    .joinToString(" · ")
   val filtersActive = state.query.search.isNotBlank() ||
     state.query.categoryId != null ||
     state.query.brandId != null ||
@@ -686,6 +805,7 @@ private fun ResultSummary(
           else -> "$count products"
         },
         style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.testTag(CatalogScreenTags.RESULT_COUNT),
       )
@@ -698,13 +818,16 @@ private fun ResultSummary(
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
-      val scope = listOfNotNull(state.selectedCategoryName, state.brandLabel).joinToString(" · ")
       if (scope.isNotEmpty()) {
+        // The scope is repeated OUTSIDE the chip row as well: a long "All"…
+        // chip row scrolls, and a filter that scrolls out of sight reads as no
+        // filter at all.
         Text(
-          text = scope,
+          text = "Showing $scope",
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
         )
       }
     }
@@ -725,7 +848,11 @@ private fun ContinuationFooter(
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  if (state.hasMore) {
+  // Auto-continue as soon as the footer is visible, but NEVER while a
+  // continuation is failing: retrying a failing cursor automatically would turn
+  // one dead endpoint into an endless request loop. After a failure the shopper
+  // gets the explicit retry below.
+  if (state.hasMore && state.errorMessage == null) {
     LaunchedEffect(state.nextCursor) { onLoadMore() }
   }
 
@@ -768,7 +895,8 @@ private fun ContinuationFooter(
 
         // Reached only when the server said there is no next batch (or repeated
         // its cursor). An explicit end beats an endless spinner.
-        !state.hasMore -> Text(
+        else -> Text(
+
           text = "You have seen every product in this list.",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,

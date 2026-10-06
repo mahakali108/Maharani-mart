@@ -5,8 +5,8 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Brand tokens that Material 3's [androidx.compose.material3.ColorScheme] has no
- * slot for: the retailer "action" blue, stock states, the saffron accent, the
- * app-bar gradient and skeleton tones.
+ * slot for: the Maharani-red commerce chrome, stock states, the saffron accent,
+ * the app-bar gradient and skeleton tones.
  *
  * Read them through [MaharaniThemeTokens.colors] so screens never reach for a
  * palette constant directly and dark mode keeps working:
@@ -53,11 +53,12 @@ data class MaharaniExtraColors(
 )
 
 internal val LightExtraColors = MaharaniExtraColors(
-  // The buy actions (add to cart, place order) are the primary royal blue:
-  // one blue family across chrome and commerce, so nothing has to be learned.
-  action = MaharaniPalette.RoyalBlue600,
-  actionContainer = MaharaniPalette.RoyalBlue50,
-  onActionContainer = MaharaniPalette.RoyalBlue700,
+  // Buy actions (add to cart, place order, checkout) are the brand red: one
+  // family across chrome and commerce, so "where am I" and "what can I tap"
+  // are the same colour and the shop never looks like a marketplace clone.
+  action = MaharaniPalette.BrandRed600,
+  actionContainer = MaharaniPalette.BrandRed50,
+  onActionContainer = MaharaniPalette.BrandRed700,
   inStock = MaharaniPalette.Success600,
   inStockSurface = MaharaniPalette.Success50,
   outOfStock = MaharaniPalette.OutOfStockRose,
@@ -69,26 +70,30 @@ internal val LightExtraColors = MaharaniExtraColors(
   saffron = MaharaniPalette.Saffron600,
   saffronSurface = MaharaniPalette.Saffron50,
   onSaffronSurface = MaharaniPalette.Saffron800,
-  // The app bar's two-stop royal gradient: deep at the top edge, lighter behind
-  // the search field, so the header reads as premium without a loud gradient.
-  appBarStart = MaharaniPalette.RoyalBlue700,
-  appBarEnd = MaharaniPalette.RoyalBlue500,
+  // The app bar's two-stop brand gradient: deep at the top edge, a touch
+  // lighter behind the search field, so the header reads as premium Maharani
+  // red without a loud gradient. White content on it clears 4.5:1 at 600.
+  appBarStart = MaharaniPalette.BrandRed700,
+  appBarEnd = MaharaniPalette.BrandRed600,
   onAppBar = MaharaniPalette.White,
   onAppBarMuted = Color(0xD9FFFFFF),
   appBarField = MaharaniPalette.White,
   onAppBarField = MaharaniPalette.Ink900,
   appBarFieldHint = MaharaniPalette.Ink500,
-  skeletonBase = MaharaniPalette.Cool200,
-  skeletonHighlight = MaharaniPalette.Cool100,
-  imagePlaceholder = MaharaniPalette.Cool100,
+  skeletonBase = MaharaniPalette.Neutral200,
+  skeletonHighlight = MaharaniPalette.Neutral100,
+  // A neutral (not pink) tile behind artwork, so a photo is never tinted by the
+  // surface it loads on. Brand-tinted placeholder surfaces are opt-in per
+  // component (see the directory tiles' monogram).
+  imagePlaceholder = MaharaniPalette.Neutral100,
   onImagePlaceholder = MaharaniPalette.Ink400,
   scrim = Color(0x990B0B0B),
 )
 
 internal val DarkExtraColors = MaharaniExtraColors(
-  action = MaharaniPalette.RoyalBlue400,
-  actionContainer = MaharaniPalette.RoyalBlue900,
-  onActionContainer = MaharaniPalette.RoyalBlue100,
+  action = MaharaniPalette.BrandRed400,
+  actionContainer = MaharaniPalette.BrandRed900,
+  onActionContainer = MaharaniPalette.BrandRed100,
   inStock = MaharaniPalette.Success50,
   inStockSurface = MaharaniPalette.Success900,
   outOfStock = MaharaniPalette.OutOfStockRoseDark,
@@ -100,15 +105,15 @@ internal val DarkExtraColors = MaharaniExtraColors(
   saffron = MaharaniPalette.Saffron300,
   saffronSurface = MaharaniPalette.Saffron900,
   onSaffronSurface = MaharaniPalette.Saffron100,
-  appBarStart = MaharaniPalette.RoyalBlue900,
-  appBarEnd = MaharaniPalette.RoyalBlue800,
+  appBarStart = MaharaniPalette.BrandRed900,
+  appBarEnd = MaharaniPalette.BrandRed800,
   onAppBar = MaharaniPalette.White,
   onAppBarMuted = Color(0xB3FFFFFF),
   appBarField = MaharaniPalette.SurfaceDarkHigh,
   onAppBarField = MaharaniPalette.Ink50,
   appBarFieldHint = MaharaniPalette.Ink400,
   skeletonBase = MaharaniPalette.SurfaceDarkHigh,
-  skeletonHighlight = Color(0xFF2A3542),
+  skeletonHighlight = Color(0xFF332E31),
   imagePlaceholder = MaharaniPalette.SurfaceDarkHigh,
   onImagePlaceholder = MaharaniPalette.Ink500,
   scrim = Color(0xB3000000),

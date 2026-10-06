@@ -14,26 +14,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
- * Maharani Traders Material 3 theme — the native shopping redesign.
+ * Maharani Traders Material 3 theme — the native shopping UI.
  *
- * Mapping rationale (royal blue + warm gold, over the existing web tokens):
- *  - `primary`   → ROYAL / DEEP BLUE ([MaharaniPalette.RoyalBlue600]): the
- *    shopping app bar, bottom navigation, primary buttons, selection, links and
- *    progress. One deep blue family carries the whole commerce chrome, so
- *    "where am I" and "what can I tap" are the same colour everywhere.
+ * Mapping rationale (MAHARANI RED, over the existing web tokens):
+ *  - `primary`   → BRAND RED ([MaharaniPalette.BrandRed600], the same #C8102E
+ *    as the launcher asset and the web's `primary`): app bar, the selected
+ *    segment, bottom-navigation selection, primary buttons, links and progress.
+ *    One red family carries the whole commerce chrome, so "where am I" and
+ *    "what can I tap" are the same colour everywhere.
+ *  - `primaryContainer` → the soft pink supporting surface
+ *    ([MaharaniPalette.BrandRed50]) used behind selected tiles and the
+ *    bottom-navigation indicator.
  *  - `secondary` → WARM GOLD ([MaharaniPalette.Saffron500]): the accent that
- *    makes offers, counts and highlights pop against the blue — offer badges,
- *    the selected segment's edge, banner accents, the brand-filter chip.
- *  - `tertiary`  → BRAND RED (#C8102E): pure identity — the crown mark, the
- *    "New" ribbon, the launcher and the splash. It is never used for a
- *    destructive action, so red keeps meaning "Maharani", not "warning".
+ *    makes offers and highlights pop against red — offer badges, wholesale
+ *    emphasis, banner accents.
+ *  - `tertiary`  → BRAND RED as identity (the crown mark and the "New"
+ *    ribbon). Never a destructive action, so red keeps meaning "Maharani".
  *  - `error`     → rose, used for failures and "Out of stock" only.
  *
- * Backgrounds are the cool blue-tinted greys from [MaharaniPalette] so white
- * cards sit on one continuous shopping surface while every content surface
- * stays white (or near-black in dark mode). Elevation is carried by surfaces,
- * not shadows, and gradients appear in exactly two places (the app bar and the
- * splash), so the result is colourful and premium rather than neon.
+ * Backgrounds are WARM NEUTRALS ([MaharaniPalette.NeutralPage] and friends) so
+ * white cards sit on one continuous surface while every content surface stays
+ * white (or near-black in dark mode). There is no blue chrome anywhere: the
+ * biggest colour on screen is the brand red, the second is the page itself.
+ * Elevation is carried by surfaces, not shadows, and gradients appear in
+ * exactly two places (the app bar and the splash).
  *
  * Typography intentionally starts from the Material 3 defaults: the web's
  * Poppins is self-hosted with @fontsource, and bundling the Poppins TTFs for
@@ -41,11 +45,11 @@ import androidx.compose.ui.unit.dp
  * plan rather than something to fake here.
  */
 private val LightColors = lightColorScheme(
-  primary = MaharaniPalette.RoyalBlue600,
+  primary = MaharaniPalette.BrandRed600,
   onPrimary = MaharaniPalette.White,
-  primaryContainer = MaharaniPalette.RoyalBlue50,
-  onPrimaryContainer = MaharaniPalette.RoyalBlue800,
-  inversePrimary = MaharaniPalette.RoyalBlue200,
+  primaryContainer = MaharaniPalette.BrandRed50,
+  onPrimaryContainer = MaharaniPalette.BrandRed700,
+  inversePrimary = MaharaniPalette.BrandRed200,
   secondary = MaharaniPalette.Saffron500,
   onSecondary = MaharaniPalette.Ink950,
   secondaryContainer = MaharaniPalette.Saffron100,
@@ -55,22 +59,22 @@ private val LightColors = lightColorScheme(
   onTertiary = MaharaniPalette.White,
   tertiaryContainer = MaharaniPalette.BrandRed50,
   onTertiaryContainer = MaharaniPalette.BrandRed700,
-  background = MaharaniPalette.PageLight,
+  background = MaharaniPalette.NeutralPage,
   onBackground = MaharaniPalette.Ink900,
   surface = MaharaniPalette.White,
   onSurface = MaharaniPalette.Ink900,
-  surfaceVariant = MaharaniPalette.Cool100,
+  surfaceVariant = MaharaniPalette.Neutral100,
   onSurfaceVariant = MaharaniPalette.Ink600,
   surfaceContainerLowest = MaharaniPalette.White,
-  surfaceContainerLow = MaharaniPalette.Cool50,
-  surfaceContainer = MaharaniPalette.Cool100,
-  surfaceContainerHigh = MaharaniPalette.Cool200,
-  surfaceContainerHighest = MaharaniPalette.Cool300,
-  surfaceTint = MaharaniPalette.RoyalBlue600,
+  surfaceContainerLow = MaharaniPalette.Neutral50,
+  surfaceContainer = MaharaniPalette.Neutral100,
+  surfaceContainerHigh = MaharaniPalette.Neutral200,
+  surfaceContainerHighest = MaharaniPalette.Neutral300,
+  surfaceTint = MaharaniPalette.BrandRed600,
   inverseSurface = MaharaniPalette.Ink900,
   inverseOnSurface = MaharaniPalette.Ink50,
-  outline = MaharaniPalette.Cool300,
-  outlineVariant = MaharaniPalette.Cool200,
+  outline = MaharaniPalette.Neutral300,
+  outlineVariant = MaharaniPalette.Neutral200,
   error = MaharaniPalette.OutOfStockRose,
   onError = MaharaniPalette.White,
   errorContainer = MaharaniPalette.OutOfStockRoseSurface,
@@ -79,11 +83,11 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-  primary = MaharaniPalette.RoyalBlue400,
+  primary = MaharaniPalette.BrandRed300,
   onPrimary = MaharaniPalette.Ink950,
-  primaryContainer = MaharaniPalette.RoyalBlue800,
-  onPrimaryContainer = MaharaniPalette.RoyalBlue100,
-  inversePrimary = MaharaniPalette.RoyalBlue600,
+  primaryContainer = MaharaniPalette.BrandRed900,
+  onPrimaryContainer = MaharaniPalette.BrandRed100,
+  inversePrimary = MaharaniPalette.BrandRed600,
   secondary = MaharaniPalette.Saffron300,
   onSecondary = MaharaniPalette.Ink950,
   secondaryContainer = MaharaniPalette.Saffron900,
@@ -101,13 +105,13 @@ private val DarkColors = darkColorScheme(
   surfaceContainerLowest = MaharaniPalette.PageDark,
   surfaceContainerLow = MaharaniPalette.SurfaceDark,
   surfaceContainer = MaharaniPalette.SurfaceDarkHigh,
-  surfaceContainerHigh = Color(0xFF26313E),
-  surfaceContainerHighest = Color(0xFF2E3A48),
-  surfaceTint = MaharaniPalette.RoyalBlue400,
+  surfaceContainerHigh = Color(0xFF2E292C),
+  surfaceContainerHighest = Color(0xFF393235),
+  surfaceTint = MaharaniPalette.BrandRed300,
   inverseSurface = MaharaniPalette.Ink100,
   inverseOnSurface = MaharaniPalette.Ink900,
-  outline = Color(0xFF33404E),
-  outlineVariant = Color(0xFF26313E),
+  outline = Color(0xFF3D373A),
+  outlineVariant = Color(0xFF2E292C),
   error = Color(0xFFFB7185),
   onError = Color(0xFF4C0519),
   errorContainer = Color(0xFF4C0519),

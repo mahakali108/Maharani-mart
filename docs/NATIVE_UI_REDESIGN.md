@@ -25,27 +25,36 @@ server data as before; nothing on a screen is invented.
 
 ---
 
-## 2. Identity: blue commerce chrome, red brand, saffron accent
+## 2. Identity: Maharani red chrome, saffron accent, warm neutrals
 
-The web app uses two colours for two jobs (`tailwind.config.ts`): `primary`
-`#C8102E` (the printed brand red — crown, wordmark, marketing surfaces) and
-`action` `#2874F0` (the marketplace blue of shopping chrome). The native app now
-does the same, and the split is deliberate rather than a rebrand:
+The native app is **red-primary**. Brand red `#C8102E` (`MaharaniPalette.BrandRed600`,
+the same value as the printed brand, the launcher icon, the system splash and the
+web's `primary`) is the single colour of the chrome: app bars, the selected
+segment of the catalogue's segmented control, bottom-bar selection, links,
+primary buttons, focus rings and progress.
+
+This replaced an earlier split — *identity red, commerce chrome blue* — because
+two brand colours on one screen made the app read as a marketplace skin rather
+than as Maharani Traders: the shopper saw blue on every actionable surface, a
+red wordmark above it, and a red splash before it, and the Categories/Brands
+segments (blue-on-grey) were mistaken for disabled controls.
 
 | Surface | Colour | Why |
 | --- | --- | --- |
-| Launcher icon, system splash (`themes.xml` → `@color/brand_red`), in-app `BrandSplash` | Brand red `#C8102E` | The icon→splash→app handoff must read as one product. `BrandSplash` therefore pins `MaharaniPalette.BrandRed600` instead of following `colorScheme.primary`. |
-| App bars, bottom bar selection, links, primary buttons, focus | Maharani blue (`ActionBlue*`) | Shopping chrome. Blue is the marketplace's "you can act here" colour and keeps long sessions calm. |
-| "New launch", slab-rate highlight, small accents | Saffron (`Saffron*`) | A restrained warm accent for "worth a look", never for money or stock. |
-| Errors, destructive actions, out-of-stock | Red / rose | Brand red doubles as the error colour, so red still means "stop". |
-| Page background, card surfaces | Cool greys + white | Light, airy, high-contrast text. |
+| Launcher icon, system splash (`themes.xml` → `@color/brand_red`), in-app `BrandSplash`, app bars, selected tab/segment, bottom-bar selection, links, primary buttons, focus | Brand red `#C8102E` (`BrandRed*`) | One colour for "this is Maharani" and "you can act here". The icon→splash→chrome handoff has no seam, and a selected control is unmistakable at arm's length in a shop. |
+| Supporting surfaces (selected tiles, indicators, badges, soft blocks) | Brand red 50/100 (`BrandRed50`, `BrandRed100`) | The pink supporting tone; keeps a red selection from becoming a red screen. |
+| "New launch", offers/highlights, secondary accents | Saffron (`Saffron*`) | The warm second accent for "worth a look". Never used for money, stock or a destructive action. |
+| Errors, destructive actions, out-of-stock | Rose (`error`, `OutOfStockRose*`) | Failure and unavailability stay legible next to a red brand: they are rose-pink surfaces with deep rose ink, and out-of-stock is never rendered in the brand red. |
+| Page background, card surfaces | Warm neutrals (`NeutralPage #F7F6F7`, `Neutral50–300`) + white cards | Light, airy, high-contrast text without the cool, blue-tinted greys that made the whole app look blue even where nothing was. |
+| In stock | Green (`inStock`, `inStockSurface`) | The one green in the product grid, so "can I order it" is answered at a glance. |
 
 The Material 3 scheme in `theme/Theme.kt` is built from these palettes (light and
 dark), so screens reference `MaterialTheme.colorScheme.*` or
-`MaharaniThemeTokens.colors.*` — never a literal hex. The saffron scale and the
-cool page greys are the one addition of the native brief: they are **design
-tokens, not data**. No product, price, offer or stock value lives in a colour
-file.
+`MaharaniThemeTokens.colors.*` — never a literal hex. There is no blue anywhere
+in the app layer: `MaharaniPalette` no longer defines an action-blue family at
+all, so a blue control cannot be reintroduced by accident. (The **web**
+storefront keeps its own `action` blue in `tailwind.config.ts`; that is a web
+token, not an app one, and `tests/pdp-flipkart-style.test.ts` still pins it.)
 
 `themes.xml` keeps `@drawable/ic_launcher_foreground`, `@color/brand_red` and
 `postSplashScreenTheme` exactly as before — the launcher and splash identity is
@@ -67,11 +76,12 @@ card radius cannot drift between screens:
 | Media | `productImageRatio 1:1` · `railCardWidth 168` · `categoryTileWidth 88` · `categoryTileImage 64` · `brandTileWidth 84` · `bannerHeight 156` · `heroImageHeight 300` |
 | Elevation | `cardElevation 1` · `appBarElevation 2` (flat, modern; depth comes from borders and tone) |
 
-`theme/ExtraColors.kt` — tokens the Material scheme does not model: `action*`,
+`theme/ExtraColors.kt` — tokens the Material scheme does not model: `action*` (= brand red),
 `inStock*` / `outOfStock*` / `warning*` (stock language), `brandMark*`,
 `saffron*`, the app-bar gradient pair (`appBarStart`, `appBarEnd`, `onAppBar`,
 `onAppBarMuted`, `appBarField`, `onAppBarField`, `appBarFieldHint`),
-`skeletonBase` / `skeletonHighlight`, `imagePlaceholder` / `onImagePlaceholder`,
+`skeletonBase` / `skeletonHighlight` (neutral), `imagePlaceholder` /
+`onImagePlaceholder` (neutral),
 `scrim`. Light and dark values are both declared; dark mode is not an
 afterthought bolted on with `copy(alpha = …)`.
 
@@ -94,7 +104,9 @@ description. They cost no APK weight, cannot disagree with the theme (they take 
 
 | Component | Contract |
 | --- | --- |
-| `MaharaniSearchBar` | Rounded field, clear-text button, in-field spinner while `loading`, `onBar = true` variant for the blue app bar, IME search action, `testTag`. Never shows trending/fake suggestions. |
+| `MaharaniSearchBar` | Rounded field, clear-text button, in-field spinner while `loading`, `onBar = true` variant for the brand app bar, IME search action, `testTag`. On a
+page the field is a soft neutral well with a hairline edge rather than a
+shadowed white pill. Never shows trending/fake suggestions. |
 | `SectionHeader` | Title + optional subtitle + optional `View all` action with a chevron. |
 | `StockBadge` | Two-state pill with a status dot. `UNKNOWN` is styled as a **warning** and reads "Stock not confirmed" — it is never dressed as in-stock. `compact` for cards. |
 | `FactChip` | Neutral wholesale fact (pack size, MOQ, pcs/case). Ellipsises rather than overflowing a narrow card. |
