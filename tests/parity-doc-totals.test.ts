@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * The parity document must agree with itself.
  *
- * WHY: the previous version summarised 79/4/14/4 while its own rows said
- * 129/8/26/6. A parity report whose totals contradict its table is worse than
- * no report, because it is the number people quote without re-counting.
+ * WHY: these totals are often copied into release notes without re-counting.
+ * Keep the published summary mechanically tied to the feature rows so a later
+ * parity update cannot silently leave misleading counts behind.
  */
 const DOC = join(process.cwd(), 'docs/NATIVE_PWA_FEATURE_PARITY.md');
 const STATUSES = ['IMPLEMENTED', 'PARTIAL', 'MISSING', 'BLOCKED', 'N/A'] as const;
