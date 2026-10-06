@@ -658,21 +658,24 @@ class SessionManagerTest {
     // shopper is typing into (and its own progress state) and then bring it
     // back — the login-screen flashing the shell is supposed to avoid.
     var stateWhileLoggingIn: SessionState? = null
-    val api = FakeMaharaniApi().apply {
-      nextResult = { ApiEnvelope(sessionDto()) }
-      nextLoginResult = {
-        stateWhileLoggingIn = session.state.value
-        ApiEnvelope(
-          AuthSessionDto(
-            accessToken = "fresh-access-token",
-            refreshToken = "fresh-refresh-token",
-            expiresAt = 2_000_000,
-          )
-        )
-      }
-    }
+    // The fake's `session()` endpoint is a member function, so the lambda that
+    // reads the session state has to be assigned AFTER the manager exists:
+    // inside an `apply { }` block the fake's own `session()` would win over the
+    // local and the reference would not compile.
+    val api = FakeMaharaniApi()
     val store = FakeTokenStore()
     val session = manager(api, store)
+    api.nextResult = { ApiEnvelope(sessionDto()) }
+    api.nextLoginResult = {
+      stateWhileLoggingIn = session.state.value
+      ApiEnvelope(
+        AuthSessionDto(
+          accessToken = "fresh-access-token",
+          refreshToken = "fresh-refresh-token",
+          expiresAt = 2_000_000,
+        )
+      )
+    }
     session.signOut()
     assertEquals(SessionState.SignedOut(SignOutReason.SIGNED_OUT), session.state.value)
 
