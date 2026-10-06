@@ -34,6 +34,8 @@ dependencies {
   implementation(project(":core:common"))
   implementation(project(":core:model"))
   implementation(project(":core:network"))
+  // CSV export consumes the Retrofit ResponseBody exposed by the network API.
+  implementation(libs.okhttp)
   implementation(project(":core:auth"))
   implementation(project(":core:designsystem"))
 

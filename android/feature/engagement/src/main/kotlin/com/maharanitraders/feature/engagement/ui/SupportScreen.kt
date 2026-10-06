@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -207,15 +206,13 @@ private fun SupportCreateContent(state: SupportUiState, viewModel: SupportViewMo
         modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget).testTag(SupportTags.ORDER),
       ) {
         val selectedOrder = state.supportOrders.firstOrNull { it.id == state.selectedOrderId }
-        Text(
-          when {
-            state.orderOptionsLoading -> "Loading recent orders…"
-            selectedOrder != null -> "Order ${selectedOrder.orderNumber}"
-            state.supportOrders.isEmpty() -> "No recent orders available"
-            else -> "Choose an order (or leave unlinked)",
-          },
-          modifier = Modifier.padding(16.dp),
-        )
+        val orderLabel = when {
+          state.orderOptionsLoading -> "Loading recent orders…"
+          selectedOrder != null -> "Order ${selectedOrder.orderNumber}"
+          state.supportOrders.isEmpty() -> "No recent orders available"
+          else -> "Choose an order (or leave unlinked)"
+        }
+        Text(text = orderLabel, modifier = Modifier.padding(16.dp))
       }
       DropdownMenu(expanded = orderMenu, onDismissRequest = { orderMenu = false }) {
         DropdownMenuItem(
