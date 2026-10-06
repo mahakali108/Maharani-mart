@@ -28,8 +28,8 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 |---|---|---|---|---|---|---|
 | AUTH-01 | Login | `app/login/page.tsx` | `POST /api/mobile/v1/auth/login` | `LoginScreen` + `LoginViewModel` | IMPLEMENTED | Email + password; token pair stored via the Keystore-backed session store. |
 | AUTH-02 | Retailer registration | `app/register-retailer/page.tsx` | `POST /api/mobile/v1/retailers/register` | `RegisterScreen` + `RegisterViewModel` | IMPLEMENTED | Full form; areas come from `GET /areas`, never a hardcoded list. |
-| AUTH-03 | Forgot password | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | — | MISSING | The mobile endpoint exists, and `AuthRepository.requestPasswordReset` wraps it, but no native screen calls it: the sign-in screen has no "Forgot password" affordance, so a retailer who forgets the password currently has to use the website. |
-| AUTH-04 | Reset password | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | — | MISSING | The bearer-authenticated mobile endpoint exists, and `AuthRepository.updatePassword` wraps it, but nothing calls it: the app registers no reset deep link (the manifest has only the launcher intent filter), so the reset link completes on the web. |
+| AUTH-03 | Forgot password | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | `AuthFlowScreen` `FORGOT_PASSWORD` step + `ForgotPasswordViewModel` | IMPLEMENTED | "Forgot password?" on the sign-in screen opens a native step that validates the email client-side (fast feedback only) and calls the endpoint through `AuthRepository.requestPasswordReset`, with a double-submit guard because the endpoint is rate limited. The confirmation copy is deliberately generic — the endpoint answers identically whether or not the address has an account — and says honestly where the reset completes: the emailed link opens the Maharani Traders website (see AUTH-04). `ForgotPasswordViewModelTest` covers submit, validation, failure and the in-flight guard. |
+| AUTH-04 | Reset password | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | `SecurityScreen` (signed-in path) | BLOCKED | The bearer-authenticated endpoint IS now used natively by the in-account security screen (ACC-04), so a SIGNED-IN user can change their password without leaving the app. What remains blocked is only the EMAIL-LINK path: Supabase delivers the recovery link to `NEXT_PUBLIC_SITE_URL/auth/callback?next=/reset-password`, and this app registers no app link (no assetlinks deployment), so there is no native surface the emailed link can land on. Reaching parity there needs deep-link infrastructure, not app code alone. |
 | AUTH-05 | Logout | `lib/auth/actions.ts` | `POST /api/mobile/v1/auth/logout` | `AuthenticatedShell` | IMPLEMENTED | Clears the stored session as well as the server session. |
 | AUTH-06 | Silent token refresh | `middleware.ts` | `POST /api/mobile/v1/auth/refresh` | `SessionManager`, `AuthInterceptor` | IMPLEMENTED | Single-flight refresh on 401; the failed call is replayed once. |
 | AUTH-07 | Session / role bootstrap | `middleware.ts` | `GET /api/mobile/v1/session` | `SessionBootstrapper`, `MaharaniRouter` | IMPLEMENTED | Role and workspace decide the destination set; the client never grants itself a workspace. |
@@ -97,7 +97,7 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | CHK-04 | Place order | checkout submit | `POST /orders` | `CartScreen` | IMPLEMENTED | Idempotency key per attempt; the server re-quotes before writing. |
 | CHK-05 | Uncertain-submit recovery | checkout retry | `GET /orders/requests/{requestKey}` | `CartScreen` "Check order status" | IMPLEMENTED | A timed-out submit is resolved by asking the server what happened, instead of risking a second order. |
 | CHK-06 | Order confirmation | checkout success | `POST /orders` response | `CartScreen` confirmation | IMPLEMENTED | Shows the server-confirmed number, status, total, coins used and coin balance after. |
-| CHK-07 | Add a new address during checkout | `app/retailer/account/addresses` | `POST /api/mobile/v1/addresses`, `PATCH`/`DELETE /addresses/{id}`, `POST /addresses/{id}/default` | `AddressBookScreen` (reached from Account) | PARTIAL | Full address CRUD now exists natively against real routes that reuse the web form's own `addressPayloadSchema`, with ownership by `id` + session retailer and RLS underneath. What is missing is only the entry point: the checkout step still lets the retailer SELECT a saved address, not add one mid-checkout, so a first-time address is created in the address book first. |
+| CHK-07 | Add a new address during checkout | `app/retailer/account/addresses` | `POST /api/mobile/v1/addresses`, `PATCH`/`DELETE /addresses/{id}`, `POST /addresses/{id}/default` | `AddressBookScreen` (reached from Account AND from checkout) | IMPLEMENTED | Full address CRUD exists natively against real routes that reuse the web form's own `addressPayloadSchema`, with ownership by `id` + session retailer and RLS underneath — and the checkout step now has the entry point too: an "Add delivery address" action (rendered whether or not addresses exist, so a first-time buyer is never stuck) opens the same `AddressBookScreen`, and when checkout becomes visible again it re-reads the server address list (`CartCheckoutViewModel.reloadAddressesIfStale`), keeps a selection that still exists, falls back to the default/first address, and re-quotes only when the selection actually changed. `CommerceViewModelTest` covers first-address pickup, unchanged-selection no-op and vanished-selection reselect. |
 
 ## 7. Orders
 
@@ -148,7 +148,7 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 | ACC-01 | Account overview | `app/retailer/account/page.tsx` | `GET /session` | `AccountScreen` | IMPLEMENTED | Identity, role and workspace from the session. |
 | ACC-02 | Address book | `app/retailer/account/addresses/page.tsx` | `GET`/`POST /addresses`, `PATCH`/`DELETE /addresses/{id}`, `POST /addresses/{id}/default` | `AddressBookScreen` + `AddressBookViewModel` | IMPLEMENTED | Loading, empty, error-with-retry and offline states; create, edit, delete-behind-a-confirmation and an exclusive default. Writes reuse the web form's own zod schema and the same default-exclusivity rule the web server actions apply, so the two surfaces cannot drift. The checkout step's existing `GET /addresses` read is unchanged. |
 | ACC-03 | Edit profile | `app/retailer/account/edit/page.tsx` | — | — | BLOCKED | No mobile profile-update endpoint. |
-| ACC-04 | Security / change password | `app/retailer/account/security/page.tsx` | `POST /auth/password-update` | `AuthFlowScreen` | PARTIAL | The password-update call exists and is used in the reset flow; there is no in-account security screen. |
+| ACC-04 | Security / change password | `app/retailer/account/security/page.tsx` | `POST /auth/password-update` | `SecurityScreen` + `ChangePasswordViewModel` | IMPLEMENTED | The in-account security screen (Account → "Password & security") changes the password through the authenticated endpoint with the caller's OWN bearer token: client-side length/confirmation checks (fast feedback only — GoTrue's policy is re-checked server-side), the server's per-field messages placed under the fields, a success confirmation that clears the new password from memory, and failure reporting without ever claiming a change. The web page's additional "log out of all sessions" and account deletion / data-export requests ride on web server actions with no mobile endpoint and stay web-only — they are omitted, not faked. `ChangePasswordViewModelTest` covers the change, both client validations, server field errors, network failure and the double-submit guard. |
 | ACC-05 | Sign out | account page | `POST /auth/logout` | `AuthenticatedShell` | IMPLEMENTED | |
 
 ## 12. Support, reports and assistive features
@@ -156,7 +156,7 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 | ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
 |---|---|---|---|---|---|---|
 | MISC-01 | Support tickets | `app/retailer/support/**` | — | — | BLOCKED | No mobile endpoints for support threads. |
-| MISC-02 | Help centre | `app/retailer/help/page.tsx` | static content | — | MISSING | Static content; no backend dependency. |
+| MISC-02 | Help centre | `app/retailer/help/page.tsx` | static content | `HelpScreen` | IMPLEMENTED | Account → "Help centre": the web help page's own FAQs (pricing, MOQ, coins, cancellation/returns, invoices) as static content, plus shortcut rows drawn ONLY from the destinations the server's policy granted this account (orders, coins, catalogue for a retailer; none for an account without them). The contact block states honestly that the app's API does not publish a support phone number rather than hardcoding one. Nothing fetched, nothing invented. |
 | MISC-03 | Reports | `app/retailer/reports/page.tsx` | — | — | BLOCKED | No mobile reporting endpoint. |
 | MISC-04 | AI assistant | `app/retailer/ai/page.tsx` | — | — | N/A | Not part of the retailer ordering journey this app delivers. |
 
@@ -176,10 +176,10 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 
 | Status | Count |
 |---|---|
-| IMPLEMENTED | 69 |
-| PARTIAL | 2 |
-| MISSING | 4 |
-| BLOCKED | 5 |
+| IMPLEMENTED | 73 |
+| PARTIAL | 0 |
+| MISSING | 1 |
+| BLOCKED | 6 |
 | N/A | 1 |
 | **Total rows** | **81** |
 
@@ -200,6 +200,11 @@ behind a placeholder screen in the app.
    endpoint exists, and the app does not write profile rows directly.
 4. **MISC-01 / MISC-03 — support and reports.** Need mobile routes for support threads
    and report figures.
+5. **AUTH-04 — the emailed reset link.** The signed-in password change is native now
+   (ACC-04); what remains is the EMAIL-LINK journey: Supabase points the recovery link
+   at the web reset page, and this app registers no app link (no `assetlinks.json`
+   deployment, no intent filter), so the link has nowhere to land natively. Needs
+   deep-link infrastructure plus the matching Supabase redirect change.
 
 ## Remaining limitations, stated rather than hidden
 
@@ -211,8 +216,11 @@ behind a placeholder screen in the app.
 2. **No offers/schemes rail on home.** PROMO-04 is BLOCKED (no mobile schemes
    endpoint). The home screen therefore shows banners, categories, brands, recently
    added and the product grid — never a fabricated "Today's offers" rail.
-3. **No in-account security screen** (ACC-04 PARTIAL): the password-update call exists
-   and is exercised by the reset flow, but there is no in-account security screen yet.
+3. **The web security page offers more than the native one.** "Log out of all
+   sessions" and the account deletion / data-export requests use web server actions
+   over `retailer_account_requests`; no mobile endpoint exists, so the native security
+   screen offers the password change only (ACC-04) and says so rather than faking the
+   rest.
 4. **The directory panes narrow on the device.** The server's catalogue search is a
    PRODUCT search; the Categories/Brands panes filter the names the server already
    sent rather than inventing a second, differently-behaving search endpoint.
@@ -239,6 +247,16 @@ behind a placeholder screen in the app.
   completeness). **Android compilation and unit tests cannot be executed in the
   verifying environment** (no JDK or Android SDK available); they run in the
   `android-apk.yml` GitHub Actions job, and no Kotlin build result is claimed here
+  unless that job is green.
+- The retailer-gap closure (AUTH-03, AUTH-04, CHK-07, ACC-04, MISC-02 — the second
+  2026-10-06 change set) was verified by: the new Kotlin unit tests
+  (`ForgotPasswordViewModelTest`, `ChangePasswordViewModelTest`, and the
+  `reloadAddressesIfStale` cases in `CommerceViewModelTest`), the repository's static
+  Android gates (`tests/android-project-integrity.test.ts`, which resolves the new
+  symbols and checks `FakeAuthApi` implements every `MaharaniApi` member with the
+  exact parameter names), and the web suite run in this environment (typecheck, lint,
+  tests, production build). Kotlin compilation and the Android unit-test/lint/APK
+  tasks run in the `android-apk.yml` job; no Kotlin build result is claimed here
   unless that job is green.
 - Session persistence, the catalogue panes and the account hub (the 2026-10-06 change
   set) were verified by: reading the changed Kotlin against its call sites; the

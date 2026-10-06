@@ -62,6 +62,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maharanitraders.app.ui.AccountScreen
+import com.maharanitraders.app.ui.HelpScreen
 import com.maharanitraders.app.ui.ShellBadgesViewModel
 import com.maharanitraders.app.ui.SessionHomeScreen
 import com.maharanitraders.app.ui.UnsupportedAccountScreen
@@ -82,6 +83,8 @@ import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.model.SessionSnapshot
 import com.maharanitraders.core.model.UserRole
+import com.maharanitraders.feature.auth.ChangePasswordViewModel
+import com.maharanitraders.feature.auth.SecurityScreen
 import com.maharanitraders.feature.catalog.CatalogTab
 import com.maharanitraders.feature.catalog.ProductDetailViewModel
 import com.maharanitraders.feature.catalog.ui.CatalogScreen
@@ -442,6 +445,12 @@ private fun RoutedShell(
                   popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                 }
               },
+              onOpenSecurity = {
+                navController.navigate(MaharaniRoutes.SECURITY) { launchSingleTop = true }
+              },
+              onOpenHelp = {
+                navController.navigate(MaharaniRoutes.HELP) { launchSingleTop = true }
+              },
             )
           }
         }
@@ -451,6 +460,35 @@ private fun RoutedShell(
         // checkout opens.
         composable(MaharaniRoutes.ADDRESS_BOOK) {
           AddressBookScreen()
+        }
+
+        // Security (change password) is a sub-screen of Account over the
+        // authenticated password-update endpoint. The change is performed with
+        // the caller's OWN bearer token on the server; this screen only
+        // collects the two fields and shows the server's verdict.
+        composable(MaharaniRoutes.SECURITY) {
+          val changePasswordViewModel: ChangePasswordViewModel = hiltViewModel()
+          val changePasswordState by changePasswordViewModel.state.collectAsStateWithLifecycle()
+          SecurityScreen(
+            state = changePasswordState,
+            signedInAs = snapshot.user.email ?: snapshot.user.fullName,
+            onPasswordChange = changePasswordViewModel::onPasswordChange,
+            onConfirmPasswordChange = changePasswordViewModel::onConfirmPasswordChange,
+            onSubmit = changePasswordViewModel::submit,
+            onDone = { navController.popBackStack() },
+          )
+        }
+
+        // The help centre: static FAQs mirroring the web help page. Only the
+        // shortcuts this account's router-granted destinations allow are
+        // shown; nothing here is fetched or invented.
+        composable(MaharaniRoutes.HELP) {
+          HelpScreen(
+            availableRoutes = routing.destinations.map { it.route }.toSet(),
+            onOpenDestination = { route ->
+              navController.navigate(route) { launchSingleTop = true }
+            },
+          )
         }
 
         // Order sub-screens. The history list opens the detail record; the
@@ -741,6 +779,10 @@ private fun DestinationSurface(
   onOpenOrder: (String) -> Unit,
   /** Open another destination of this account (the Account tab's shortcuts). */
   onOpenDestination: (String) -> Unit,
+  /** Open the in-account security (change password) sub-screen. */
+  onOpenSecurity: () -> Unit,
+  /** Open the help centre sub-screen. */
+  onOpenHelp: () -> Unit,
 ) {
   when (destination.route) {
     MaharaniRoutes.HOME -> if (retailerHome) {
@@ -783,6 +825,7 @@ private fun DestinationSurface(
     MaharaniRoutes.CART -> CartScreen(
       onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
       onViewOrders = onViewOrders,
+      onOpenAddressBook = onOpenAddresses,
     )
 
     MaharaniRoutes.ORDERS -> OrderHistoryScreen(onOpenOrder = onOpenOrder)
@@ -799,6 +842,8 @@ private fun DestinationSurface(
       onOpenAddresses = onOpenAddresses,
       onOpenOrders = onViewOrders,
       onOpenDestination = { route -> onOpenDestination(route) },
+      onOpenSecurity = onOpenSecurity,
+      onOpenHelp = onOpenHelp,
     )
 
     else -> {

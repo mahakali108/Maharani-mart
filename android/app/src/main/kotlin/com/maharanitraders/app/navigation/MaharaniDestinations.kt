@@ -87,6 +87,19 @@ object MaharaniRoutes {
    * it is not a drawer destination of its own.
    */
   const val ADDRESS_BOOK = "account/addresses"
+
+  /**
+   * The in-account security screen (change password). A sub-screen of the
+   * account tab over the authenticated `POST /auth/password-update` endpoint,
+   * reached from the account screen — not a drawer destination of its own.
+   */
+  const val SECURITY = "account/security"
+
+  /**
+   * The help centre: static FAQs mirroring the web help page, plus the
+   * account's real shortcuts. No backend data, no invented answers.
+   */
+  const val HELP = "help"
   const val COINS = "coins"
   const val NOTIFICATIONS = "notifications"
   const val COUPONS = "coupons"

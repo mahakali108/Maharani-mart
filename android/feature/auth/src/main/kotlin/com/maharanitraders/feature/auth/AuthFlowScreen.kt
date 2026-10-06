@@ -27,7 +27,7 @@ object AuthFlowTags {
   const val CONFIRM_TITLE = "confirm_email_title"
 }
 
-private enum class AuthStep { LOGIN, REGISTER, PENDING_APPROVAL, CONFIRM_EMAIL }
+private enum class AuthStep { LOGIN, REGISTER, FORGOT_PASSWORD, PENDING_APPROVAL, CONFIRM_EMAIL }
 
 /**
  * The signed-out experience: sign in, register, and the two honest outcomes of
@@ -47,8 +47,10 @@ fun AuthFlowScreen(
 
   val loginViewModel: LoginViewModel = hiltViewModel()
   val registerViewModel: RegisterViewModel = hiltViewModel()
+  val forgotPasswordViewModel: ForgotPasswordViewModel = hiltViewModel()
   val loginState by loginViewModel.state.collectAsStateWithLifecycle()
   val registerState by registerViewModel.state.collectAsStateWithLifecycle()
+  val forgotPasswordState by forgotPasswordViewModel.state.collectAsStateWithLifecycle()
 
   // Both transitions below are side effects, so they run in a LaunchedEffect
   // rather than during composition: writing state (or calling back into the
@@ -56,6 +58,14 @@ fun AuthFlowScreen(
   // loops and lost updates.
   LaunchedEffect(loginState.signedIn) {
     if (loginState.signedIn) onSignedIn()
+  }
+
+  // The forgot-password ViewModel is activity-scoped and outlives a sign-out:
+  // blank it whenever this flow enters composition, so the next account on
+  // this device never inherits the previous account's "reset link sent"
+  // confirmation.
+  LaunchedEffect(Unit) {
+    forgotPasswordViewModel.reset()
   }
 
   LaunchedEffect(registerState.registered, registerState.requiresEmailConfirmation) {
@@ -75,6 +85,20 @@ fun AuthFlowScreen(
       onPasswordChange = loginViewModel::onPasswordChange,
       onSubmit = loginViewModel::submit,
       onOpenRegister = { step = AuthStep.REGISTER },
+      onOpenForgotPassword = {
+        // Convenience only: if the identifier already looks like an email,
+        // carry it over so the shopper does not type it twice.
+        forgotPasswordViewModel.primeEmail(loginState.identifier)
+        step = AuthStep.FORGOT_PASSWORD
+      },
+      modifier = modifier,
+    )
+
+    AuthStep.FORGOT_PASSWORD -> ForgotPasswordScreen(
+      state = forgotPasswordState,
+      onEmailChange = forgotPasswordViewModel::onEmailChange,
+      onSubmit = forgotPasswordViewModel::submit,
+      onBackToLogin = { step = AuthStep.LOGIN },
       modifier = modifier,
     )
 
