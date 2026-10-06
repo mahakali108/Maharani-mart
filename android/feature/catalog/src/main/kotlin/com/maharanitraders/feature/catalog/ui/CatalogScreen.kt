@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -41,12 +42,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maharanitraders.core.designsystem.components.ChevronRightGlyph
 import com.maharanitraders.core.designsystem.components.CloseGlyph
 import com.maharanitraders.core.designsystem.components.EmptyState
 import com.maharanitraders.core.designsystem.components.ErrorState
@@ -75,6 +78,8 @@ object CatalogScreenTags {
   const val TAB_CATEGORIES = "catalog_tab_categories"
   const val TAB_BRANDS = "catalog_tab_brands"
   const val CATEGORY_CHIPS = "catalog_category_chips"
+  const val ALL_CHIP = "catalog_all_chip"
+  const val CATEGORY_CHIP = "catalog_category_chip"
   const val SORT_BUTTON = "catalog_sort_button"
   const val IN_STOCK_CHIP = "catalog_in_stock_chip"
   const val BRAND_CHIP = "catalog_brand_chip"
@@ -208,6 +213,11 @@ fun CatalogContent(
   onToggleFavorite: ((String) -> Unit)? = null,
   modifier: Modifier = Modifier,
 ) {
+  // The grid's scroll position lives HERE, not inside the Products branch: the
+  // shopper who dips into Categories and comes back must land where they left
+  // off, not at the top of the list.
+  val gridState = rememberLazyGridState()
+
   Column(modifier = modifier.fillMaxSize()) {
     CatalogHeader(
       state = state,
@@ -231,6 +241,7 @@ fun CatalogContent(
         onLoadMore = onLoadMore,
         onOpenProduct = onOpenProduct,
         onToggleFavorite = onToggleFavorite,
+        gridState = gridState,
       )
 
       CatalogTab.CATEGORIES -> CatalogDirectoryPane(
@@ -343,6 +354,7 @@ private fun CatalogProductsPane(
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
   onToggleFavorite: ((String) -> Unit)?,
+  gridState: LazyGridState,
 ) {
   // The controls and the count live INSIDE the scroller, in the grid's header
   // slot, so the cards get the whole screen once the shopper scrolls. They are
@@ -429,7 +441,7 @@ private fun CatalogProductsPane(
     else -> ProductGrid(
       products = state.products,
       onOpenProduct = onOpenProduct,
-      state = rememberLazyGridState(),
+      state = gridState,
       modifier = Modifier.fillMaxSize(),
       isFavorite = { product -> favorites.isFavorite(product.id, product.isFavorite) },
       isFavoritePending = { product -> favorites.isPending(product.id) },
@@ -438,14 +450,13 @@ private fun CatalogProductsPane(
         item(span = { GridItemSpan(maxLineSpan) }) { controls() }
       },
       footer = {
-        // Rendered only when the footer has something to say: a continuation in
-        // flight, a continuation that failed, or a list that has ended. A blank
-        // 72dp strip under the last row would be exactly the "excessive empty
-        // space" this redesign removes.
-        if (state.loadingMore || state.errorMessage != null || !state.hasMore) {
-          item(span = { GridItemSpan(maxLineSpan) }) {
-            ContinuationFooter(state = state, onLoadMore = onLoadMore, onRetry = onRetry)
-          }
+        // The item ALWAYS exists: it is the sentinel that asks for the next
+        // batch when the shopper reaches it, and hiding it would stop the list
+        // from ever continuing. It draws nothing until it has something to say
+        // (a continuation in flight, a continuation that failed, or the end of
+        // the list), so there is no blank strip under the last row either.
+        item(span = { GridItemSpan(maxLineSpan) }) {
+          ContinuationFooter(state = state, onLoadMore = onLoadMore, onRetry = onRetry)
         }
       },
     )
@@ -493,6 +504,7 @@ private fun CatalogScopeBar(
           selected = state.query.categoryId == null && state.query.brandId == null,
           onClick = onClearScope,
           label = { Text("All") },
+          modifier = Modifier.testTag(CatalogScreenTags.ALL_CHIP),
           colors = catalogChipColors(),
         )
       }
@@ -517,6 +529,7 @@ private fun CatalogScopeBar(
           } else {
             null
           },
+          modifier = Modifier.testTag(CatalogScreenTags.CATEGORY_CHIP),
           colors = catalogChipColors(),
         )
       }
@@ -750,6 +763,15 @@ private fun SortMenu(
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
+        // The stock glyph set has no downward chevron; the right chevron rotated
+        // a quarter turn is the same mark, so the control reads as a menu
+        // without adding an icon to the APK.
+        ChevronRightGlyph(
+          modifier = Modifier
+            .size(14.dp)
+            .rotate(90f),
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -856,6 +878,11 @@ private fun ContinuationFooter(
     LaunchedEffect(state.nextCursor) { onLoadMore() }
   }
 
+  // Nothing to draw while the next batch is on its way for the first time: the
+  // sentinel above has already asked for it.
+  val visible = state.loadingMore || state.errorMessage != null || !state.hasMore
+  if (!visible) return
+
   Surface(
     color = MaterialTheme.colorScheme.background,
     shape = RoundedCornerShape(0.dp),
@@ -886,8 +913,12 @@ private fun ContinuationFooter(
           )
         }
 
+        // A continuation that failed retries the CONTINUATION (the same
+        // cursor), not the whole list: the rows already read stay on screen and
+        // the shopper keeps their place. The full-list retry is the error
+        // surface shown when there is nothing on screen yet.
         state.errorMessage != null -> TextButton(
-          onClick = onRetry,
+          onClick = { if (state.hasMore && state.nextCursor != null) onLoadMore() else onRetry() },
           modifier = Modifier.testTag(CatalogScreenTags.LOADING_MORE),
         ) {
           Text(if (state.offline) "Back online? Load more" else "Try loading more again")

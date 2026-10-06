@@ -98,7 +98,9 @@ fun ProductCardSkeleton(modifier: Modifier = Modifier) {
     modifier = modifier
       .clip(RoundedCornerShape(MaharaniDimens.radiusCard))
       .background(MaterialTheme.colorScheme.surface)
-      .padding(MaharaniDimens.spaceMd),
+      // Same padding as the real card, so the loading grid has the geometry of
+      // the loaded one and nothing shifts when the data lands.
+      .padding(MaharaniDimens.cardPadding),
     verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
   ) {
     SkeletonSurface(

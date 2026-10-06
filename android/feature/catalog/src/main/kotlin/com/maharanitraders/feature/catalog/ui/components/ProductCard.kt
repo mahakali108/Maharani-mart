@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.maharanitraders.core.designsystem.components.FactChip
 import com.maharanitraders.core.designsystem.components.FavoriteButton
 import com.maharanitraders.core.designsystem.components.PriceBlock
@@ -96,7 +97,7 @@ fun ProductCard(
     modifier = modifier.testTag(PRODUCT_CARD_TAG),
   ) {
     Column(
-      modifier = Modifier.padding(CARD_PADDING),
+      modifier = Modifier.padding(MaharaniDimens.cardPadding),
       verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
     ) {
       Box(modifier = Modifier.fillMaxWidth()) {
@@ -224,11 +225,3 @@ fun ProductCard(
     }
   }
 }
-
-/**
- * Card padding, one value for every grid and rail.
- *
- * 10dp rather than 12dp: at 360dp two cards leave ~159dp each, and this is the
- * difference between a 2-line product name fitting and being clipped.
- */
-private val CARD_PADDING = 10.dp
