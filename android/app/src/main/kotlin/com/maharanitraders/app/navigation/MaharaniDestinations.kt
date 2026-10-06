@@ -89,6 +89,17 @@ object MaharaniRoutes {
   const val ADDRESS_BOOK = "account/addresses"
 
   /**
+   * The brand directory: the SAME catalogue, opened on its Brands pane.
+   *
+   * It exists because Categories already had a drawer entry and Brands did not,
+   * which made "browse by brand" look like a feature the app lacked when the
+   * brand list was in fact one tap away. Both entries open one destination with
+   * one implementation (see CAT-09), so a price or a stock state still cannot
+   * differ between them.
+   */
+  const val BRANDS = "brands"
+
+  /**
    * The in-account security screen (change password). A sub-screen of the
    * account tab over the authenticated `POST /auth/password-update` endpoint,
    * reached from the account screen — not a drawer destination of its own.
@@ -157,6 +168,15 @@ object MaharaniCatalog {
       // existing taxonomy endpoints, so no planned-phase label.
       phase = null,
       summary = "The shop's real category and brand directory, with live product counts.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.BRANDS,
+      label = "Brands",
+      workspace = Workspace.RETAILER,
+      // Shipped with the native shopping redesign: the catalogue's own Brands
+      // pane, so no planned-phase label and no second implementation.
+      phase = null,
+      summary = "The shop's real brand list, drawn from the same brand rows the catalogue filters by.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.FAVORITES,

@@ -227,13 +227,16 @@ private fun RoutedShell(
   // The drawer's "Categories" entry renders the SAME catalogue on its Categories
   // pane, so it counts as the Catalog tab: the bar stays visible and keeps its
   // selection instead of vanishing because a second route to one screen is open.
-  val selectedTabRoute = if (currentRoute == MaharaniRoutes.CATEGORIES) {
+  val selectedTabRoute = if (
+    currentRoute == MaharaniRoutes.CATEGORIES || currentRoute == MaharaniRoutes.BRANDS
+  ) {
     MaharaniRoutes.CATALOG
   } else {
     currentRoute
   }
   val showBottomBar = currentRoute in BOTTOM_NAV_ROUTES ||
-    currentRoute == MaharaniRoutes.CATEGORIES
+    currentRoute == MaharaniRoutes.CATEGORIES ||
+    currentRoute == MaharaniRoutes.BRANDS
   val currentLabel = routing.destinations.firstOrNull { it.route == currentRoute }?.label
     ?: routing.start.label
 
@@ -780,6 +783,14 @@ private fun DestinationSurface(
     // shopper can switch to Products or Brands without leaving the screen.
     MaharaniRoutes.CATEGORIES -> CatalogScreen(
       initialTab = CatalogTab.CATEGORIES,
+      onOpenProduct = onOpenProduct,
+    )
+
+    // The same catalogue on its Brands pane: one implementation, two entry
+    // points, so a brand-filtered list cannot price or stock differently from a
+    // category-filtered one.
+    MaharaniRoutes.BRANDS -> CatalogScreen(
+      initialTab = CatalogTab.BRANDS,
       onOpenProduct = onOpenProduct,
     )
 

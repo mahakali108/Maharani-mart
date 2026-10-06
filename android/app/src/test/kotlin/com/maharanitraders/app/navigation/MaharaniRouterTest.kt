@@ -68,6 +68,9 @@ class MaharaniRouterTest {
     // The native shopping redesign ships the category directory and the
     // account profile, so both are real screens for a retailer.
     assertTrue(MaharaniRoutes.CATEGORIES in routes)
+    // Brands is the same catalogue opened on its own pane; without an entry
+    // point the brand list looked like a missing feature.
+    assertTrue(MaharaniRoutes.BRANDS in routes)
     assertTrue(MaharaniRoutes.ACCOUNT in routes)
     assertTrue(MaharaniRoutes.CART in routes)
     assertTrue(MaharaniRoutes.FAVORITES in routes)
@@ -133,6 +136,7 @@ class MaharaniRouterTest {
     // The account profile is shared across roles; the retailer taxonomy is not.
     assertTrue(MaharaniRoutes.ACCOUNT in routes)
     assertTrue(MaharaniRoutes.CATEGORIES !in routes)
+    assertTrue(MaharaniRoutes.BRANDS !in routes)
     assertTrue(MaharaniRoutes.CATALOG !in routes)
     assertTrue(MaharaniRoutes.CART !in routes)
     assertTrue(MaharaniRoutes.ORDERS !in routes)
