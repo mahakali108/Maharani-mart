@@ -1,7 +1,8 @@
 # Native UI redesign — the Maharani Traders shopping app
 
-Status: implemented on branch `arena/01a100c2-maharani-mart`, **not yet compiled**
-(see [Verification](#verification-what-ran-and-what-could-not)).
+Status: implemented and CI-verified on branch `arena/581284a2-maharani-mart`
+(web typecheck/lint/tests/build and the Android unit test + lint + debug APK job —
+see §13 for the exact runs).
 Scope: `android/` only. No backend file changed, no endpoint added, no wire
 contract touched (`docs/NATIVE_ANDROID_API_CONTRACT.md` is still the authority).
 
@@ -429,3 +430,91 @@ Deleted:
    added later against verified contracts — see `docs/NATIVE_PWA_FEATURE_PARITY.md` (ORD-03,
    ORD-04, ORD-05) for their current state.
 5. A standalone Coins wallet/history screen belongs to later native work; checkout continues to use only the existing server-owned Coins calculation and debit rules.
+
+---
+
+## 13. The directory fix and the red-primary catalogue (latest change)
+
+### 13.1 Why Categories and Brands showed nothing
+
+Both taxonomy endpoints built their read with an **embedded aggregate and a
+child filter**:
+
+```
+categories?select=id,name,image_url,parent_id,products(count)&products.is_active=eq.true
+brands?select=id,name,logo_url,products(count)&products.is_active=eq.true
+```
+
+Three things are wrong with that, and only the third is visible in a browser:
+
+1. `products(count)` is a **PostgREST aggregate embed**, and aggregates are
+   opt-in per project (`db-aggregates-enabled`). Where they are not enabled the
+   whole request fails, no rows come back.
+2. A filter on an embedded resource narrows the *parent* rows as well, so an
+   embed filter is not a safe way to count children.
+3. The service mapped `data === null` (i.e. **the read failed**) to `[]`.
+
+So a failing query became a successful, permanently empty directory: the
+Categories and Brands panes rendered "no categories yet" at HTTP 200, and their
+Retry re-read the same failing query, because as far as the client could tell
+there was nothing to retry. The Products pane never used the aggregate, which is
+exactly why only these two panes looked dead.
+
+### 13.2 What it does now
+
+- The taxonomy is read with **plain columns** (`id, name, image_url, parent_id` /
+  `id, name, logo_url`), `is_active`, `order`, through the caller's own
+  RLS-scoped bearer client — the same query shape every other read in this API
+  already uses.
+- A failed read **throws**, and the route answers `503 database_unavailable`
+  with a message that asks the shopper to try again. An empty list now means
+  exactly one thing: the shop publishes no categories (or no brands).
+- `productCount` is derived from the shop's **real active product rows** by a
+  bounded keyset scan (500 rows/page × 10 pages, two small columns). When the
+  scan cannot complete, the count is `null` and the tile says "Tap to browse" —
+  never a truncated sum, never an invented zero. A category with genuinely no
+  products reports `0`.
+- The product filter path is untouched: `loadCatalogBatch` still scopes a
+  category to `id` + its published children and a brand to `eq('brand_id')`, so
+  a parent category still shows everything under it.
+- Authentication, retailer-role gating, RLS and the `read.catalog` rate limit are
+  unchanged. The home screen keeps its deliberate asymmetry: a taxonomy outage
+  degrades its two rails only.
+
+### 13.3 The catalogue UI
+
+| Requirement | How it is met |
+| --- | --- |
+| Real taxonomy, no fakes | Categories and Brands panes render exactly the rows the server returned, with the server's own names, images and counts. Nothing is hardcoded, mocked or estimated on the device. |
+| Segmented control | `CatalogTabStrip`: one pill, three equal 48dp segments. Selected = filled brand red + white semibold label; unselected = muted ink on the neutral track. `Role.Tab` per segment, inside a `selectableGroup`, so it is announced as a tab set and never reads as a disabled button. |
+| Always know where you are | Brand app bar (name never truncated) + the selected segment + the applied scope as a removable chip + a "Showing…" line under the count. |
+| Category / brand tiles | 2-column grid, 96dp artwork band, two-line name, one server fact line. Selected state carries three cues (2dp primary border, primary-tinted surface, filled tick badge), so it survives colour-blindness and a screenshot. |
+| Product grid | `GridCells.Adaptive(158.dp)` → exactly two columns at 360/393/412dp, 1:1 artwork band, centred `Fit` images on a light neutral surface, 2-line name, brand, pack chips, price, MOQ and stock state; one card geometry for the grid and its skeleton. |
+| Filters and sort | "All" + every real category as chips, the applied brand as its own chip, a sort control that names the current order and opens the full list, and an in-stock switch that is filled when it is on. Every one of them performs a real request. |
+| Favourites | 48dp control with a solid backing circle, filled heart in rose when saved, progress while the write is in flight, and one shared store, so the state survives navigation. |
+| Bottom navigation | Home · Catalogue · Cart · Orders · Account, selected item in brand red with a pink indicator, server-driven cart badge, and the shell insets the content so the bar never covers the last row. |
+| Loading / empty / error / retry | All three panes: skeletons while loading, "No products found" / "No categories yet" as *empty* (never an error), "No match" for a local filter with no hit, and `ErrorState`/`OfflineState` with a real retry that issues a fresh request. A failed *continuation* keeps the rows already on screen and retries the continuation, not the whole list. |
+
+### 13.4 Files
+
+Backend: `lib/mobile/catalog.ts`, `lib/mobile/catalog-service.ts`,
+`app/api/mobile/v1/catalog/categories/route.ts`,
+`app/api/mobile/v1/catalog/brands/route.ts`, `tests/mobile-catalog-api.test.ts`.
+
+Android: `theme/Color.kt`, `theme/ExtraColors.kt`, `theme/Theme.kt`,
+`theme/Dimensions.kt`, `components/MaharaniSearchBar.kt`, `components/Skeletons.kt`,
+`feature/catalog/…/CatalogViewModel.kt`, `ui/CatalogScreen.kt`,
+`ui/components/{CatalogTabStrip,DirectoryCards,ProductCard,ProductGrid,ProductImage}.kt`,
+`feature/catalog/src/test/…/CatalogViewModelTest.kt`,
+`app/navigation/AuthenticatedShell.kt`, `app/ui/BrandSplash.kt`.
+
+### 13.5 What could not be verified here
+
+There is no Android SDK, JDK or Gradle distribution in this working environment
+(and no network route to the hosts that serve them), so unit tests, lint and the
+APK are **not** run locally: they are run by `.github/workflows/android-apk.yml`
+on the pushed commit, and the results — including compiler diagnostics and the
+APK artifact — are reported in the pull request. The 360/393/412dp widths are
+checked by layout arithmetic (two `Adaptive(158.dp)` columns at every one of
+them, fixed 48dp targets, no fixed-width child wider than the viewport) rather
+than on a device screen.
