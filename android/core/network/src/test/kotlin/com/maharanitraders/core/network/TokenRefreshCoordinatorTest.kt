@@ -5,6 +5,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -64,7 +66,7 @@ class TokenRefreshCoordinatorTest {
       null
     }
 
-    assertEquals(null, coordinator.refresh("stale-token"))
+    assertNull(coordinator.refresh("stale-token"))
     assertEquals(1, refreshes)
   }
 
@@ -74,7 +76,7 @@ class TokenRefreshCoordinatorTest {
     var refreshes = 0
     coordinator.install { refreshes += 1; "fresh-token" }
 
-    assertEquals(null, coordinator.refresh(null))
+    assertNull(coordinator.refresh(null))
     assertEquals(0, refreshes)
   }
 
@@ -85,17 +87,17 @@ class TokenRefreshCoordinatorTest {
     assertEquals("account-a-token", coordinator.refresh("stale-a"))
 
     coordinator.reset()
+    coordinator.install { "account-b-token" }
 
-    assertEquals("account-b-token", run {
-      coordinator.install { "account-b-token" }
-      coordinator.refresh("stale-b")
-    })
+    // Nothing cached from account A survives: the next caller pays for a real
+    // exchange and receives account B's token.
+    assertEquals("account-b-token", coordinator.refresh("stale-b"))
   }
 
   @Test
   fun `no refresher installed means no refresh`() = runTest(dispatcher) {
     val coordinator = TokenRefreshCoordinator()
-    assertEquals(false, coordinator.installed)
-    assertEquals(null, coordinator.refresh("stale-token"))
+    assertFalse(coordinator.installed)
+    assertNull(coordinator.refresh("stale-token"))
   }
 }

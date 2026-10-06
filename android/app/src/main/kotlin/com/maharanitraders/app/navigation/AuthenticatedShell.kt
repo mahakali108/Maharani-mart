@@ -216,7 +216,16 @@ private fun RoutedShell(
 
   val bottomItems = routing.destinations.filter { it.route in BOTTOM_NAV_ROUTES }
   val drawerItems = routing.destinations.filter { it.route !in BOTTOM_NAV_ROUTES }
-  val showBottomBar = currentRoute in BOTTOM_NAV_ROUTES
+  // The drawer's "Categories" entry renders the SAME catalogue on its Categories
+  // pane, so it counts as the Catalog tab: the bar stays visible and keeps its
+  // selection instead of vanishing because a second route to one screen is open.
+  val selectedTabRoute = if (currentRoute == MaharaniRoutes.CATEGORIES) {
+    MaharaniRoutes.CATALOG
+  } else {
+    currentRoute
+  }
+  val showBottomBar = currentRoute in BOTTOM_NAV_ROUTES ||
+    currentRoute == MaharaniRoutes.CATEGORIES
   val currentLabel = routing.destinations.firstOrNull { it.route == currentRoute }?.label
     ?: routing.start.label
 
@@ -364,7 +373,7 @@ private fun RoutedShell(
           ) {
             bottomItems.forEach { destination ->
               NavigationBarItem(
-                selected = destination.route == currentRoute,
+                selected = destination.route == selectedTabRoute,
                 onClick = { selectTab(destination) },
                 icon = {
                   if (destination.route == MaharaniRoutes.CART) {

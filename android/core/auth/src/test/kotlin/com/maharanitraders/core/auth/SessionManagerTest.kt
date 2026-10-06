@@ -1,5 +1,6 @@
 package com.maharanitraders.core.auth
 
+import com.maharanitraders.core.common.SessionScopedStore
 import com.maharanitraders.core.common.TimeSource
 import com.maharanitraders.core.datastore.AppPreferences
 import com.maharanitraders.core.datastore.PreferenceStore
@@ -515,9 +516,9 @@ class SessionManagerTest {
 
     val fresh = session.refreshAccessToken()
 
-    assertEquals(null, fresh)
-    assertEquals(null, store.stored)
-    assertEquals(null, holder.accessToken())
+    assertNull(fresh)
+    assertNull(store.stored)
+    assertNull(holder.accessToken())
     assertEquals(
       SessionState.SignedOut(SignOutReason.SESSION_EXPIRED),
       session.state.value,
@@ -535,7 +536,7 @@ class SessionManagerTest {
     api.nextRefreshResult = { throw IOException("no route to host") }
     val fresh = session.refreshAccessToken()
 
-    assertEquals(null, fresh)
+    assertNull(fresh)
     // A blip must not sign the shopper out or throw away the tokens: the next
     // request (or the next launch) can still refresh.
     assertEquals("refresh-token-1", store.stored?.refreshToken)
