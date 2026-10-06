@@ -235,6 +235,9 @@ class MaharaniRouterTest {
       MaharaniRoutes.HOME,
       MaharaniRoutes.CATALOG,
       MaharaniRoutes.CATEGORIES,
+      // Brands is the SAME catalogue on its Brands pane, so it is built the
+      // moment CATEGORIES is: it renders `CatalogScreen`, not a placeholder.
+      MaharaniRoutes.BRANDS,
       MaharaniRoutes.FAVORITES,
       MaharaniRoutes.QUICK_ORDER,
       MaharaniRoutes.CART,
@@ -272,6 +275,9 @@ class MaharaniRouterTest {
       MaharaniRoutes.HOME,
       MaharaniRoutes.CATALOG,
       MaharaniRoutes.CATEGORIES,
+      // Brands is the SAME catalogue on its Brands pane, so it is built the
+      // moment CATEGORIES is: it renders `CatalogScreen`, not a placeholder.
+      MaharaniRoutes.BRANDS,
       MaharaniRoutes.FAVORITES,
       MaharaniRoutes.QUICK_ORDER,
       MaharaniRoutes.CART,

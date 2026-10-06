@@ -37,7 +37,14 @@ object MaharaniDimens {
 
   // Touch and control sizes.
   val touchTarget = 48.dp
-  val searchFieldHeight = 46.dp
+
+  /**
+   * The search field is ALSO a touch target — it is the control every catalogue
+   * visit starts with — so it carries the platform minimum rather than the 46 dp
+   * that a pure text box would need. Two dp is invisible in a screenshot and is
+   * the difference between meeting the accessibility minimum and missing it.
+   */
+  val searchFieldHeight = 48.dp
   val bottomBarHeight = 64.dp
 
   // Cards and imagery.
