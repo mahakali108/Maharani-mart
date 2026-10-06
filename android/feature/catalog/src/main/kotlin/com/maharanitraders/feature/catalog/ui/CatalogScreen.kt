@@ -120,24 +120,27 @@ fun CatalogScreen(
   val state by viewModel.state.collectAsStateWithLifecycle()
 
   // Deep links from the home screen and the shell arrive as arguments, not as
-  // state the ViewModel guesses at. They are applied ONCE per visit: a
-  // configuration change recomposes this effect with the same arguments, and
-  // re-applying them would drag the shopper back to the initial pane after they
-  // had moved on.
-  var appliedInitial by rememberSaveable { mutableStateOf(false) }
-  LaunchedEffect(initialSearch, initialCategoryId, initialBrandId, initialTab) {
-    if (appliedInitial) return@LaunchedEffect
-    appliedInitial = true
-    if (initialSearch.isNotEmpty() && state.query.search != initialSearch) {
-      viewModel.onSearchChange(initialSearch)
-    }
-    if (initialCategoryId != null && state.query.categoryId != initialCategoryId) {
-      viewModel.selectCategory(initialCategoryId)
-    }
-    if (initialBrandId != null && state.query.brandId != initialBrandId) {
-      viewModel.selectBrand(initialBrandId, initialBrandLabel)
-    }
-    viewModel.selectTab(initialTab)
+  // state the ViewModel guesses at. They are applied ONCE per distinct request:
+  // a configuration change recomposes this effect with the SAME key and does
+  // nothing, while re-opening the catalogue with a different search (the
+  // navigation entry is reused, so `rememberSaveable` survives) applies the new
+  // one instead of silently showing the previous query's results.
+  //
+  // The whole request — search, category, brand and pane — goes through ONE
+  // ViewModel call, so a deep link costs one catalogue read instead of one per
+  // field (see `applyInitialRequest`).
+  var appliedInitial by rememberSaveable { mutableStateOf<String?>(null) }
+  val requestKey = "$initialSearch|$initialCategoryId|$initialBrandId|${initialTab.name}"
+  LaunchedEffect(requestKey) {
+    if (appliedInitial == requestKey) return@LaunchedEffect
+    appliedInitial = requestKey
+    viewModel.applyInitialRequest(
+      search = initialSearch,
+      categoryId = initialCategoryId,
+      brandId = initialBrandId,
+      brandLabel = initialBrandLabel,
+      tab = initialTab,
+    )
   }
 
   val favorites by viewModel.favoriteState.collectAsStateWithLifecycle()
@@ -668,10 +671,17 @@ private fun ResultSummary(
     horizontalArrangement = Arrangement.SpaceBetween,
   ) {
     Column(modifier = Modifier.weight(1f)) {
+      // The header is a STATE report, not a spinner. "Loading products…" used to
+      // be the fallback whenever the count was absent — which is also true after
+      // a FAILED load and on the second and later batches, so a list that had
+      // stopped loading (or had never started) still said it was loading.
       val count = state.resultCount
+      val loading = state.loading || state.loadingMore
       Text(
         text = when {
-          count == null -> "Loading products…"
+          loading -> "Loading products…"
+          state.errorMessage != null -> "Products unavailable"
+          count == null -> "Products"
           count == 1 -> "1 product"
           else -> "$count products"
         },

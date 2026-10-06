@@ -189,6 +189,80 @@ class CatalogViewModelTest {
     assertThat(viewModel.state.value.brandLabel).isNull()
   }
 
+  /**
+   * The catalogue's own load path, which is what "the Catalog is stuck loading"
+   * actually was on a long-lived session: the request that opens the screen
+   * carries filters from the home search box, a category rail or a brand tile,
+   * and applying them field by field spent one catalogue read each (the server
+   * allows 120/min, `lib/mobile/rate-limit.ts`). One request per deep link.
+   */
+  @Test
+  fun `applies a search, category and brand deep link in one request`() = runTest(dispatcher) {
+    val api = api()
+    repeat(4) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }
+
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    val afterInitialLoad = api.productRequests.size
+
+    viewModel.applyInitialRequest(
+      search = "basmati",
+      categoryId = "c1",
+      brandId = "b1",
+      brandLabel = "India Gate",
+      tab = CatalogTab.PRODUCTS,
+    )
+    advanceUntilIdle()
+
+    // Exactly ONE further read for the whole deep link.
+    assertThat(api.productRequests).hasSize(afterInitialLoad + 1)
+    val request = api.productRequests.last()
+    assertThat(request.search).isEqualTo("basmati")
+    assertThat(request.categoryId).isEqualTo("c1")
+    assertThat(request.brandId).isEqualTo("b1")
+    assertThat(request.cursor).isNull()
+
+    val state = viewModel.state.value
+    assertThat(state.query.search).isEqualTo("basmati")
+    assertThat(state.brandLabel).isEqualTo("India Gate")
+    assertThat(state.tab).isEqualTo(CatalogTab.PRODUCTS)
+  }
+
+  @Test
+  fun `an unfiltered deep link costs no extra request`() = runTest(dispatcher) {
+    val api = api()
+    repeat(2) { api.productPages.addLast(envelope(listOf("p1"), resultCount = 1)) }
+
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    val afterInitialLoad = api.productRequests.size
+
+    // Opening the tab with no filter and the default pane: `init` already loaded
+    // this exact query, so a second identical read would be pure waste.
+    viewModel.applyInitialRequest()
+    advanceUntilIdle()
+
+    assertThat(api.productRequests).hasSize(afterInitialLoad)
+  }
+
+  @Test
+  fun `a deep link can open the catalogue on its Categories pane`() = runTest(dispatcher) {
+    val api = api()
+    repeat(2) { api.productPages.addLast(envelope(listOf("p1"), resultCount = 1)) }
+
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.applyInitialRequest(tab = CatalogTab.CATEGORIES)
+    advanceUntilIdle()
+
+    val state = viewModel.state.value
+    assertThat(state.tab).isEqualTo(CatalogTab.CATEGORIES)
+    // The taxonomy is already in state, so the pane renders without a reload.
+    assertThat(state.visibleCategories.map { it.name }).containsExactly("Rice", "Oils")
+    assertThat(state.visibleBrands.map { it.name }).containsExactly("India Gate", "Fortune")
+  }
+
   @Test
   fun `narrows the directory panes on the device without a request`() = runTest(dispatcher) {
     val api = api()

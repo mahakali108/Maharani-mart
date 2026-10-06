@@ -322,6 +322,54 @@ class CatalogViewModel @Inject constructor(
     reload()
   }
 
+  /**
+   * Apply the request the shell opened this screen with — search term, category,
+   * brand and pane — as ONE query change and ONE list load.
+   *
+   * WHY THIS EXISTS AS A SINGLE CALL
+   * The catalogue is opened from five places (the tab, the home search box, a
+   * home category rail, a brand tile and the favourites screen's "browse" empty
+   * state), and a deep link can carry a search AND a category AND a brand at
+   * once. Driving that through [onSearchChange] + [selectCategory] +
+   * [selectBrand] fired one request per field — up to four catalog reads for one
+   * tap, each one discarded by the next, and each one counting against the
+   * server's `read.catalog` budget (120/min, `lib/mobile/rate-limit.ts`). A
+   * burst of those is how a healthy session starts answering `429`.
+   *
+   * So the filters are folded into one state update and the in-flight first
+   * batch — which was fetched for the DEFAULT query and is already obsolete — is
+   * cancelled before it can be rendered. `reload()` is skipped entirely when the
+   * request adds nothing, which is the common case: opening the tab with no
+   * filter keeps the single load `init` already started.
+   */
+  fun applyInitialRequest(
+    search: String = "",
+    categoryId: String? = null,
+    brandId: String? = null,
+    brandLabel: String? = null,
+    tab: CatalogTab = CatalogTab.PRODUCTS,
+  ) {
+    val current = _state.value
+    val nextQuery = current.query.copy(
+      search = search.trim(),
+      categoryId = categoryId,
+      brandId = brandId,
+    )
+    val nextLabel = if (brandId == null) {
+      null
+    } else {
+      brandLabel ?: current.brands.firstOrNull { brand -> brand.id == brandId }?.name
+    }
+    if (nextQuery == current.query && nextLabel == current.brandLabel && tab == current.tab) return
+
+    // The pending debounce (if the shopper is typing) belongs to the old query.
+    searchJob?.cancel()
+    _state.update {
+      it.copy(tab = tab, query = nextQuery, brandLabel = nextLabel, directoryFilter = "")
+    }
+    reload()
+  }
+
   /** Fetch the first batch for the current filters. */
   fun reload() {
     listJob?.cancel()
