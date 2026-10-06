@@ -527,8 +527,12 @@ class SessionManagerTest {
 
   @Test
   fun `a runtime refresh that cannot reach the server keeps the session`() = runTest(dispatcher) {
+    // The session was verified at launch with a token that is still valid — the
+    // state the app is in when, an hour later, a request's refresh cannot reach
+    // the server. (The token must NOT be expired here: with an expired token
+    // `restore()` would refresh first, which is a different test.)
     val api = FakeMaharaniApi().apply { nextResult = { ApiEnvelope(sessionDto()) } }
-    val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
+    val store = FakeTokenStore(initial = validTokens())
     val holder = ActiveTokenHolder()
     val session = manager(api, store, holder = holder)
     assertTrue(session.restore() is SessionState.Authenticated)
