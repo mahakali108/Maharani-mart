@@ -1,6 +1,6 @@
 # Maharani Traders — Native Android ↔ PWA Feature Parity
 
-Audited against the repository on 2026-10-05. The PWA under `app/retailer/**` is the
+Audited against the repository on 2026-10-06. The PWA under `app/retailer/**` is the
 FEATURE REFERENCE; the native Android app under `android/` is the product being
 delivered. Every row below was checked by reading the route, the endpoint and the
 Kotlin screen — not inferred from a previous report.
@@ -36,6 +36,8 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | AUTH-08 | Pending-approval gate | `app/pending-approval/page.tsx` | session `gate` | `SessionGateScreens` | IMPLEMENTED | Driven by `ApiErrorCode.gate`, never by matching message text. |
 | AUTH-09 | Access-expired gate | `app/access-expired/page.tsx` | session `gate` | `SessionGateScreens` | IMPLEMENTED | As above. |
 | AUTH-10 | Account suspended / inactive | session guard | session `gate` | `SessionGateScreens` | IMPLEMENTED | As above. |
+| AUTH-11 | Session survives restarts | web cookie session | `GET /session`, `POST /auth/refresh` | `SessionManager` + `KeystoreTokenStore` | IMPLEMENTED | The token pair is written by `KeystoreTokenStore` (AES-256-GCM under a non-exportable AndroidKeyStore key; ciphertext in `filesDir`, never a plaintext preference) and read back on every cold start, so a session outlives activity recreation, process death, relaunch and device restart. Restore verifies with `GET /session` **with the stored token published to the request interceptor first** — the defect this change fixes: the verify call used to run anonymously, answer 401 and wipe a perfectly good session, which is why every cold start landed on sign-in. A token the server rejects as expired is refreshed once through `POST /auth/refresh` and retried; a refresh the server rejects as terminal clears the session, while a network failure keeps it and reports offline. No email or password is ever stored — only the server's token pair. |
+| AUTH-12 | Session-scoped state isolation | web per-request session | — | `SessionScopedStore` set in `SessionManager` | IMPLEMENTED | Favourites (`FavoritesStore`), cart count (`CartCountStore`) and unread badge (`UnreadStore`) are process-wide singletons. Each implements `SessionScopedStore`, contributes itself to the Hilt multibound `Set<SessionScopedStore>`, and is emptied by `SessionManager` whenever the published state leaves `Authenticated` (sign-out, terminal refresh failure, gate rejection) and before a new sign-in is adopted. Without it the next account on the same device inherited the previous account's hearts and badges until something happened to reload them. |
 
 ## 2. Home and discovery
 
@@ -44,9 +46,9 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | HOME-01 | Retailer home | `app/retailer/home/page.tsx` | `GET /api/mobile/v1/home` | `RetailerHomeScreen` + `HomeViewModel` | IMPLEMENTED | Banners, category rail, product rails — all server rows. |
 | HOME-02 | Promotional banners | `app/retailer/home` | `GET /home` | `BannerCarousel` | IMPLEMENTED | Renders only banners the server returned; no placeholder art. |
 | HOME-03 | Search | `app/retailer/catalog` search field | `GET /catalog/products?search=` | `CatalogScreen` filter bar | IMPLEMENTED | Debounced; the query is sent to the server, never filtered client-side. |
-| HOME-04 | Category directory | `app/retailer/categories/page.tsx` | `GET /catalog/categories` | `CategoriesScreen` + `CategoriesViewModel` | IMPLEMENTED | Tapping a category opens the catalogue filtered by it. |
+| HOME-04 | Category directory | `app/retailer/categories/page.tsx` | `GET /catalog/categories` | `CatalogScreen` Categories pane (`CatalogViewModel`) | IMPLEMENTED | The catalogue's Categories pane, reached from the home rail, the drawer's "Categories" entry and the bottom bar's Catalog tab. Every tile is a real published category with its real image and the server's own `productCount` when the server counted one; a missing count is omitted rather than rounded to "0 items". Tapping one applies the filter and switches to the Products pane. |
 | HOME-05 | Category landing page | `app/retailer/categories/[id]/page.tsx` | `GET /catalog/products?categoryId=` | `CatalogScreen` (filtered) | IMPLEMENTED | Same list, pre-filtered, rather than a second screen that could price differently. |
-| HOME-06 | Brand directory | `app/retailer/brands/page.tsx` | `GET /catalog/brands` | `CategoriesScreen` brand rail + `CategoriesViewModel` | IMPLEMENTED | The brands endpoint is read alongside categories and rendered as a horizontal brand rail on the Categories tab, narrowed by the same filter field; a failed or empty brand read cannot blank the category directory. Tapping a brand opens the catalogue filtered by it. |
+| HOME-06 | Brand directory | `app/retailer/brands/page.tsx` | `GET /catalog/brands` | `CatalogScreen` Brands pane (`CatalogViewModel`) | IMPLEMENTED | The brands endpoint is read in parallel with categories when the catalogue opens, and its rows fill both the home brand rail and the catalogue's Brands pane. The pane narrows on the device (a filter field over the names the server already sent, so typing costs no request) and shows a real logo where the server sent one, the real name, and the server's `productCount` when present. Each pane reports its own read: a categories outage cannot put an error on the Brands pane, and whichever read succeeded is kept. Tapping a brand opens the Products pane filtered by `brandId`, with the brand name carried as the chip label. |
 | HOME-07 | Brand landing page | `app/retailer/brands/[id]/page.tsx` | `GET /catalog/products?brandId=` | `CatalogScreen` (filtered) | IMPLEMENTED | Tapping a brand tile opens the catalogue pre-filtered by `brandId`, with the brand name as the filter label — the same single-screen choice HOME-05 makes for categories. |
 
 ## 3. Catalogue and product detail
@@ -61,6 +63,7 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | CAT-06 | Stock badge | PDP + cards | `availability` on the pack | `StockBadge` | IMPLEMENTED | In Stock / Out of Stock only — no FEFO, GRN or multi-warehouse anywhere in the native app. |
 | CAT-07 | Add to cart from PDP | PDP | `POST /cart/lines` | `ProductDetailScreen` → `CartCheckoutViewModel` | IMPLEMENTED | Server re-prices; the response replaces the local cart. |
 | CAT-08 | Quick order | `app/retailer/quick-order/page.tsx` | `GET /api/mobile/v1/quick-order`, `POST /quick-order/match` | `QuickOrderScreen` + `QuickOrderViewModel` | IMPLEMENTED | Name search and pasted-list matcher over the real catalogue, priced for the caller by the same engine the cart and checkout use. Every add goes through `POST /cart/lines` (the `mutate_retailer_cart_line` RPC revalidates MOQ, quantity bounds and pack activity) and any order still commits through the existing atomic checkout, whose 0054 triggers reject a stale or out-of-stock quote — quick order creates no order of its own and cannot be laxer than any other surface. The matcher itself never writes, and a line that matches nothing answers with its own error instead of a guess. |
+| CAT-09 | Categories and Brands in one catalogue | `app/retailer/{categories,brands}` | `GET /catalog/categories`, `GET /catalog/brands` | `CatalogScreen` + `CatalogTabStrip` + `CatalogViewModel` | IMPLEMENTED | One destination with three panes — `[Products] [Categories] [Brands]` — rather than two disconnected directory implementations. The taxonomy is read once per visit (both endpoints in parallel) and narrowed on the device; a pane switch costs no request and a filter change costs exactly one. The pane state, loading flag, failure and empty state are per pane, so the panel that succeeded is never blanked by the one that failed. This replaced the separate `CategoriesScreen`/`CategoriesViewModel`, whose only entry points now open this screen on its Categories pane. |
 
 ## 4. Favourites
 
@@ -164,6 +167,7 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 | PLAT-01 | Native shell and navigation | app layout | — | `MaharaniRouter`, `AuthenticatedShell` | IMPLEMENTED | Bottom bar plus drawer; destinations are filtered by the session's role and workspaces. |
 | PLAT-02 | Offline and error states | web error boundaries | — | `StateSurfaces` | IMPLEMENTED | Offline, retryable and non-retryable failures are distinguished from the error code, not from message text. |
 | PLAT-03 | No WebView anywhere | — | — | — | IMPLEMENTED | The app is Kotlin + Compose + Retrofit. No WebView, Capacitor or bundled web assets, in the app or in CI. |
+| PLAT-05 | Central bottom navigation | web header nav | — | `AuthenticatedShell` bottom bar | IMPLEMENTED | Home / Catalog / Cart / Orders / Account. Catalog — not a second Categories tab — is the discovery tab, because the catalogue contains the Categories and Brands panes; the drawer's Categories entry opens the same screen on its pane. |
 | PLAT-04 | Android CI | — | — | `.github/workflows/android-apk.yml` | IMPLEMENTED | JDK 17, SDK 36, build-tools 36.0.0, repo Gradle wrapper; runs `testDebugUnitTest lintDebug assembleDebug` and uploads the lint report and the debug APK. |
 
 ---
@@ -172,12 +176,12 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 
 | Status | Count |
 |---|---|
-| IMPLEMENTED | 65 |
+| IMPLEMENTED | 69 |
 | PARTIAL | 2 |
 | MISSING | 4 |
 | BLOCKED | 5 |
 | N/A | 1 |
-| **Total rows** | **77** |
+| **Total rows** | **81** |
 
 These counts are checked against the rows above by
 `tests/parity-doc-totals.test.ts`, because the previous version of this document
@@ -196,6 +200,22 @@ behind a placeholder screen in the app.
    endpoint exists, and the app does not write profile rows directly.
 4. **MISC-01 / MISC-03 — support and reports.** Need mobile routes for support threads
    and report figures.
+
+## Remaining limitations, stated rather than hidden
+
+1. **No add-to-cart on the catalogue card.** The card shows brand, name, pack size,
+   MOQ, live price, stock and the favourite toggle, and adding to the cart happens on
+   the product detail (CAT-07) where the server pack and MOQ are known. A one-tap card
+   add would need the cart mutation that lives in `:feature:orders`; until that edge is
+   deliberate, the card does not pretend to own it.
+2. **No offers/schemes rail on home.** PROMO-04 is BLOCKED (no mobile schemes
+   endpoint). The home screen therefore shows banners, categories, brands, recently
+   added and the product grid — never a fabricated "Today's offers" rail.
+3. **No in-account security screen** (ACC-04 PARTIAL): the password-update call exists
+   and is exercised by the reset flow, but there is no in-account security screen yet.
+4. **The directory panes narrow on the device.** The server's catalogue search is a
+   PRODUCT search; the Categories/Brands panes filter the names the server already
+   sent rather than inventing a second, differently-behaving search endpoint.
 
 ## Method
 
@@ -220,3 +240,15 @@ behind a placeholder screen in the app.
   verifying environment** (no JDK or Android SDK available); they run in the
   `android-apk.yml` GitHub Actions job, and no Kotlin build result is claimed here
   unless that job is green.
+- Session persistence, the catalogue panes and the account hub (the 2026-10-06 change
+  set) were verified by: reading the changed Kotlin against its call sites; the
+  repository's static Android gates (`tests/android-project-integrity.test.ts`); the
+  catalogue unit tests in `android/feature/catalog/src/test/…/CatalogViewModelTest.kt`
+  (categories load, brands load, category filter, brand filter, pane navigation, empty
+  state, API failure, pagination, de-duplication) and the session tests in
+  `android/core/auth/src/test/…/SessionManagerTest.kt` (token published before the
+  verify call, refresh retry, terminal rejection clears, network failure keeps, a
+  second account cannot inherit the first account's scoped state). Those Kotlin tests
+  run in the `android-apk.yml` job; the static gates run here. The web suite
+  (`pnpm test`), typecheck, lint and production build were run in this environment and
+  are green.

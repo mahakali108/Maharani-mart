@@ -144,18 +144,29 @@ The search field lives in the app bar (reference layout), is always visible, and
 submits to the real catalogue search — no invented trending searches, no
 client-side suggestion list.
 
-### 5.2 Categories tab (`CategoriesScreen` + `CategoriesViewModel`) — new
+### 5.2 Categories and Brands panes (`CatalogScreen` + `CatalogViewModel`) — as built
+
+> **As built (2026-10-06).** The separate `CategoriesScreen`/`CategoriesViewModel`
+> sketched below was not kept: two directories meant two implementations of the same
+> selection, empty and failure states, and two places for a filter to behave
+> differently. The shipped design is ONE catalogue with three panes —
+> `[Products] [Categories] [Brands]` — implemented by `CatalogTabStrip`, the two
+> directory panes inside `CatalogScreen`, and `CatalogViewModel`. `CategoriesScreen`,
+> `CategoriesViewModel` and `CategoriesViewModelTest` no longer exist; the drawer's
+> Categories entry opens `CatalogScreen` on its Categories pane. The paragraph below
+> is kept as the design intent it was.
 
 Data: `GET /api/mobile/v1/catalog/categories` and `/brands` (loaded
-concurrently). Responsive grid of `CategoryCard`s with real names, real images
-and the server's rolled-up active-product counts; a brand rail above when the
-server published brands. Tapping a category or brand opens the catalogue scoped
-to it.
+concurrently). Responsive grid of directory tiles (`CategoryCard`, `BrandCard`)
+with real names, real images and the server's rolled-up active-product counts.
+Tapping a category or brand applies that filter and switches to the Products
+pane, so the selection is immediately visible in real products.
 
 The field at the top narrows the **already loaded** names on the device. It is a
 directory filter, not a server search, and it cannot surface a category the
-server did not send; it fires no request (pinned by
-`CategoriesViewModelTest`).
+server did not send; it fires no request (pinned by `CatalogViewModelTest` —
+"reads the two directory endpoints once", "narrows the directory panes on the
+device without a request").
 
 ### 5.3 Catalogue (`CatalogScreen` + `CatalogViewModel`)
 
@@ -364,8 +375,9 @@ New — feature (`:feature:catalog`):
 
 - `ui/components/ProductImage.kt`, `BannerCarousel.kt`, `CategoryTile.kt`
   (`CategoryTile`, `BrandTile`, `CategoryCard`), `ProductCard.kt`, `ProductGrid.kt`
-- `CategoriesViewModel.kt`, `ui/CategoriesScreen.kt`
-- `src/test/…/CategoriesViewModelTest.kt`
+- `ui/components/CatalogTabStrip.kt`, `ui/components/DirectoryCards.kt`
+  (`DirectoryAllCard`, `CategoryCard`, `BrandCard`)
+- `CatalogTabs.kt` (`CatalogTab`), `src/test/…/CatalogViewModelTest.kt`
 
 New — app (`:app`):
 

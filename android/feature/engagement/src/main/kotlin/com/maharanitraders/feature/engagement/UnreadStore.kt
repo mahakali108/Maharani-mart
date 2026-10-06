@@ -1,6 +1,7 @@
 package com.maharanitraders.feature.engagement
 
 import com.maharanitraders.core.common.AppResult
+import com.maharanitraders.core.common.SessionScopedStore
 import com.maharanitraders.core.common.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,7 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 @Singleton
 class UnreadStore @Inject constructor(
   private val repository: EngagementRepository,
-) {
+) : SessionScopedStore {
 
   private val _unreadCount = MutableStateFlow<Int?>(null)
   val unreadCount: StateFlow<Int?> = _unreadCount.asStateFlow()
@@ -58,5 +59,14 @@ class UnreadStore @Inject constructor(
   /** Session ended: clear the previous account's badge. */
   fun clear() {
     _unreadCount.value = null
+  }
+
+  /**
+   * Session-scoped contract: the unread count belongs to the signed-in
+   * recipient, so it goes back to "not known yet" with the session rather than
+   * showing the previous account's number to the next one.
+   */
+  override suspend fun onSessionEnded() {
+    clear()
   }
 }

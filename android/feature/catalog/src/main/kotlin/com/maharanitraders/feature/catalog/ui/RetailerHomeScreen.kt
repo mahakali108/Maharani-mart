@@ -47,6 +47,7 @@ import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.model.CatalogBrand
 import com.maharanitraders.core.model.CatalogCategory
 import com.maharanitraders.core.model.CatalogProduct
+import com.maharanitraders.feature.catalog.CatalogTab
 import com.maharanitraders.feature.catalog.HomeUiState
 import com.maharanitraders.feature.catalog.HomeViewModel
 import com.maharanitraders.feature.catalog.ui.components.BrandTile
@@ -70,10 +71,13 @@ object HomeScreenTags {
 /**
  * The retailer home screen — the shop front.
  *
- * Top to bottom: the admin's promotional banners (or a branded, non-promotional
- * welcome panel when no promotion is live), the real category rail, the real
- * brand rail, a "Recently added" rail fed by the catalogue's own newest-first
- * ordering, and the discovery grid — the first batch of the real catalogue.
+ * Top to bottom, the order the brief asks for: the admin's promotional banners
+ * (or a branded, non-promotional welcome panel when no promotion is live), the
+ * real category rail, the real brand rail, a "Recently added" rail fed by the
+ * catalogue's own newest-first ordering, and the discovery grid — the first
+ * batch of the real catalogue. A "Today's offers" rail is deliberately ABSENT:
+ * PROMO-04 is blocked on a mobile schemes endpoint, and inventing one would be
+ * fake data. This screen renders no section the server did not fill.
  * Every value arrives from `GET /api/mobile/v1/home` plus one `sort=newest`
  * catalogue batch; the screen has no fallback content, so when the request
  * fails the shopper sees an honest error or offline state with a retry rather
@@ -91,7 +95,12 @@ object HomeScreenTags {
 fun RetailerHomeScreen(
   onOpenCatalog: (search: String, categoryId: String?, brandId: String?, brandLabel: String?) -> Unit,
   onOpenProduct: (productId: String) -> Unit,
-  onOpenCategories: () -> Unit,
+  /**
+   * Open the catalogue on one of its directory panes. The home rails' "View all"
+   * lands on the pane it summarises (categories, brands) rather than on a
+   * separate screen, because there is only one catalogue.
+   */
+  onOpenDirectory: (CatalogTab) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -107,7 +116,7 @@ fun RetailerHomeScreen(
     onOpenCatalog = { onOpenCatalog("", null, null, null) },
     onOpenCategory = { categoryId -> onOpenCatalog("", categoryId, null, null) },
     onOpenBrand = { brand -> onOpenCatalog("", null, brand.id, brand.name) },
-    onOpenCategories = onOpenCategories,
+    onOpenDirectory = onOpenDirectory,
     onOpenProduct = onOpenProduct,
     modifier = modifier,
   )
@@ -132,7 +141,7 @@ fun HomeContent(
   onToggleFavorite: ((String) -> Unit)? = null,
   onOpenCategory: (String) -> Unit,
   onOpenBrand: (CatalogBrand) -> Unit,
-  onOpenCategories: () -> Unit,
+  onOpenDirectory: (CatalogTab) -> Unit,
   onOpenProduct: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -215,8 +224,9 @@ fun HomeContent(
               Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
                 SectionHeader(
                   title = "Shop by category",
+                  subtitle = "Everything the shop stocks, by aisle",
                   actionLabel = "View all",
-                  onAction = onOpenCategories,
+                  onAction = { onOpenDirectory(CatalogTab.CATEGORIES) },
                 )
                 CategoryRail(categories = home.categories, onSelect = onOpenCategory)
               }
@@ -227,9 +237,10 @@ fun HomeContent(
             item(span = full) {
               Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
                 SectionHeader(
-                  title = "Shop by brand",
+                  title = "Featured brands",
+                  subtitle = "The houses you stock",
                   actionLabel = "View all",
-                  onAction = onOpenCategories,
+                  onAction = { onOpenDirectory(CatalogTab.BRANDS) },
                 )
                 BrandRail(brands = home.brands, onSelect = onOpenBrand)
               }

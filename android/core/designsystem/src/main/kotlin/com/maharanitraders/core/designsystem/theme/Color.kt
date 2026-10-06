@@ -16,6 +16,13 @@ import androidx.compose.ui.graphics.Color
  *     native brief (restrained accents, light-blue page backgrounds). They are
  *     design tokens, not data: no product, price or stock value lives here.
  *
+ * The native brief asks for a ROYAL / DEEP BLUE primary with a WARM GOLDEN
+ * accent, so the [RoyalBlue] scale below is the commerce chrome (app bar,
+ * bottom navigation, buttons, selection) and the existing saffron scale is the
+ * accent family the theme is built on. The brand red stays the identity colour
+ * (crown mark, launcher, splash, "New" ribbon) — three families, each with one
+ * job, rather than everything in one blue.
+ *
  * Note for reviewers: use these tokens (or the Material 3 scheme built from
  * them in [MaharaniTheme]) instead of literal hex values in screens.
  */
@@ -46,6 +53,21 @@ object MaharaniPalette {
   val ActionBlue800 = Color(0xFF1A4394)
   val ActionBlue900 = Color(0xFF1A3C78)
 
+  // Royal blue — the PRIMARY chrome family: app bar, bottom navigation, primary
+  // buttons, selected states. A deep, saturated royal blue rather than the
+  // lighter marketplace blue: it is the colour the whole shop is built on, so it
+  // has to hold white text at every size (contrast 8.4:1 at 600).
+  val RoyalBlue50 = Color(0xFFEEF3FF)
+  val RoyalBlue100 = Color(0xFFDCE6FF)
+  val RoyalBlue200 = Color(0xFFBCCEFF)
+  val RoyalBlue300 = Color(0xFF93ACF8)
+  val RoyalBlue400 = Color(0xFF6285EC)
+  val RoyalBlue500 = Color(0xFF3A61D8)
+  val RoyalBlue600 = Color(0xFF2348BE) // primary core
+  val RoyalBlue700 = Color(0xFF1B3A9E)
+  val RoyalBlue800 = Color(0xFF172F7E)
+  val RoyalBlue900 = Color(0xFF132861)
+
   // Ink — text and neutral surfaces.
   val Ink50 = Color(0xFFF6F6F6)
   val Ink100 = Color(0xFFEDEDED)
@@ -65,16 +87,19 @@ object MaharaniPalette {
   val Success700 = Color(0xFF047857)
   val Success900 = Color(0xFF064E3B)
 
-  // Saffron — the native shopping redesign's restrained accent (tier-table
-  // emphasis, wholesale highlights). Part of the native brand direction, not a
-  // web token; the app keeps it to small surfaces only.
+  // Saffron / gold — the app's SECONDARY accent (Material's `secondary` role):
+  // offer badges, "New" ribbons' companion accents, wholesale highlights, the
+  // selected segment's edge and banner copy. Warm amber-gold, deliberately used
+  // on small surfaces so it reads as a premium accent rather than a wash.
   val Saffron50 = Color(0xFFFFF8EB)
   val Saffron100 = Color(0xFFFEEFC7)
   val Saffron200 = Color(0xFFFDDF8A)
   val Saffron300 = Color(0xFFFBC44D)
-  val Saffron500 = Color(0xFFF59E0B)
+  val Saffron400 = Color(0xFFF7B01B)
+  val Saffron500 = Color(0xFFF59E0B) // secondary core
   val Saffron600 = Color(0xFFD97706)
   val Saffron700 = Color(0xFFA16207)
+  val Saffron800 = Color(0xFF854D0E)
   val Saffron900 = Color(0xFF78350F)
 
   // Cool page greys — the light-blue-tinted backgrounds the native redesign

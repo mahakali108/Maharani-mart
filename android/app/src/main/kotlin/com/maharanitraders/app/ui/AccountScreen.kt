@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,11 +27,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.maharanitraders.app.BuildConfig
 import com.maharanitraders.app.navigation.MaharaniCatalog
+import com.maharanitraders.app.navigation.MaharaniRoutes
 import com.maharanitraders.core.designsystem.IsoDateDisplay
+import com.maharanitraders.core.designsystem.components.ChevronRightGlyph
 import com.maharanitraders.core.designsystem.components.SectionHeader
 import com.maharanitraders.core.designsystem.labels.label
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.model.SessionSnapshot
+import com.maharanitraders.core.model.UserRole
 import com.maharanitraders.core.model.Workspace
 
 /** Test tags for the account surface. */
@@ -40,15 +44,20 @@ object AccountScreenTags {
   const val ACCESS = "account_access"
   const val SIGN_OUT = "account_sign_out"
   const val ADDRESS_BOOK = "account_address_book"
+  const val SHORTCUTS = "account_shortcuts"
 }
 
 /**
- * The Account tab: the verified session, presented as a profile.
+ * The Account tab: the verified session, presented as a profile, plus the
+ * shortcuts to everything else this account owns.
  *
  * Nothing here is fetched again or invented — every line is the same
  * server-verified snapshot the shell was routed with: identity, role, shop
- * status, access period and the workspaces the server's policy grants. Sign
- * out is the only action, and it is the real session controller's.
+ * status, access period and the workspaces the server's policy grants. The
+ * shortcuts open the REAL destinations that already exist (orders, favourites,
+ * the coin wallet, coupons, notifications, quick order), so "Account" is a place
+ * a shopkeeper can run their account from rather than a dead end. Sign out is
+ * the real session controller's, and it clears the account's cached state.
  */
 @Composable
 fun AccountScreen(
@@ -57,6 +66,10 @@ fun AccountScreen(
   modifier: Modifier = Modifier,
   /** Opens the delivery address book — a real screen over the addresses API. */
   onOpenAddresses: () -> Unit = {},
+  /** Opens the order history tab. */
+  onOpenOrders: () -> Unit = {},
+  /** Opens another destination of this account, by route. */
+  onOpenDestination: (String) -> Unit = {},
 ) {
   LazyColumn(
     modifier = modifier
@@ -112,6 +125,15 @@ fun AccountScreen(
       }
     }
 
+    if (snapshot.role == UserRole.RETAILER) {
+      item {
+        ShortcutsCard(
+          onOpenOrders = onOpenOrders,
+          onOpenDestination = onOpenDestination,
+        )
+      }
+    }
+
     item { WorkspacesCard(snapshot = snapshot) }
 
     item {
@@ -140,6 +162,109 @@ fun AccountScreen(
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = MaharaniDimens.spaceMd),
+      )
+    }
+  }
+}
+
+/**
+ * The account's own shortcuts, in one card.
+ *
+ * Every row opens a destination the router already granted this account, so a
+ * row that could not be opened is not drawn: the list is built from the same
+ * server-described workspace/permission check the drawer uses, not from a
+ * hardcoded wish list. Costs nothing to render (no request) — each destination
+ * loads its own real data when it opens.
+ */
+@Composable
+private fun ShortcutsCard(
+  onOpenOrders: () -> Unit,
+  onOpenDestination: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  AccountCard(modifier = modifier.testTag(AccountScreenTags.SHORTCUTS)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+      SectionHeader(
+        title = "Your shop",
+        subtitle = "Orders, savings and messages",
+      )
+      ShortcutRow(
+        label = "My orders",
+        detail = "Track, re-order and download invoices",
+        onClick = onOpenOrders,
+      )
+      ShortcutRow(
+        label = "Favourites",
+        detail = "The products you saved",
+        onClick = { onOpenDestination(MaharaniRoutes.FAVORITES) },
+      )
+      ShortcutRow(
+        label = "Quick order",
+        detail = "Restock a known list in seconds",
+        onClick = { onOpenDestination(MaharaniRoutes.QUICK_ORDER) },
+      )
+      ShortcutRow(
+        label = "Maharani Coins",
+        detail = "Balance and ledger",
+        onClick = { onOpenDestination(MaharaniRoutes.COINS) },
+      )
+      ShortcutRow(
+        label = "Coupons and offers",
+        detail = "Apply a code at checkout",
+        onClick = { onOpenDestination(MaharaniRoutes.COUPONS) },
+      )
+      ShortcutRow(
+        label = "Notifications",
+        detail = "Order and account updates",
+        onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATIONS) },
+      )
+    }
+  }
+}
+
+/** One tappable account shortcut: title, one-line detail, chevron, 48dp target. */
+@Composable
+private fun ShortcutRow(
+  label: String,
+  detail: String,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    onClick = onClick,
+    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+    color = MaterialTheme.colorScheme.surfaceContainerLow,
+    modifier = modifier
+      .fillMaxWidth()
+      .heightIn(min = MaharaniDimens.touchTarget),
+  ) {
+    Row(
+      modifier = Modifier.padding(
+        horizontal = MaharaniDimens.spaceMd,
+        vertical = MaharaniDimens.spaceSm,
+      ),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = label,
+          style = MaterialTheme.typography.titleSmall,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+          text = detail,
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+      ChevronRightGlyph(
+        modifier = Modifier.size(18.dp),
+        tint = MaterialTheme.colorScheme.primary,
       )
     }
   }

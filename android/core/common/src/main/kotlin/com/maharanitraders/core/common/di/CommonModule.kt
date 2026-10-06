@@ -2,11 +2,13 @@ package com.maharanitraders.core.common.di
 
 import com.maharanitraders.core.common.AndroidNetworkMonitor
 import com.maharanitraders.core.common.NetworkMonitor
+import com.maharanitraders.core.common.SessionScopedStore
 import com.maharanitraders.core.common.SystemTimeSource
 import com.maharanitraders.core.common.TimeSource
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
+import dagger.multibindings.Multibinds
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Qualifier
@@ -68,4 +70,17 @@ abstract class CommonBindingsModule {
   @Binds
   @Singleton
   abstract fun bindNetworkMonitor(impl: AndroidNetworkMonitor): NetworkMonitor
+
+  /**
+   * Declares the (possibly empty) set of session-scoped caches the session layer
+   * clears when a session ends.
+   *
+   * Hilt cannot inject a `Set<T>` that no module contributes to unless the
+   * multibinding is declared, and an empty set is a completely normal state:
+   * it is what a build with no session-scoped caches looks like. Feature
+   * modules add their own stores with `@Provides @IntoSet`, and `core:auth` —
+   * which is the only consumer — stays free of feature dependencies.
+   */
+  @Multibinds
+  abstract fun sessionScopedStores(): Set<SessionScopedStore>
 }

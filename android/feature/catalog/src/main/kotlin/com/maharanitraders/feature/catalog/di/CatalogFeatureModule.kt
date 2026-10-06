@@ -1,11 +1,14 @@
 package com.maharanitraders.feature.catalog.di
 
+import com.maharanitraders.core.common.SessionScopedStore
 import com.maharanitraders.feature.catalog.CatalogRepository
+import com.maharanitraders.feature.catalog.FavoritesStore
 import com.maharanitraders.feature.catalog.NetworkCatalogRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
 import javax.inject.Singleton
 
 /**
@@ -23,4 +26,13 @@ abstract class CatalogFeatureModule {
   @Binds
   @Singleton
   abstract fun bindCatalogRepository(impl: NetworkCatalogRepository): CatalogRepository
+
+  /**
+   * The favourite set is per-account, so it joins the session-scoped set the
+   * session layer clears on sign-out. Bound (rather than provided) because the
+   * store is already `@Inject`-constructible and a singleton.
+   */
+  @Binds
+  @IntoSet
+  abstract fun bindFavoritesSessionScoped(impl: FavoritesStore): SessionScopedStore
 }

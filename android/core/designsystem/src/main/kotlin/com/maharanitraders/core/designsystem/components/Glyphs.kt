@@ -384,3 +384,112 @@ fun BellGlyph(
     drawCircle(tint, radius = px(1.5f), center = point(12f, 2.9f))
   }
 }
+
+/**
+ * Tick: the confirmed / selected state.
+ *
+ * Used where a control has to say "this is the one that is applied" without
+ * relying on colour alone (a category tile that is currently filtering the
+ * catalogue, a default address, a chosen payment step).
+ */
+@Composable
+fun CheckGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Selected", modifier) {
+    drawLine(
+      color = tint,
+      start = point(5.4f, 12.6f),
+      end = point(10.2f, 17.4f),
+      strokeWidth = px(2.2f),
+      cap = StrokeCap.Round,
+    )
+    drawLine(
+      color = tint,
+      start = point(10.2f, 17.4f),
+      end = point(18.6f, 6.6f),
+      strokeWidth = px(2.2f),
+      cap = StrokeCap.Round,
+    )
+  }
+}
+
+/**
+ * Coin: the Maharani Coins wallet.
+ *
+ * A circle with a rupee stroke inside — the same money the ledger moves, drawn
+ * the way the web wallet shows it.
+ */
+@Composable
+fun CoinGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Coins", modifier) {
+    drawCircle(tint, radius = px(8.6f), center = point(12f, 12f), style = Stroke(px(1.9f)))
+    drawLine(tint, point(9.4f, 9f), point(14.6f, 9f), px(1.7f), cap = StrokeCap.Round)
+    drawLine(tint, point(9.4f, 12f), point(14.6f, 12f), px(1.7f), cap = StrokeCap.Round)
+    drawLine(tint, point(11.2f, 9f), point(11.2f, 16.4f), px(1.7f), cap = StrokeCap.Round)
+    drawLine(tint, point(12.6f, 14.1f), point(16f, 17.4f), px(1.7f), cap = StrokeCap.Round)
+  }
+}
+
+/**
+ * Price tag: offers, coupons and schemes.
+ *
+ * The catalogue marks a product with an active scheme with the same mark, so
+ * "Offer" reads identically on a card, a coupon list and the home shortcuts.
+ */
+@Composable
+fun OfferGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Offers", modifier) {
+    val body = Path().apply {
+      moveTo(px(11.4f), px(3.6f))
+      lineTo(px(20.4f), px(3.6f))
+      lineTo(px(20.4f), px(12.6f))
+      lineTo(px(12.2f), px(20.8f))
+      lineTo(px(3.2f), px(11.8f))
+      close()
+    }
+    drawPath(body, tint, style = Stroke(px(1.8f), join = StrokeJoin.Round))
+    drawCircle(tint, radius = px(1.9f), center = point(16.9f, 7.1f))
+  }
+}
+
+/**
+ * Lightning bolt: quick order.
+ *
+ * The restock shortcut — the one action on the home screen that skips browsing
+ * and goes straight to the order pad.
+ */
+@Composable
+fun BoltGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Quick order", modifier) {
+    drawPath(polygon(13.4f, 2.8f, 6.2f, 13.4f, 11.2f, 13.4f, 10.4f, 21.2f, 17.8f, 10.6f, 12.7f, 10.6f), tint)
+  }
+}
+
+/**
+ * Storefront: brands.
+ *
+ * An awning over a shop door — the brand directory's own mark, so "brand" is
+ * never confused with "category" when the two panes are a swatch apart.
+ */
+@Composable
+fun BrandGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Brands", modifier) {
+    drawPath(polygon(3.6f, 4.2f, 20.4f, 4.2f, 20.4f, 8.2f, 3.6f, 8.2f), tint)
+    drawPath(polygon(4.8f, 8.6f, 19.2f, 8.6f, 19.2f, 12.4f, 4.8f, 12.4f), tint)
+    drawCircle(tint, radius = px(3.2f), center = point(12f, 17.8f), style = Stroke(px(1.8f)))
+  }
+}

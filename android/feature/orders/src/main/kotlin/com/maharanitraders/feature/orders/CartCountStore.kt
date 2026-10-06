@@ -1,6 +1,7 @@
 package com.maharanitraders.feature.orders
 
 import com.maharanitraders.core.common.AppResult
+import com.maharanitraders.core.common.SessionScopedStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +39,7 @@ data class CartBadgeState(
 @Singleton
 class CartCountStore @Inject constructor(
   private val repository: CommerceRepository,
-) {
+) : SessionScopedStore {
 
   private val _state = MutableStateFlow(CartBadgeState())
   val state: StateFlow<CartBadgeState> = _state.asStateFlow()
@@ -67,5 +68,15 @@ class CartCountStore @Inject constructor(
   /** Session ended: nothing about the previous account may survive. */
   fun clear() {
     _state.value = CartBadgeState()
+  }
+
+  /**
+   * Session-scoped contract: the badge is the previous account's cart line
+   * count, so it is dropped with the session. `null` again means "not known
+   * yet", which is the honest badge for an account whose cart has not been
+   * read.
+   */
+  override suspend fun onSessionEnded() {
+    clear()
   }
 }

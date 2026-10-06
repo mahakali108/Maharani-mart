@@ -8,9 +8,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
 
 /**
  * The executor is the single place where a thrown exception becomes a typed
@@ -57,6 +61,103 @@ class ApiCallExecutorTest {
       )
     }
     assertEquals("ok", (result as AppResult.Success).value.status)
+  }
+
+  /**
+   * The expired-token retry.
+   *
+   * A live session whose access token has expired must not turn into an error
+   * screen: the request that answered `401 invalid_token` is retried once, after
+   * the session layer has exchanged the refresh token. These tests use the real
+   * executor, the real error mapper and the real coordinator — only the token
+   * holder and the refresh block are doubles.
+   */
+  private fun expiredTokenError(): HttpException = HttpException(
+    Response.error<Any>(
+      401,
+      """{"error":{"code":"invalid_token","message":"Please sign in again."}}"""
+        .toResponseBody("application/json".toMediaType()),
+    ),
+  )
+
+  @Test
+  fun `retries once after refreshing an expired token`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder().apply { set("stale-token") }
+    val coordinator = TokenRefreshCoordinator()
+    var refreshCalls = 0
+    coordinator.install {
+      refreshCalls += 1
+      // What SessionManager does: publish the new pair, return the new token.
+      holder.set("fresh-token")
+      "fresh-token"
+    }
+    val executor = ApiCallExecutor(
+      ApiErrorMapper(Json { ignoreUnknownKeys = true }),
+      dispatcher,
+      holder,
+      coordinator,
+    )
+    var attempts = 0
+
+    val result = executor.execute {
+      attempts += 1
+      // The interceptor reads the holder on every attempt.
+      if (holder.accessToken() != "fresh-token") throw expiredTokenError()
+      "priced for your shop"
+    }
+
+    assertEquals(AppResult.Success("priced for your shop"), result)
+    assertEquals(2, attempts)
+    assertEquals(1, refreshCalls)
+  }
+
+  @Test
+  fun `reports the original failure when the token cannot be refreshed`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder().apply { set("stale-token") }
+    val coordinator = TokenRefreshCoordinator()
+    coordinator.install { null }
+    val executor = ApiCallExecutor(
+      ApiErrorMapper(Json { ignoreUnknownKeys = true }),
+      dispatcher,
+      holder,
+      coordinator,
+    )
+    var attempts = 0
+
+    val result = executor.execute<String> {
+      attempts += 1
+      throw expiredTokenError()
+    }
+
+    assertTrue(result is AppResult.Failure)
+    assertEquals(ApiErrorCode.INVALID_TOKEN, (result as AppResult.Failure).error.let {
+      (it as com.maharanitraders.core.common.AppError.Api).code
+    })
+    // No retry without a new token: repeating the same 401 helps nobody.
+    assertEquals(1, attempts)
+  }
+
+  @Test
+  fun `does not retry a transport failure`() = runTest(dispatcher) {
+    val coordinator = TokenRefreshCoordinator()
+    var refreshCalls = 0
+    coordinator.install { refreshCalls += 1; "fresh-token" }
+    val executor = ApiCallExecutor(
+      ApiErrorMapper(Json { ignoreUnknownKeys = true }),
+      dispatcher,
+      ActiveTokenHolder().apply { set("stale-token") },
+      coordinator,
+    )
+    var attempts = 0
+
+    val result = executor.execute<Int> {
+      attempts += 1
+      throw IOException("offline")
+    }
+
+    assertTrue(result is AppResult.Failure)
+    assertEquals(1, attempts)
+    assertEquals(0, refreshCalls)
   }
 
   @Test

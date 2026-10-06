@@ -272,3 +272,56 @@ Treat §2/§3 as the only path to a real verdict.
 - [ ] TalkBack over a product card, the stock badge and the search field
 - [ ] Confirmed the PDP has no add-to-cart and the cart/orders tabs show the
       honest Phase-E placeholder
+
+---
+
+## 8. Addendum — the 2026-10-06 session + catalogue change set
+
+This addendum supersedes §4.6 above (which named `CategoriesViewModel`, a file
+this change set deletes).
+
+### What changed
+
+- **Session persistence (the defect).** `SessionManager.restore()` published the
+  stored access token to `ActiveTokenHolder` *after* `GET /api/mobile/v1/session`
+  had been called. The verify call is bearer-authenticated by the interceptor
+  reading that holder, so every cold start verified anonymously, took a 401, and
+  wiped a valid session — which is why the app asked for a password on every
+  launch. The token is now published before the verify call.
+- **Runtime refresh.** A request that answers `401 invalid_token` is retried once
+  after `TokenRefreshCoordinator` exchanges the refresh token (single-flight, no
+  recursion, no retry on transport failures or on requests that carried no
+  token). The launch path still refreshes once and treats a refused refresh token
+  as terminal while a network failure keeps the stored pair.
+- **Per-account isolation.** `core:common` declares `SessionScopedStore`; the
+  session layer clears every contributed store whenever the published state is not
+  `Authenticated` and before a new account is accepted. `FavoritesStore`,
+  `CartCountStore` and `UnreadStore` are the implementors.
+- **One catalogue.** `CatalogScreen` + `CatalogViewModel` now own the Products,
+  Categories and Brands panes (`CatalogTabStrip`, `DirectoryCards`). The former
+  `CategoriesScreen`, `CategoriesViewModel` and `CategoriesViewModelTest` are
+  deleted, and the drawer's Categories entry opens the catalogue on its pane.
+- **Shell.** The bottom bar's second tab is `CATALOG`; `AccountScreen` gained real
+  shortcuts (orders, favourites, quick order, coins, coupons, notifications) and
+  the home rails' "View all" opens the catalogue on the pane it summarises.
+
+### Verification status, and what is NOT verified here
+
+| Check | Result |
+| --- | --- |
+| `tests/android-project-integrity.test.ts` (static Kotlin gates) | **green** |
+| `tests/parity-doc-totals.test.ts` | **green** |
+| `pnpm typecheck` / `next lint` / `pnpm test` / `next build` | run in this change set; results in the PR body |
+| `./gradlew testDebugUnitTest lintDebug assembleDebug` | **not run in this environment** — the sandbox has no JDK, no Android SDK and cannot reach `services.gradle.org`, `dl.google.com` or Maven Central. The `android-apk.yml` job is the compiler of record for this change, and no Kotlin build result is claimed unless that job is green. |
+
+The new Kotlin unit tests that CI runs are
+`android/core/auth/src/test/…/SessionManagerTest.kt` (token published before the
+verify call; refresh success/refusal/offline; a second account cannot inherit the
+first account's scoped state),
+`android/core/network/src/test/…/ApiCallExecutorTest.kt` (one retry after a
+refresh; no retry without a new token; no retry on transport failure),
+`android/core/network/src/test/…/TokenRefreshCoordinatorTest.kt` (single-flight,
+no recursion, reset, no refresher) and
+`android/feature/catalog/src/test/…/CatalogViewModelTest.kt` (categories load,
+brands load, category filter, brand filter, pane navigation, device-side
+narrowing, empty taxonomy, per-pane failure and retry, pagination, de-duplication).

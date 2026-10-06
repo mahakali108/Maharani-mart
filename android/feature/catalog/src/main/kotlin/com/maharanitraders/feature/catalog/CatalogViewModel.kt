@@ -3,6 +3,7 @@ package com.maharanitraders.feature.catalog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maharanitraders.core.common.AppResult
+import com.maharanitraders.core.model.CatalogBrand
 import com.maharanitraders.core.model.CatalogCategory
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.CatalogQuery
@@ -10,6 +11,8 @@ import com.maharanitraders.core.model.CatalogSort
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,21 +21,46 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * The catalogue list state.
+ * The catalogue state: which pane, which filters, and the server's product
+ * batches.
  *
- * `loading` is the FIRST load only; `loadingMore` is a continuation batch. They
- * are separate flags so appending a page can never blank the list the shopper is
- * reading, and so a stuck continuation cannot look like a fresh empty catalogue.
+ * `loading` is the FIRST load of the product list; `loadingMore` is a
+ * continuation batch; `categoriesLoading`/`brandsLoading` belong to the
+ * directory panes. They are separate flags so appending a page can never blank
+ * the list the shopper is reading, and so a slow taxonomy read cannot make the
+ * products look empty (or the reverse).
  */
 data class CatalogUiState(
+  /** Which pane is showing. Tapping a category or brand tile moves to PRODUCTS. */
+  val tab: CatalogTab = CatalogTab.PRODUCTS,
   val query: CatalogQuery = CatalogQuery.DEFAULT,
   val categories: List<CatalogCategory> = emptyList(),
+  val brands: List<CatalogBrand> = emptyList(),
   val products: List<CatalogProduct> = emptyList(),
   val nextCursor: String? = null,
   val hasMore: Boolean = false,
   val loading: Boolean = true,
   val loadingMore: Boolean = false,
   val categoriesLoading: Boolean = false,
+  val brandsLoading: Boolean = false,
+  /** The category taxonomy has answered (successfully or not). */
+  val categoriesLoaded: Boolean = false,
+  /** The brand taxonomy has answered (successfully or not). */
+  val brandsLoaded: Boolean = false,
+  /**
+   * On-device narrowing of the directory panes. It filters the names the server
+   * already sent and never issues a request, because the catalogue's server
+   * search is for products — this field must not be mistaken for it.
+   */
+  val directoryFilter: String = "",
+  /**
+   * Per-pane failure. Kept apart on purpose: a categories outage must not put an
+   * error on the Brands pane, which may have loaded perfectly well.
+   */
+  val categoriesError: String? = null,
+  val categoriesOffline: Boolean = false,
+  val brandsError: String? = null,
+  val brandsOffline: Boolean = false,
   val errorMessage: String? = null,
   val offline: Boolean = false,
   val retryable: Boolean = true,
@@ -52,12 +80,56 @@ data class CatalogUiState(
   val actionMessage: String? = null,
 ) {
   val isEmpty: Boolean get() = !loading && errorMessage == null && products.isEmpty()
+
   val selectedCategoryName: String?
     get() = query.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }
+
+  val selectedCategory: CatalogCategory?
+    get() = query.categoryId?.let { id -> categories.firstOrNull { it.id == id } }
+
+  val selectedBrand: CatalogBrand?
+    get() = query.brandId?.let { id -> brands.firstOrNull { it.id == id } }
+
+  /** Either directory read is in flight. */
+  val directoryLoading: Boolean get() = categoriesLoading || brandsLoading
+
+  val visibleCategories: List<CatalogCategory>
+    get() = categories.filterBy(directoryFilter) { it.name }
+
+  val visibleBrands: List<CatalogBrand>
+    get() = brands.filterBy(directoryFilter) { it.name }
+
+  /**
+   * The shop genuinely publishes no categories (and the read succeeded): an
+   * empty state, not a failure and not "no match".
+   */
+  val categoriesEmpty: Boolean
+    get() = categoriesLoaded && categoriesError == null && categories.isEmpty()
+
+  /** As [categoriesEmpty], for the Brands pane. */
+  val brandsEmpty: Boolean
+    get() = brandsLoaded && brandsError == null && brands.isEmpty()
+
+  /** A local filter that matches no category the server sent. */
+  val categoriesNoMatch: Boolean
+    get() = categoriesLoaded && categoriesError == null && directoryFilter.isNotBlank() &&
+      visibleCategories.isEmpty() && !categoriesEmpty
+
+  /** A local filter that matches no brand the server sent. */
+  val brandsNoMatch: Boolean
+    get() = brandsLoaded && brandsError == null && directoryFilter.isNotBlank() &&
+      visibleBrands.isEmpty() && !brandsEmpty
+
+  private fun <T> List<T>.filterBy(needle: String, name: (T) -> String): List<T> {
+    val trimmed = needle.trim()
+    if (trimmed.isEmpty()) return this
+    return filter { name(it).contains(trimmed, ignoreCase = true) }
+  }
 }
 
 /**
- * Search, filter and paginate the real catalogue.
+ * Search, filter and paginate the real catalogue — and hold the real taxonomy
+ * that filters it.
  *
  * Pagination discipline, all of which the migration contract requires:
  *  - the cursor is OPAQUE and is stored, never parsed or edited;
@@ -69,6 +141,12 @@ data class CatalogUiState(
  *
  * The ViewModel sends filters only. It never sends a price, a stock value or an
  * identity — the server resolves all of those from the verified token.
+ *
+ * Categories and brands are read ONCE per screen (in parallel, through the same
+ * `GET /catalog/categories` and `GET /catalog/brands` the filter chips and the
+ * home rails use) and then narrowed on the device, which is why switching panes
+ * never costs a request. Tapping a tile only changes the product filter that
+ * the existing, tested list path already handles.
  */
 @HiltViewModel
 class CatalogViewModel @Inject constructor(
@@ -84,10 +162,11 @@ class CatalogViewModel @Inject constructor(
 
   private var searchJob: Job? = null
   private var listJob: Job? = null
+  private var directoryJob: Job? = null
 
   init {
     viewModelScope.launch { favorites.ensureLoaded() }
-    loadCategories()
+    loadDirectories()
     reload()
   }
 
@@ -111,20 +190,70 @@ class CatalogViewModel @Inject constructor(
     _state.update { it.copy(actionMessage = null) }
   }
 
-  fun loadCategories() {
-    if (_state.value.categories.isNotEmpty()) return
-    _state.update { it.copy(categoriesLoading = true) }
-    viewModelScope.launch {
-      when (val result = repository.loadCategories()) {
-        is AppResult.Success -> _state.update {
-          it.copy(categories = result.value, categoriesLoading = false)
-        }
-        // A missing category strip must not take the product list down with it:
-        // the failure is reported, and the list still loads unfiltered.
-        is AppResult.Failure -> _state.update { it.copy(categoriesLoading = false) }
+  /** Switch pane. Free: every pane is rendered from state this screen already has. */
+  fun selectTab(tab: CatalogTab) {
+    if (_state.value.tab == tab) return
+    _state.update { it.copy(tab = tab) }
+  }
+
+  /** Narrow the directory panes to names the server already sent. No request. */
+  fun onDirectoryFilterChange(value: String) {
+    _state.update { it.copy(directoryFilter = value) }
+  }
+
+  /**
+   * Read the taxonomy. Called once on open, and again only when the shopper asks
+   * (retry) or after a failure — a successful read is never repeated by a pane
+   * switch, and the two endpoints are fetched in parallel.
+   */
+  fun loadDirectories(force: Boolean = false) {
+    if (directoryJob?.isActive == true) return
+    val current = _state.value
+    val complete = current.categoriesLoaded && current.brandsLoaded &&
+      current.categoriesError == null && current.brandsError == null
+    if (complete && !force) return
+
+    _state.update {
+      it.copy(
+        categoriesLoading = true,
+        brandsLoading = true,
+        categoriesError = null,
+        categoriesOffline = false,
+        brandsError = null,
+        brandsOffline = false,
+      )
+    }
+
+    directoryJob = viewModelScope.launch {
+      val (categories, brands) = coroutineScope {
+        val cats = async { repository.loadCategories() }
+        val brandList = async { repository.loadBrands() }
+        cats.await() to brandList.await()
+      }
+
+      _state.update { current ->
+        current.copy(
+          categoriesLoading = false,
+          brandsLoading = false,
+          categories = (categories as? AppResult.Success)?.value ?: current.categories,
+          // A missing brand list must not blank the category directory, and vice
+          // versa: whichever read succeeded is kept and shown.
+          brands = (brands as? AppResult.Success)?.value ?: current.brands,
+          categoriesLoaded = true,
+          brandsLoaded = true,
+          // Each pane is honest about its own read: it shows the reason and
+          // offers a retry rather than an empty shop.
+          categoriesError = (categories as? AppResult.Failure)?.error?.message,
+          categoriesOffline = (categories as? AppResult.Failure)?.error?.isOffline == true,
+          brandsError = (brands as? AppResult.Failure)?.error?.message,
+          brandsOffline = (brands as? AppResult.Failure)?.error?.isOffline == true,
+        )
       }
     }
   }
+
+  /** The directory panes' retry. Re-reads both endpoints, keeping what succeeds. */
+  fun retryDirectories() = loadDirectories(force = true)
 
   /**
    * Typed search. Debounced, and it restarts the list from the top — a filter
@@ -139,11 +268,20 @@ class CatalogViewModel @Inject constructor(
     }
   }
 
+  /**
+   * Apply (or clear) the category filter. Tapping a tile in the Categories pane
+   * is the same call, and it moves the shopper to the product list so they can
+   * see what the filter did — one catalogue, one result set.
+   */
   fun selectCategory(categoryId: String?) {
-    val current = _state.value.query.categoryId
-    if (current == categoryId) return
-    _state.update { it.copy(query = it.query.copy(categoryId = categoryId)) }
-    reload()
+    val changed = _state.value.query.categoryId != categoryId
+    _state.update {
+      it.copy(
+        tab = CatalogTab.PRODUCTS,
+        query = it.query.copy(categoryId = categoryId),
+      )
+    }
+    if (changed) reload()
   }
 
   fun selectSort(sort: CatalogSort) {
@@ -154,19 +292,24 @@ class CatalogViewModel @Inject constructor(
 
   /**
    * Brand filtering. The chip row carries categories; a brand usually arrives
-   * already chosen (the home brand rail), together with the label to show.
-   * Selecting `null` clears it.
+   * already chosen (a brand tile or the home brand rail), together with the
+   * label to show. Selecting `null` clears it.
    */
   fun selectBrand(brandId: String?, label: String? = null) {
-    val current = _state.value.query.brandId
-    if (current == brandId) return
+    val current = _state.value
+    val changed = current.query.brandId != brandId
     _state.update {
       it.copy(
+        tab = CatalogTab.PRODUCTS,
         query = it.query.copy(brandId = brandId),
-        brandLabel = if (brandId == null) null else label ?: it.brandLabel,
+        brandLabel = if (brandId == null) {
+          null
+        } else {
+          label ?: it.brands.firstOrNull { brand -> brand.id == brandId }?.name ?: it.brandLabel
+        },
       )
     }
-    reload()
+    if (changed) reload()
   }
 
   fun toggleInStockOnly() {
