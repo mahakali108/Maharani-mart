@@ -386,7 +386,11 @@ describe('proof viewing uses signed URLs only', () => {
     const proofSrc = read('lib/delivery/proof-url.ts');
     expect(proofSrc).toContain("prefix: 'deliveries/'");
     expect(proofSrc).toContain("prefix: 'payments/'");
-    expect(proofSrc).toContain('getSignedUrl(match.bucket, parsed.value)');
+    // The signer must receive the resolved bucket and the parsed object path,
+    // and the trailing argument must be the CALLER's client: a bearer-token
+    // caller (the mobile API) has to sign with its own RLS session, because the
+    // default anonymous cookie client would be refused the URL.
+    expect(proofSrc).toContain('getSignedUrl(match.bucket, parsed.value, undefined, client)');
   });
 
   it('media kinds mark both proof kinds private with the right folders', () => {

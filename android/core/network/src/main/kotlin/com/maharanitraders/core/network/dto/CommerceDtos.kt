@@ -204,6 +204,15 @@ data class MobileOrderDto(
   val coinsUsedPaise: Long? = null,
   /** Actual Coins/wallet balance after the order debit (NULL for legacy recovery snapshots). */
   val balanceAfterCoinsPaise: Long? = null,
+  // Detail-only additions. The list payload does not carry them, so they
+  // default to empty here rather than being required.
+  /** The order's own status history, oldest first. */
+  val statusHistory: List<MobileOrderStatusEntryDto> = emptyList(),
+  /** Coins this order spent (reversed debits already excluded by the server). */
+  val coinsSpentPaise: Long? = null,
+  /** Coins refunded for this order. */
+  val coinsRefundedPaise: Long? = null,
+  val coinsRefunded: Boolean = false,
 )
 
 @Serializable

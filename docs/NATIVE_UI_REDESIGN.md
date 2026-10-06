@@ -400,5 +400,8 @@ Deleted:
 1. A verified `deliveryArea` field on `/session` or `/home` could replace the shop-name app-bar slot with a delivery-area chip.
 2. A real search-suggestions endpoint could use `MaharaniSearchBar`'s loading slot; no local suggestion list should be fabricated.
 3. Favourite writes need an authenticated backend endpoint; the current `isFavorite` field remains read-only.
-4. Saved carts, whole-cart deletion, cancellation, returns, reorder, invoices and delivery tracking need separately verified server contracts before they appear in the native app.
+4. Saved carts, whole-cart deletion, cancellation and returns need separately verified server
+   contracts before they appear in the native app. Reorder, invoices and delivery tracking were
+   added later against verified contracts — see `docs/NATIVE_PWA_FEATURE_PARITY.md` (ORD-03,
+   ORD-04, ORD-05) for their current state.
 5. A standalone Coins wallet/history screen belongs to later native work; checkout continues to use only the existing server-owned Coins calculation and debit rules.

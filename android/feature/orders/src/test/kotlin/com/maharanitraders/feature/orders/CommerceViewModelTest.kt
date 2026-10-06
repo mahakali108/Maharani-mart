@@ -407,6 +407,39 @@ class CommerceViewModelTest {
       return if (historyResults.isNotEmpty()) historyResults.removeAt(0)
       else AppResult.Success(OrderHistoryPage(emptyList(), null, false))
     }
+    val detailCalls = mutableListOf<String>()
+    val detailResults = mutableListOf<AppResult<RetailerOrder>>()
+    val invoiceCalls = mutableListOf<String>()
+    val invoiceResults = mutableListOf<AppResult<OrderInvoice>>()
+    val deliveryCalls = mutableListOf<String>()
+    val deliveryResults = mutableListOf<AppResult<OrderDelivery>>()
+    val reorderCalls = mutableListOf<List<CartLineIntent>>()
+    val reorderResults = mutableListOf<AppResult<ReorderOutcome>>()
+
+    override suspend fun orderDetail(orderId: String): AppResult<RetailerOrder> {
+      detailCalls += orderId
+      return if (detailResults.isNotEmpty()) detailResults.removeAt(0)
+      else AppResult.Failure(AppError.Api(ApiErrorCode.NOT_FOUND, "This order could not be found."))
+    }
+    override suspend fun orderInvoice(orderId: String): AppResult<OrderInvoice> {
+      invoiceCalls += orderId
+      return if (invoiceResults.isNotEmpty()) invoiceResults.removeAt(0)
+      else AppResult.Failure(AppError.Api(ApiErrorCode.NOT_FOUND, "This invoice could not be found."))
+    }
+    override suspend fun orderDelivery(orderId: String): AppResult<OrderDelivery> {
+      deliveryCalls += orderId
+      return if (deliveryResults.isNotEmpty()) deliveryResults.removeAt(0)
+      else AppResult.Failure(AppError.Api(ApiErrorCode.NOT_FOUND, "This delivery record could not be found."))
+    }
+    override suspend fun reorderLines(intents: List<CartLineIntent>): AppResult<ReorderOutcome> {
+      reorderCalls += intents
+      val result = if (reorderResults.isNotEmpty()) reorderResults.removeAt(0)
+      else AppResult.Success(ReorderOutcome(intents.size, intents.size, cart))
+      if (result is AppResult.Success) {
+        result.value.cart?.let { snapshot -> cart = snapshot }
+      }
+      return result
+    }
   }
 
   private data class PlaceCall(

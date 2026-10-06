@@ -28,6 +28,8 @@ import com.maharanitraders.core.network.dto.MobileQuickOrderDto
 import com.maharanitraders.core.network.dto.MobileCouponsDto
 import com.maharanitraders.core.network.dto.MobileFavoritesDto
 import com.maharanitraders.core.network.dto.MobileNotificationDto
+import com.maharanitraders.core.network.dto.MobileDeliveryDto
+import com.maharanitraders.core.network.dto.MobileInvoiceDto
 import com.maharanitraders.core.network.dto.MobileOrderDto
 import com.maharanitraders.core.network.dto.MobileWalletLedgerEntryDto
 import com.maharanitraders.core.network.dto.MobileWalletSummaryDto
@@ -248,6 +250,22 @@ interface MaharaniApi {
 
   @GET("api/mobile/v1/orders/{id}")
   suspend fun orderDetail(@Path("id") orderId: String): ApiEnvelope<MobileOrderDto>
+
+  /**
+   * The GST invoice for one owned order.
+   *
+   * The server folds the stored lines with the SAME helpers the web invoice
+   * uses and returns integer paise, so the app never derives a tax component.
+   */
+  @GET("api/mobile/v1/orders/{id}/invoice")
+  suspend fun orderInvoice(@Path("id") orderId: String): ApiEnvelope<MobileInvoiceDto>
+
+  /**
+   * The delivery record for one owned order: status timeline, proof and the
+   * server-decided return window.
+   */
+  @GET("api/mobile/v1/orders/{id}/delivery")
+  suspend fun orderDelivery(@Path("id") orderId: String): ApiEnvelope<MobileDeliveryDto>
 
   /** Recover a committed order when the submit response was uncertain. */
   @GET("api/mobile/v1/orders/requests/{requestKey}")

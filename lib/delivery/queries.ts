@@ -157,9 +157,19 @@ export interface DeliveryDetail {
   }[];
 }
 
-/** Full delivery dossier for one order (RLS decides visibility). */
-export async function fetchDeliveryDetail(orderId: string): Promise<DeliveryDetail | null> {
-  const supabase = createClient();
+/**
+ * Full delivery dossier for one order (RLS decides visibility).
+ *
+ * `client` lets a bearer-token caller (the mobile API) reuse this exact query
+ * set with its own RLS-scoped client. Every web page keeps the cookie client
+ * default, so there is still ONE implementation of the query — and the mobile
+ * route cannot drift from the page it mirrors.
+ */
+export async function fetchDeliveryDetail(
+  orderId: string,
+  client?: ReturnType<typeof createClient>
+): Promise<DeliveryDetail | null> {
+  const supabase = client ?? createClient();
 
   const deliveryResult = await supabase
     .from('order_deliveries')

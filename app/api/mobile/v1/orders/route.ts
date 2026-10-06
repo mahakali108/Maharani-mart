@@ -99,7 +99,7 @@ export async function GET(request: Request): Promise<Response> {
     if (error) throw error;
     const batch = toListBatch(data ?? [], PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
     return jsonOkPage(
-      batch.items.map(serializeMobileOrder),
+      batch.items.map((row) => serializeMobileOrder(row)),
       { nextCursor: batch.nextCursor, hasMore: batch.nextCursor !== null, limit: PAGE_SIZE },
       { requestId }
     );

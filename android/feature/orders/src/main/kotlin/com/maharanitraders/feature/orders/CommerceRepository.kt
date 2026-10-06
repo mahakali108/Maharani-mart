@@ -14,8 +14,16 @@ import com.maharanitraders.core.network.dto.CouponRequestDto
 import com.maharanitraders.core.network.dto.MobileAddressDto
 import com.maharanitraders.core.network.dto.MobileCartDto
 import com.maharanitraders.core.network.dto.MobileCartLineDto
+import com.maharanitraders.core.network.dto.MobileDeliveryDto
+import com.maharanitraders.core.network.dto.MobileDeliveryItemDto
+import com.maharanitraders.core.network.dto.MobileDeliveryProofDto
+import com.maharanitraders.core.network.dto.MobileInvoiceDto
+import com.maharanitraders.core.network.dto.MobileInvoiceLineDto
+import com.maharanitraders.core.network.dto.MobileInvoiceTotalsDto
+import com.maharanitraders.core.network.dto.MobileInvoiceUnitPriceDto
 import com.maharanitraders.core.network.dto.MobileOrderDto
 import com.maharanitraders.core.network.dto.MobileOrderItemDto
+import com.maharanitraders.core.network.dto.MobileOrderStatusEntryDto
 import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,6 +53,20 @@ interface CommerceRepository {
   ): AppResult<OrderConfirmation>
   suspend fun recoverOrder(requestKey: String): AppResult<RetailerOrder>
   suspend fun orderHistory(cursor: String?): AppResult<OrderHistoryPage>
+  /** One owned order, with its status history and this order's Coins movement. */
+  suspend fun orderDetail(orderId: String): AppResult<RetailerOrder>
+  /** The server-computed GST invoice for one owned order. */
+  suspend fun orderInvoice(orderId: String): AppResult<OrderInvoice>
+  /** The delivery record for one owned order. */
+  suspend fun orderDelivery(orderId: String): AppResult<OrderDelivery>
+  /**
+   * Replays lines into the real cart, one `POST /cart/lines` per line.
+   *
+   * The cart API revalidates MOQ, quantity bounds and pack activity on every
+   * call and re-prices the response, so a reorder cannot be laxer than any
+   * other way into the cart, and no price is sent from the device.
+   */
+  suspend fun reorderLines(intents: List<CartLineIntent>): AppResult<ReorderOutcome>
 }
 
 @Singleton
@@ -148,6 +170,40 @@ class NetworkCommerceRepository @Inject constructor(
           hasMore = envelope.page?.hasMore == true,
         )
       }
+
+  override suspend fun orderDetail(orderId: String): AppResult<RetailerOrder> =
+    executor.executeEnvelope { api.orderDetail(orderId) }.map(MobileOrderDto::toDomain)
+
+  override suspend fun orderInvoice(orderId: String): AppResult<OrderInvoice> =
+    executor.executeEnvelope { api.orderInvoice(orderId) }.map(MobileInvoiceDto::toDomain)
+
+  override suspend fun orderDelivery(orderId: String): AppResult<OrderDelivery> =
+    executor.executeEnvelope { api.orderDelivery(orderId) }.map(MobileDeliveryDto::toDomain)
+
+  override suspend fun reorderLines(intents: List<CartLineIntent>): AppResult<ReorderOutcome> {
+    if (intents.isEmpty()) {
+      return AppResult.Success(ReorderOutcome(requestedCount = 0, addedCount = 0, cart = null))
+    }
+    var added = 0
+    var cart: CartSnapshot? = null
+    for (intent in intents) {
+      when (
+        val result = executor.executeEnvelope {
+          api.addCartLine(CartLineRequestDto(packId = intent.packId, quantity = intent.quantity))
+        }.map { it.toDomain() }
+      ) {
+        is AppResult.Success -> {
+          added += 1
+          cart = result.value
+        }
+        // The failure is returned as-is. Lines already accepted are in the
+        // server cart, which is why the caller must re-read it rather than
+        // assume nothing happened.
+        is AppResult.Failure -> return AppResult.Failure(result.error)
+      }
+    }
+    return AppResult.Success(ReorderOutcome(requestedCount = intents.size, addedCount = added, cart = cart))
+  }
 }
 
 private fun MobileCartDto.toDomain() = CartSnapshot(
@@ -258,6 +314,10 @@ private fun MobileOrderDto.toDomain() = RetailerOrder(
   items = items.map(MobileOrderItemDto::toDomain),
   coinsUsedPaise = coinsUsedPaise,
   balanceAfterCoinsPaise = balanceAfterCoinsPaise,
+  statusHistory = statusHistory.map(MobileOrderStatusEntryDto::toDomain),
+  coinsSpentPaise = coinsSpentPaise,
+  coinsRefundedPaise = coinsRefundedPaise,
+  coinsRefunded = coinsRefunded,
 )
 
 private fun MobileOrderItemDto.toDomain() = OrderItem(
@@ -273,6 +333,106 @@ private fun MobileOrderItemDto.toDomain() = OrderItem(
   unitPricePaise = unitPricePaise,
   gstPercent = gstPercent,
   lineTotalPaise = lineTotalPaise,
+)
+
+private fun MobileOrderStatusEntryDto.toDomain() = OrderStatusEntry(
+  id = id,
+  status = status,
+  note = note,
+  createdAt = createdAt,
+)
+
+private fun MobileInvoiceUnitPriceDto.toDomain() = InvoiceUnitPrice(
+  unitPricePaise = unitPricePaise,
+  unit = unit,
+)
+
+private fun MobileInvoiceLineDto.toDomain() = InvoiceLine(
+  key = key,
+  displayName = displayName,
+  packName = packName,
+  hsn = hsn,
+  quantityLabel = quantityLabel,
+  unitPrices = unitPrices.map(MobileInvoiceUnitPriceDto::toDomain),
+  gstPercent = gstPercent,
+  lineTotalPaise = lineTotalPaise,
+  taxPaise = taxPaise,
+  cgstPaise = cgstPaise,
+  sgstPaise = sgstPaise,
+  igstPaise = igstPaise,
+)
+
+private fun MobileInvoiceTotalsDto.toDomain() = InvoiceTotals(
+  subtotalPaise = subtotalPaise,
+  gstTotalPaise = gstTotalPaise,
+  cgstPaise = cgstPaise,
+  sgstPaise = sgstPaise,
+  igstPaise = igstPaise,
+  discountPaise = discountPaise,
+  grandTotalPaise = grandTotalPaise,
+)
+
+private fun MobileInvoiceDto.toDomain() = OrderInvoice(
+  orderId = orderId,
+  orderNumber = orderNumber,
+  status = status,
+  placedAt = placedAt,
+  biller = InvoiceParty(
+    name = biller.name,
+    gstin = biller.gstin,
+    address = biller.address,
+    phone = biller.phone,
+  ),
+  billedTo = InvoiceBilledTo(
+    shopName = billedTo.shopName,
+    address = billedTo.address,
+    areaName = billedTo.areaName,
+    gstin = billedTo.gstin,
+  ),
+  taxMode = taxMode,
+  lines = lines.map(MobileInvoiceLineDto::toDomain),
+  totals = totals.toDomain(),
+)
+
+private fun MobileDeliveryProofDto.toDomain() = DeliveryProof(
+  signatureCaptured = signatureCaptured,
+  photoCaptured = photoCaptured,
+  signatureUrl = signatureUrl,
+  photoUrl = photoUrl,
+)
+
+private fun MobileDeliveryItemDto.toDomain() = DeliveryItem(
+  id = id,
+  productName = productName,
+  packName = packName,
+  quantityOrdered = quantityOrdered,
+  quantityDelivered = quantityDelivered,
+  quantityMissing = quantityMissing,
+  quantityDamaged = quantityDamaged,
+  lineTotalPaise = lineTotalPaise,
+)
+
+private fun MobileDeliveryDto.toDomain() = OrderDelivery(
+  orderId = orderId,
+  orderNumber = orderNumber,
+  orderStatus = orderStatus,
+  grandTotalPaise = grandTotalPaise,
+  placedAt = placedAt,
+  shippingAddressLine = shippingAddressLine,
+  status = status,
+  assignedName = assignedName,
+  dispatchedAt = dispatchedAt,
+  inProgressAt = inProgressAt,
+  deliveredAt = deliveredAt,
+  receiverName = receiverName,
+  otpVerified = otpVerified,
+  deliveryNotes = deliveryNotes,
+  failureReason = failureReason,
+  returnWindowDays = returnWindowDays,
+  returnDeadline = returnDeadline,
+  returnWindowOpen = returnWindowOpen,
+  proof = proof.toDomain(),
+  items = items.map(MobileDeliveryItemDto::toDomain),
 )
 
 private fun kotlinx.serialization.json.JsonElement?.asAddressLine(): String? = try {

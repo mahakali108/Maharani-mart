@@ -17,7 +17,15 @@ const BUCKET_BY_PREFIX: { prefix: string; bucket: PrivateBucket }[] = [
   { prefix: 'payments/', bucket: 'payment-proofs' },
 ];
 
-export async function resolveProofUrl(ref: string | null | undefined): Promise<string | null> {
+/**
+ * `client` is threaded through to the signer so a bearer-token caller (the
+ * mobile API) signs with its own RLS-scoped session instead of the anonymous
+ * cookie client. Web pages keep the default.
+ */
+export async function resolveProofUrl(
+  ref: string | null | undefined,
+  client?: Parameters<typeof getSignedUrl>[3]
+): Promise<string | null> {
   if (!ref || ref.trim() === '') return null;
 
   const parsed = parseMediaRef(ref);
@@ -26,7 +34,7 @@ export async function resolveProofUrl(ref: string | null | undefined): Promise<s
   if (parsed?.provider === 'object-path') {
     const match = BUCKET_BY_PREFIX.find((b) => parsed.value.startsWith(b.prefix));
     if (!match) return null;
-    return getSignedUrl(match.bucket, parsed.value);
+    return getSignedUrl(match.bucket, parsed.value, undefined, client);
   }
   return null;
 }

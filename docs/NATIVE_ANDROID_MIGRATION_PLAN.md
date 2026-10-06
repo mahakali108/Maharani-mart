@@ -3,6 +3,11 @@
 **Phase A deliverable 3 of 3.** Companion documents:
 `docs/NATIVE_ANDROID_MIGRATION_AUDIT.md` and `docs/NATIVE_ANDROID_API_CONTRACT.md`.
 
+**Status note (2026-10-05):** the phase statuses in §3 are the plan's original projection from
+Phase A. What the native app implements and verifies today is recorded in
+`docs/NATIVE_PWA_FEATURE_PARITY.md`; the endpoint contract in
+`docs/NATIVE_ANDROID_API_CONTRACT.md` is kept current.
+
 Target: **Maharani Traders** — a native Kotlin + Jetpack Compose Android app that uses the
 existing Next.js + Supabase backend through `/api/mobile/v1`, preserving every existing
 business rule, role, RLS policy and data set.

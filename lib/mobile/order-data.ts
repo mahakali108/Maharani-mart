@@ -32,15 +32,36 @@ export interface MobileOrderRow {
   order_items: MobileOrderItemRow[] | null;
 }
 
+/** One status-history row, as the web order timeline reads them. */
+export interface MobileOrderStatusEntry {
+  id: string;
+  status: string;
+  note: string | null;
+  createdAt: string;
+}
+
+/**
+ * Facts only the DETAIL endpoint has.
+ *
+ * Both are optional so the list endpoint keeps its exact previous payload: a
+ * caller that did not ask for the history or the ledger movement does not get
+ * an empty array that looks like "this order has no history".
+ */
+export interface MobileOrderExtras {
+  statusHistory?: MobileOrderStatusEntry[];
+  /** Coins this order spent/refunded, read from the wallet ledger. */
+  coinMovement?: { spentPaise: number; refundedPaise: number; refunded: boolean } | null;
+}
+
 /** Convert database truth to a stable, money-safe native API representation. */
-export function serializeMobileOrder(row: MobileOrderRow) {
+export function serializeMobileOrder(row: MobileOrderRow, extras: MobileOrderExtras = {}) {
   const balanceAfterCoinsPaise = row.coins_balance_after_paise == null
     ? null
     : Number(row.coins_balance_after_paise);
   if (balanceAfterCoinsPaise !== null && (!Number.isSafeInteger(balanceAfterCoinsPaise) || balanceAfterCoinsPaise < 0)) {
     throw new Error('Order Coins balance snapshot is invalid.');
   }
-  return {
+  const payload = {
     id: row.id,
     orderNumber: row.order_number,
     status: row.status,
@@ -68,4 +89,21 @@ export function serializeMobileOrder(row: MobileOrderRow) {
       lineTotalPaise: toPaise(Number(item.line_total)),
     })),
   };
+
+  const withExtras: Record<string, unknown> = { ...payload };
+  if (extras.statusHistory) withExtras.statusHistory = extras.statusHistory;
+  if (extras.coinMovement) {
+    // The order's own ledger movement (`spentPaise` already excludes reversed
+    // debits), so the detail screen reports what THIS order spent — or what was
+    // refunded to the shop when it was cancelled/returned.
+    withExtras.coinsSpentPaise = extras.coinMovement.spentPaise;
+    withExtras.coinsRefundedPaise = extras.coinMovement.refundedPaise;
+    withExtras.coinsRefunded = extras.coinMovement.refunded;
+  }
+  return withExtras as typeof payload & Partial<{
+    statusHistory: MobileOrderStatusEntry[];
+    coinsSpentPaise: number;
+    coinsRefundedPaise: number;
+    coinsRefunded: boolean;
+  }>;
 }
