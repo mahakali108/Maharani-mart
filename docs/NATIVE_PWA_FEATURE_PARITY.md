@@ -234,30 +234,24 @@ than accepting an unverified deep link.
 - A row is IMPLEMENTED only where the native screen calls the stated endpoint and acts
   on the response. Reachability was checked against `DestinationSurface`, so a screen
   that exists but cannot be opened does not count.
-- Route behaviour for the rows changed on 2026-10-05 (CAT-08, CART-08, CHK-07, NOTIF-03,
-  NOTIF-04, ACC-02, ORD-02, ORD-03, ORD-04, ORD-05) was verified by running the endpoint
-  tests under `tests/` (session, role, ownership, validation, error and response-shape
-  assertions), not by reading the route alone: `tests/mobile-order-invoice.test.ts` and
-  `tests/mobile-order-delivery.test.ts` cover the two endpoints this change set adds,
-  including the "foreign order is a 404 with no child read" case. The Android side was
-  verified by reading the screen, its state model and the shell's render table, and by
-  the repository's static Android gates (`tests/android-project-integrity.test.ts`,
-  which resolves the new symbols, DTO `@Serializable` annotations and fake-interface
-  completeness). **Android compilation and unit tests cannot be executed in the
-  verifying environment** (no JDK or Android SDK available); they run in the
-  `android-apk.yml` GitHub Actions job, and no Kotlin build result is claimed here
-  unless that job is green.
-- Session persistence, the catalogue panes and the account hub (the 2026-10-06 change
-  set) were verified by: reading the changed Kotlin against its call sites; the
-  repository's static Android gates (`tests/android-project-integrity.test.ts`); the
-  catalogue unit tests in `android/feature/catalog/src/test/…/CatalogViewModelTest.kt`
-  (categories load, brands load, category filter, brand filter, pane navigation, empty
-  state, API failure, pagination, de-duplication) and the session tests in
-  `android/core/auth/src/test/…/SessionManagerTest.kt` (token published before the
-  verify call, refresh retry, terminal rejection clears, network failure keeps, a
-  second account cannot inherit the first account's scoped state). Those Kotlin tests
-  run in the `android-apk.yml` job; the static gates run here. The web suite
-  (`pnpm test`, 108 files / 2050 tests), typecheck, lint and production build were run
-  in this environment and are green, and the Android job itself is green in CI on
-  `09e2e9d` (run 37426923185: `testDebugUnitTest lintDebug assembleDebug`, with the
-  APK's `applicationId` re-checked by `aapt` as `com.maharanitraders.app`).
+- The retailer-upgrade routes were audited against their PWA actions and covered by
+  the endpoint tests in `tests/mobile-retailer-upgrade-api.test.ts`,
+  `tests/mobile-order-invoice.test.ts`, `tests/mobile-order-delivery.test.ts`, and
+  `tests/support-tickets.test.ts`, including authentication, role/owner scoping,
+  validation, server errors, response shapes, and foreign-order rejection before child
+  reads. Date-bound statement paths are covered by `tests/india-datetime.test.ts`.
+- The native side was checked against the screen/state/repository call paths and
+  `DestinationSurface`. Static integrity tests live in
+  `tests/android-project-integrity.test.ts`; the Android unit suites also cover
+  catalogue filtering/paging, session token restoration and state isolation, router
+  reachability, API serialization, and the support-ticket order association
+  (`SupportViewModelTest`). Compose targets use the shared 48 dp dimension; an
+  emulator-based 360/393/412 dp pass was not available in this environment.
+- Local Android Gradle execution was unavailable because this sandbox has no JDK or
+  Android SDK. The GitHub Actions Android job supplies JDK 17 and SDK 36 and completed
+  `testDebugUnitTest lintDebug assembleDebug` successfully for this PR (run
+  `37477717496`, commit `e075e07`); its APK identity check also passed.
+- The final web suite (`corepack pnpm test`, 109 files / 2,066 tests), typecheck,
+  lint and production build all passed locally. Lint/build report one existing
+  `@next/next/no-img-element` warning in
+  `components/admin/product-image-manager.tsx:110`; no new warning was introduced.
