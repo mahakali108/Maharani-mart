@@ -4,8 +4,9 @@ export interface FixtureQuery {
   table: string;
   select: string;
   filters: { op: string; column: string; value: unknown }[];
-  operation: 'select' | 'insert' | 'update' | 'delete';
+  operation: 'select' | 'insert' | 'update' | 'delete' | 'upsert';
   payload?: Record<string, unknown>;
+  conflictColumn?: string;
   limit?: number;
 }
 type Row = Record<string, unknown>;
@@ -51,6 +52,16 @@ export function supabaseFixture(
         const row = { ...query.payload, id: query.payload?.id ?? `inserted-${all.length}` };
         tables[table] = [...all, row];
         rows = [row];
+      } else if (query.operation === 'upsert') {
+        const existing = query.conflictColumn
+          ? all.find((row) => row[query.conflictColumn!] === query.payload?.[query.conflictColumn!])
+          : undefined;
+        if (existing) { Object.assign(existing, query.payload); rows = [existing]; }
+        else {
+          const row = { ...query.payload, id: query.payload?.id ?? `inserted-${all.length}` };
+          tables[table] = [...all, row];
+          rows = [row];
+        }
       } else if (query.operation === 'update') rows.forEach((row) => Object.assign(row, query.payload));
       else if (query.operation === 'delete') tables[table] = all.filter((row) => !matching(row));
       rows = [...rows].sort((a, b) => {
@@ -84,6 +95,7 @@ export function supabaseFixture(
       single: async () => { const result = run(); return { ...result, data: result.data?.[0] ?? null }; },
       update: (payload: Row) => { query.operation = 'update'; query.payload = payload; return chain; },
       insert: (payload: Row) => { query.operation = 'insert'; query.payload = payload; return chain; },
+      upsert: (payload: Row, options?: { onConflict?: string }) => { query.operation = 'upsert'; query.payload = payload; query.conflictColumn = options?.onConflict; return chain; },
       delete: () => { query.operation = 'delete'; return chain; },
       then: (resolve: (result: Result) => unknown) => Promise.resolve(run()).then(resolve),
     };

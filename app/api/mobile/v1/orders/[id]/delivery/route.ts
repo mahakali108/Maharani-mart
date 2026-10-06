@@ -78,6 +78,14 @@ export async function GET(
     ]);
 
     const { delivery, order, items } = detail;
+    const { data: returnRequest, error: returnRequestError } = await client.from('return_requests')
+      .select('status')
+      .eq('order_id', order.id)
+      .eq('retailer_id', auth.session.userId)
+      .order('requested_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ status: string }>();
+    if (returnRequestError) throw returnRequestError;
 
     return jsonOk(
       {
@@ -105,6 +113,7 @@ export async function GET(
         returnWindowOpen: delivery.return_deadline
           ? isReturnWindowOpen(delivery.return_deadline)
           : null,
+        returnRequestStatus: returnRequest?.status ?? null,
         proof: {
           signatureCaptured: delivery.signature_url != null,
           photoCaptured: delivery.photo_url != null,

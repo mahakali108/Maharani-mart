@@ -137,6 +137,64 @@ class ApiCallExecutorTest {
     assertEquals(1, attempts)
   }
 
+  /**
+   * The other half of the same rule, and the one a shopper actually hits: the
+   * API answers `expired_token` (read from the JWT's own `exp`, see
+   * `lib/mobile/auth.ts`'s `classifyTokenFailure`) once the access token's hour
+   * is up, which is what happens to the FIRST request after the app has been in
+   * the background. Refreshing only on `invalid_token` left that request failing
+   * until the process restarted, so the catalogue stopped loading on a session
+   * that was still perfectly refreshable.
+   */
+  private fun expiredTokenCodeError(): HttpException = HttpException(
+    Response.error<Any>(
+      401,
+      """{"error":{"code":"expired_token","message":"Your session has expired. Please sign in again."}}"""
+        .toResponseBody("application/json".toMediaType()),
+    ),
+  )
+
+  @Test
+  fun `refreshes and retries when the server reports the access token expired`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder().apply { set("stale-token") }
+    val coordinator = TokenRefreshCoordinator()
+    var refreshCalls = 0
+    coordinator.install {
+      refreshCalls += 1
+      holder.set("fresh-token")
+      "fresh-token"
+    }
+    val executor = ApiCallExecutor(
+      ApiErrorMapper(Json { ignoreUnknownKeys = true }),
+      dispatcher,
+      holder,
+      coordinator,
+    )
+    var attempts = 0
+
+    val result = executor.execute {
+      attempts += 1
+      if (holder.accessToken() != "fresh-token") throw expiredTokenCodeError()
+      "priced for your shop"
+    }
+
+    assertEquals(AppResult.Success("priced for your shop"), result)
+    assertEquals(2, attempts)
+    assertEquals(1, refreshCalls)
+  }
+
+  @Test
+  fun `maps the expired-token code to the sign-in error it is`() = runTest(dispatcher) {
+    val mapper = ApiErrorMapper(Json { ignoreUnknownKeys = true })
+    val mapped = mapper.fromHttp(
+      401,
+      """{"error":{"code":"expired_token","message":"Your session has expired. Please sign in again."}}""",
+    )
+    assertTrue(mapped is AppError.Api)
+    assertEquals(ApiErrorCode.EXPIRED_TOKEN, (mapped as AppError.Api).code)
+    assertTrue(mapped.requiresSignIn)
+  }
+
   @Test
   fun `does not retry a transport failure`() = runTest(dispatcher) {
     val coordinator = TokenRefreshCoordinator()

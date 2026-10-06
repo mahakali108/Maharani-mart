@@ -17,6 +17,7 @@ import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.PasswordResetRequestDto
 import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
+import com.maharanitraders.core.network.dto.PasswordChangeRequestDto
 import com.maharanitraders.core.network.dto.RefreshRequestDto
 import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
 import javax.inject.Inject
@@ -114,6 +115,21 @@ class AuthRepository @Inject constructor(
     executor.executeEnvelope {
       api.updatePassword(PasswordUpdateRequestDto(password = password, confirmPassword = confirmPassword))
     }.map { Unit }
+
+  suspend fun changePassword(currentPassword: String, newPassword: String, confirmPassword: String): AppResult<Unit> =
+    executor.executeEnvelope {
+      api.changePassword(
+        PasswordChangeRequestDto(
+          currentPassword = currentPassword,
+          newPassword = newPassword,
+          confirmPassword = confirmPassword,
+        ),
+      )
+    }.map { Unit }
+
+  /** Provider-wide revocation; local credentials are wiped separately by SessionController. */
+  suspend fun revokeAllSessions(): AppResult<Unit> =
+    executor.executeEnvelope { api.revokeAllSessions() }.map { Unit }
 
   suspend fun registerRetailer(
     fullName: String,

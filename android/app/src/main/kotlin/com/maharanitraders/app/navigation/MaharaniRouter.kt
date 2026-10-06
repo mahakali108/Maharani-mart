@@ -84,8 +84,17 @@ object MaharaniRouter {
     MaharaniRoutes.CART -> snapshot.role == UserRole.RETAILER
       && snapshot.navigation.can("orders.create")
       && snapshot.navigation.can("orders.view.own")
-    MaharaniRoutes.ORDERS -> snapshot.role == UserRole.RETAILER
-      && snapshot.navigation.can("orders.view.own")
+    MaharaniRoutes.ORDERS,
+    MaharaniRoutes.SCHEMES,
+    MaharaniRoutes.REPORTS,
+    MaharaniRoutes.SUPPORT,
+    MaharaniRoutes.HELP,
+    -> snapshot.role == UserRole.RETAILER && snapshot.navigation.can("orders.view.own")
+    MaharaniRoutes.PROFILE,
+    MaharaniRoutes.NOTIFICATION_PREFERENCES,
+    MaharaniRoutes.SECURITY,
+    MaharaniRoutes.SAVED_CARTS,
+    -> snapshot.role == UserRole.RETAILER && snapshot.navigation.can("orders.create")
     else -> true
   }
 }

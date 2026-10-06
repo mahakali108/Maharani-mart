@@ -109,12 +109,13 @@ function purchasesSelect() {
 }
 
 async function loadOrdersBetween(supabase: ReturnType<typeof createClient>, retailerId: string, startIso: string, endIso: string) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('orders')
     .select(purchasesSelect())
     .eq('retailer_id', retailerId)
     .gte('placed_at', startIso)
     .lte('placed_at', endIso);
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -125,7 +126,7 @@ async function loadTopProductsBetween(
   endIso: string,
   limit = 5
 ): Promise<TopProductRow[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('order_items')
     .select(
       'quantity_pieces, quantity, unit_price, line_total, orders!inner ( retailer_id, placed_at, status ), products ( id, name, brands ( name ) )'
@@ -134,6 +135,7 @@ async function loadTopProductsBetween(
     .gte('orders.placed_at', startIso)
     .lte('orders.placed_at', endIso)
     .neq('orders.status', 'cancelled');
+  if (error) throw error;
 
   type Row = {
     quantity: number;
@@ -190,12 +192,13 @@ export async function loadInsightWindows(supabase: ReturnType<typeof createClien
 
 /** Six-month spend trend (cancelled excluded) for the reports page. */
 export async function loadSpendTrend(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<MonthTrendRow[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('orders')
     .select('placed_at, status, subtotal, discount_total, gst_total')
     .eq('retailer_id', retailerId)
     .order('placed_at', { ascending: false })
     .limit(500);
+  if (error) throw error;
   return buildMonthTrend(data ?? [], 6);
 }
 
@@ -223,14 +226,31 @@ export async function loadPurchaseStatement(
   fromIso: string,
   toIso: string
 ): Promise<StatementRow[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('orders')
     .select('order_number, placed_at, status, subtotal, discount_total, gst_total, grand_total')
     .eq('retailer_id', retailerId)
     .gte('placed_at', fromIso)
     .lte('placed_at', toIso)
     .order('placed_at', { ascending: true });
-  return (data ?? []) as StatementRow[];
+  if (error) throw error;
+  return ((data ?? []) as unknown as {
+    order_number: string;
+    placed_at: string;
+    status: string;
+    subtotal: number;
+    discount_total: number;
+    gst_total: number;
+    grand_total: number;
+  }[]).map((row): StatementRow => ({
+    orderNumber: row.order_number,
+    placedAt: row.placed_at,
+    status: row.status,
+    subtotal: row.subtotal,
+    discountTotal: row.discount_total,
+    gstTotal: row.gst_total,
+    grandTotal: row.grand_total,
+  }));
 }
 
 export function statementCsv(rows: StatementRow[]): string {

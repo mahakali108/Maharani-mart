@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -21,6 +24,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +41,8 @@ import com.maharanitraders.core.designsystem.components.SectionHeader
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.feature.orders.OrderDetailUiState
 import com.maharanitraders.feature.orders.OrderDetailViewModel
+import com.maharanitraders.feature.orders.OrderActionsUiState
+import com.maharanitraders.feature.orders.OrderActionsViewModel
 import com.maharanitraders.feature.orders.OrderItem
 import com.maharanitraders.feature.orders.RetailerOrder
 
@@ -45,6 +53,7 @@ object OrderDetailTags {
   const val INVOICE = "order_detail_invoice"
   const val DELIVERY = "order_detail_delivery"
   const val ERROR = "order_detail_error"
+  const val CANCEL = "order_detail_cancel"
 }
 
 @Composable
@@ -57,6 +66,18 @@ fun OrderDetailScreen(
   viewModel: OrderDetailViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val actionsViewModel: OrderActionsViewModel = hiltViewModel()
+  val actions by actionsViewModel.state.collectAsStateWithLifecycle()
+  var showCancelDialog by remember { mutableStateOf(false) }
+  var cancelReason by remember { mutableStateOf("") }
+
+  LaunchedEffect(actions.completedAction) {
+    if (actions.completedAction == "cancel") {
+      showCancelDialog = false
+      cancelReason = ""
+      viewModel.load()
+    }
+  }
 
   // A successful reorder lands on the cart, where the server's re-priced lines
   // are the only thing shown. The completion flag is consumed exactly once.
@@ -74,8 +95,37 @@ fun OrderDetailScreen(
     onReorder = viewModel::reorder,
     onOpenInvoice = onOpenInvoice,
     onOpenDelivery = onOpenDelivery,
+    actions = actions,
+    onOpenCancel = { showCancelDialog = true },
     modifier = modifier,
   )
+  if (showCancelDialog) {
+    AlertDialog(
+      onDismissRequest = { if (!actions.busy) showCancelDialog = false },
+      title = { Text("Cancel this order?") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Only a pending order can be cancelled. The server will handle the Coins reversal and coupon release.")
+          OutlinedTextField(
+            value = cancelReason,
+            onValueChange = { cancelReason = it.take(500) },
+            label = { Text("Reason (optional)") },
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth(),
+          )
+          actions.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { actionsViewModel.cancelOrder(cancelReason) }, enabled = !actions.busy) {
+          if (actions.busy) CircularProgressIndicator(Modifier.padding(end = 6.dp), strokeWidth = 2.dp)
+          Text("Cancel order")
+        }
+      },
+      dismissButton = { TextButton(onClick = { showCancelDialog = false }, enabled = !actions.busy) { Text("Keep order") } },
+    )
+  }
 }
 
 @Composable
@@ -86,6 +136,8 @@ fun OrderDetailContent(
   onReorder: () -> Unit,
   onOpenInvoice: (String) -> Unit,
   onOpenDelivery: (String) -> Unit,
+  actions: OrderActionsUiState = OrderActionsUiState(),
+  onOpenCancel: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val order = state.order
@@ -149,6 +201,19 @@ fun OrderDetailContent(
       }
     }
 
+    if (order.status == "pending") {
+      item {
+        OrderDetailCard(title = "Order actions") {
+          Text("This order is still pending. Cancellation is available only until processing begins.", style = MaterialTheme.typography.bodySmall)
+          OutlinedButton(
+            onClick = onOpenCancel,
+            enabled = !actions.busy,
+            modifier = Modifier.fillMaxWidth().testTag(OrderDetailTags.CANCEL),
+          ) { Text(if (actions.busy) "Cancelling…" else "Cancel order") }
+        }
+      }
+    }
+
     order.shippingAddressLine?.let { address ->
       item {
         OrderDetailCard(title = "Delivery address") {
@@ -187,6 +252,13 @@ fun OrderDetailContent(
 
     item { SectionHeader(title = "Items in this order", subtitle = "Prices captured when the order was placed") }
     items(order.items, key = { item -> item.id }) { item -> OrderDetailItemRow(item) }
+
+    if (actions.error != null || actions.message != null) {
+      item {
+        actions.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        actions.message?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+      }
+    }
 
     item {
       state.reorderError?.let { message ->

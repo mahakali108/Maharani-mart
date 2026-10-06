@@ -933,6 +933,34 @@ class FakeMaharaniApi(
     body: com.maharanitraders.core.network.dto.MobileBulkMatchRequestDto,
   ): ApiEnvelope<com.maharanitraders.core.network.dto.MobileBulkMatchDto> = unsupported("matchBulkLines")
 
+
+  override suspend fun changePassword(body: com.maharanitraders.core.network.dto.PasswordChangeRequestDto): ApiEnvelope<AckDto> = unsupported("changePassword")
+  override suspend fun revokeAllSessions(): ApiEnvelope<AckDto> = unsupported("revokeAllSessions")
+  override suspend fun retailerProfile(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileRetailerProfileDto> = unsupported("retailerProfile")
+  override suspend fun updateRetailerProfile(body: com.maharanitraders.core.network.dto.MobileProfilePatchDto): ApiEnvelope<AckDto> = unsupported("updateRetailerProfile")
+  override suspend fun notificationPreferences(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileNotificationPreferencesDto> = unsupported("notificationPreferences")
+  override suspend fun updateNotificationPreferences(body: com.maharanitraders.core.network.dto.MobileNotificationPreferencesDto): ApiEnvelope<AckDto> = unsupported("updateNotificationPreferences")
+  override suspend fun schemes(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSchemesDto> = unsupported("schemes")
+  override suspend fun helpDetails(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileHelpDto> = unsupported("helpDetails")
+  override suspend fun accountRequests(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileAccountRequestsDto> = unsupported("accountRequests")
+  override suspend fun createAccountRequest(body: com.maharanitraders.core.network.dto.MobileAccountRequestCreateDto): ApiEnvelope<com.maharanitraders.core.network.dto.MobileAccountRequestDto> = unsupported("createAccountRequest")
+  override suspend fun purchaseReports(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileReportsDto> = unsupported("purchaseReports")
+  override suspend fun reportStatementCsv(type: String, from: String?, to: String?): okhttp3.ResponseBody = unsupported("reportStatementCsv")
+  override suspend fun supportTickets(cursor: String?, status: String?): ApiEnvelope<List<com.maharanitraders.core.network.dto.MobileSupportTicketDto>> = unsupported("supportTickets")
+  override suspend fun createSupportTicket(body: com.maharanitraders.core.network.dto.MobileSupportCreateRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSupportCreateResponseDto> = unsupported("createSupportTicket")
+  override suspend fun supportTicket(ticketId: String): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSupportTicketDetailDto> = unsupported("supportTicket")
+  override suspend fun replyToSupportTicket(ticketId: String, body: com.maharanitraders.core.network.dto.MobileSupportReplyRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSupportMessageDto> = unsupported("replyToSupportTicket")
+  override suspend fun savedCarts(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSavedCartsDto> = unsupported("savedCarts")
+  override suspend fun saveCurrentCart(body: com.maharanitraders.core.network.dto.MobileSavedCartCreateRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSavedCartMutationDto> = unsupported("saveCurrentCart")
+  override suspend fun renameSavedCart(savedCartId: String, body: com.maharanitraders.core.network.dto.MobileSavedCartRenameRequestDto): ApiEnvelope<AckDto> = unsupported("renameSavedCart")
+  override suspend fun deleteSavedCart(savedCartId: String): ApiEnvelope<AckDto> = unsupported("deleteSavedCart")
+  override suspend fun restoreSavedCart(savedCartId: String): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSavedCartRestoreDto> = unsupported("restoreSavedCart")
+  override suspend fun saveCartItemForLater(body: com.maharanitraders.core.network.dto.MobileSaveForLaterRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSavedCartMutationDto> = unsupported("saveCartItemForLater")
+  override suspend fun deleteSavedCartItem(itemId: String): ApiEnvelope<AckDto> = unsupported("deleteSavedCartItem")
+  override suspend fun restoreSavedCartItem(itemId: String): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSavedCartRestoreDto> = unsupported("restoreSavedCartItem")
+  override suspend fun cancelOrder(orderId: String, body: com.maharanitraders.core.network.dto.MobileOrderActionRequestDto): ApiEnvelope<AckDto> = unsupported("cancelOrder")
+  override suspend fun requestOrderReturn(orderId: String, body: com.maharanitraders.core.network.dto.MobileOrderActionRequestDto): ApiEnvelope<com.maharanitraders.core.network.dto.MobileReturnRequestResponseDto> = unsupported("requestOrderReturn")
+
   private fun unsupported(endpoint: String): Nothing =
     throw UnsupportedOperationException("$endpoint is not used by the session layer")
 }

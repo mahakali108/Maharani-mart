@@ -95,6 +95,13 @@ data class PasswordUpdateRequestDto(
   val confirmPassword: String,
 )
 
+@Serializable
+data class PasswordChangeRequestDto(
+  val currentPassword: String,
+  val newPassword: String,
+  val confirmPassword: String,
+)
+
 /** Generic `{ ok, message? }` acknowledgement. */
 @Serializable
 data class AckDto(

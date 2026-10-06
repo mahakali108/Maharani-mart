@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import { createInAppNotification, queueChannelNotification } from '@/lib/notifications/notify';
+import { createInAppNotification, queueChannelNotification, type NotifyInput } from '@/lib/notifications/notify';
 import type { Database } from '@/types/database.types';
 
 type ReturnRequestUpdate = Database['public']['Tables']['return_requests']['Update'];
@@ -49,11 +49,12 @@ export async function approveReturnAction(returnId: string, note: string): Promi
   const { error } = await supabase.from('return_requests').update(payload as unknown as never).eq('id', returnId);
   if (error) return { error: error.message };
 
-  const notifyInput = {
+  const notifyInput: NotifyInput = {
     recipientId: existing.retailer_id,
     title: 'Return request approved',
     body: `Your return request for order has been approved.${note ? ` Note: ${note}` : ''}`,
     linkUrl: `/retailer/orders/${existing.order_id}`,
+    category: 'order',
   };
   await createInAppNotification(notifyInput);
   await queueChannelNotification('whatsapp', notifyInput);
@@ -94,6 +95,7 @@ export async function rejectReturnAction(returnId: string, note: string): Promis
     title: 'Return request rejected',
     body: `Your return request was not approved. Reason: ${note}`,
     linkUrl: `/retailer/orders/${existing.order_id}`,
+    category: 'order',
   });
 
   revalidatePath('/admin/returns');

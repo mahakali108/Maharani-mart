@@ -30,6 +30,7 @@ import {
   indiaDateParts,
   indiaDayEndIso,
   indiaDayStartIso,
+  isValidIndiaDateKey,
   indiaDiffDays,
   indiaMonthStart,
   indiaPreviousMonthStart,
@@ -193,9 +194,13 @@ describe('Asia/Kolkata calendar-day boundaries (UTC storage, IST day buckets)', 
     expect(indiaCalendarDateKey(new Date(end.getTime() + 1))).toBe('2026-09-05');
   });
 
-  it('returns null for malformed date keys (no fabricated bounds)', () => {
+  it('rejects malformed and impossible calendar dates rather than rolling them forward', () => {
     expect(indiaDayStartIso('not-a-date')).toBeNull();
     expect(indiaDayEndIso('2026-9-4')).toBeNull();
+    expect(indiaDayStartIso('2026-02-30')).toBeNull();
+    expect(isValidIndiaDateKey('2026-02-30')).toBe(false);
+    expect(isValidIndiaDateKey('2024-02-29')).toBe(true);
+    expect(isValidIndiaDateKey('2025-02-29')).toBe(false);
   });
 
   it('adds/subtracts India calendar days across month boundaries', () => {

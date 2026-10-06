@@ -27,9 +27,12 @@ export async function reverseOrderWalletDebit(
   orderId: string,
   retailerId: string,
   reason: string,
-  createdBy: string | null
+  createdBy: string | null,
+  callerClient?: ReturnType<typeof createClient>
 ): Promise<{ success: true; refundedPaise: number } | { error: string }> {
-  const supabase = createClient();
+  // Mobile routes pass the already-verified bearer-scoped caller client. Web
+  // actions keep their cookie-scoped default; neither path bypasses RLS.
+  const supabase = callerClient ?? createClient();
 
   // PREFERRED PATH — the database function (0053). It is the only way a refund
   // can be written when the caller is the RETAILER (cancelling their own order)

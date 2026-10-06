@@ -187,13 +187,14 @@ export async function getRetailerLedger(
   retailerId: string,
   limit = 100
 ): Promise<WalletTransaction[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('retailer_wallet_ledger')
     .select('*')
     .eq('retailer_id', retailerId)
     .order('created_at', { ascending: false })
     .limit(limit)
     .returns<WalletTransaction[]>();
+  if (error) throw error;
   return data ?? [];
 }
 
