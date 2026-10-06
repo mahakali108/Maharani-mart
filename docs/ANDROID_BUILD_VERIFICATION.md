@@ -312,7 +312,25 @@ this change set deletes).
 | `tests/android-project-integrity.test.ts` (static Kotlin gates) | **green** |
 | `tests/parity-doc-totals.test.ts` | **green** |
 | `pnpm typecheck` / `next lint` / `pnpm test` / `next build` | run in this change set; results in the PR body |
-| `./gradlew testDebugUnitTest lintDebug assembleDebug` | **not run in this environment** — the sandbox has no JDK, no Android SDK and cannot reach `services.gradle.org`, `dl.google.com` or Maven Central. The `android-apk.yml` job is the compiler of record for this change, and no Kotlin build result is claimed unless that job is green. |
+| `./gradlew testDebugUnitTest lintDebug assembleDebug` | **green in CI** — run [37426923185](https://github.com/mahakali108/Maharani-mart/actions/runs/37426923185) on `09e2e9d`. The sandbox itself has no JDK/SDK and cannot reach `services.gradle.org`, `dl.google.com` or Maven Central, so `android-apk.yml` remains the compiler of record. |
+
+### CI evidence for this change set
+
+| Item | Value |
+| --- | --- |
+| Push run | [37426923185](https://github.com/mahakali108/Maharani-mart/actions/runs/37426923185) — commit `09e2e9d`, **success** |
+| PR run | [37426927458](https://github.com/mahakali108/Maharani-mart/actions/runs/37426927458) — **success** |
+| Web job | `pnpm typecheck`, `pnpm test` (108 files / 2050 tests), `next lint`, `next build` — success |
+| Android job | `./gradlew testDebugUnitTest lintDebug assembleDebug` — success (JDK 17, SDK 36, build-tools 36.0.0) |
+| APK identity | step *Verify debug APK identity* — `aapt dump badging` matched `package: name='com.maharanitraders.app'` |
+| APK artifact | `maharani-traders-debug-apk`, 14.4 MiB (15,073,368 bytes) |
+| Reports | `android-reports` (Gradle test + lint HTML/XML), 321 KiB |
+
+The Kotlin suite is 265 `@Test` methods across 32 files. The files this change set
+touches or adds are `SessionManagerTest.kt` (31), `CatalogViewModelTest.kt` (21),
+`ApiCallExecutorTest.kt` (8), `TokenRefreshCoordinatorTest.kt` (6) and
+`MaharaniRouterTest.kt` (13); all of them ran in the green Android job above. The
+`CategoriesViewModelTest.kt` that the change set deletes is gone from the suite.
 
 The new Kotlin unit tests that CI runs are
 `android/core/auth/src/test/…/SessionManagerTest.kt` (token published before the

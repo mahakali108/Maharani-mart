@@ -250,5 +250,7 @@ behind a placeholder screen in the app.
   verify call, refresh retry, terminal rejection clears, network failure keeps, a
   second account cannot inherit the first account's scoped state). Those Kotlin tests
   run in the `android-apk.yml` job; the static gates run here. The web suite
-  (`pnpm test`), typecheck, lint and production build were run in this environment and
-  are green.
+  (`pnpm test`, 108 files / 2050 tests), typecheck, lint and production build were run
+  in this environment and are green, and the Android job itself is green in CI on
+  `09e2e9d` (run 37426923185: `testDebugUnitTest lintDebug assembleDebug`, with the
+  APK's `applicationId` re-checked by `aapt` as `com.maharanitraders.app`).
