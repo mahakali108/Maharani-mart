@@ -3,6 +3,7 @@ package com.maharanitraders.core.network
 import com.maharanitraders.core.network.dto.ApiEnvelope
 import com.maharanitraders.core.network.dto.ApiErrorEnvelope
 import com.maharanitraders.core.network.dto.HealthDto
+import com.maharanitraders.core.network.dto.MobileNotificationPreferencesDto
 import com.maharanitraders.core.network.dto.SessionDto
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -106,6 +107,20 @@ class ApiSerializationTest {
     assertEquals("Only 4 available", envelope.error.message)
     assertEquals(4, envelope.error.details?.available)
     assertEquals("Too many", envelope.error.details?.fields?.get("quantity"))
+  }
+
+  @Test
+  fun `encodes all notification preferences even when every value is the default`() {
+    val body = json.encodeToString(
+      MobileNotificationPreferencesDto.serializer(),
+      MobileNotificationPreferencesDto(),
+    )
+    assertEquals(
+      """{"orderUpdates":true,"paymentUpdates":true,"walletUpdates":true,"offerUpdates":true}""",
+      body,
+    )
+    val defaults = json.decodeFromString(MobileNotificationPreferencesDto.serializer(), "{}")
+    assertTrue(defaults.orderUpdates && defaults.paymentUpdates && defaults.walletUpdates && defaults.offerUpdates)
   }
 
   @Test

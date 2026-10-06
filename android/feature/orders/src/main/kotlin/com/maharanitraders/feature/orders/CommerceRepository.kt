@@ -432,6 +432,7 @@ private fun MobileDeliveryDto.toDomain() = OrderDelivery(
   returnDeadline = returnDeadline,
   returnWindowOpen = returnWindowOpen,
   proof = proof.toDomain(),
+  returnRequestStatus = returnRequestStatus,
   items = items.map(MobileDeliveryItemDto::toDomain),
 )
 

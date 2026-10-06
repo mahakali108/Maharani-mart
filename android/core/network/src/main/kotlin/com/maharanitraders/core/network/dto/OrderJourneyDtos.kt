@@ -147,6 +147,7 @@ data class MobileDeliveryDto(
   val returnWindowDays: Int? = null,
   val returnDeadline: String? = null,
   val returnWindowOpen: Boolean? = null,
+  val returnRequestStatus: String? = null,
   val proof: MobileDeliveryProofDto = MobileDeliveryProofDto(),
   val items: List<MobileDeliveryItemDto> = emptyList(),
 )

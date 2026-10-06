@@ -74,6 +74,14 @@ class MaharaniRouterTest {
     assertTrue(MaharaniRoutes.COINS in routes)
     assertTrue(MaharaniRoutes.ORDERS in routes) // retailer-only history
     assertTrue(MaharaniRoutes.NOTIFICATIONS in routes)
+    assertTrue(MaharaniRoutes.PROFILE in routes)
+    assertTrue(MaharaniRoutes.NOTIFICATION_PREFERENCES in routes)
+    assertTrue(MaharaniRoutes.SECURITY in routes)
+    assertTrue(MaharaniRoutes.SAVED_CARTS in routes)
+    assertTrue(MaharaniRoutes.SCHEMES in routes)
+    assertTrue(MaharaniRoutes.REPORTS in routes)
+    assertTrue(MaharaniRoutes.SUPPORT in routes)
+    assertTrue(MaharaniRoutes.HELP in routes)
 
     assertTrue("retailers must not see the admin workspace", MaharaniRoutes.ADMINISTRATION !in routes)
     assertTrue(MaharaniRoutes.WAREHOUSE !in routes)
@@ -93,6 +101,21 @@ class MaharaniRouterTest {
     ).map { it.route }
     assertTrue(MaharaniRoutes.CART !in createOnly)
     assertTrue(MaharaniRoutes.ORDERS !in createOnly)
+    assertTrue(MaharaniRoutes.PROFILE in createOnly)
+    assertTrue(MaharaniRoutes.NOTIFICATION_PREFERENCES in createOnly)
+    assertTrue(MaharaniRoutes.SECURITY in createOnly)
+    assertTrue(MaharaniRoutes.SAVED_CARTS in createOnly)
+    assertTrue(MaharaniRoutes.SCHEMES !in createOnly)
+    assertTrue(MaharaniRoutes.REPORTS !in createOnly)
+    assertTrue(MaharaniRoutes.SUPPORT !in createOnly)
+    assertTrue(MaharaniRoutes.HELP !in createOnly)
+
+    assertTrue(MaharaniRoutes.PROFILE !in historyOnly)
+    assertTrue(MaharaniRoutes.SAVED_CARTS !in historyOnly)
+    assertTrue(MaharaniRoutes.SCHEMES in historyOnly)
+    assertTrue(MaharaniRoutes.REPORTS in historyOnly)
+    assertTrue(MaharaniRoutes.SUPPORT in historyOnly)
+    assertTrue(MaharaniRoutes.HELP in historyOnly)
   }
 
   @Test
@@ -117,6 +140,10 @@ class MaharaniRouterTest {
     // Favourites are saved against a retailer account, so no other workspace
     // has one to show.
     assertTrue(MaharaniRoutes.FAVORITES !in routes)
+    assertTrue(MaharaniRoutes.PROFILE !in routes)
+    assertTrue(MaharaniRoutes.SAVED_CARTS !in routes)
+    assertTrue(MaharaniRoutes.SUPPORT !in routes)
+    assertTrue(MaharaniRoutes.SECURITY !in routes)
   }
 
   @Test
@@ -212,6 +239,14 @@ class MaharaniRouterTest {
       MaharaniRoutes.NOTIFICATIONS,
       MaharaniRoutes.COUPONS,
       MaharaniRoutes.ACCOUNT,
+      MaharaniRoutes.PROFILE,
+      MaharaniRoutes.NOTIFICATION_PREFERENCES,
+      MaharaniRoutes.SECURITY,
+      MaharaniRoutes.SAVED_CARTS,
+      MaharaniRoutes.SCHEMES,
+      MaharaniRoutes.REPORTS,
+      MaharaniRoutes.SUPPORT,
+      MaharaniRoutes.HELP,
     )
 
     MaharaniCatalog.destinations
@@ -241,6 +276,14 @@ class MaharaniRouterTest {
       MaharaniRoutes.NOTIFICATIONS,
       MaharaniRoutes.COUPONS,
       MaharaniRoutes.ACCOUNT,
+      MaharaniRoutes.PROFILE,
+      MaharaniRoutes.NOTIFICATION_PREFERENCES,
+      MaharaniRoutes.SECURITY,
+      MaharaniRoutes.SAVED_CARTS,
+      MaharaniRoutes.SCHEMES,
+      MaharaniRoutes.REPORTS,
+      MaharaniRoutes.SUPPORT,
+      MaharaniRoutes.HELP,
     )
 
     MaharaniCatalog.destinations

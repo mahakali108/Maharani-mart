@@ -6,6 +6,10 @@ import com.maharanitraders.feature.orders.CommerceRepository
 import com.maharanitraders.feature.orders.NetworkCommerceRepository
 import com.maharanitraders.feature.orders.NetworkQuickOrderRepository
 import com.maharanitraders.feature.orders.QuickOrderRepository
+import com.maharanitraders.feature.orders.NetworkSavedCartsRepository
+import com.maharanitraders.feature.orders.SavedCartsRepository
+import com.maharanitraders.feature.orders.NetworkRetailerOrderActionsRepository
+import com.maharanitraders.feature.orders.RetailerOrderActionsRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,6 +29,14 @@ abstract class OrdersFeatureModule {
   @Binds
   @Singleton
   abstract fun bindQuickOrderRepository(impl: NetworkQuickOrderRepository): QuickOrderRepository
+
+  @Binds
+  @Singleton
+  abstract fun bindSavedCartsRepository(impl: NetworkSavedCartsRepository): SavedCartsRepository
+
+  @Binds
+  @Singleton
+  abstract fun bindOrderActionsRepository(impl: NetworkRetailerOrderActionsRepository): RetailerOrderActionsRepository
 
   /** The cart badge count is the signed-in account's cart, so it goes with the session. */
   @Binds

@@ -27,13 +27,13 @@ object AuthFlowTags {
   const val CONFIRM_TITLE = "confirm_email_title"
 }
 
-private enum class AuthStep { LOGIN, REGISTER, PENDING_APPROVAL, CONFIRM_EMAIL }
+private enum class AuthStep { LOGIN, REGISTER, PASSWORD_RESET, PENDING_APPROVAL, CONFIRM_EMAIL }
 
 /**
  * The signed-out experience: sign in, register, and the two honest outcomes of
- * registration (pending approval, or "confirm your email first").
+ * registration (pending approval, or "confirm your email first"), and password reset.
  *
- * Navigation is local state rather than a nav graph on purpose: these four
+ * Navigation is local state rather than a nav graph on purpose: these screens
  * screens are one flow with no deep links and no back stack worth preserving,
  * and a local `when` cannot render a screen the session state forbids.
  */
@@ -47,8 +47,10 @@ fun AuthFlowScreen(
 
   val loginViewModel: LoginViewModel = hiltViewModel()
   val registerViewModel: RegisterViewModel = hiltViewModel()
+  val passwordResetViewModel: PasswordResetViewModel = hiltViewModel()
   val loginState by loginViewModel.state.collectAsStateWithLifecycle()
   val registerState by registerViewModel.state.collectAsStateWithLifecycle()
+  val passwordResetState by passwordResetViewModel.state.collectAsStateWithLifecycle()
 
   // Both transitions below are side effects, so they run in a LaunchedEffect
   // rather than during composition: writing state (or calling back into the
@@ -75,6 +77,10 @@ fun AuthFlowScreen(
       onPasswordChange = loginViewModel::onPasswordChange,
       onSubmit = loginViewModel::submit,
       onOpenRegister = { step = AuthStep.REGISTER },
+      onForgotPassword = {
+        passwordResetViewModel.onEmailChange(loginState.identifier.takeIf(AuthValidation::isEmail).orEmpty())
+        step = AuthStep.PASSWORD_RESET
+      },
       modifier = modifier,
     )
 
@@ -95,6 +101,14 @@ fun AuthFlowScreen(
         modifier = modifier,
       )
     }
+
+    AuthStep.PASSWORD_RESET -> PasswordResetScreen(
+      state = passwordResetState,
+      onEmailChange = passwordResetViewModel::onEmailChange,
+      onSubmit = passwordResetViewModel::submit,
+      onBack = { step = AuthStep.LOGIN },
+      modifier = modifier,
+    )
 
     AuthStep.PENDING_APPROVAL -> RegistrationOutcomeScreen(
       title = "Your shop is awaiting approval",

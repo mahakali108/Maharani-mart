@@ -33,6 +33,30 @@ import com.maharanitraders.core.network.dto.MobileInvoiceDto
 import com.maharanitraders.core.network.dto.MobileOrderDto
 import com.maharanitraders.core.network.dto.MobileWalletLedgerEntryDto
 import com.maharanitraders.core.network.dto.MobileWalletSummaryDto
+import com.maharanitraders.core.network.dto.MobileRetailerProfileDto
+import com.maharanitraders.core.network.dto.MobileProfilePatchDto
+import com.maharanitraders.core.network.dto.MobileNotificationPreferencesDto
+import com.maharanitraders.core.network.dto.MobileSchemesDto
+import com.maharanitraders.core.network.dto.MobileHelpDto
+import com.maharanitraders.core.network.dto.MobileReportsDto
+import com.maharanitraders.core.network.dto.MobileSupportTicketsDto
+import com.maharanitraders.core.network.dto.MobileSupportTicketDto
+import com.maharanitraders.core.network.dto.MobileSupportTicketDetailDto
+import com.maharanitraders.core.network.dto.MobileSupportCreateRequestDto
+import com.maharanitraders.core.network.dto.MobileSupportCreateResponseDto
+import com.maharanitraders.core.network.dto.MobileSupportReplyRequestDto
+import com.maharanitraders.core.network.dto.MobileSupportMessageDto
+import com.maharanitraders.core.network.dto.MobileSavedCartsDto
+import com.maharanitraders.core.network.dto.MobileSavedCartCreateRequestDto
+import com.maharanitraders.core.network.dto.MobileSavedCartRenameRequestDto
+import com.maharanitraders.core.network.dto.MobileSavedCartMutationDto
+import com.maharanitraders.core.network.dto.MobileSavedCartRestoreDto
+import com.maharanitraders.core.network.dto.MobileSaveForLaterRequestDto
+import com.maharanitraders.core.network.dto.MobileOrderActionRequestDto
+import com.maharanitraders.core.network.dto.MobileReturnRequestResponseDto
+import com.maharanitraders.core.network.dto.MobileAccountRequestsDto
+import com.maharanitraders.core.network.dto.MobileAccountRequestCreateDto
+import com.maharanitraders.core.network.dto.MobileAccountRequestDto
 import com.maharanitraders.core.network.dto.OrderConfirmationDto
 import com.maharanitraders.core.network.dto.PlaceOrderRequestDto
 import com.maharanitraders.core.network.dto.PlaceOrderResponseDto
@@ -42,6 +66,7 @@ import com.maharanitraders.core.network.dto.RetailerHomeDto
 import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.PasswordResetRequestDto
 import com.maharanitraders.core.network.dto.PasswordUpdateRequestDto
+import com.maharanitraders.core.network.dto.PasswordChangeRequestDto
 import com.maharanitraders.core.network.dto.RefreshRequestDto
 import com.maharanitraders.core.network.dto.RefreshSessionDto
 import com.maharanitraders.core.network.dto.RegisterRetailerRequestDto
@@ -55,6 +80,8 @@ import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
+import okhttp3.ResponseBody
 
 /**
  * The versioned mobile API surface.
@@ -105,6 +132,13 @@ interface MaharaniApi {
 
   @POST("api/mobile/v1/auth/password-update")
   suspend fun updatePassword(@Body body: PasswordUpdateRequestDto): ApiEnvelope<AckDto>
+
+  /** In-account rotation; the server re-authenticates the current credential before updating. */
+  @POST("api/mobile/v1/auth/password-change")
+  suspend fun changePassword(@Body body: PasswordChangeRequestDto): ApiEnvelope<AckDto>
+
+  @POST("api/mobile/v1/auth/logout-all")
+  suspend fun revokeAllSessions(): ApiEnvelope<AckDto>
 
   /**
    * Active service areas. Public by design: a prospective retailer has no
@@ -311,4 +345,103 @@ interface MaharaniApi {
 
   @GET("api/mobile/v1/coupons")
   suspend fun coupons(): ApiEnvelope<MobileCouponsDto>
+
+  // -------------------------------------------------------------------------
+  // Native retailer upgrade — account, schemes, reports and support
+  // -------------------------------------------------------------------------
+
+  @GET("api/mobile/v1/profile")
+  suspend fun retailerProfile(): ApiEnvelope<MobileRetailerProfileDto>
+
+  @PATCH("api/mobile/v1/profile")
+  suspend fun updateRetailerProfile(@Body body: MobileProfilePatchDto): ApiEnvelope<AckDto>
+
+  @GET("api/mobile/v1/notifications/preferences")
+  suspend fun notificationPreferences(): ApiEnvelope<MobileNotificationPreferencesDto>
+
+  @PATCH("api/mobile/v1/notifications/preferences")
+  suspend fun updateNotificationPreferences(
+    @Body body: MobileNotificationPreferencesDto,
+  ): ApiEnvelope<AckDto>
+
+  @GET("api/mobile/v1/schemes")
+  suspend fun schemes(): ApiEnvelope<MobileSchemesDto>
+
+  @GET("api/mobile/v1/help")
+  suspend fun helpDetails(): ApiEnvelope<MobileHelpDto>
+
+  @GET("api/mobile/v1/account/requests")
+  suspend fun accountRequests(): ApiEnvelope<MobileAccountRequestsDto>
+
+  @POST("api/mobile/v1/account/requests")
+  suspend fun createAccountRequest(@Body body: MobileAccountRequestCreateDto): ApiEnvelope<MobileAccountRequestDto>
+
+  @GET("api/mobile/v1/reports")
+  suspend fun purchaseReports(): ApiEnvelope<MobileReportsDto>
+
+  /** Server-generated statement CSV; authentication is still the bearer interceptor. */
+  @Streaming
+  @GET("api/mobile/v1/reports/statement")
+  suspend fun reportStatementCsv(
+    @Query("type") type: String,
+    @Query("from") from: String? = null,
+    @Query("to") to: String? = null,
+  ): ResponseBody
+
+  @GET("api/mobile/v1/support/tickets")
+  suspend fun supportTickets(
+    @Query("cursor") cursor: String? = null,
+    @Query("status") status: String? = null,
+  ): ApiEnvelope<List<MobileSupportTicketDto>>
+
+  @POST("api/mobile/v1/support/tickets")
+  suspend fun createSupportTicket(@Body body: MobileSupportCreateRequestDto): ApiEnvelope<MobileSupportCreateResponseDto>
+
+  @GET("api/mobile/v1/support/tickets/{id}")
+  suspend fun supportTicket(@Path("id") ticketId: String): ApiEnvelope<MobileSupportTicketDetailDto>
+
+  @POST("api/mobile/v1/support/tickets/{id}")
+  suspend fun replyToSupportTicket(
+    @Path("id") ticketId: String,
+    @Body body: MobileSupportReplyRequestDto,
+  ): ApiEnvelope<MobileSupportMessageDto>
+
+  @GET("api/mobile/v1/saved-carts")
+  suspend fun savedCarts(): ApiEnvelope<MobileSavedCartsDto>
+
+  @POST("api/mobile/v1/saved-carts")
+  suspend fun saveCurrentCart(@Body body: MobileSavedCartCreateRequestDto): ApiEnvelope<MobileSavedCartMutationDto>
+
+  @PATCH("api/mobile/v1/saved-carts/{id}")
+  suspend fun renameSavedCart(
+    @Path("id") savedCartId: String,
+    @Body body: MobileSavedCartRenameRequestDto,
+  ): ApiEnvelope<AckDto>
+
+  @DELETE("api/mobile/v1/saved-carts/{id}")
+  suspend fun deleteSavedCart(@Path("id") savedCartId: String): ApiEnvelope<AckDto>
+
+  @POST("api/mobile/v1/saved-carts/{id}/restore")
+  suspend fun restoreSavedCart(@Path("id") savedCartId: String): ApiEnvelope<MobileSavedCartRestoreDto>
+
+  @POST("api/mobile/v1/saved-carts/items")
+  suspend fun saveCartItemForLater(@Body body: MobileSaveForLaterRequestDto): ApiEnvelope<MobileSavedCartMutationDto>
+
+  @DELETE("api/mobile/v1/saved-carts/items/{itemId}")
+  suspend fun deleteSavedCartItem(@Path("itemId") itemId: String): ApiEnvelope<AckDto>
+
+  @POST("api/mobile/v1/saved-carts/items/{itemId}/restore")
+  suspend fun restoreSavedCartItem(@Path("itemId") itemId: String): ApiEnvelope<MobileSavedCartRestoreDto>
+
+  @POST("api/mobile/v1/orders/{id}/cancel")
+  suspend fun cancelOrder(
+    @Path("id") orderId: String,
+    @Body body: MobileOrderActionRequestDto,
+  ): ApiEnvelope<AckDto>
+
+  @POST("api/mobile/v1/orders/{id}/return")
+  suspend fun requestOrderReturn(
+    @Path("id") orderId: String,
+    @Body body: MobileOrderActionRequestDto,
+  ): ApiEnvelope<MobileReturnRequestResponseDto>
 }

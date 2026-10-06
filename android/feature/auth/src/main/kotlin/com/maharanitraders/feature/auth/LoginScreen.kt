@@ -31,6 +31,7 @@ object LoginTags {
   const val SUBMIT = "login_submit"
   const val ERROR = "login_error"
   const val OPEN_REGISTER = "login_open_register"
+  const val FORGOT_PASSWORD = "login_forgot_password"
 }
 
 /**
@@ -47,6 +48,7 @@ fun LoginScreen(
   onPasswordChange: (String) -> Unit,
   onSubmit: () -> Unit,
   onOpenRegister: () -> Unit,
+  onForgotPassword: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -139,6 +141,15 @@ fun LoginScreen(
       }
       Text(if (state.submitting) "Signing in…" else "Sign in")
     }
+
+    TertiaryAction(
+      label = "Forgot password?",
+      onClick = onForgotPassword,
+      enabled = !state.submitting,
+      modifier = Modifier
+        .padding(top = 8.dp)
+        .testTag(LoginTags.FORGOT_PASSWORD),
+    )
 
     TertiaryAction(
       label = "New retailer? Register your shop",

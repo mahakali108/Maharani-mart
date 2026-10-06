@@ -94,6 +94,13 @@ import com.maharanitraders.feature.catalog.ui.RetailerHomeScreen
 import com.maharanitraders.feature.engagement.ui.CouponsScreen
 import com.maharanitraders.feature.engagement.ui.NotificationsScreen
 import com.maharanitraders.feature.engagement.ui.WalletScreen
+import com.maharanitraders.feature.engagement.ui.RetailerProfileScreen
+import com.maharanitraders.feature.engagement.ui.NotificationPreferencesScreen
+import com.maharanitraders.feature.engagement.ui.SchemesScreen
+import com.maharanitraders.feature.engagement.ui.PurchaseReportsScreen
+import com.maharanitraders.feature.engagement.ui.SupportScreen
+import com.maharanitraders.feature.engagement.ui.HelpScreen
+import com.maharanitraders.feature.engagement.ui.SecurityScreen
 import com.maharanitraders.feature.orders.CartCheckoutViewModel
 import com.maharanitraders.feature.orders.OrderDetailViewModel
 import com.maharanitraders.feature.orders.ui.CartScreen
@@ -101,6 +108,7 @@ import com.maharanitraders.feature.orders.ui.OrderDeliveryScreen
 import com.maharanitraders.feature.orders.ui.OrderDetailScreen
 import com.maharanitraders.feature.orders.ui.OrderHistoryScreen
 import com.maharanitraders.feature.orders.ui.OrderInvoiceScreen
+import com.maharanitraders.feature.orders.ui.SavedCartsScreen
 import kotlinx.coroutines.launch
 
 /** Test tags for the shell, used by Compose UI tests added in later phases. */
@@ -423,6 +431,7 @@ private fun RoutedShell(
             DestinationSurface(
               destination = destination,
               snapshot = snapshot,
+              availableRoutes = routing.destinations.mapTo(mutableSetOf()) { it.route },
               retailerHome = retailerHome,
               catalogRequest = catalogRequest,
               onOpenCatalog = ::openCatalog,
@@ -731,6 +740,7 @@ private fun AccountDialog(
 private fun DestinationSurface(
   destination: MaharaniDestination,
   snapshot: SessionSnapshot,
+  availableRoutes: Set<String>,
   retailerHome: Boolean,
   catalogRequest: CatalogRequest,
   onOpenCatalog: (CatalogRequest) -> Unit,
@@ -793,9 +803,33 @@ private fun DestinationSurface(
 
     MaharaniRoutes.COUPONS -> CouponsScreen()
 
+    MaharaniRoutes.PROFILE -> RetailerProfileScreen()
+
+    MaharaniRoutes.NOTIFICATION_PREFERENCES -> NotificationPreferencesScreen()
+
+    MaharaniRoutes.SECURITY -> SecurityScreen(onSignOut = onSignOut)
+
+    MaharaniRoutes.SAVED_CARTS -> SavedCartsScreen(
+      onOpenCart = { onOpenDestination(MaharaniRoutes.CART) },
+    )
+
+    MaharaniRoutes.SCHEMES -> SchemesScreen()
+
+    MaharaniRoutes.REPORTS -> PurchaseReportsScreen()
+
+    MaharaniRoutes.SUPPORT -> SupportScreen()
+
+    MaharaniRoutes.HELP -> HelpScreen(
+      onOpenSupport = { onOpenDestination(MaharaniRoutes.SUPPORT) },
+      onOpenOrders = { onOpenDestination(MaharaniRoutes.ORDERS) },
+      onOpenCoins = { onOpenDestination(MaharaniRoutes.COINS) },
+      onOpenCatalog = { onOpenCatalog(CatalogRequest()) },
+    )
+
     MaharaniRoutes.ACCOUNT -> AccountScreen(
       snapshot = snapshot,
       onSignOut = onSignOut,
+      availableRoutes = availableRoutes,
       onOpenAddresses = onOpenAddresses,
       onOpenOrders = onViewOrders,
       onOpenDestination = { route -> onOpenDestination(route) },

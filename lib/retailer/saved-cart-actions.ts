@@ -5,12 +5,14 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 import { validatePackForCart } from '@/lib/retailer/cart-service';
+import {
+  isSaveForLaterCartName,
+  MAX_LINES_PER_SAVED_CART,
+  MAX_SAVED_CARTS,
+  SAVE_FOR_LATER_CART_NAME,
+} from '@/lib/retailer/saved-cart-constants';
 
 export type SavedCartActionResult = { error?: string } | { success: true; savedCartId?: string };
-
-const SAVE_FOR_LATER_CART_NAME = 'Saved for later';
-const MAX_SAVED_CARTS = 20;
-const MAX_LINES_PER_SAVED_CART = 100;
 
 function sanitizeName(raw: string): string {
   return raw.replace(/\s+/g, ' ').trim().slice(0, 60);
@@ -29,6 +31,7 @@ export async function saveCurrentCartAction(rawName: string): Promise<SavedCartA
 
   const name = sanitizeName(rawName);
   if (name.length < 1) return { error: 'Give the saved cart a name.' };
+  if (isSaveForLaterCartName(name)) return { error: 'That name is reserved for items saved for later.' };
 
   const supabase = createClient();
 
@@ -304,12 +307,23 @@ export async function renameSavedCartAction(savedCartId: string, rawName: string
   if (user.role !== 'retailer') return { error: 'Only a retailer can rename saved carts.' };
   const name = sanitizeName(rawName);
   if (name.length < 1) return { error: 'Enter a name for the saved cart.' };
+  if (isSaveForLaterCartName(name)) return { error: 'That name is reserved for items saved for later.' };
   const supabase = createClient();
+  const { data: existing, error: lookupError } = await supabase
+    .from('retailer_saved_carts')
+    .select('id, name')
+    .eq('id', savedCartId)
+    .eq('retailer_id', user.id)
+    .maybeSingle<{ id: string; name: string }>();
+  if (lookupError) return { error: 'The saved cart could not be renamed.' };
+  if (!existing || isSaveForLaterCartName(existing.name)) return { error: 'Saved cart not found.' };
+
   const { data, error } = await supabase
     .from('retailer_saved_carts')
     .update({ name, updated_at: new Date().toISOString() } as unknown as never)
     .eq('id', savedCartId)
     .eq('retailer_id', user.id)
+    .neq('name', SAVE_FOR_LATER_CART_NAME)
     .select('id')
     .maybeSingle<{ id: string }>();
   if (error) return { error: 'The saved cart could not be renamed.' };
@@ -322,11 +336,21 @@ export async function deleteSavedCartAction(savedCartId: string): Promise<SavedC
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can delete saved carts.' };
   const supabase = createClient();
+  const { data: existing, error: lookupError } = await supabase
+    .from('retailer_saved_carts')
+    .select('id, name')
+    .eq('id', savedCartId)
+    .eq('retailer_id', user.id)
+    .maybeSingle<{ id: string; name: string }>();
+  if (lookupError) return { error: 'The saved cart could not be deleted.' };
+  if (!existing || isSaveForLaterCartName(existing.name)) return { error: 'Saved cart not found.' };
+
   const { error } = await supabase
     .from('retailer_saved_carts')
     .delete()
     .eq('id', savedCartId)
-    .eq('retailer_id', user.id);
+    .eq('retailer_id', user.id)
+    .neq('name', SAVE_FOR_LATER_CART_NAME);
   if (error) return { error: 'The saved cart could not be deleted.' };
   revalidatePath('/retailer/cart/saved');
   revalidatePath('/retailer/cart');

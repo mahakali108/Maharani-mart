@@ -12,12 +12,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -33,6 +42,8 @@ import com.maharanitraders.core.designsystem.components.OfflineState
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.feature.orders.DeliveryItem
 import com.maharanitraders.feature.orders.DeliveryUiState
+import com.maharanitraders.feature.orders.OrderActionsUiState
+import com.maharanitraders.feature.orders.OrderActionsViewModel
 import com.maharanitraders.feature.orders.DeliveryViewModel
 import com.maharanitraders.feature.orders.OrderDelivery
 
@@ -42,6 +53,7 @@ object DeliveryTags {
   const val ITEM = "delivery_item"
   const val SIGNATURE = "delivery_signature"
   const val PHOTO = "delivery_photo"
+  const val REQUEST_RETURN = "delivery_request_return"
 }
 
 /**
@@ -60,7 +72,54 @@ fun OrderDeliveryScreen(
   viewModel: DeliveryViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  OrderDeliveryContent(state = state, onRetry = viewModel::load, onBack = onBack, modifier = modifier)
+  val actionsViewModel: OrderActionsViewModel = hiltViewModel()
+  val actions by actionsViewModel.state.collectAsStateWithLifecycle()
+  var showReturnDialog by remember { mutableStateOf(false) }
+  var returnReason by remember { mutableStateOf("") }
+
+  LaunchedEffect(actions.completedAction) {
+    if (actions.completedAction == "return") {
+      showReturnDialog = false
+      returnReason = ""
+      viewModel.load()
+    }
+  }
+
+  OrderDeliveryContent(
+    state = state,
+    onRetry = viewModel::load,
+    onBack = onBack,
+    actions = actions,
+    onOpenReturn = { showReturnDialog = true },
+    modifier = modifier,
+  )
+  if (showReturnDialog) {
+    AlertDialog(
+      onDismissRequest = { if (!actions.busy) showReturnDialog = false },
+      title = { Text("Request a return") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("The support team will review your request. The server checks this order's return deadline when you submit.")
+          OutlinedTextField(
+            value = returnReason,
+            onValueChange = { returnReason = it.take(1000) },
+            label = { Text("Reason for return") },
+            minLines = 3,
+            maxLines = 6,
+            modifier = Modifier.fillMaxWidth(),
+          )
+          actions.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { actionsViewModel.requestReturn(returnReason) }, enabled = !actions.busy && returnReason.isNotBlank()) {
+          if (actions.busy) CircularProgressIndicator(Modifier.padding(end = 6.dp), strokeWidth = 2.dp)
+          Text("Submit request")
+        }
+      },
+      dismissButton = { TextButton(onClick = { showReturnDialog = false }, enabled = !actions.busy) { Text("Not now") } },
+    )
+  }
 }
 
 @Composable
@@ -68,6 +127,8 @@ fun OrderDeliveryContent(
   state: DeliveryUiState,
   onRetry: () -> Unit,
   onBack: () -> Unit,
+  actions: OrderActionsUiState = OrderActionsUiState(),
+  onOpenReturn: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val delivery = state.delivery
@@ -143,21 +204,40 @@ fun OrderDeliveryContent(
       DeliveryCard(title = "Return window") {
         val deadline = delivery.returnDeadline
         val open = delivery.returnWindowOpen
+        val requestStatus = delivery.returnRequestStatus
         when {
+          requestStatus != null -> Text(
+            "Return request: ${requestStatus.replace('_', ' ').replaceFirstChar { it.uppercase() }}.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+          )
           deadline == null -> Text(
             "A return window is set when the delivery is completed.",
             style = MaterialTheme.typography.bodyMedium,
           )
+          open == true && delivery.orderStatus == "delivered" -> {
+            Text(
+              "You can request a return until $deadline (inclusive).",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.primary,
+            )
+            Button(
+              onClick = onOpenReturn,
+              enabled = !actions.busy,
+              modifier = Modifier.fillMaxWidth().testTag(DeliveryTags.REQUEST_RETURN),
+            ) { Text(if (actions.busy) "Submitting…" else "Request a return") }
+          }
           open == true -> Text(
-            "You can request a return until $deadline (inclusive).",
+            "The return window is open until $deadline, but this order is not marked delivered yet.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
           )
           else -> Text(
             "The return window closed on $deadline.",
             style = MaterialTheme.typography.bodyMedium,
           )
         }
+        actions.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        actions.message?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
       }
     }
 

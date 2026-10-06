@@ -5,12 +5,12 @@ import type { Database } from '@/types/database.types';
 export type NotificationChannel = 'whatsapp' | 'sms' | 'push' | 'in_app';
 
 /**
- * Transactional categories (order/payment/wallet/account) are always
- * delivered — they are records of the retailer's own money and orders.
- * `promotional` respects the retailer's notification preferences
- * (retailer_notification_prefs.offer_updates, migration 0035).
+ * Explicit retailer-facing order, payment, wallet and promotional messages
+ * respect the matching preference. Critical/account notices and legacy
+ * unclassified transactional messages remain deliverable. The preferences are
+ * for the in-app feed; external channel queues retain their existing behavior.
  */
-export type NotificationCategory = 'transactional' | 'promotional';
+export type NotificationCategory = 'transactional' | 'account' | 'order' | 'payment' | 'wallet' | 'promotional';
 
 export interface NotifyInput {
   recipientId: string;
@@ -29,6 +29,13 @@ export interface NotifyInput {
 
 type NotificationInsert = Database['public']['Tables']['notifications']['Insert'];
 type NotificationLogInsert = Database['public']['Tables']['notification_logs']['Insert'];
+type PreferenceColumn = 'order_updates' | 'payment_updates' | 'wallet_updates' | 'offer_updates';
+const PREFERENCE_COLUMNS: Partial<Record<NotificationCategory, PreferenceColumn>> = {
+  order: 'order_updates',
+  payment: 'payment_updates',
+  wallet: 'wallet_updates',
+  promotional: 'offer_updates',
+};
 
 /**
  * Notification architecture (Phase 1 scaffolding — real DB writes,
@@ -55,16 +62,24 @@ type NotificationLogInsert = Database['public']['Tables']['notification_logs']['
 export async function createInAppNotification(input: NotifyInput) {
   const supabase = createClient();
 
-  // Preference gate for promotional notifications. Transactional notices
-  // (orders, payments, wallet, account) always go through.
-  if ((input.category ?? 'transactional') === 'promotional') {
+  const preferenceColumn = input.category ? PREFERENCE_COLUMNS[input.category] : undefined;
+
+  // `account`, unclassified/legacy transactional notices, admins, and
+  // recipients without a preferences row remain unaffected. A preference
+  // read failure is fail-open so a settings outage cannot suppress a notice.
+  if (preferenceColumn) {
     try {
       const { data: prefs } = await supabase
         .from('retailer_notification_prefs')
-        .select('offer_updates')
+        .select('order_updates, payment_updates, wallet_updates, offer_updates')
         .eq('retailer_id', input.recipientId)
-        .maybeSingle<{ offer_updates: boolean }>();
-      if (prefs && prefs.offer_updates === false) return;
+        .maybeSingle<{
+          order_updates: boolean;
+          payment_updates: boolean;
+          wallet_updates: boolean;
+          offer_updates: boolean;
+        }>();
+      if (prefs && prefs[preferenceColumn] === false) return;
     } catch {
       // On any prefs read failure, deliver — missing prefs row means "on".
     }

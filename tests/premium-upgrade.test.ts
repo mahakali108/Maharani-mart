@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { parseBulkOrderLines } from '@/lib/retailer/bulk-shared';
 import { formatAddressLine, parseAddressForm } from '@/lib/retailer/address-shared';
 import { computeProfileCompletion } from '@/lib/retailer/profile-completion';
-import { aggregateTotals, buildMonthTrend, statementCsv, EMPTY_TOTALS } from '@/lib/retailer/reports';
+import { aggregateTotals, buildMonthTrend, loadPurchaseStatement, statementCsv, EMPTY_TOTALS } from '@/lib/retailer/reports';
+import { supabaseFixture } from './helpers/supabase-fixture';
 import { availabilityBadge, isOutOfStock, normalizeAvailabilityState } from '@/lib/retailer/availability';
 
 const ROOT = join(__dirname, '..');
@@ -202,6 +203,36 @@ describe('premium upgrade — reports', () => {
     expect(lines[0]).toBe('Order number,Placed on (IST),Status,Subtotal (Rs),Discount (Rs),GST (Rs),Grand total (Rs)');
     expect(lines[1]).toContain('"MT-001"');
     expect(csv).not.toContain('cost');
+  });
+
+  it('does not turn a statement database failure into a successful empty CSV', async () => {
+    const client = supabaseFixture({}, { orders: 'database timeout' });
+    await expect(loadPurchaseStatement(
+      client as never,
+      'retailer-1',
+      '2026-04-01T00:00:00.000Z',
+      '2026-04-30T23:59:59.999Z',
+    )).rejects.toThrow('database timeout');
+  });
+
+  it('maps snake-case database columns before passing rows into the camel-case CSV renderer', async () => {
+    const client = supabaseFixture({ orders: [{
+      id: 'order-1', retailer_id: 'retailer-1', order_number: 'MT-STATEMENT-001',
+      placed_at: '2026-04-10T08:00:00.000Z', status: 'delivered', subtotal: 100,
+      discount_total: 0, gst_total: 18, grand_total: 118,
+    }] });
+    const rows = await loadPurchaseStatement(
+      client as never,
+      'retailer-1',
+      '2026-04-01T00:00:00.000Z',
+      '2026-04-30T23:59:59.999Z',
+    );
+    const csv = statementCsv(rows);
+    expect(rows[0]).toMatchObject({ orderNumber: 'MT-STATEMENT-001', subtotal: 100, gstTotal: 18, grandTotal: 118 });
+    expect(csv).toContain('"MT-STATEMENT-001"');
+    expect(csv).toContain('"100.00"');
+    expect(csv).toContain('"18.00"');
+    expect(csv).toContain('"118.00"');
   });
 });
 

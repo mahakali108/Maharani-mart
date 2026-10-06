@@ -57,6 +57,18 @@ export const passwordUpdateSchema = z
     message: 'Passwords do not match.',
   });
 
+/** In-account change-password flow: the current credential is mandatory. */
+export const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password.'),
+    newPassword: z.string().min(8, 'New password must be at least 8 characters.'),
+    confirmPassword: z.string().min(1, 'Please confirm your new password.'),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'New passwords do not match.',
+  });
+
 /** Mirrors `registerRetailerSchema` in lib/auth/actions.ts. */
 export const registerRetailerSchema = z.object({
   fullName: z.string().trim().min(2, 'Enter your full name.'),

@@ -12,7 +12,7 @@ Kotlin screen — not inferred from a previous report.
 | IMPLEMENTED | A native screen performs the real business action against the real backend. A placeholder, a label, or a value the app computed for itself does NOT qualify. |
 | PARTIAL | The native app does some of this, and the Notes say exactly what is missing. |
 | MISSING | No native implementation. The backend may well exist. |
-| BLOCKED | Cannot be built natively without backend work that does not exist yet. The Notes state the work. |
+| BLOCKED | A deployment, trust, or backend prerequisite prevents a safe native implementation. The Notes name the prerequisite and fallback. |
 | N/A | Deliberately not brought to native, with the reason. |
 
 Money, stock, totals and coin balances are server-authoritative everywhere. Where the
@@ -28,8 +28,8 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 |---|---|---|---|---|---|---|
 | AUTH-01 | Login | `app/login/page.tsx` | `POST /api/mobile/v1/auth/login` | `LoginScreen` + `LoginViewModel` | IMPLEMENTED | Email + password; token pair stored via the Keystore-backed session store. |
 | AUTH-02 | Retailer registration | `app/register-retailer/page.tsx` | `POST /api/mobile/v1/retailers/register` | `RegisterScreen` + `RegisterViewModel` | IMPLEMENTED | Full form; areas come from `GET /areas`, never a hardcoded list. |
-| AUTH-03 | Forgot password | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | — | MISSING | The mobile endpoint exists, and `AuthRepository.requestPasswordReset` wraps it, but no native screen calls it: the sign-in screen has no "Forgot password" affordance, so a retailer who forgets the password currently has to use the website. |
-| AUTH-04 | Reset password | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | — | MISSING | The bearer-authenticated mobile endpoint exists, and `AuthRepository.updatePassword` wraps it, but nothing calls it: the app registers no reset deep link (the manifest has only the launcher intent filter), so the reset link completes on the web. |
+| AUTH-03 | Forgot password request | `app/forgot-password/page.tsx` | `POST /api/mobile/v1/auth/password-reset` | `PasswordResetScreen` + `PasswordResetViewModel` from `LoginScreen` | IMPLEMENTED | Validates the email locally, submits to the enumeration-safe endpoint and shows the same generic response whether an account exists or not. The email's recovery URL intentionally opens in the external browser; see AUTH-04/AUTH-13. |
+| AUTH-04 | Complete password reset from the emailed link | `app/reset-password/page.tsx` | `POST /api/mobile/v1/auth/password-update` | External browser fallback from `PasswordResetScreen` | PARTIAL | A retailer can request the recovery email natively, but the emailed Supabase recovery link finishes on the secure PWA reset page because this app has no verified App Link/recovery-code handoff. Signed-in password rotation is fully native under ACC-04. |
 | AUTH-05 | Logout | `lib/auth/actions.ts` | `POST /api/mobile/v1/auth/logout` | `AuthenticatedShell` | IMPLEMENTED | Clears the stored session as well as the server session. |
 | AUTH-06 | Silent token refresh | `middleware.ts` | `POST /api/mobile/v1/auth/refresh` | `SessionManager`, `AuthInterceptor` | IMPLEMENTED | Single-flight refresh on 401; the failed call is replayed once. |
 | AUTH-07 | Session / role bootstrap | `middleware.ts` | `GET /api/mobile/v1/session` | `SessionBootstrapper`, `MaharaniRouter` | IMPLEMENTED | Role and workspace decide the destination set; the client never grants itself a workspace. |
@@ -38,6 +38,8 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | AUTH-10 | Account suspended / inactive | session guard | session `gate` | `SessionGateScreens` | IMPLEMENTED | As above. |
 | AUTH-11 | Session survives restarts | web cookie session | `GET /session`, `POST /auth/refresh` | `SessionManager` + `KeystoreTokenStore` | IMPLEMENTED | The token pair is written by `KeystoreTokenStore` (AES-256-GCM under a non-exportable AndroidKeyStore key; ciphertext in `filesDir`, never a plaintext preference) and read back on every cold start, so a session outlives activity recreation, process death, relaunch and device restart. Restore verifies with `GET /session` **with the stored token published to the request interceptor first** — the defect this change fixes: the verify call used to run anonymously, answer 401 and wipe a perfectly good session, which is why every cold start landed on sign-in. A token the server rejects as expired is refreshed once through `POST /auth/refresh` and retried; a refresh the server rejects as terminal clears the session, while a network failure keeps it and reports offline. No email or password is ever stored — only the server's token pair. |
 | AUTH-12 | Session-scoped state isolation | web per-request session | — | `SessionScopedStore` set in `SessionManager` | IMPLEMENTED | Favourites (`FavoritesStore`), cart count (`CartCountStore`) and unread badge (`UnreadStore`) are process-wide singletons. Each implements `SessionScopedStore`, contributes itself to the Hilt multibound `Set<SessionScopedStore>`, and is emptied by `SessionManager` whenever the published state leaves `Authenticated` (sign-out, terminal refresh failure, gate rejection) and before a new sign-in is adopted. Without it the next account on the same device inherited the previous account's hearts and badges until something happened to reload them. |
+| AUTH-13 | Recovery-link App Link handoff | Supabase recovery email → `/auth/callback?next=/reset-password` | verified Android App Link + native recovery token exchange | — | BLOCKED | There is no verified `assetlinks.json`/App Link association or native recovery callback/token-exchange path in this deployment. Until the domain owner configures and verifies that capability, the supported recovery link stays in the external browser; no WebView or unverified custom-scheme shortcut is used. |
+| AUTH-14 | Sign out all devices | `app/retailer/account/security/page.tsx` | `POST /api/mobile/v1/auth/logout-all` | `SecurityScreen` + `SecurityViewModel` | IMPLEMENTED | GoTrue global refresh-token revocation is called with the verified bearer session; the local Keystore session is then cleared. |
 
 ## 2. Home and discovery
 
@@ -84,7 +86,7 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | CART-04 | Apply a coupon | cart coupon box | `POST /cart/coupon` | `CartScreen` | IMPLEMENTED | The server validates and prices the coupon; the app never computes a discount. |
 | CART-05 | Remove a coupon | cart | `DELETE /cart/coupon` | `CartScreen` | IMPLEMENTED | |
 | CART-06 | Unavailable-line handling | cart warnings | `orderable`/`message` on each line | `CartScreen` | IMPLEMENTED | A non-orderable line blocks checkout and shows the server's reason. |
-| CART-07 | Saved carts | `app/retailer/cart/saved/page.tsx` | server action | — | MISSING | No mobile endpoint exists for saved carts; the web feature uses a server action, not `/api/mobile/v1`. Adding it would need a new route plus RLS review. |
+| CART-07 | Saved carts and save for later | `app/retailer/cart/saved/page.tsx` | `GET/POST /api/mobile/v1/saved-carts`, `PATCH/DELETE /saved-carts/{id}`, restore and item routes | `SavedCartsScreen` + `SavedCartsViewModel`; Cart line action | IMPLEMENTED | Named lists and the reserved Save for later list keep pack ids/quantities only. Owner filters and RLS scope reads/writes; restore revalidates live pack/product activity, MOQ and cart rules before merging. No saved price, stock or total is carried forward. |
 | CART-08 | Shell cart badge | `components/layout/retailer-shell.tsx` (`cartCount` head count over `cart_items`) | `GET /cart` (`lineCount`) | `ShellBadgesViewModel` + `CartCountStore` | IMPLEMENTED | The badge shows the server's own `lineCount` from the same cart response the cart screen renders — the same fact the web shell badges — so a mutation moves both together. `null` until the server has answered, which renders no bubble rather than a confident "0"; cleared on sign-out. |
 
 ## 6. Checkout, order creation and confirmation
@@ -108,6 +110,8 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 | ORD-03 | Invoice | `app/retailer/orders/[id]/invoice/page.tsx` | `GET /api/mobile/v1/orders/{id}/invoice` | `OrderInvoiceScreen` + `InvoiceViewModel` | IMPLEMENTED | The endpoint folds the stored order rows with the web invoice's own helpers (`toInvoiceDisplayLines`, `classifyTaxSplit`, `computeInvoiceTaxLines`) and answers in paise, so no GST arithmetic exists in Kotlin. The screen prints the server's `taxMode` columns — CGST + SGST, IGST, or the stored unsplit total — verbatim; the printed grand total is the stored one. Ownership is checked before any child row is read, and a malformed or foreign id is a 404. |
 | ORD-04 | Reorder | `app/retailer/orders/[id]/reorder/page.tsx` | `POST /cart/lines` | `OrderDetailScreen` reorder action + `OrderDetailViewModel.reorder()` | IMPLEMENTED | Replays each line's stored piece count (never its row count) into the real cart, one `POST /cart/lines` per line, so the cart RPC revalidates MOQ, quantity bounds and pack activity and re-prices every line. A line whose pack no longer exists is skipped and said so; a mid-way failure keeps the lines the server already accepted, re-reads the server badge count and reports the error rather than claiming nothing happened. |
 | ORD-05 | Delivery tracking | `app/retailer/orders/[id]/delivery/page.tsx` | `GET /api/mobile/v1/orders/{id}/delivery` | `OrderDeliveryScreen` + `DeliveryViewModel` | IMPLEMENTED | The endpoint reads the same dossier as the web page (`fetchDeliveryDetail`), resolves proof object paths to short-lived signed URLs using the caller's own RLS client, and returns the server's inclusive `returnWindowOpen` decision — the app never compares dates. The screen is read-only because RLS grants retailers read-only access to delivery rows. |
+| ORD-06 | Cancel a pending order | `app/retailer/orders/[id]` action | `POST /api/mobile/v1/orders/{id}/cancel` | `OrderDetailScreen` + `OrderActionsViewModel` | IMPLEMENTED | The update is constrained to the verified retailer's own `pending` order. Existing database state/stock behavior runs; Coins reversal is idempotent and coupon redemption is released server-side. Processing orders cannot be cancelled. |
+| ORD-07 | Request a return | `app/retailer/orders/[id]/delivery` action | `POST /api/mobile/v1/orders/{id}/return` | `OrderDeliveryScreen` + `OrderActionsViewModel` | IMPLEMENTED | Requires the caller's own delivered order, checks the snapshotted server return deadline inclusively, and inserts a staff-reviewed request under RLS. No client-side date or refund decision is trusted. |
 
 ## 8. Coins
 
@@ -130,7 +134,7 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 | NOTIF-02 | Mark read | notifications page | `POST /notifications/read` | `NotificationsScreen` | IMPLEMENTED | Only the loaded unread ids are sent; a failure is reported and nothing is marked locally. A partial result re-reads the feed rather than guessing which rows the server marked. |
 | NOTIF-03 | Unread count | notification bell | `GET /notifications` first-page `meta.unreadCount` | `NotificationsScreen` header | IMPLEMENTED | The server counts the caller's own unread rows (`recipient_id = auth.uid()`, `is_read = false`) and returns the exact total with the first page. The screen prefers that number; only before it arrives does it show the loaded-page floor as "N+", and the action reads "Mark these read" until the total is known. Cursor pages deliberately omit the count rather than re-count. |
 | NOTIF-04 | Shell unread badge | web header bell | `GET /notifications` first-page `meta.unreadCount` | `ShellBadgesViewModel` + `UnreadStore` | IMPLEMENTED | Same single store the notifications screen reads and writes through, so the badge cannot disagree with the feed. `null` until the server has answered (no bubble rather than a false "0"), cleared on sign-out, and a mark-read that the server did not confirm in full re-reads the feed instead of guessing. |
-| NOTIF-05 | Notification preferences | `app/retailer/account/notification-preferences/page.tsx` | — | — | BLOCKED | No mobile endpoint for preferences. |
+| NOTIF-05 | Notification preferences | `app/retailer/account/notification-preferences/page.tsx` | `GET/PATCH /api/mobile/v1/notifications/preferences` | `NotificationPreferencesScreen` + `NotificationPreferencesViewModel` | IMPLEMENTED | Owner row only; an absent row defaults to enabled, matching the PWA. The app persists order, payment, Coins and offer preferences; no client identity is accepted. |
 
 ## 10. Coupons, offers and schemes
 
@@ -139,7 +143,7 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 | PROMO-01 | Coupon list | `app/retailer/coupons/page.tsx` | `GET /coupons` | `CouponsScreen` + `CouponsViewModel` | IMPLEMENTED | Real coupons with their server-stated conditions. |
 | PROMO-02 | Apply a coupon | cart | `POST /cart/coupon` | `CartScreen` | IMPLEMENTED | See CART-04. |
 | PROMO-03 | Offer badge on products | catalogue cards | `hasOffer` | `ProductCard` `OfferBadge` | IMPLEMENTED | Shown only when the server row says so. |
-| PROMO-04 | Schemes | `app/retailer/schemes/page.tsx` | — | — | BLOCKED | No mobile endpoint exposes schemes. Would need a route over the same source the web page reads. |
+| PROMO-04 | Schemes | `app/retailer/schemes/page.tsx` | `GET /api/mobile/v1/schemes` | `SchemesScreen` + `SchemesViewModel` | IMPLEMENTED | Reads the same active and in-window scheme rows as the PWA under the caller's RLS client. Displays only returned scheme details and validity; it does not invent savings or alter price. |
 
 ## 11. Account
 
@@ -147,17 +151,19 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 |---|---|---|---|---|---|---|
 | ACC-01 | Account overview | `app/retailer/account/page.tsx` | `GET /session` | `AccountScreen` | IMPLEMENTED | Identity, role and workspace from the session. |
 | ACC-02 | Address book | `app/retailer/account/addresses/page.tsx` | `GET`/`POST /addresses`, `PATCH`/`DELETE /addresses/{id}`, `POST /addresses/{id}/default` | `AddressBookScreen` + `AddressBookViewModel` | IMPLEMENTED | Loading, empty, error-with-retry and offline states; create, edit, delete-behind-a-confirmation and an exclusive default. Writes reuse the web form's own zod schema and the same default-exclusivity rule the web server actions apply, so the two surfaces cannot drift. The checkout step's existing `GET /addresses` read is unchanged. |
-| ACC-03 | Edit profile | `app/retailer/account/edit/page.tsx` | — | — | BLOCKED | No mobile profile-update endpoint. |
-| ACC-04 | Security / change password | `app/retailer/account/security/page.tsx` | `POST /auth/password-update` | `AuthFlowScreen` | PARTIAL | The password-update call exists and is used in the reset flow; there is no in-account security screen. |
+| ACC-03 | Edit profile | `app/retailer/account/edit/page.tsx` | `GET/PATCH /api/mobile/v1/profile` | `RetailerProfileScreen` + `RetailerProfileViewModel` | IMPLEMENTED | Shop name/address go through the narrow `update_my_shop_profile` RPC; owner name/phone update only the caller's `profiles` row. GSTIN, area, approval, account status and Coins settings are read-only/not accepted. |
+| ACC-04 | Security / change password | `app/retailer/account/security/page.tsx` | `POST /api/mobile/v1/auth/password-change` | `SecurityScreen` + `SecurityViewModel` | IMPLEMENTED | Native in-account rotation first re-authenticates the current password through GoTrue and verifies the returned user id equals the bearer caller before updating. No service-role password mutation. Email recovery-link completion is tracked separately in AUTH-04/AUTH-13. |
 | ACC-05 | Sign out | account page | `POST /auth/logout` | `AuthenticatedShell` | IMPLEMENTED | |
+| ACC-06 | Request data export | `app/retailer/account/security/page.tsx` | `GET/POST /api/mobile/v1/account/requests` | `SecurityScreen` + `SecurityViewModel` | IMPLEMENTED | Creates an owner-stamped staff-review request; it does not claim to export data immediately. Recent statuses are read from the same owner-scoped rows. |
+| ACC-07 | Request account deletion | `app/retailer/account/security/page.tsx` | `GET/POST /api/mobile/v1/account/requests` | `SecurityScreen` + confirmation dialog | IMPLEMENTED | Submits a staff-reviewed request only; it does not delete or suspend the account. Request type, retailer identity and status are server/RLS controlled. |
 
 ## 12. Support, reports and assistive features
 
 | ID | PWA Feature | PWA Route/Component | Backend/API | Native Screen | Status | Notes |
 |---|---|---|---|---|---|---|
-| MISC-01 | Support tickets | `app/retailer/support/**` | — | — | BLOCKED | No mobile endpoints for support threads. |
-| MISC-02 | Help centre | `app/retailer/help/page.tsx` | static content | — | MISSING | Static content; no backend dependency. |
-| MISC-03 | Reports | `app/retailer/reports/page.tsx` | — | — | BLOCKED | No mobile reporting endpoint. |
+| MISC-01 | Support tickets and replies | `app/retailer/support/**` | `/api/mobile/v1/support/tickets`, `/support/tickets/{id}`, and retailer order history | `SupportScreen` + `SupportViewModel` | IMPLEMENTED | Optionally links a recent order selected from the signed-in retailer's own order history; the create route independently verifies ownership before insert. Creates tickets from server identity, pages the caller's ticket list, reads messages only after ticket ownership is verified, and permits replies only while the ticket is open/in progress. |
+| MISC-02 | Help centre | `app/retailer/help/page.tsx` | `GET /api/mobile/v1/help` + static FAQ | `HelpScreen` + `HelpViewModel` | IMPLEMENTED | Mirrors the PWA help answers and quick links. Company name is branded fallback; a support phone is shown/callable only when deployment configuration provides one. |
+| MISC-03 | Purchase reports and statements | `app/retailer/reports/page.tsx` and `/statement` | `GET /api/mobile/v1/reports`, `/reports/statement` | `PurchaseReportsScreen` + `PurchaseReportsViewModel` | IMPLEMENTED | Uses the same retailer-scoped report aggregators as the PWA; amounts cross the API as paise, cancelled orders follow the shared exclusion rule, and CSV exports are server-generated from owner-only rows with validated India-day date boundaries. Android saves the returned CSV through the user-selected document provider. |
 | MISC-04 | AI assistant | `app/retailer/ai/page.tsx` | — | — | N/A | Not part of the retailer ordering journey this app delivers. |
 
 ## 13. Platform and delivery
@@ -176,12 +182,12 @@ The project uses COINS, not the retired retailer-credit system. 1 coin = ₹1.
 
 | Status | Count |
 |---|---|
-| IMPLEMENTED | 69 |
+| IMPLEMENTED | 83 |
 | PARTIAL | 2 |
-| MISSING | 4 |
-| BLOCKED | 5 |
+| MISSING | 0 |
+| BLOCKED | 1 |
 | N/A | 1 |
-| **Total rows** | **81** |
+| **Total rows** | **87** |
 
 These counts are checked against the rows above by
 `tests/parity-doc-totals.test.ts`, because the previous version of this document
@@ -189,33 +195,34 @@ claimed totals that its own table contradicted.
 
 ## What is BLOCKED, and what it would take
 
-Each of these needs backend work that does not exist today. None of them is hidden
-behind a placeholder screen in the app.
+One feature remains blocked by the missing production-domain association and the
+native recovery handoff; it deliberately falls back to the secure browser flow rather
+than accepting an unverified deep link.
 
-1. **NOTIF-05 — notification preferences.** Needs read/write routes; the web page
-   uses a server action, so there is no `/api/mobile/v1` surface yet.
-2. **PROMO-04 — schemes.** Needs a mobile route over the scheme data the web page reads.
-3. **ACC-03 — profile editing.** Needs a mobile profile-update route. The web edit page
-   writes through a server action guarded by `update_my_shop_profile`; no mobile
-   endpoint exists, and the app does not write profile rows directly.
-4. **MISC-01 / MISC-03 — support and reports.** Need mobile routes for support threads
-   and report figures.
+1. **AUTH-13 — recovery-link App Link handoff.** The domain owner must publish and
+   verify the Android Digital Asset Links association for the production package and
+   signing certificate. The native app then needs a reviewed Supabase recovery-token
+   exchange/callback that can only be reached through that verified App Link. Until
+   both pieces are configured and tested, emailed recovery links stay on the existing
+   HTTPS reset page. No custom-scheme or WebView shortcut is used.
 
 ## Remaining limitations, stated rather than hidden
 
 1. **No add-to-cart on the catalogue card.** The card shows brand, name, pack size,
-   MOQ, live price, stock and the favourite toggle, and adding to the cart happens on
-   the product detail (CAT-07) where the server pack and MOQ are known. A one-tap card
-   add would need the cart mutation that lives in `:feature:orders`; until that edge is
-   deliberate, the card does not pretend to own it.
-2. **No offers/schemes rail on home.** PROMO-04 is BLOCKED (no mobile schemes
-   endpoint). The home screen therefore shows banners, categories, brands, recently
-   added and the product grid — never a fabricated "Today's offers" rail.
-3. **No in-account security screen** (ACC-04 PARTIAL): the password-update call exists
-   and is exercised by the reset flow, but there is no in-account security screen yet.
-4. **The directory panes narrow on the device.** The server's catalogue search is a
-   PRODUCT search; the Categories/Brands panes filter the names the server already
-   sent rather than inventing a second, differently-behaving search endpoint.
+   MOQ, live price, stock and the favourite toggle. Adding to the cart happens on the
+   product detail (CAT-07), where the server pack and MOQ are known; the card does not
+   pretend to own that mutation.
+2. **No schemes/offer rail on home.** Schemes and coupons have real native destinations
+   (PROMO-04 and PROMO-01), but the home screen has no such rail. It shows only server
+   data and never fabricates a "Today's offers" promotion.
+3. **Recovery-link completion stays in the HTTPS browser flow** (AUTH-04/AUTH-13)
+   until the production domain's verified App Link and the reviewed native token
+   handoff exist. In-account password rotation is already native (ACC-04).
+4. **A new delivery address cannot be added mid-checkout** (CHK-07 PARTIAL). Create or
+   edit it in the native address book first, then select it during checkout.
+5. **The Categories/Brands panes narrow on-device.** The server's catalogue search is
+   for products; these panes filter only the taxonomy rows the server already sent
+   rather than inventing a separate search endpoint.
 
 ## Method
 
