@@ -298,6 +298,7 @@ private fun RoutedShell(
         when {
           currentRoute == MaharaniRoutes.HOME && retailerHome -> RetailerHomeTopBar(
             snapshot = snapshot,
+            greeting = greeting,
             search = homeSearch,
             onSearchChange = { homeSearch = it },
             // `MaharaniSearchBar.onSubmit` carries no argument: the shell owns the
