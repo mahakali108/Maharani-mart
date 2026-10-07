@@ -54,6 +54,8 @@ object OrderDetailTags {
   const val DELIVERY = "order_detail_delivery"
   const val ERROR = "order_detail_error"
   const val CANCEL = "order_detail_cancel"
+  /** The list of lines a reorder could not add, each with the server's reason. */
+  const val REORDER_SKIPPED = "order_detail_reorder_skipped"
 }
 
 @Composable
@@ -235,17 +237,32 @@ fun OrderDetailContent(
       }
     }
 
-    if (order.statusHistory.isNotEmpty()) {
-      item { SectionHeader(title = "Status history") }
-      items(order.statusHistory, key = { entry -> entry.id }) { entry ->
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(orderStatusHeading(entry.status), style = MaterialTheme.typography.titleSmall)
-            entry.note?.takeIf { it.isNotBlank() }?.let { note ->
-              Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-          }
-          Text(entry.createdAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // The status timeline: the rows the server has for THIS order, in the
+    // order it recorded them. No stage is drawn that the backend did not
+    // record, and no courier position is invented.
+    run {
+      val steps = orderTimeline(order.statusHistory, order.status)
+      item {
+        SectionHeader(
+          title = "Order progress",
+          subtitle = if (order.statusHistory.isEmpty()) {
+            "The server has not recorded status steps for this order yet"
+          } else {
+            "${steps.size} step${if (steps.size == 1) "" else "s"} recorded by the server"
+          },
+        )
+      }
+      item {
+        Surface(
+          shape = RoundedCornerShape(18.dp),
+          color = MaterialTheme.colorScheme.surfaceContainerLow,
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          OrderTimeline(
+            steps = steps,
+            modifier = Modifier.padding(MaharaniDimens.spaceLg),
+          )
         }
       }
     }
@@ -269,6 +286,43 @@ fun OrderDetailContent(
           modifier = Modifier.fillMaxWidth().testTag(OrderDetailTags.ERROR),
         ) { Text(message, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
       }
+
+      // A partial reorder is reported line by line. One generic "something
+      // failed" would leave the shopkeeper guessing which of eight products
+      // the warehouse could not fill.
+      if (state.reorderFailures.isNotEmpty()) {
+        Surface(
+          color = MaterialTheme.colorScheme.surfaceContainerLow,
+          shape = RoundedCornerShape(12.dp),
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+          modifier = Modifier.fillMaxWidth().testTag(OrderDetailTags.REORDER_SKIPPED),
+        ) {
+          Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            Text(
+              text = "${state.reorderAddedCount} of ${state.reorderRequestedCount} lines added to your cart",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.SemiBold,
+            )
+            state.reorderFailures.forEach { failure ->
+              val name = order.items.firstOrNull { item -> item.packId == failure.packId }?.productName
+              Text(
+                text = "${name ?: "One line"}: ${failure.message}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+              )
+            }
+            Text(
+              text = "The lines that were added are priced at today's rates — the price on this order is history.",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+        }
+      }
+
       Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
         Button(
           onClick = onReorder,
@@ -279,7 +333,8 @@ fun OrderDetailContent(
           else Text("Reorder these items")
         }
         Text(
-          "Reorder adds the same piece counts to your cart; the server re-checks stock, pack rules and today's prices.",
+          "Reorder adds the same piece counts to your cart. The server re-checks stock, packs and " +
+            "today's prices line by line, and tells you about any line it cannot add.",
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

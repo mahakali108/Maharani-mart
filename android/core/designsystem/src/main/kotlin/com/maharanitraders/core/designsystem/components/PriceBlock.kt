@@ -29,6 +29,9 @@ enum class PriceEmphasis {
 /** Test tag shared by every rendered price, for Compose UI tests. */
 const val PRICE_BLOCK_TAG = "price_block"
 
+/** Test tag of the case-price line, present only when the server published one. */
+const val PRICE_BLOCK_CASE_TAG = "price_block_case"
+
 /**
  * One honest price block: the server's GST-inclusive per-piece rate, an
  * optional printed MRP struck through beside it, and an optional caption line
@@ -52,6 +55,17 @@ fun PriceBlock(
   emphasis: PriceEmphasis = PriceEmphasis.Card,
   mrpPaise: Long? = null,
   caption: String? = null,
+  /**
+   * The pack's CASE price, when the server published one, together with the
+   * case size it belongs to.
+   *
+   * WHY IT IS A PAIR: a case price without its case size is unreadable —
+   * "₹480" beside "₹40 / pc" looks like a second, contradictory rate unless
+   * the row says it is 12 pieces. Both come from the same server pack row, and
+   * when either is missing the whole line is omitted rather than half-drawn.
+   */
+  casePricePaise: Long? = null,
+  unitsPerCase: Int? = null,
 ) {
   val priceStyle = when (emphasis) {
     PriceEmphasis.Card -> MaterialTheme.typography.titleMedium
@@ -110,6 +124,22 @@ fun PriceBlock(
           )
         }
       }
+    }
+
+    // Price per CASE is spelled out as a case price, never as a bare number:
+    // a wholesale buyer reads "₹480 / case of 12" against "₹40 / pc" without
+    // having to work out which figure the cart will multiply.
+    val casePrice = casePricePaise
+    val caseSize = unitsPerCase
+    if (casePrice != null && caseSize != null && caseSize > 1) {
+      Text(
+        text = "${MoneyFormat.formatPaiseShort(casePrice)} / case of $caseSize",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.testTag(PRICE_BLOCK_CASE_TAG),
+      )
     }
 
     if (caption != null) {

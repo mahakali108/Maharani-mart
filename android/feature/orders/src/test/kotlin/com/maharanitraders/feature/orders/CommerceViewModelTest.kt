@@ -34,7 +34,7 @@ class CommerceViewModelTest {
   fun `cart quantity changes obey server MOQ and retain the last server snapshot on failure`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
     val preferences = AppPreferences(MemoryPreferenceStore())
-    val viewModel = CartCheckoutViewModel(repository, preferences, CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, preferences, CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
 
     viewModel.setQuantity(CART_LINE.id, 5)
@@ -65,7 +65,7 @@ class CommerceViewModelTest {
     val repository = FakeCommerceRepository().apply {
       addResults += AppResult.Failure(AppError.Network("response lost"))
     }
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
 
     viewModel.addCartLine("pack-1", 6)
@@ -90,9 +90,89 @@ class CommerceViewModelTest {
   }
 
   @Test
+  fun `removing the selected lines sends one server removal each and clears the tick`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val viewModel = CartCheckoutViewModel(
+      repository,
+      AppPreferences(MemoryPreferenceStore()),
+      CartCountStore(repository),
+      RecordingFavoriteToggler(),
+    )
+    advanceUntilIdle()
+
+    viewModel.toggleLineSelection("line-1")
+    assertEquals(setOf("line-1"), viewModel.state.value.selectedLineIds)
+
+    viewModel.removeSelected()
+    advanceUntilIdle()
+
+    // Removed by the SERVER, one call per line: a local deletion could disagree
+    // with the basket the checkout will quote.
+    assertEquals(listOf("line-1"), repository.removeCalls)
+    assertTrue(viewModel.state.value.selectedLineIds.isEmpty())
+    assertTrue(viewModel.state.value.bulkMessage.orEmpty().contains("1 line"))
+  }
+
+  @Test
+  fun `saving a line to favourites names the product the server row carries`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val favorites = RecordingFavoriteToggler()
+    val viewModel = CartCheckoutViewModel(
+      repository,
+      AppPreferences(MemoryPreferenceStore()),
+      CartCountStore(repository),
+      favorites,
+    )
+    advanceUntilIdle()
+
+    viewModel.toggleLineSelection("line-1")
+    viewModel.moveSelectedToFavourites()
+    advanceUntilIdle()
+
+    assertEquals(listOf("product-1"), favorites.toggled)
+  }
+
+  @Test
+  fun `the server's own changes are reported as warnings and never applied silently`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val viewModel = CartCheckoutViewModel(
+      repository,
+      AppPreferences(MemoryPreferenceStore()),
+      CartCountStore(repository),
+      RecordingFavoriteToggler(),
+    )
+    advanceUntilIdle()
+    assertTrue(viewModel.state.value.cartNotices.isEmpty())
+
+    // While the shopper was away the server re-priced the line and the pack
+    // went out of stock. The basket on screen is now stale — and the app must
+    // say so rather than quietly swapping the numbers.
+    repository.cart = initialCart.copy(
+      lines = listOf(
+        CART_LINE.copy(
+          unitPricePaise = 11_500,
+          lineTotalPaise = 69_000,
+          availability = "out_of_stock",
+          orderable = false,
+          message = "Out of stock right now.",
+        ),
+      ),
+    )
+    viewModel.refreshCart()
+    advanceUntilIdle()
+
+    val notices = viewModel.state.value.cartNotices
+    assertTrue(notices.any { it.kind == CartNoticeKind.PRICE_CHANGED })
+    assertTrue(notices.any { it.kind == CartNoticeKind.STOCK_CHANGED })
+    assertTrue(notices.any { it.kind == CartNoticeKind.NOT_ORDERABLE })
+    // The line is still in the cart: the shopper decides, the app does not.
+    assertEquals(1, viewModel.state.value.cart?.lines?.size)
+  }
+
+  @Test
   fun `checkout refresh reloads the shared cart before requesting a replacement quote`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -111,7 +191,7 @@ class CommerceViewModelTest {
   fun `opening the cart re-reads the server so a line added elsewhere appears`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
     val cartCounts = CartCountStore(repository)
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), cartCounts)
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), cartCounts, RecordingFavoriteToggler())
     advanceUntilIdle()
     val readsAfterFirstOpen = repository.loadCartCalls
 
@@ -137,7 +217,7 @@ class CommerceViewModelTest {
   @Test
   fun `opening the cart during a change in flight never fetches a competing snapshot`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     val readsBefore = repository.loadCartCalls
 
@@ -160,7 +240,7 @@ class CommerceViewModelTest {
   @Test
   fun `opening the cart while the first read is still running does not double-fetch`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
 
     // No advanceUntilIdle: the initial read is still in flight, and the screen
     // composes at exactly this moment.
@@ -176,7 +256,7 @@ class CommerceViewModelTest {
       // First read (checkout entry): the retailer has no saved address yet.
       addressResults += AppResult.Success(emptyList())
     }
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -204,7 +284,7 @@ class CommerceViewModelTest {
   @Test
   fun `reloadAddressesIfStale keeps an unchanged selection without a redundant quote`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -226,7 +306,7 @@ class CommerceViewModelTest {
   fun `reloadAddressesIfStale reselects and re-quotes when the selected address vanished`() = runTest(dispatcher) {
     val replacement = address.copy(id = "address-2", label = "Warehouse", isDefault = true)
     val repository = FakeCommerceRepository()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -247,7 +327,7 @@ class CommerceViewModelTest {
   @Test
   fun `reloadAddressesIfStale does nothing outside checkout`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
 
     viewModel.reloadAddressesIfStale()
@@ -262,7 +342,7 @@ class CommerceViewModelTest {
     val repository = FakeCommerceRepository().apply {
       addressResults += AppResult.Failure(AppError.Network("offline"))
     }
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
 
     viewModel.beginCheckout()
@@ -283,7 +363,7 @@ class CommerceViewModelTest {
     val repository = FakeCommerceRepository().apply {
       placeResults += AppResult.Failure(AppError.Api(ApiErrorCode.INSUFFICIENT_STOCK, "Stock changed."))
     }
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -308,7 +388,7 @@ class CommerceViewModelTest {
       )
     }
     val preferences = AppPreferences(MemoryPreferenceStore())
-    val viewModel = CartCheckoutViewModel(repository, preferences, CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, preferences, CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
 
     viewModel.beginCheckout()
@@ -330,7 +410,7 @@ class CommerceViewModelTest {
       recoveryResults += AppResult.Success(actualOrder)
     }
     val store = MemoryPreferenceStore()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -366,7 +446,7 @@ class CommerceViewModelTest {
       recoveryResults += AppResult.Failure(AppError.Api(ApiErrorCode.NOT_FOUND, "No completed order yet."))
     }
     val store = MemoryPreferenceStore()
-    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store), CartCountStore(repository))
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(store), CartCountStore(repository), RecordingFavoriteToggler())
     advanceUntilIdle()
     viewModel.beginCheckout()
     advanceUntilIdle()
@@ -504,7 +584,12 @@ class CommerceViewModelTest {
       updateCalls += lineId to quantity
       return if (updateResults.isNotEmpty()) updateResults.removeAt(0) else AppResult.Success(cart)
     }
-    override suspend fun removeCartLine(lineId: String): AppResult<CartSnapshot> = AppResult.Success(cart)
+    val removeCalls = mutableListOf<String>()
+
+    override suspend fun removeCartLine(lineId: String): AppResult<CartSnapshot> {
+      removeCalls += lineId
+      return AppResult.Success(cart)
+    }
     override suspend fun loadAddresses(): AppResult<List<DeliveryAddress>> {
       addressCalls += 1
       return if (addressResults.isNotEmpty()) addressResults.removeAt(0)

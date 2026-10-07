@@ -65,6 +65,10 @@ interface CommerceRepository {
    * The cart API revalidates MOQ, quantity bounds and pack activity on every
    * call and re-prices the response, so a reorder cannot be laxer than any
    * other way into the cart, and no price is sent from the device.
+   *
+   * A refused line is COLLECTED, not fatal: the rest of the order still lands,
+   * and [ReorderOutcome.failures] carries the server's own message for each
+   * line it would not take.
    */
   suspend fun reorderLines(intents: List<CartLineIntent>): AppResult<ReorderOutcome>
 }
@@ -186,6 +190,7 @@ class NetworkCommerceRepository @Inject constructor(
     }
     var added = 0
     var cart: CartSnapshot? = null
+    val failures = mutableListOf<ReorderLineFailure>()
     for (intent in intents) {
       when (
         val result = executor.executeEnvelope {
@@ -196,13 +201,25 @@ class NetworkCommerceRepository @Inject constructor(
           added += 1
           cart = result.value
         }
-        // The failure is returned as-is. Lines already accepted are in the
-        // server cart, which is why the caller must re-read it rather than
-        // assume nothing happened.
-        is AppResult.Failure -> return AppResult.Failure(result.error)
+        // Recorded, not returned: one sold-out pack must not cancel the five
+        // that are still available. Lines already accepted are in the server
+        // cart, which is why the caller re-reads it rather than assuming
+        // nothing happened.
+        is AppResult.Failure -> failures += ReorderLineFailure(
+          packId = intent.packId,
+          quantity = intent.quantity,
+          message = result.error.message,
+        )
       }
     }
-    return AppResult.Success(ReorderOutcome(requestedCount = intents.size, addedCount = added, cart = cart))
+    return AppResult.Success(
+      ReorderOutcome(
+        requestedCount = intents.size,
+        addedCount = added,
+        cart = cart,
+        failures = failures,
+      ),
+    )
   }
 }
 

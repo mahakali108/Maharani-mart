@@ -1,6 +1,5 @@
 package com.maharanitraders.feature.catalog.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,6 +51,7 @@ import com.maharanitraders.core.designsystem.components.OfflineState
 import com.maharanitraders.core.designsystem.components.PagerDots
 import com.maharanitraders.core.designsystem.components.PriceBlock
 import com.maharanitraders.core.designsystem.components.PriceEmphasis
+import com.maharanitraders.core.designsystem.components.QuantityLadder
 import com.maharanitraders.core.designsystem.components.SectionHeader
 import com.maharanitraders.core.designsystem.components.StockBadge
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
@@ -241,7 +241,14 @@ fun ProductDetailContent(
               }
 
               state.selectedPack?.let { pack ->
-                if (pack.tiers.size > 1) TierTable(pack = pack)
+                // The server's own selling slabs, with the half-open range
+                // printed as the last quantity it covers (see `quantityLadder`).
+                if (pack.tiers.size > 1) {
+                  QuantityLadder(
+                    tiers = pack.tiers,
+                    modifier = Modifier.testTag(ProductDetailTags.TIER_TABLE),
+                  )
+                }
               }
 
               HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -396,6 +403,10 @@ private fun PackPricingPanel(pack: ProductPackDetail, modifier: Modifier = Modif
           mrpPaise = pack.mrpPaise,
           emphasis = PriceEmphasis.Detail,
           caption = "GST inclusive · ${formatPercent(pack.gstPercent)} GST",
+          // The case rate is labelled as a case rate, next to the per-piece
+          // rate, so the two figures cannot be mistaken for one another.
+          casePricePaise = pack.derivedCasePricePaise,
+          unitsPerCase = pack.unitsPerCase,
           modifier = Modifier
             .weight(1f, fill = false)
             .testTag(ProductDetailTags.PRICE),
@@ -530,75 +541,6 @@ private fun PackSelector(
           }
         }
       }
-    }
-  }
-}
-
-/** The server's slab table, so "buy more, pay less" is a real published rate. */
-@Composable
-private fun TierTable(pack: ProductPackDetail, modifier: Modifier = Modifier) {
-  val tokens = MaharaniThemeTokens.colors
-  Surface(
-    color = MaterialTheme.colorScheme.surfaceContainerLow,
-    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
-    modifier = modifier
-      .fillMaxWidth()
-      .testTag(ProductDetailTags.TIER_TABLE),
-  ) {
-    Column(
-      modifier = Modifier.padding(MaharaniDimens.spaceMd),
-      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
-    ) {
-      Text(
-        text = "Slab rates (per piece)",
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-      )
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-      ) {
-        Text(
-          text = "Quantity",
-          style = MaterialTheme.typography.labelMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-          text = "Price / pc",
-          style = MaterialTheme.typography.labelMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-      pack.tiers.forEachIndexed { index, tier ->
-        val upper = tier.maxQuantity
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MaharaniDimens.radiusChip))
-            .then(
-              if (index == 0) Modifier.background(tokens.saffronSurface) else Modifier,
-            )
-            .padding(horizontal = MaharaniDimens.spaceSm, vertical = MaharaniDimens.spaceXs),
-          horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-          Text(
-            text = if (upper == null) "${tier.minQuantity}+ pcs" else "${tier.minQuantity}–$upper pcs",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (index == 0) tokens.onSaffronSurface else MaterialTheme.colorScheme.onSurface,
-          )
-          Text(
-            text = "${MoneyFormat.formatPaise(tier.unitPricePaise)}/pc",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (index == 0) tokens.onSaffronSurface else MaterialTheme.colorScheme.onSurface,
-          )
-        }
-      }
-      Text(
-        text = "Published slab rates for your shop; the price above is the rate at the " +
-          "minimum order quantity.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
     }
   }
 }

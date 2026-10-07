@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +33,7 @@ import com.maharanitraders.core.designsystem.components.FavoriteButton
 import com.maharanitraders.core.designsystem.components.PriceBlock
 import com.maharanitraders.core.designsystem.components.PriceEmphasis
 import com.maharanitraders.core.designsystem.components.StockBadge
+import com.maharanitraders.core.designsystem.components.nextSlabHint
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.model.CatalogPack
 import com.maharanitraders.core.model.CatalogProduct
@@ -50,6 +53,12 @@ const val FAVORITE_TOGGLE_TAG = "catalog_favorite_toggle"
  * a Compose UI test can address one card's button in a grid of many.
  */
 const val ADD_TO_CART_TAG = "catalog_add_to_cart"
+
+/**
+ * Test tag of the card's compare control. The product id is appended so a UI
+ * test can address one card in a grid of many.
+ */
+const val COMPARE_TOGGLE_TAG = "catalog_compare_toggle"
 
 /**
  * The quantity a quick add sends: the pack's MOQ, never a smaller number.
@@ -125,6 +134,12 @@ fun ProductCard(
   onAddToCart: (() -> Unit)? = null,
   /** True while THIS card's add is in flight; shows a spinner in place of the label. */
   addPending: Boolean = false,
+  /** Null hides the control: not every grid offers comparison. */
+  onToggleCompare: (() -> Unit)? = null,
+  /** Whether this card is parked in the comparison tray. */
+  compareSelected: Boolean = false,
+  /** True when the tray is full, so the control can explain a refused tap. */
+  compareFull: Boolean = false,
 ) {
   val pack = product.pack
   val outOfStock = pack?.availability == PackAvailability.OUT_OF_STOCK
@@ -251,7 +266,16 @@ fun ProductCard(
             unitPricePaise = pack.unitPricePaise,
             mrpPaise = pack.mrpPaise,
             emphasis = emphasis,
-            caption = pack.moq?.let { moq -> "Min order $moq pcs" },
+            // The minimum AND the next slab, when the server published one.
+            // Both are server figures: the MOQ from the pack row, and the slab
+            // from the same tiers the cart prices with — so the card never
+            // advertises a rate checkout would refuse.
+            caption = buildList {
+              pack.moq?.let { moq -> add("Min order $moq pcs") }
+              nextSlabHint(tiers = pack.tiers, quantity = quickAddQuantity(pack))?.let { add(it) }
+            }.joinToString(" · ").takeIf { it.isNotEmpty() },
+            casePricePaise = pack.derivedCasePricePaise,
+            unitsPerCase = pack.unitsPerCase,
             modifier = Modifier
               .weight(1f, fill = false)
               .testTag(CatalogTags.PRICE),
@@ -299,6 +323,32 @@ fun ProductCard(
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
               modifier = Modifier.testTag("${ADD_TO_CART_TAG}_${pack?.packId ?: product.id}"),
+            )
+          }
+        }
+
+        if (onToggleCompare != null) {
+          // A text control, not a bare glyph: "Compare" says what the tap does,
+          // and the state is carried by the WORD (Added / Compare) as well as
+          // by colour, so it is readable without colour perception.
+          TextButton(
+            onClick = onToggleCompare,
+            enabled = compareSelected || !compareFull,
+            modifier = Modifier
+              .fillMaxWidth()
+              .heightIn(min = 40.dp)
+              .testTag("${COMPARE_TOGGLE_TAG}_${product.id}"),
+            contentPadding = PaddingValues(horizontal = 4.dp),
+          ) {
+            Text(
+              text = when {
+                compareSelected -> "✓ Comparing"
+                compareFull -> "Compare (3 max)"
+                else -> "Compare"
+              },
+              style = MaterialTheme.typography.labelSmall,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
             )
           }
         }

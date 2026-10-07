@@ -6,10 +6,12 @@ import com.maharanitraders.core.common.AppError
 import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.feature.catalog.HomeCoins
 import com.maharanitraders.feature.catalog.HomeDashboard
+import com.maharanitraders.feature.catalog.HomeFrequentlyOrdered
 import com.maharanitraders.feature.catalog.HomeOrderSummary
 import com.maharanitraders.feature.catalog.LocalHistoryStore
 import com.maharanitraders.feature.engagement.EngagementRepository
 import com.maharanitraders.feature.orders.CommerceRepository
+import com.maharanitraders.feature.orders.buyAgainCandidates
 import com.maharanitraders.feature.orders.RetailerOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -74,8 +76,26 @@ class HomeDashboardViewModel @Inject constructor(
           spentPaise = summary.coinsSpentPaise,
         )
       }
-      val lastOrder = (orderResult as? AppResult.Success)?.value?.orders?.firstOrNull()
-        ?.let { order -> order.toHomeSummary() }
+      // Named for what it holds: the constructor's `orders` is the repository,
+      // and a local with the same name would make the two calls below read
+      // ambiguously.
+      val orderRows = (orderResult as? AppResult.Success)?.value?.orders.orEmpty()
+      val lastOrder = orderRows.firstOrNull()?.let { order -> order.toHomeSummary() }
+      // "Frequently ordered" is THIS shop's own repeat list, aggregated from the
+      // order rows the dashboard just read — no second request, and no
+      // popularity signal invented on the device.
+      val frequentlyOrdered = if (orderRows.isEmpty()) {
+        emptyList()
+      } else {
+        buyAgainCandidates(orderRows, limit = HOME_FREQUENT_LIMIT).map { candidate ->
+          HomeFrequentlyOrdered(
+            productId = candidate.productId,
+            name = candidate.productName ?: candidate.packName ?: "Product",
+            packName = candidate.packName,
+            timesOrdered = candidate.timesOrdered,
+          )
+        }
+      }
 
       // One message, naming the read that failed — never a generic "something
       // went wrong" that hides which number is missing.
@@ -88,6 +108,7 @@ class HomeDashboardViewModel @Inject constructor(
           coins = coins,
           lastOrder = lastOrder,
           recentlyViewed = viewed,
+          frequentlyOrdered = frequentlyOrdered,
           errorMessage = failure?.message,
           // The check is written out rather than reached for through the
           // catalogue's extension, so this module depends only on `core:common`
@@ -104,6 +125,9 @@ class HomeDashboardViewModel @Inject constructor(
     }
   }
 }
+
+/** How many repeat products the home rail shows. */
+private const val HOME_FREQUENT_LIMIT = 6
 
 /**
  * The order fields the home card shows, taken verbatim from the order row.

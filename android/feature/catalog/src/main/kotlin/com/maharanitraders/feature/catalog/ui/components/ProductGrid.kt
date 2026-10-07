@@ -43,6 +43,12 @@ fun LazyGridScope.productCardItems(
   onQuickAddToCart: ((String, Int) -> Unit)? = null,
   /** The pack whose add is in flight, so exactly one card shows a spinner. */
   quickAddPackId: String? = null,
+  /** Null hides the control: not every grid offers comparison. */
+  onToggleCompare: ((String) -> Unit)? = null,
+  /** The products parked in the comparison tray. */
+  compareIds: Set<String> = emptySet(),
+  /** True when the tray has no room left, so a card can say so. */
+  compareFull: Boolean = false,
 ) {
   items(products, key = { it.id }) { product ->
     ProductCard(
@@ -58,6 +64,9 @@ fun LazyGridScope.productCardItems(
         }
       },
       addPending = quickAddPackId != null && quickAddPackId == product.pack?.packId,
+      onToggleCompare = onToggleCompare?.let { toggle -> { toggle(product.id) } },
+      compareSelected = product.id in compareIds,
+      compareFull = compareFull,
       modifier = Modifier.fillMaxWidth(),
     )
   }
@@ -86,6 +95,12 @@ fun ProductGrid(
   onToggleFavorite: ((String) -> Unit)? = null,
   onQuickAddToCart: ((String, Int) -> Unit)? = null,
   quickAddPackId: String? = null,
+  /** Null hides the control: not every grid offers comparison. */
+  onToggleCompare: ((String) -> Unit)? = null,
+  /** The products parked in the comparison tray. */
+  compareIds: Set<String> = emptySet(),
+  /** True when the tray has no room left, so a card can say so. */
+  compareFull: Boolean = false,
   /**
    * A slot drawn ABOVE the first card, inside the same scroller.
    *
@@ -115,6 +130,9 @@ fun ProductGrid(
       onToggleFavorite = onToggleFavorite,
       onQuickAddToCart = onQuickAddToCart,
       quickAddPackId = quickAddPackId,
+      onToggleCompare = onToggleCompare,
+      compareIds = compareIds,
+      compareFull = compareFull,
     )
     footer?.invoke(this)
   }

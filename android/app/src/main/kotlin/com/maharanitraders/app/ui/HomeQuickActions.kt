@@ -28,17 +28,20 @@ import com.maharanitraders.feature.catalog.HomeQuickActionIcon
 internal fun homeQuickActions(availableRoutes: Set<String>): List<HomeQuickAction> {
   val candidates = listOf(
     HomeQuickAction(MaharaniRoutes.CATALOG, "Shop now", HomeQuickActionIcon.SHOP, AccentTone.BRAND),
-    HomeQuickAction(MaharaniRoutes.QUICK_ORDER, "Quick order", HomeQuickActionIcon.QUICK_ORDER, AccentTone.VIOLET),
-    HomeQuickAction(MaharaniRoutes.ORDERS, "My orders", HomeQuickActionIcon.ORDERS, AccentTone.GREEN),
-    HomeQuickAction(MaharaniRoutes.CART, "Cart", HomeQuickActionIcon.CART, AccentTone.AMBER),
     HomeQuickAction(MaharaniRoutes.CATEGORIES, "Categories", HomeQuickActionIcon.CATEGORY, AccentTone.BLUE),
     HomeQuickAction(MaharaniRoutes.BRANDS, "Brands", HomeQuickActionIcon.BRAND, AccentTone.BLUE),
-    HomeQuickAction(MaharaniRoutes.COINS, "Coins", HomeQuickActionIcon.COINS, AccentTone.AMBER),
-    HomeQuickAction(MaharaniRoutes.COUPONS, "Coupons", HomeQuickActionIcon.COUPONS, AccentTone.ROSE),
+    HomeQuickAction(MaharaniRoutes.QUICK_ORDER, "Quick order", HomeQuickActionIcon.QUICK_ORDER, AccentTone.VIOLET),
+    // Reordering is the single most repeated job in wholesale, so "Buy again"
+    // sits in the first row rather than behind the drawer.
+    HomeQuickAction(MaharaniRoutes.BUY_AGAIN, "Buy again", HomeQuickActionIcon.REORDER, AccentTone.VIOLET),
+    HomeQuickAction(MaharaniRoutes.ORDERS, "My orders", HomeQuickActionIcon.ORDERS, AccentTone.GREEN),
+    HomeQuickAction(MaharaniRoutes.FAVORITES, "Favourites", HomeQuickActionIcon.FAVORITES, AccentTone.ROSE),
+    HomeQuickAction(MaharaniRoutes.CART, "Cart", HomeQuickActionIcon.CART, AccentTone.AMBER),
     // Beyond the first two rows: still real, simply not worth pushing the shop
     // off the first screen for.
+    HomeQuickAction(MaharaniRoutes.COINS, "Coins", HomeQuickActionIcon.COINS, AccentTone.AMBER),
+    HomeQuickAction(MaharaniRoutes.COUPONS, "Coupons", HomeQuickActionIcon.COUPONS, AccentTone.ROSE),
     HomeQuickAction(MaharaniRoutes.SAVED_CARTS, "Saved carts", HomeQuickActionIcon.SAVED_CARTS, AccentTone.VIOLET),
-    HomeQuickAction(MaharaniRoutes.FAVORITES, "Favourites", HomeQuickActionIcon.FAVORITES, AccentTone.ROSE),
     HomeQuickAction(MaharaniRoutes.SUPPORT, "Support", HomeQuickActionIcon.SUPPORT, AccentTone.BLUE),
     HomeQuickAction(MaharaniRoutes.NOTIFICATIONS, "Alerts", HomeQuickActionIcon.NOTIFICATIONS, AccentTone.VIOLET),
     HomeQuickAction(MaharaniRoutes.REPORTS, "Reports", HomeQuickActionIcon.REPORTS, AccentTone.GREEN),

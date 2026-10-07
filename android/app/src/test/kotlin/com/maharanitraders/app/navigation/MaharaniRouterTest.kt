@@ -240,6 +240,9 @@ class MaharaniRouterTest {
       MaharaniRoutes.BRANDS,
       MaharaniRoutes.FAVORITES,
       MaharaniRoutes.QUICK_ORDER,
+      // Buy again renders BuyAgainScreen against real order history and the
+      // live catalogue, so it is built — not a planned placeholder.
+      MaharaniRoutes.BUY_AGAIN,
       MaharaniRoutes.CART,
       MaharaniRoutes.ORDERS,
       MaharaniRoutes.COINS,
@@ -280,6 +283,9 @@ class MaharaniRouterTest {
       MaharaniRoutes.BRANDS,
       MaharaniRoutes.FAVORITES,
       MaharaniRoutes.QUICK_ORDER,
+      // Buy again renders BuyAgainScreen against real order history and the
+      // live catalogue, so it is built — not a planned placeholder.
+      MaharaniRoutes.BUY_AGAIN,
       MaharaniRoutes.CART,
       MaharaniRoutes.ORDERS,
       MaharaniRoutes.COINS,

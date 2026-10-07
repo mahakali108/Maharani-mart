@@ -26,6 +26,9 @@ data class OrderDetailUiState(
   /** Set the moment a reorder succeeds, so the screen can open the cart once. */
   val reorderCompleted: Boolean = false,
   val reorderAddedCount: Int = 0,
+  val reorderRequestedCount: Int = 0,
+  /** Lines the server refused, each with its own reason. */
+  val reorderFailures: List<ReorderLineFailure> = emptyList(),
   val reorderError: String? = null,
 ) {
   val hasOrder: Boolean get() = order != null
@@ -87,9 +90,14 @@ class OrderDetailViewModel @Inject constructor(
   /**
    * Replays this order's lines into the cart.
    *
-   * A failure is reported as it happened: the lines the server already accepted
-   * stay in the cart, so the badge is refreshed from the server instead of the
-   * app pretending the attempt did nothing.
+   * Every line the warehouse can still fill is added; the ones it cannot are
+   * reported WITH their reason ("only 20 pcs available", "no longer sold")
+   * instead of collapsing into one failure. Nothing is added under an old price:
+   * the cart re-prices each line from the server as it is accepted.
+   *
+   * When at least one line landed, the shopper is taken to the cart with the
+   * refusals stated there too, because a half-filled basket that claims success
+   * is worse than one that explains itself.
    */
   fun reorder() {
     val order = _state.value.order ?: return
@@ -108,12 +116,22 @@ class OrderDetailViewModel @Inject constructor(
       when (val result = repository.reorderLines(intents)) {
         is AppResult.Success -> {
           result.value.cart?.let(cartCountStore::record)
+          val added = result.value.addedCount
+          val failures = result.value.failures
           _state.update {
             it.copy(
               reorderInProgress = false,
-              reorderCompleted = true,
-              reorderAddedCount = result.value.addedCount,
-              reorderError = null,
+              reorderCompleted = added > 0,
+              reorderAddedCount = added,
+              reorderRequestedCount = result.value.requestedCount,
+              reorderFailures = failures,
+              reorderError = if (added == 0) {
+                // Nothing landed: say so plainly, with the first real reason.
+                failures.firstOrNull()?.message
+                  ?: "No line of this order could be added to the cart."
+              } else {
+                null
+              },
             )
           }
         }
@@ -122,7 +140,11 @@ class OrderDetailViewModel @Inject constructor(
           // the badge tells the truth, then report the failure.
           cartCountStore.refresh()
           _state.update {
-            it.copy(reorderInProgress = false, reorderError = result.error.message)
+            it.copy(
+              reorderInProgress = false,
+              reorderError = result.error.message,
+              reorderRequestedCount = it.reorderRequestedCount,
+            )
           }
         }
       }

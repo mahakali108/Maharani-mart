@@ -145,6 +145,63 @@ class OrderJourneyViewModelTest {
   }
 
   @Test
+  fun `a partial reorder adds what it can and names the line it could not`() = runTest(dispatcher) {
+    val repository = FakeJourneyRepository()
+    val viewModel = detailViewModel(repository)
+    advanceUntilIdle()
+
+    // The server accepted one line and refused the other: the shopper asked for
+    // a whole order, so the acceptable part must still land, and the refusal
+    // must be reported against its own line.
+    repository.reorderResults += AppResult.Success(
+      ReorderOutcome(
+        requestedCount = 2,
+        addedCount = 1,
+        cart = CartSnapshot(emptyList(), couponCode = null, couponUnavailable = false, lineCount = 1, itemCount = 24),
+        failures = listOf(
+          ReorderLineFailure(packId = "pack-2", quantity = 12, message = "Only 8 available now."),
+        ),
+      ),
+    )
+
+    viewModel.reorder()
+    advanceUntilIdle()
+
+    assertTrue(viewModel.state.value.reorderCompleted)
+    assertEquals(1, viewModel.state.value.reorderAddedCount)
+    assertEquals(2, viewModel.state.value.reorderRequestedCount)
+    assertEquals(1, viewModel.state.value.reorderFailures.size)
+    assertEquals("Only 8 available now.", viewModel.state.value.reorderFailures.single().message)
+    // A partial success is not an error: the shopper is shown the cart and told
+    // which line is missing from it.
+    assertNull(viewModel.state.value.reorderError)
+  }
+
+  @Test
+  fun `a reorder where nothing lands is an error, not a success`() = runTest(dispatcher) {
+    val repository = FakeJourneyRepository()
+    val viewModel = detailViewModel(repository)
+    advanceUntilIdle()
+
+    repository.reorderResults += AppResult.Success(
+      ReorderOutcome(
+        requestedCount = 1,
+        addedCount = 0,
+        cart = null,
+        failures = listOf(
+          ReorderLineFailure(packId = "pack-1", quantity = 24, message = "Out of stock right now."),
+        ),
+      ),
+    )
+
+    viewModel.reorder()
+    advanceUntilIdle()
+
+    assertFalse(viewModel.state.value.reorderCompleted)
+    assertEquals("Out of stock right now.", viewModel.state.value.reorderError)
+  }
+
+  @Test
   fun `a successful reorder records the server cart counts in the badge store`() = runTest(dispatcher) {
     val repository = FakeJourneyRepository().apply {
       reorderResults += AppResult.Success(

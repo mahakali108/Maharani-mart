@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -62,6 +63,7 @@ import com.maharanitraders.core.model.CatalogSort
 import com.maharanitraders.feature.catalog.CatalogTab
 import com.maharanitraders.feature.catalog.CatalogUiState
 import com.maharanitraders.feature.catalog.CatalogViewModel
+import com.maharanitraders.feature.catalog.ProductCompare
 import com.maharanitraders.feature.catalog.FavoritesSnapshot
 import com.maharanitraders.feature.catalog.ui.components.BrandCard
 import com.maharanitraders.feature.catalog.ui.components.CatalogTabStrip
@@ -92,6 +94,10 @@ object CatalogScreenTags {
   const val RECENT_SEARCHES = "catalog_recent_searches"
   const val RECENT_SEARCH_CHIP = "catalog_recent_search_chip"
   const val CLEAR_RECENT_SEARCHES = "catalog_clear_recent_searches"
+
+  /** Product comparison: the tray and the way into the table. */
+  const val COMPARE_TRAY = "catalog_compare_tray"
+  const val COMPARE_OPEN = "catalog_compare_open"
 
   /** The directory panes' local (on-device) filter field. */
   const val DIRECTORY_FILTER = "catalog_directory_filter"
@@ -222,6 +228,10 @@ fun CatalogScreen(
       onToggleFavorite = viewModel::toggleFavorite,
       onQuickAddToCart = onQuickAddToCart,
       quickAddPackId = quickAddPackId,
+      onToggleCompare = viewModel::toggleCompare,
+      onOpenCompare = viewModel::openCompare,
+      onCloseCompare = viewModel::closeCompare,
+      onClearCompare = viewModel::clearCompare,
       modifier = Modifier.padding(padding),
     )
   }
@@ -254,6 +264,10 @@ fun CatalogContent(
   onToggleFavorite: ((String) -> Unit)? = null,
   onQuickAddToCart: ((String, Int) -> Unit)? = null,
   quickAddPackId: String? = null,
+  onToggleCompare: ((String) -> Unit)? = null,
+  onOpenCompare: () -> Unit = {},
+  onCloseCompare: () -> Unit = {},
+  onClearCompare: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   // The grid's scroll position lives HERE, not inside the Products branch: the
@@ -261,7 +275,8 @@ fun CatalogContent(
   // off, not at the top of the list.
   val gridState = rememberLazyGridState()
 
-  Column(modifier = modifier.fillMaxSize()) {
+  Box(modifier = modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
     CatalogHeader(
       state = state,
       onSearchChange = onSearchChange,
@@ -289,6 +304,7 @@ fun CatalogContent(
         onToggleFavorite = onToggleFavorite,
         onQuickAddToCart = onQuickAddToCart,
         quickAddPackId = quickAddPackId,
+        onToggleCompare = onToggleCompare,
         gridState = gridState,
       )
 
@@ -311,6 +327,96 @@ fun CatalogContent(
         onSelectBrand = onSelectBrand,
         onClearBrand = onClearBrand,
       )
+      }
+    }
+
+    // The comparison tray: parked products, and the way into the table. It sits
+    // above the list rather than inside it, so it stays visible while scrolling
+    // and never pushes the grid's content off the bottom of the screen.
+    CompareTrayBar(
+      state = state,
+      onOpenCompare = onOpenCompare,
+      onClearCompare = onClearCompare,
+      modifier = Modifier.align(Alignment.BottomCenter),
+    )
+
+    if (state.compareOpen) {
+      CompareOverlay(
+        details = state.compareDetails,
+        loading = state.compareLoading,
+        error = state.compareError,
+        onClose = onCloseCompare,
+        onRemove = { productId -> onToggleCompare?.invoke(productId) },
+        onOpenProduct = { productId ->
+          onCloseCompare()
+          onOpenProduct(productId)
+        },
+      )
+    }
+  }
+}
+
+/**
+ * The comparison tray.
+ *
+ * Drawn only while at least one product is parked, and it says how many are in
+ * the tray — a shopkeeper who tapped "Compare" on two products must be able to
+ * see that the tap landed. Opening with a single product is allowed on purpose:
+ * the table then reads a one-column comparison, which is still a real set of
+ * server facts, rather than a dead button.
+ */
+@Composable
+private fun CompareTrayBar(
+  state: CatalogUiState,
+  onOpenCompare: () -> Unit,
+  onClearCompare: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  if (state.compareIds.isEmpty() || state.compareOpen) return
+  val count = state.compareIds.size
+  Surface(
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(MaharaniDimens.pageGutter)
+      .testTag(CatalogScreenTags.COMPARE_TRAY),
+    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = MaharaniDimens.cardElevation,
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = MaharaniDimens.spaceMd, vertical = MaharaniDimens.spaceSm),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = "$count product${if (count == 1) "" else "s"} to compare",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+          text = "Up to ${ProductCompare.MAX_PRODUCTS} · current prices are read from the server",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+      TextButton(onClick = onClearCompare, modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget)) {
+        Text("Clear")
+      }
+      Button(
+        onClick = onOpenCompare,
+        modifier = Modifier
+          .heightIn(min = MaharaniDimens.touchTarget)
+          .testTag(CatalogScreenTags.COMPARE_OPEN),
+        shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+      ) { Text("Compare") }
     }
   }
 }
@@ -476,6 +582,7 @@ private fun CatalogProductsPane(
   onToggleFavorite: ((String) -> Unit)?,
   onQuickAddToCart: ((String, Int) -> Unit)?,
   quickAddPackId: String?,
+  onToggleCompare: ((String) -> Unit)?,
   gridState: LazyGridState,
 ) {
   // The controls and the count live INSIDE the scroller, in the grid's header
@@ -570,6 +677,9 @@ private fun CatalogProductsPane(
       onToggleFavorite = onToggleFavorite,
       onQuickAddToCart = onQuickAddToCart,
       quickAddPackId = quickAddPackId,
+      onToggleCompare = onToggleCompare,
+      compareIds = state.compareIds,
+      compareFull = state.compareIds.size >= ProductCompare.MAX_PRODUCTS,
       header = {
         item(span = { GridItemSpan(maxLineSpan) }) { controls() }
       },

@@ -210,6 +210,82 @@ class QuickOrderViewModelTest {
     assertEquals(listOf("pack-1" to 2, "pack-2" to 3), cart.adds)
     assertTrue(viewModel.state.value.message.orEmpty().startsWith("Added 1 of 2 lines."))
     assertFalse(viewModel.state.value.bulkAdding)
+    // The refusal belongs to the line the shopper typed, not only to a snackbar
+    // at the bottom of the screen.
+    assertEquals("Pack is unavailable.", viewModel.state.value.lineErrors[1])
+  }
+
+  @Test
+  fun `a repeated pack in the pasted list is sent once, with the pieces added up`() = runTest(dispatcher) {
+    val cart = FakeCartWriter().apply {
+      addResults += AppResult.Success(CartSnapshot(emptyList(), null, false, lineCount = 1, itemCount = 7))
+    }
+    val (viewModel, _, _) = build(
+      repository = FakeQuickOrderRepository().apply {
+        matchResults += AppResult.Success(
+          listOf(
+            BulkMatchLine("2 x parle", 2, "p1", "A", null, listOf(matchPack("pack-1")), null),
+            BulkMatchLine("parle x 3", 3, "p1", "A", null, listOf(matchPack("pack-1")), null),
+          ),
+        )
+      },
+      cart = cart,
+    )
+
+    viewModel.onBulkRawChange("2 x parle\nparle x 3")
+    viewModel.matchBulkLines()
+    advanceUntilIdle()
+    viewModel.addBulkMatches()
+    advanceUntilIdle()
+
+    // One call, five pieces: the second call would have overwritten the first
+    // quantity or been refused as a duplicate.
+    assertEquals(listOf("pack-1" to 5), cart.adds)
+    assertTrue(viewModel.state.value.message.orEmpty().contains("merged"))
+  }
+
+  @Test
+  fun `a line taken out of the run is not added, and can be put back`() = runTest(dispatcher) {
+    val cart = FakeCartWriter().apply {
+      // Two runs: the first adds the second line only, the second adds both.
+      addResults += AppResult.Success(CartSnapshot(emptyList(), null, false, lineCount = 1, itemCount = 3))
+      addResults += AppResult.Success(CartSnapshot(emptyList(), null, false, lineCount = 2, itemCount = 5))
+    }
+    val (viewModel, _, _) = build(
+      repository = FakeQuickOrderRepository().apply {
+        matchResults += AppResult.Success(
+          listOf(
+            BulkMatchLine("a", 2, "p1", "A", null, listOf(matchPack("pack-1")), null),
+            BulkMatchLine("b", 3, "p2", "B", null, listOf(matchPack("pack-2")), null),
+          ),
+        )
+      },
+      cart = cart,
+    )
+
+    viewModel.onBulkRawChange("a\nb")
+    viewModel.matchBulkLines()
+    advanceUntilIdle()
+
+    viewModel.toggleBulkLine(0)
+    viewModel.addBulkMatches()
+    advanceUntilIdle()
+
+    assertEquals(listOf("pack-2" to 3), cart.adds)
+
+    // Putting it back is the same index, so the error against line 0 stays
+    // against line 0. Only the newly included line is sent: re-sending pack-2
+    // would ADD to the quantity already in the cart.
+    viewModel.toggleBulkLine(0)
+    viewModel.addBulkMatches()
+    advanceUntilIdle()
+    assertEquals(listOf("pack-2" to 3, "pack-1" to 2), cart.adds)
+
+    // A third run with nothing new left says so instead of doubling the order.
+    viewModel.addBulkMatches()
+    advanceUntilIdle()
+    assertEquals(listOf("pack-2" to 3, "pack-1" to 2), cart.adds)
+    assertTrue(viewModel.state.value.bulkError.orEmpty().contains("already in your cart"))
   }
 }
 

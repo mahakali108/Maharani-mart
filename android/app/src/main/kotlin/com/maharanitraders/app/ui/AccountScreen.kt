@@ -45,6 +45,7 @@ object AccountScreenTags {
   const val SIGN_OUT = "account_sign_out"
   const val ADDRESS_BOOK = "account_address_book"
   const val SHORTCUTS = "account_shortcuts"
+  const val BUY_AGAIN = "account_buy_again"
   const val SECURITY = "account_security"
   const val HELP = "account_help"
 }
@@ -131,7 +132,7 @@ fun AccountScreen(
 
     if (snapshot.role == UserRole.RETAILER) {
       item {
-        ShortcutsCard(
+        AccountShortcutGroups(
           onOpenOrders = onOpenOrders,
           onOpenDestination = onOpenDestination,
           availableRoutes = availableRoutes,
@@ -181,36 +182,167 @@ fun AccountScreen(
  * hardcoded wish list. Costs nothing to render (no request) — each destination
  * loads its own real data when it opens.
  */
+/**
+ * The account's destinations, grouped the way a shopkeeper looks for them.
+ *
+ * WHY GROUPS
+ * A flat list of fourteen rows makes every action equally hard to find. The
+ * groups below are the jobs a retailer actually has: buy things, look after
+ * money, look after the account, get help. Within a group the order is
+ * frequency, and every row still opens a destination the router already granted
+ * this account — a row that could not be opened is not drawn, so the list is
+ * never a wish list.
+ *
+ * Each destination loads its own real data when it opens. This screen issues no
+ * request of its own.
+ */
 @Composable
-private fun ShortcutsCard(
+private fun AccountShortcutGroups(
   onOpenOrders: () -> Unit,
   onOpenDestination: (String) -> Unit,
   availableRoutes: Set<String>?,
   modifier: Modifier = Modifier,
 ) {
   fun allowed(route: String): Boolean = availableRoutes == null || route in availableRoutes
-  AccountCard(modifier = modifier.testTag(AccountScreenTags.SHORTCUTS)) {
-    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-      SectionHeader(title = "Your shop", subtitle = "Orders, savings and messages")
-      if (allowed(MaharaniRoutes.ORDERS)) ShortcutRow("My orders", "Track, re-order and download invoices", onOpenOrders)
-      if (allowed(MaharaniRoutes.FAVORITES)) ShortcutRow(label = "Favourites", detail = "The products you saved", onClick = { onOpenDestination(MaharaniRoutes.FAVORITES) })
-      if (allowed(MaharaniRoutes.QUICK_ORDER)) ShortcutRow(label = "Quick order", detail = "Restock a known list in seconds", onClick = { onOpenDestination(MaharaniRoutes.QUICK_ORDER) })
-      if (allowed(MaharaniRoutes.COINS)) ShortcutRow(label = "Maharani Coins", detail = "Balance and ledger", onClick = { onOpenDestination(MaharaniRoutes.COINS) })
-      if (allowed(MaharaniRoutes.COUPONS)) ShortcutRow(label = "Coupons and offers", detail = "Apply a code at checkout", onClick = { onOpenDestination(MaharaniRoutes.COUPONS) })
-      if (allowed(MaharaniRoutes.NOTIFICATIONS)) ShortcutRow(label = "Notifications", detail = "Order and account updates", onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATIONS) })
-      if (allowed(MaharaniRoutes.SAVED_CARTS)) ShortcutRow(label = "Saved carts", detail = "Keep and restore restock lists", onClick = { onOpenDestination(MaharaniRoutes.SAVED_CARTS) })
-      if (allowed(MaharaniRoutes.PROFILE)) ShortcutRow(label = "Shop profile", detail = "Edit shop and contact details", onClick = { onOpenDestination(MaharaniRoutes.PROFILE) })
-      if (allowed(MaharaniRoutes.NOTIFICATION_PREFERENCES)) ShortcutRow(label = "Notification settings", detail = "Choose in-app update categories", onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATION_PREFERENCES) })
-      if (allowed(MaharaniRoutes.REPORTS)) ShortcutRow(label = "Purchase reports", detail = "Weekly, monthly and CSV statements", onClick = { onOpenDestination(MaharaniRoutes.REPORTS) })
-      if (allowed(MaharaniRoutes.SCHEMES)) ShortcutRow(label = "Active schemes", detail = "Live schemes for your shop", onClick = { onOpenDestination(MaharaniRoutes.SCHEMES) })
-      if (allowed(MaharaniRoutes.SUPPORT)) ShortcutRow(label = "Support tickets", detail = "Private conversations with support", onClick = { onOpenDestination(MaharaniRoutes.SUPPORT) })
-      if (allowed(MaharaniRoutes.HELP)) ShortcutRow(label = "Help centre", detail = "Support contacts and help", onClick = { onOpenDestination(MaharaniRoutes.HELP) }, tag = AccountScreenTags.HELP)
-      if (allowed(MaharaniRoutes.SECURITY)) ShortcutRow(label = "Security & privacy", detail = "Password, sessions and data requests", onClick = { onOpenDestination(MaharaniRoutes.SECURITY) }, tag = AccountScreenTags.SECURITY)
+
+  Column(
+    modifier = modifier.testTag(AccountScreenTags.SHORTCUTS),
+    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
+  ) {
+    AccountGroup(title = "My shopping", subtitle = "Order, reorder and restock") {
+      if (allowed(MaharaniRoutes.ORDERS)) {
+        ShortcutRow("My orders", "Track, reorder and download invoices", onOpenOrders)
+      }
+      if (allowed(MaharaniRoutes.BUY_AGAIN)) {
+        ShortcutRow(
+          label = "Buy again",
+          detail = "What your shop orders most, at today's prices",
+          onClick = { onOpenDestination(MaharaniRoutes.BUY_AGAIN) },
+          tag = AccountScreenTags.BUY_AGAIN,
+        )
+      }
+      if (allowed(MaharaniRoutes.QUICK_ORDER)) {
+        ShortcutRow(
+          label = "Quick order",
+          detail = "Restock a known list in seconds",
+          onClick = { onOpenDestination(MaharaniRoutes.QUICK_ORDER) },
+        )
+      }
+      if (allowed(MaharaniRoutes.FAVORITES)) {
+        ShortcutRow(
+          label = "Favourites",
+          detail = "The products you saved",
+          onClick = { onOpenDestination(MaharaniRoutes.FAVORITES) },
+        )
+      }
+      if (allowed(MaharaniRoutes.SAVED_CARTS)) {
+        ShortcutRow(
+          label = "Saved carts",
+          detail = "Keep and restore restock lists",
+          onClick = { onOpenDestination(MaharaniRoutes.SAVED_CARTS) },
+        )
+      }
+      if (allowed(MaharaniRoutes.REPORTS)) {
+        ShortcutRow(
+          label = "Purchase reports",
+          detail = "Weekly, monthly and CSV statements",
+          onClick = { onOpenDestination(MaharaniRoutes.REPORTS) },
+        )
+      }
+    }
+
+    AccountGroup(title = "Money & benefits", subtitle = "Coins, offers and schemes") {
+      if (allowed(MaharaniRoutes.COINS)) {
+        ShortcutRow(
+          label = "Maharani Coins",
+          detail = "Balance and ledger",
+          onClick = { onOpenDestination(MaharaniRoutes.COINS) },
+        )
+      }
+      if (allowed(MaharaniRoutes.COUPONS)) {
+        ShortcutRow(
+          label = "Coupons and offers",
+          detail = "Apply a code at checkout",
+          onClick = { onOpenDestination(MaharaniRoutes.COUPONS) },
+        )
+      }
+      if (allowed(MaharaniRoutes.SCHEMES)) {
+        ShortcutRow(
+          label = "Active schemes",
+          detail = "Live schemes for your shop",
+          onClick = { onOpenDestination(MaharaniRoutes.SCHEMES) },
+        )
+      }
+    }
+
+    AccountGroup(title = "Account", subtitle = "Your details, addresses and security") {
+      if (allowed(MaharaniRoutes.PROFILE)) {
+        ShortcutRow(
+          label = "Shop profile",
+          detail = "Edit shop and contact details",
+          onClick = { onOpenDestination(MaharaniRoutes.PROFILE) },
+        )
+      }
+      if (allowed(MaharaniRoutes.NOTIFICATIONS)) {
+        ShortcutRow(
+          label = "Notifications",
+          detail = "Order and account updates",
+          onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATIONS) },
+        )
+      }
+      if (allowed(MaharaniRoutes.NOTIFICATION_PREFERENCES)) {
+        ShortcutRow(
+          label = "Notification settings",
+          detail = "Choose in-app update categories",
+          onClick = { onOpenDestination(MaharaniRoutes.NOTIFICATION_PREFERENCES) },
+        )
+      }
+      if (allowed(MaharaniRoutes.SECURITY)) {
+        ShortcutRow(
+          label = "Security & privacy",
+          detail = "Password, sessions and data requests",
+          onClick = { onOpenDestination(MaharaniRoutes.SECURITY) },
+          tag = AccountScreenTags.SECURITY,
+        )
+      }
+    }
+
+    AccountGroup(title = "Help", subtitle = "Talk to us, or read the answers") {
+      if (allowed(MaharaniRoutes.SUPPORT)) {
+        ShortcutRow(
+          label = "Support tickets",
+          detail = "Private conversations with support",
+          onClick = { onOpenDestination(MaharaniRoutes.SUPPORT) },
+        )
+      }
+      if (allowed(MaharaniRoutes.HELP)) {
+        ShortcutRow(
+          label = "Help centre",
+          detail = "Support contacts and help",
+          onClick = { onOpenDestination(MaharaniRoutes.HELP) },
+          tag = AccountScreenTags.HELP,
+        )
+      }
     }
   }
 }
 
-/** One tappable account shortcut: title, one-line detail, chevron, 48dp target. */
+/** One titled group of account rows. */
+@Composable
+private fun AccountGroup(
+  title: String,
+  subtitle: String,
+  modifier: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  AccountCard(modifier = modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+      SectionHeader(title = title, subtitle = subtitle)
+      content()
+    }
+  }
+}
+
 @Composable
 private fun ShortcutRow(
   label: String,
