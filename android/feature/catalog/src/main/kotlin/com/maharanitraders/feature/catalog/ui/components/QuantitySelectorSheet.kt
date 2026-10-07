@@ -41,6 +41,7 @@ import com.maharanitraders.core.designsystem.components.PriceEmphasis
 import com.maharanitraders.core.designsystem.components.StockBadge
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.model.CatalogProduct
+import com.maharanitraders.feature.catalog.ui.CatalogTags
 
 /** Stable Compose tags for quantity-selector regression coverage. */
 object QuantitySelectorTags {
