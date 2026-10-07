@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
+import { countFor, loadScopedProductCounts } from '@/lib/retailer/taxonomy-counts';
 
 /**
  * Category browsing for the retailer app.
@@ -13,6 +14,12 @@ import type { createClient } from '@/lib/supabase/server';
  *    catalog's `?category=` filter and the home category counts use),
  *  - the true active product count for that scope.
  *
+ * The reads are PLAIN COLUMNS. This module used to select the taxonomy with an
+ * embedded `products ( id )` and filter it with `products.is_active=eq.true`:
+ * an embedded-resource filter is not a safe way to count children (it narrows
+ * the parent rows as well), and it hid the rows an admin had just created. The
+ * counts now come from `loadScopedProductCounts` over real product rows.
+ *
  * No counts are invented: a failed read flips the matching error flag and the
  * UI says the data is unavailable instead of showing an estimated number.
  */
@@ -22,14 +29,12 @@ interface CategoryRow {
   name: string;
   image_url: string | null;
   parent_id: string | null;
-  products: { id: string }[] | null;
 }
 
 interface BrandRow {
   id: string;
   name: string;
   logo_url: string | null;
-  products: { id: string; category_id: string | null }[] | null;
 }
 
 export interface CategoryDetailCategory {
@@ -78,22 +83,19 @@ export async function loadCategoryDetail(
     return { category: null, subcategories: [], brands: [], productCount: undefined, errors: { category: true, brands: false } };
   }
 
+  // Plain columns: the category tree and the brand list are independent reads,
+  // and neither carries an embedded aggregate or an embedded-resource filter.
   const [categoryResult, brandResult] = await Promise.all([
-    // Every active category with its active products' ids: one read powers the
-    // parent lookup, the subcategory list, and the scoped product counts.
     supabase
       .from('categories')
-      .select('id, name, image_url, parent_id, products ( id )')
+      .select('id, name, image_url, parent_id')
       .eq('is_active', true)
-      .eq('products.is_active', true)
       .order('sort_order')
       .returns<CategoryRow[]>(),
-    // Active brands with their active products' category membership.
     supabase
       .from('brands')
-      .select('id, name, logo_url, products ( id, category_id )')
+      .select('id, name, logo_url')
       .eq('is_active', true)
-      .eq('products.is_active', true)
       .order('name')
       .returns<BrandRow[]>(),
   ]);
@@ -107,24 +109,29 @@ export async function loadCategoryDetail(
     return { category: null, subcategories: [], brands: [], productCount: undefined, errors };
   }
 
-  const subcategories = rows
-    .filter((row) => row.parent_id === category.id)
-    .map((row) => ({
-      id: row.id,
-      name: row.name,
-      image_url: row.image_url,
-      productCount: row.products ? row.products.length : undefined,
-    }));
+  const subcategoryRows = rows.filter((row) => row.parent_id === category.id);
+  const scopeIds = [category.id, ...subcategoryRows.map((sub) => sub.id)];
 
-  const scopeIds = new Set<string>([category.id, ...subcategories.map((sub) => sub.id)]);
-  const productCount = category.products
-    ? category.products.length + subcategories.reduce((sum, sub) => sum + (sub.productCount ?? 0), 0)
+  // Counts of the ACTIVE products inside the scope, from real rows. `null`
+  // means the scan did not complete: every count stays unknown rather than
+  // becoming a zero.
+  const counts = await loadScopedProductCounts(supabase, scopeIds);
+
+  const subcategories = subcategoryRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    image_url: row.image_url,
+    productCount: countFor(counts?.categories ?? null, row.id) ?? undefined,
+  }));
+
+  const productCount = counts
+    ? scopeIds.reduce((sum, id) => sum + (countFor(counts.categories, id) ?? 0), 0)
     : undefined;
 
   const brands: CategoryDetailBrand[] = (brandResult.error ? [] : brandResult.data ?? [])
     .map((brand) => {
-      const inScope = (brand.products ?? []).filter((product) => product.category_id != null && scopeIds.has(product.category_id));
-      return { id: brand.id, name: brand.name, logo_url: brand.logo_url, productCount: inScope.length };
+      const scoped = countFor(counts?.brands ?? null, brand.id);
+      return { id: brand.id, name: brand.name, logo_url: brand.logo_url, productCount: scoped ?? 0 };
     })
     .filter((brand) => brand.productCount > 0)
     .sort((a, b) => b.productCount - a.productCount || a.name.localeCompare(b.name));

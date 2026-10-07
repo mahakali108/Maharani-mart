@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
 import { ADMIN_PAGE_SIZE } from '@/lib/admin/catalog-query';
+import { countFor, loadTaxonomyProductCounts } from '@/lib/retailer/taxonomy-counts';
 import {
   applyCursor,
   applyKeysetOrder,
@@ -31,10 +32,12 @@ import {
  * matter how far down the list the operator is, and a row created while they
  * scroll cannot shift or repeat what is on screen.
  *
- * Nothing here invents a number. `products(count)` is the real link count from
- * the database (PostgREST nested aggregate over `products.brand_id` /
- * `products.category_id`), which is what an operator needs before deciding
- * whether a row is safe to deactivate or delete.
+ * Nothing here invents a number. The per-row product count is the real link
+ * count read from `products.brand_id` / `products.category_id`, which is what
+ * an operator needs before deciding whether a row is safe to deactivate or
+ * delete. It is read as plain rows (NOT the opt-in `products(count)` PostgREST
+ * aggregate — see lib/retailer/taxonomy-counts.ts) and is `null`, not `0`,
+ * when the scan could not complete.
  */
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -47,7 +50,8 @@ export interface AdminCategoryRow {
   sort_order: number;
   is_active: boolean;
   created_at: string;
-  products: { count: number }[] | null;
+  /** Real linked-product count, or `null` when the count scan could not run. */
+  productCount: number | null;
 }
 
 export interface AdminBrandRow {
@@ -56,7 +60,8 @@ export interface AdminBrandRow {
   logo_url: string | null;
   is_active: boolean;
   created_at: string;
-  products: { count: number }[] | null;
+  /** Real linked-product count, or `null` when the count scan could not run. */
+  productCount: number | null;
 }
 
 /** One batch of taxonomy rows plus the cursor that continues the list. */
@@ -119,8 +124,16 @@ export function taxonomyOrder(sort: TaxonomySort): KeysetColumn[] {
 
 /**
  * One batch of rows from `categories` or `brands`. Both tables have the same
- * filters, the same sorts and the same `products(count)` aggregate, so the two
- * list pages share this single query instead of two near-copies.
+ * filters and the same sorts, so the two list pages share this single query
+ * instead of two near-copies.
+ *
+ * The linked-product count is NOT read with the `products(count)` aggregate
+ * embed this query used to carry: aggregates are an optional PostgREST
+ * capability (`db-aggregates-enabled`, off by default, `PGRST123`) and where
+ * they are unavailable the request fails AS A WHOLE — which took the whole
+ * Categories/Brands screen down with the counts. The count now comes from
+ * `loadTaxonomyProductCounts` (plain columns over the caller's own RLS-scoped
+ * client) and is `null` when it cannot be read.
  */
 async function loadTaxonomyBatch<Row extends object>(
   supabase: SupabaseClient,
@@ -133,8 +146,8 @@ async function loadTaxonomyBatch<Row extends object>(
   // its own columns; everything else about the two queries is shared.
   const columns =
     table === 'categories'
-      ? 'id, name, parent_id, image_url, sort_order, is_active, created_at, products(count)'
-      : 'id, name, logo_url, is_active, created_at, products(count)';
+      ? 'id, name, parent_id, image_url, sort_order, is_active, created_at'
+      : 'id, name, logo_url, is_active, created_at';
   const query = applyTaxonomyFilters(supabase.from(table).select(columns), params);
   const { data, error } = await applyCursor(applyKeysetOrder(query, order), cursor, order, ADMIN_PAGE_SIZE);
   if (error) throw new Error(error.message);
@@ -152,7 +165,12 @@ export async function loadAdminCategoryBatch(
   params: TaxonomyParams,
   cursor: ListCursor | null
 ): Promise<TaxonomyBatch<AdminCategoryRow & { parentName: string | null }>> {
-  const batch = await loadTaxonomyBatch<AdminCategoryRow>(supabase, 'categories', params, cursor);
+  // The batch and its counts are independent reads; both are bounded (one page
+  // of rows, one product scan) and neither invents a number.
+  const [batch, counts] = await Promise.all([
+    loadTaxonomyBatch<AdminCategoryRow>(supabase, 'categories', params, cursor),
+    loadTaxonomyProductCounts(supabase, { activeOnly: false }),
+  ]);
   const rows = batch.items;
 
   const parentIds = [...new Set(rows.map((row) => row.parent_id).filter((id): id is string => id !== null))];
@@ -170,7 +188,11 @@ export async function loadAdminCategoryBatch(
   }
 
   return {
-    items: rows.map((row) => ({ ...row, parentName: row.parent_id ? parentNames.get(row.parent_id) ?? null : null })),
+    items: rows.map((row) => ({
+      ...row,
+      parentName: row.parent_id ? parentNames.get(row.parent_id) ?? null : null,
+      productCount: countFor(counts?.categories, row.id),
+    })),
     nextCursor: batch.nextCursor,
   };
 }
@@ -181,7 +203,14 @@ export async function loadAdminBrandBatch(
   params: TaxonomyParams,
   cursor: ListCursor | null
 ): Promise<TaxonomyBatch<AdminBrandRow>> {
-  return loadTaxonomyBatch<AdminBrandRow>(supabase, 'brands', params, cursor);
+  const [batch, counts] = await Promise.all([
+    loadTaxonomyBatch<AdminBrandRow>(supabase, 'brands', params, cursor),
+    loadTaxonomyProductCounts(supabase, { activeOnly: false }),
+  ]);
+  return {
+    items: batch.items.map((row) => ({ ...row, productCount: countFor(counts?.brands, row.id) })),
+    nextCursor: batch.nextCursor,
+  };
 }
 
 /** Counts for the /admin/catalog hub cards — real rows, never estimates. */
@@ -224,11 +253,19 @@ export async function findBrandNameDuplicate(
   let query = supabase
     .from('brands')
     .select('id, name')
-    .ilike('name', escapeLikeLiteral(normalizeTaxonomyName(name)));
+    .ilike('name', escapeLikeLiteral(normalizeTaxonomyName(name)))
+    // `.limit(2)` + an array read instead of `maybeSingle()`: brands.name is only
+    // case-SENSITIVELY unique (0001), so "Tata" and "tata" can both exist and a
+    // single-row read would fail with PGRST116 — turning a duplicate-name check
+    // into an unhandled exception on the one path where the message matters
+    // most. Any match means "duplicate"; the first one names it.
+    .limit(2);
   if (excludeId) query = query.neq('id', excludeId);
-  const { data, error } = await query.maybeSingle<{ id: string; name: string }>();
-  if (error) throw new Error(error.message);
-  return data ?? null;
+  const { data, error } = await query.returns<{ id: string; name: string }[]>();
+  // A failed pre-check must never block a legitimate create: the unique
+  // constraint on brands.name remains the authority for the race.
+  if (error) return null;
+  return data?.[0] ?? null;
 }
 
 /**
@@ -245,12 +282,17 @@ export async function findCategoryNameDuplicate(
   let query = supabase
     .from('categories')
     .select('id, name')
-    .ilike('name', escapeLikeLiteral(normalizeTaxonomyName(name)));
+    .ilike('name', escapeLikeLiteral(normalizeTaxonomyName(name)))
+    // Same reasoning as `findBrandNameDuplicate`: `categories_name_parent_ci_uq`
+    // (0027) is the authority, but it is an index that may not exist on a
+    // project where 0027 was never applied — so the pre-check reads a LIST and
+    // reports the first match instead of erroring on a multi-row result.
+    .limit(2);
   query = parentId ? query.eq('parent_id', parentId) : query.is('parent_id', null);
   if (excludeId) query = query.neq('id', excludeId);
-  const { data, error } = await query.maybeSingle<{ id: string; name: string }>();
-  if (error) throw new Error(error.message);
-  return data ?? null;
+  const { data, error } = await query.returns<{ id: string; name: string }[]>();
+  if (error) return null;
+  return data?.[0] ?? null;
 }
 
 /**

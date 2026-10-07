@@ -46,7 +46,11 @@ function renderCategoryRows(rows: CategoryListRow[], canManage: boolean) {
         </span>
       </td>
       <td className="hidden px-5 py-3 text-ink-600 sm:table-cell">{category.parentName ?? '— Top level —'}</td>
-      <td className="hidden px-5 py-3 text-ink-600 md:table-cell">{category.products?.[0]?.count ?? 0}</td>
+      <td className="hidden px-5 py-3 text-ink-600 md:table-cell">
+        {/* Real link count from products.category_id; "unknown" (never a fake 0)
+            when the bounded count scan could not complete. */}
+        {category.productCount ?? 'unknown'}
+      </td>
       <td className="px-5 py-3">
         {canManage ? (
           <CategoryRowActions id={category.id} isActive={category.is_active} />

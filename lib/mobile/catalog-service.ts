@@ -23,6 +23,7 @@ import {
 import { loadCatalogBatch } from '@/lib/retailer/catalog-batches';
 import { CATALOG_PAGE_SIZE } from '@/lib/retailer/catalog-params';
 import { resolvePackPrice } from '@/lib/retailer/effective-price';
+import { loadTaxonomyProductCounts } from '@/lib/retailer/taxonomy-counts';
 import { normalizeAvailabilityState, type AvailabilityState } from '@/lib/retailer/availability';
 import { toPaise } from '@/lib/retailer/case-pricing';
 import {
@@ -105,80 +106,6 @@ export async function loadMobileCatalogContext(session: MobileSession): Promise<
   return { areaId: retailer?.area_id ?? null, ...taxonomy };
 }
 
-/** How many product rows one count-scan page reads. */
-const TAXONOMY_COUNT_PAGE_SIZE = 500;
-
-/**
- * How many pages the count scan will read before counts become UNKNOWN.
- *
- * The scan is a bounded read of two small columns (`category_id`,
- * `brand_id`) over active products, so it is exact for any catalogue up to
- * `TAXONOMY_COUNT_PAGE_SIZE * TAXONOMY_COUNT_MAX_PAGES` products. Past that
- * bound the counts are reported as `null` (unknown) rather than as an
- * approximation or a partial sum — the shopper is told "tap to browse" instead
- * of being shown a number the server did not actually count.
- */
-const TAXONOMY_COUNT_MAX_PAGES = 10;
-
-interface ProductScopeRow {
-  id: string;
-  category_id: string | null;
-  brand_id: string | null;
-}
-
-/** Active products per category and per brand, or `null` when unknown. */
-interface TaxonomyCounts {
-  categories: Map<string, number>;
-  brands: Map<string, number>;
-}
-
-/**
- * Count active products per category and brand with a bounded keyset scan.
- *
- * WHY NOT `products(count)`: the aggregate embed is an optional PostgREST
- * capability, and when a project does not enable it the aggregate query fails
- * as a WHOLE — the category list would disappear along with its counts. That
- * failure cannot be reproduced here (it needs the real PostgREST), so the read
- * is built on the one query shape this API already uses everywhere else (plain
- * columns, `is_active`, RLS under the caller's own token) and the count is
- * derived on the server from real rows.
- *
- * Returns `null` when the scan could not complete — a failed request or a
- * catalogue larger than the bound — because an incomplete count is unknown,
- * not zero.
- */
-async function loadTaxonomyCounts(supabase: SupabaseClient): Promise<TaxonomyCounts | null> {
-  const categories = new Map<string, number>();
-  const brands = new Map<string, number>();
-  let cursor: string | null = null;
-
-  for (let page = 0; page < TAXONOMY_COUNT_MAX_PAGES; page += 1) {
-    let query = supabase
-      .from('products')
-      .select('id, category_id, brand_id')
-      .eq('is_active', true)
-      .order('id')
-      .limit(TAXONOMY_COUNT_PAGE_SIZE);
-    if (cursor !== null) query = query.gt('id', cursor);
-
-    const { data, error } = await query.returns<ProductScopeRow[]>();
-    if (error) return null;
-
-    const rows = data ?? [];
-    for (const row of rows) {
-      if (row.category_id) categories.set(row.category_id, (categories.get(row.category_id) ?? 0) + 1);
-      if (row.brand_id) brands.set(row.brand_id, (brands.get(row.brand_id) ?? 0) + 1);
-    }
-
-    if (rows.length < TAXONOMY_COUNT_PAGE_SIZE) return { categories, brands };
-    cursor = rows[rows.length - 1]!.id;
-  }
-
-  // The bound was reached: the catalogue is bigger than this scan, so no count
-  // can be claimed. Unknown, never a truncated sum.
-  return null;
-}
-
 interface TaxonomyScope {
   categoryRows: MobileCategoryRow[];
   brandRows: MobileBrandRow[];
@@ -224,7 +151,7 @@ async function loadTaxonomyScope(supabase: SupabaseClient): Promise<TaxonomyScop
     throw new Error(`Brands could not be read: ${brandResult.error.message}`);
   }
 
-  const counts = await loadTaxonomyCounts(supabase);
+  const counts = await loadTaxonomyProductCounts(supabase);
 
   return {
     categoryRows: categoryResult.data ?? [],

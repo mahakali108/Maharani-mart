@@ -12,6 +12,66 @@ export interface FixtureQuery {
 type Row = Record<string, unknown>;
 type Result = { data: Row[] | null; error: { message: string } | null; count: number | null };
 
+/** Split an `or=(a,b,and(c,d))` expression on top-level commas. */
+function splitTopLevel(expression: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of expression) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) { parts.push(current); current = ''; continue; }
+    current += char;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function unquoteValue(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed;
+}
+
+function matchClause(row: Row, clause: string): boolean {
+  const match = /^([\w.]+)\.(ilike|eq|in|gt|lt|lte|gte|is)\.(.*)$/.exec(clause.trim());
+  if (!match) return true;
+  const [, column, op, rawValue] = match;
+  // A dotted column is a nested relation this double does not model.
+  if (column!.includes('.')) return true;
+  const cell = row[column!];
+  const value = unquoteValue(rawValue ?? '');
+  if (op === 'ilike') return String(cell ?? '').toLowerCase().includes(value.replace(/%/g, '').toLowerCase());
+  if (op === 'in') return value.trim().replace(/^\(|\)$/g, '').split(',').map(unquoteValue).includes(String(cell));
+  if (op === 'eq') return String(cell) === value;
+  if (op === 'gt') return String(cell ?? '') > value;
+  if (op === 'lt') return String(cell ?? '') < value;
+  if (op === 'lte') return String(cell ?? '') <= value;
+  if (op === 'gte') return String(cell ?? '') >= value;
+  if (op === 'is') return value === 'null' ? cell === null || cell === undefined : String(cell) === value;
+  return true;
+}
+
+/**
+ * PostgREST `or=(a,b,and(c,d))` is `a OR b OR (c AND d)`: commas at the top
+ * level are OR, a nested `and(...)` group is AND. Keyset continuations are
+ * expressed exactly this way, so the double has to honour it or a pagination
+ * test would silently re-serve the first batch.
+ */
+function matchOrExpression(row: Row, expression: string): boolean {
+  // `or()` receives the expression without the `or=(...)` wrapper. Only that
+  // prefix is stripped: blanket-stripping a trailing `)` would unbalance the
+  // LAST `and(...)` group and make it match every row (which would silently
+  // turn a keyset continuation back into "return the first batch again").
+  const trimmed = expression.trim().replace(/^or=/, '');
+  return splitTopLevel(trimmed).some((part) => {
+    const clause = part.trim();
+    if (clause.startsWith('and(') && clause.endsWith(')')) {
+      return splitTopLevel(clause.slice(4, -1)).every((inner) => matchClause(row, inner));
+    }
+    return matchClause(row, clause);
+  });
+}
+
 export function supabaseFixture(
   initial: Record<string, object[]> = {},
   errors: Record<string, string> = {},
@@ -25,8 +85,11 @@ export function supabaseFixture(
     const sorts: { column: string; asc: boolean }[] = [];
     function matching(row: Row) {
       return query.filters.every(({ op, column, value }) => {
-        // Nested aggregates and OR syntax are recorded for contract assertions.
-        if (column.includes('.') || op === 'or') return true;
+        // Nested (aggregate/relation) columns are recorded for contract
+        // assertions but not modelled; OR expressions are matched properly
+        // because keyset continuations depend on them.
+        if (op === 'or') return matchOrExpression(row, String(value));
+        if (column.includes('.')) return true;
         if (op === 'eq') return row[column] === value;
         if (op === 'neq') return row[column] !== value;
         if (op === 'in') return (value as unknown[]).includes(row[column]);
@@ -39,6 +102,8 @@ export function supabaseFixture(
         }
         if (op === 'lte') return String(row[column]) <= String(value);
         if (op === 'gte') return String(row[column]) >= String(value);
+        if (op === 'gt') return String(row[column] ?? '') > String(value);
+        if (op === 'lt') return String(row[column] ?? '') < String(value);
         return true;
       });
     }
@@ -87,9 +152,12 @@ export function supabaseFixture(
       is: (column: string, value: unknown) => { query.filters.push({ op: 'is', column, value }); return chain; },
       lte: (column: string, value: unknown) => { query.filters.push({ op: 'lte', column, value }); return chain; },
       gte: (column: string, value: unknown) => { query.filters.push({ op: 'gte', column, value }); return chain; },
+      gt: (column: string, value: unknown) => { query.filters.push({ op: 'gt', column, value }); return chain; },
+      lt: (column: string, value: unknown) => { query.filters.push({ op: 'lt', column, value }); return chain; },
       or: (value: string) => { query.filters.push({ op: 'or', column: '', value }); return chain; },
       order: (column: string, options?: { ascending?: boolean }) => { sorts.push({ column, asc: options?.ascending !== false }); return chain; },
       limit: (limit: number) => { query.limit = limit; return chain; },
+      range: (from: number, to: number) => { query.limit = Math.max(0, to - from + 1); return chain; },
       returns: () => chain,
       maybeSingle: async () => { const result = run(); return { ...result, data: result.data?.[0] ?? null }; },
       single: async () => { const result = run(); return { ...result, data: result.data?.[0] ?? null }; },

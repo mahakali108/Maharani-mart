@@ -18,8 +18,8 @@ function tables() {
     product_pricing_tiers: tiers.map((tier) => ({ ...tier, product_pack_id: PACK })),
     orders: [{ ...order, retailer_id: RETAILER }],
     cart_items: [{ ...line, retailer_id: RETAILER }],
-    categories: [{ id: CATEGORY, name: 'Fixture category', image_url: null, parent_id: null, is_active: true, products: [{ count: 1 }] }],
-    brands: [{ id: BRAND, name: 'Fixture brand', logo_url: null, is_active: true, products: [{ count: 1 }] }],
+    categories: [{ id: CATEGORY, name: 'Fixture category', image_url: null, parent_id: null, is_active: true }],
+    brands: [{ id: BRAND, name: 'Fixture brand', logo_url: null, is_active: true }],
     banners: [{ id: 'banner', title: 'Configured promotion', image_url: '/test.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 0 }],
     retailer_favorites: [{ retailer_id: RETAILER, product_id: PRODUCT }],
   };
@@ -134,10 +134,16 @@ describe('reorder history and category counts', () => {
     expect(homeHistory([legacy]).recent[0]?.previousQuantity).toBe(48);
   });
   it('matches category filter scope and omits unknown counts', () => {
-    const root = { id: 'root', name: 'Root', image_url: null, parent_id: null, products: [{ count: 2 }] };
-    const child = { ...root, id: 'child', parent_id: 'root', products: [{ count: 3 }] };
-    expect(homeCategories([root, child])[0]?.productCount).toBe(5);
-    expect(homeCategories([root, { ...child, products: null }])[0]?.productCount).toBeUndefined();
+    const root = { id: 'root', name: 'Root', image_url: null, parent_id: null };
+    const child = { ...root, id: 'child', parent_id: 'root' };
+    // Counts come from real product rows (a per-category map), never from the
+    // opt-in `products(count)` aggregate embed.
+    expect(homeCategories([root, child], new Map([['root', 2], ['child', 3]]))[0]?.productCount).toBe(5);
+    // A scan that did not complete leaves the count UNKNOWN — not zero.
+    expect(homeCategories([root, child], null)[0]?.productCount).toBeUndefined();
+    // A category with no linked product is a real zero, and the parent total
+    // still counts its child.
+    expect(homeCategories([root, child], new Map([['child', 3]]))[0]?.productCount).toBe(3);
   });
 });
 
@@ -180,13 +186,24 @@ describe('home Supabase query contracts (mocked, not live RLS)', () => {
     expect(home.products[0]).toMatchObject({ fromPrice: 30, availability: 'in_stock', isFavorite: true });
     expect(home.reorders[0]).toMatchObject({ packId: PACK, previousQuantity: 12, quantity: 12, unitPrice: 28, canReorder: true });
     expect(home.cart.subtotal).toBe(336);
-    for (const table of ['products', 'orders', 'cart_items', 'product_pricing_tiers']) expect(db.queries.filter((query) => query.table === table)).toHaveLength(1);
+    // `products` is read twice: the discovery batch and the bounded taxonomy
+    // count scan (two small columns) that replaces the aggregate embed.
+    expect(db.queries.filter((query) => query.table === 'products')).toHaveLength(2);
+    const countScan = db.queries.filter((query) => query.table === 'products' && query.select === 'id, category_id, brand_id');
+    expect(countScan).toHaveLength(1);
+    expect(countScan[0]?.filters).toContainEqual({ op: 'eq', column: 'is_active', value: true });
+    for (const table of ['orders', 'cart_items', 'product_pricing_tiers']) expect(db.queries.filter((query) => query.table === table)).toHaveLength(1);
     expect(db.rpcs).toHaveLength(1);
     for (const table of ['orders', 'cart_items', 'retailer_favorites']) {
       expect(db.queries.find((query) => query.table === table)?.filters).toContainEqual({ op: 'eq', column: 'retailer_id', value: RETAILER });
     }
+    // Regression guard: no taxonomy read may carry the opt-in `products(count)`
+    // aggregate — where aggregates are disabled the WHOLE request fails, which
+    // is how an admin-created category or brand stayed invisible in the catalog.
     for (const table of ['brands', 'categories']) {
-      expect(db.queries.find((query) => query.table === table)?.filters).toContainEqual({ op: 'eq', column: 'products.is_active', value: true });
+      const query = db.queries.find((candidate) => candidate.table === table);
+      expect(query?.select ?? '').not.toContain('count');
+      expect((query?.filters ?? []).some((filter) => filter.column.includes('.'))).toBe(false);
     }
     expect(home.banners[0]?.link_url).toBe('/retailer/catalog');
   });

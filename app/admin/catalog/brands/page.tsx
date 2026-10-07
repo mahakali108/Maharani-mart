@@ -33,7 +33,11 @@ function renderBrandRows(rows: AdminBrandRow[], canManage: boolean) {
   return rows.map((brand) => (
     <tr key={brand.id}>
       <td className="px-5 py-3 font-medium text-ink-900">{brand.name}</td>
-      <td className="hidden px-5 py-3 text-ink-600 md:table-cell">{brand.products?.[0]?.count ?? 0}</td>
+      <td className="hidden px-5 py-3 text-ink-600 md:table-cell">
+        {/* Real link count from products.brand_id; "unknown" when the bounded
+            count scan could not complete — never an invented zero. */}
+        {brand.productCount ?? 'unknown'}
+      </td>
       <td className="px-5 py-3">
         {canManage ? (
           <BrandRowActions id={brand.id} isActive={brand.is_active} />
