@@ -49,15 +49,35 @@ fun favoritesView(
     products
   }
   return when (sort) {
-    FavoritesSort.NAME -> filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-    FavoritesSort.PRICE_LOW -> filtered.sortedWith(
-      compareBy(nullsLast()) { product -> product.pack?.unitPricePaise }
-        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
-    )
-    FavoritesSort.PRICE_HIGH -> filtered.sortedWith(
-      compareBy(nullsLast()) { product -> product.pack?.unitPricePaise?.let { -it } }
-        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
-    )
+    FavoritesSort.NAME -> filtered.sortedWith(nameComparator())
+    FavoritesSort.PRICE_LOW -> filtered.sortedWith(priceComparator(ascending = true))
+    FavoritesSort.PRICE_HIGH -> filtered.sortedWith(priceComparator(ascending = false))
+  }
+}
+
+/** Name order, case-insensitively, so "atta" and "Atta" sit together. */
+private fun nameComparator(): Comparator<CatalogProduct> = Comparator { left, right ->
+  left.name.compareTo(right.name, ignoreCase = true)
+}
+
+/**
+ * Price order, with the unpriced rows LAST in both directions.
+ *
+ * Written out rather than composed from `compareBy(nullsLast())` because the
+ * rule is not "nulls last" — it is "a row the server could not price goes to the
+ * bottom whether the shopper asked for cheapest or dearest". Sorting a null to
+ * the top of a "low to high" list would advertise an unreadable rate as the
+ * cheapest product in the shop.
+ */
+private fun priceComparator(ascending: Boolean): Comparator<CatalogProduct> = Comparator { left, right ->
+  val leftPrice = left.pack?.unitPricePaise
+  val rightPrice = right.pack?.unitPricePaise
+  when {
+    leftPrice == null && rightPrice == null -> nameComparator().compare(left, right)
+    leftPrice == null -> 1
+    rightPrice == null -> -1
+    leftPrice == rightPrice -> nameComparator().compare(left, right)
+    else -> if (ascending) leftPrice.compareTo(rightPrice) else rightPrice.compareTo(leftPrice)
   }
 }
 
