@@ -41,6 +41,8 @@ fun LazyGridScope.productCardItems(
    * passes null and the cards stay browse-only.
    */
   onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  /** Opens a quantity selector for this product instead of adding its MOQ directly. */
+  onSelectQuantity: ((CatalogProduct) -> Unit)? = null,
   /** The pack whose add is in flight, so exactly one card shows a spinner. */
   quickAddPackId: String? = null,
   /** Null hides the control: not every grid offers comparison. */
@@ -57,12 +59,17 @@ fun LazyGridScope.productCardItems(
       isFavorite = isFavorite(product),
       favoritePending = isFavoritePending(product),
       onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(product.id) } },
-      onAddToCart = onQuickAddToCart?.let { add ->
-        {
-          val pack = product.pack
-          if (pack != null) add(pack.packId, quickAddQuantity(pack))
+      onAddToCart = if (onSelectQuantity == null) {
+        onQuickAddToCart?.let { add ->
+          {
+            val pack = product.pack
+            if (pack != null) add(pack.packId, quickAddQuantity(pack))
+          }
         }
+      } else {
+        null
       },
+      onSelectQuantity = onSelectQuantity?.let { select -> { select(product) } },
       addPending = quickAddPackId != null && quickAddPackId == product.pack?.packId,
       onToggleCompare = onToggleCompare?.let { toggle -> { toggle(product.id) } },
       compareSelected = product.id in compareIds,
@@ -94,6 +101,8 @@ fun ProductGrid(
   isFavoritePending: (CatalogProduct) -> Boolean = { false },
   onToggleFavorite: ((String) -> Unit)? = null,
   onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  /** Opens a quantity selector for this product instead of adding its MOQ directly. */
+  onSelectQuantity: ((CatalogProduct) -> Unit)? = null,
   quickAddPackId: String? = null,
   /** Null hides the control: not every grid offers comparison. */
   onToggleCompare: ((String) -> Unit)? = null,
@@ -129,6 +138,7 @@ fun ProductGrid(
       isFavoritePending = isFavoritePending,
       onToggleFavorite = onToggleFavorite,
       onQuickAddToCart = onQuickAddToCart,
+      onSelectQuantity = onSelectQuantity,
       quickAddPackId = quickAddPackId,
       onToggleCompare = onToggleCompare,
       compareIds = compareIds,

@@ -65,4 +65,9 @@ class QuickAddTest {
     // there is one — rather than hiding an orderable product behind a guess.
     assertThat(canQuickAdd(pack(availability = PackAvailability.UNKNOWN))).isTrue()
   }
+
+  @Test
+  fun `does not offer one-tap add for an MOQ above the cart request limit`() {
+    assertThat(canQuickAdd(pack(moq = 100_001))).isFalse()
+  }
 }

@@ -345,7 +345,11 @@ private fun RoutedShell(
               // must never be cut off. Every other route names itself.
               if (currentRoute == MaharaniRoutes.HOME) {
                 BrandLockup()
-              } else if (currentRoute == MaharaniRoutes.CATALOG) {
+              } else if (
+                currentRoute == MaharaniRoutes.CATALOG ||
+                  currentRoute == MaharaniRoutes.CATEGORIES ||
+                  currentRoute == MaharaniRoutes.BRANDS
+              ) {
                 BrandLockup(subtitle = currentLabel)
               } else {
                 Text(currentLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)

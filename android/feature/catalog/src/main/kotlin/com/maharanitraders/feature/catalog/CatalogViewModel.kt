@@ -72,9 +72,9 @@ data class CatalogUiState(
   /** Set when a continuation returned the same cursor: the list has ended. */
   val endOfList: Boolean = false,
   /**
-   * Display label of a brand filter applied from outside the catalogue (the
-   * home screen's brand rail). The catalogue's own chip row is categories; a
-   * brand filter arrives already chosen, so its name travels with the request.
+   * Display label for the active brand scope. The product filter rail normally
+   * resolves it from the real brand list; a home deep link may also provide the
+   * server-backed label while the taxonomy read is still loading.
    */
   val brandLabel: String? = null,
   /** Message from a failed favourite toggle, for a snackbar. */
@@ -482,9 +482,9 @@ class CatalogViewModel @Inject constructor(
   }
 
   /**
-   * Brand filtering. The chip row carries categories; a brand usually arrives
-   * already chosen (a brand tile or the home brand rail), together with the
-   * label to show. Selecting `null` clears it.
+   * Brand filtering from either the product rail or the dedicated Brands pane.
+   * The name comes from the real taxonomy (or the home deep-link payload), and
+   * selecting `null` clears only the brand part of the active server query.
    */
   fun selectBrand(brandId: String?, label: String? = null) {
     val current = _state.value
@@ -506,10 +506,11 @@ class CatalogViewModel @Inject constructor(
   /**
    * Clear the applied CATEGORY and BRAND scope in one step.
    *
-   * The "All" affordances mean "no scope", which is both filters at once, and
-   * [selectCategory]/[selectBrand] each reload on their own — clearing both
-   * through them fired two catalogue reads for one tap and let the first,
-   * already-obsolete response race the second. One state update, one read.
+   * Clearing a combined scope must be one state update and one catalogue read:
+   * [selectCategory]/[selectBrand] each reload on their own, so calling both
+   * here would issue two reads and let the first obsolete response race the
+   * second. The product pane's category "All" chip clears only that category;
+   * callers that mean no category AND no brand can use this method.
    *
    * Search, sort and the in-stock switch are deliberately NOT touched: this is
    * the scope control, not `clearFilters()`.

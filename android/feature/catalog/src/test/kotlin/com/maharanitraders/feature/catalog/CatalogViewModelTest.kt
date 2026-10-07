@@ -198,6 +198,26 @@ class CatalogViewModelTest {
    * allows 120/min, `lib/mobile/rate-limit.ts`). One request per deep link.
    */
   @Test
+  fun `category and brand selections remain combined in the server product query`() = runTest(dispatcher) {
+    val api = api()
+    repeat(4) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }
+
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.selectCategory("c1")
+    advanceUntilIdle()
+    viewModel.selectBrand("b1", "India Gate")
+    advanceUntilIdle()
+
+    val request = api.productRequests.last()
+    assertThat(request.categoryId).isEqualTo("c1")
+    assertThat(request.brandId).isEqualTo("b1")
+    assertThat(viewModel.state.value.selectedCategoryName).isEqualTo("Rice")
+    assertThat(viewModel.state.value.selectedBrand?.name).isEqualTo("India Gate")
+  }
+
+  @Test
   fun `applies a search, category and brand deep link in one request`() = runTest(dispatcher) {
     val api = api()
     repeat(4) { api.productPages.addLast(envelope(listOf("p$it"), resultCount = 1)) }

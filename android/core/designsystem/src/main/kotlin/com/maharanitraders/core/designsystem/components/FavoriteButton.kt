@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.unit.dp
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
+import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 
 /**
  * The favourite (wishlist) toggle, shared by product cards and product detail.
@@ -46,7 +47,7 @@ fun FavoriteButton(
   }
   val tint = when {
     !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
-    isFavorite -> MaterialTheme.colorScheme.error
+    isFavorite -> MaharaniThemeTokens.colors.highlight
     else -> MaterialTheme.colorScheme.onSurfaceVariant
   }
 
