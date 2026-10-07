@@ -48,16 +48,25 @@ data class QuantityLadderRow(
  * The price itself is never derived: it is the rate the pricing engine returned
  * for the slab, printed as paise.
  */
-fun quantityLadder(tiers: List<PriceTier>, unitLabel: String = "pc"): List<QuantityLadderRow> {
+fun quantityLadder(
+  tiers: List<PriceTier>,
+  unitLabel: String = "pc",
+  /**
+   * The plural used by a RANGE ("1–6 pcs"), while the rate keeps the singular
+   * unit ("₹80 / pc"). Wholesale screens say "pcs" for a quantity and "per
+   * piece" for a rate, so one label cannot serve both.
+   */
+  unitPlural: String = "pcs",
+): List<QuantityLadderRow> {
   if (tiers.size < 2) return emptyList()
   return tiers.map { tier ->
     // Captured in a local: `PriceTier` is a public property of another module,
     // so Kotlin will not smart-cast it to non-null after the check below.
     val max = tier.maxQuantity
     val range = when {
-      max == null -> "${tier.minQuantity}+ $unitLabel"
+      max == null -> "${tier.minQuantity}+ $unitPlural"
       max - 1 <= tier.minQuantity -> "${tier.minQuantity} $unitLabel"
-      else -> "${tier.minQuantity}–${max - 1} $unitLabel"
+      else -> "${tier.minQuantity}–${max - 1} $unitPlural"
     }
     QuantityLadderRow(
       rangeLabel = range,
@@ -100,8 +109,9 @@ fun QuantityLadder(
   tiers: List<PriceTier>,
   modifier: Modifier = Modifier,
   unitLabel: String = "pc",
+  unitPlural: String = "pcs",
 ) {
-  val rows = quantityLadder(tiers, unitLabel)
+  val rows = quantityLadder(tiers, unitLabel, unitPlural)
   if (rows.isEmpty()) return
 
   val tokens = MaharaniThemeTokens.colors
