@@ -685,7 +685,9 @@ private fun QuickActionGlyph(icon: HomeQuickActionIcon, tint: Color) {
     HomeQuickActionIcon.ORDERS -> OrdersGlyph(modifier = size, tint = tint)
     HomeQuickActionIcon.CART -> CartGlyph(modifier = size, tint = tint)
     HomeQuickActionIcon.REORDER -> RefreshGlyph(modifier = size, tint = tint)
-    HomeQuickActionIcon.FAVORITES -> HeartGlyph(modifier = size, tint = tint)
+    // A filled heart: the tile is "the products you saved", so an outline
+    // heart would read as "not saved".
+    HomeQuickActionIcon.FAVORITES -> HeartGlyph(modifier = size, filled = true, tint = tint)
     HomeQuickActionIcon.QUICK_ORDER -> BoltGlyph(modifier = size, tint = tint)
     HomeQuickActionIcon.SAVED_CARTS -> BookmarkGlyph(modifier = size, tint = tint)
     HomeQuickActionIcon.COINS -> CoinGlyph(modifier = size, tint = tint)
