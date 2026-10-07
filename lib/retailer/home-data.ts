@@ -12,14 +12,12 @@ import {
 } from '@/lib/retailer/catalog';
 import { fromPaise, toPaise } from '@/lib/retailer/case-pricing';
 import { calcSavings } from '@/lib/retailer/format';
+import { countFor, loadTaxonomyProductCounts } from '@/lib/retailer/taxonomy-counts';
 import type { AvailabilityState } from '@/lib/retailer/availability';
 
-interface BannerRow extends PromoBannerData, ScheduledBanner {}
 export interface HomeCategoryRow extends CategoryCardData {
   parent_id: string | null;
-  products: { count: number }[] | null;
 }
-interface BrandRow extends BrandCardData { products: { count: number }[] | null }
 export interface HomeOrderItem extends OrderItemQuantityRow {
   id: string;
   product_id: string;
@@ -77,16 +75,28 @@ export interface RetailerHomeData {
   errors: { catalog: boolean; categories: boolean; brands: boolean; banners: boolean; history: boolean; pricing: boolean; schemes: boolean };
 }
 
-/** Same scope as the catalog filter: parent + its active immediate children.
- * A missing aggregate is unknown, not an invented zero. */
-export function homeCategories(rows: HomeCategoryRow[]): CategoryCardData[] {
+/**
+ * Same scope as the catalog filter: parent + its active immediate children.
+ *
+ * The counts come from real product rows (`loadTaxonomyProductCounts`) — NOT
+ * from the opt-in `products(count)` PostgREST aggregate the home page used to
+ * request, which fails the WHOLE taxonomy read on a project where aggregates
+ * are disabled and therefore made an admin-created category invisible in the
+ * catalog. A count that could not be read is `undefined` (unknown), never an
+ * invented zero.
+ */
+export function homeCategories(
+  rows: HomeCategoryRow[],
+  counts?: Map<string, number> | null
+): CategoryCardData[] {
   const parents = rows.filter((row) => !row.parent_id);
   return (parents.length ? parents : rows).slice(0, 10).map((row) => {
     const scope = rows.filter((candidate) => candidate.id === row.id || candidate.parent_id === row.id);
-    const known = scope.every((candidate) => candidate.products?.[0]?.count != null);
+    const scoped = scope.map((candidate) => countFor(counts, candidate.id));
+    const known = scoped.every((count): count is number => count !== null);
     return {
       id: row.id, name: row.name, image_url: row.image_url,
-      productCount: known ? scope.reduce((sum, candidate) => sum + candidate.products![0]!.count, 0) : undefined,
+      productCount: known ? (scoped as number[]).reduce((sum, count) => sum + count, 0) : undefined,
     };
   });
 }
@@ -161,12 +171,16 @@ export async function loadRetailerHome(
   let bannerQuery = supabase.from('banners').select('*').eq('is_active', true);
   bannerQuery = areaId ? bannerQuery.or(`area_id.is.null,area_id.eq.${areaId}`) : bannerQuery.is('area_id', null);
 
-  const [bannerResult, categoryResult, brandResult, productResult, schemeResult, historyResult, cartResult, favoriteIds] = await Promise.all([
-    bannerQuery.order('sort_order').order('id').returns<BannerRow[]>(),
-    supabase.from('categories').select('id, name, image_url, parent_id, products(count)')
-      .eq('is_active', true).eq('products.is_active', true).order('sort_order').returns<HomeCategoryRow[]>(),
-    supabase.from('brands').select('id, name, logo_url, products(count)')
-      .eq('is_active', true).eq('products.is_active', true).order('name').returns<BrandRow[]>(),
+  const [bannerResult, categoryResult, brandResult, productResult, schemeResult, historyResult, cartResult, favoriteIds, taxonomyCounts] = await Promise.all([
+    bannerQuery.order('sort_order').order('id').returns<(PromoBannerData & ScheduledBanner)[]>(),
+    // Plain columns, exactly like the mobile catalogue's taxonomy read: the
+    // `products(count)` aggregate embed and its embedded-resource filter are
+    // opt-in PostgREST features that fail the ENTIRE read when unavailable.
+    // The counts are derived from real product rows below.
+    supabase.from('categories').select('id, name, image_url, parent_id')
+      .eq('is_active', true).order('sort_order').returns<HomeCategoryRow[]>(),
+    supabase.from('brands').select('id, name, logo_url')
+      .eq('is_active', true).order('name').returns<BrandCardData[]>(),
     supabase.from('products').select(PRODUCT_CARD_SELECT).eq('is_active', true)
       .order('created_at', { ascending: false }).order('id').limit(80).returns<CatalogProductRow[]>(),
     // Same active/in-window rules as the retailer Schemes page — real rows only.
@@ -179,6 +193,10 @@ export async function loadRetailerHome(
     supabase.from('cart_items').select('id, product_id, pack_id, quantity', { count: 'exact' })
       .eq('retailer_id', retailerId).order('id').limit(250).returns<HomeCartLine[]>(),
     loadFavoriteIds(supabase, retailerId),
+    // Bounded scan over active products (the same helper the mobile taxonomy
+    // uses). `null` = the scan could not complete, so every rail count is
+    // reported as unknown rather than as zero.
+    loadTaxonomyProductCounts(supabase),
   ]);
 
   const errors = {
@@ -232,9 +250,10 @@ export async function loadRetailerHome(
       .map((banner) => ({ id: banner.id, title: banner.title, subtitle: banner.subtitle,
         image_url: banner.image_url, cta_label: banner.cta_label,
         link_url: resolveBannerTarget(banner.link_url, siteUrl)?.href ?? null })),
-    categories: homeCategories(categoryResult.error ? [] : categoryResult.data ?? []),
+    categories: homeCategories(categoryResult.error ? [] : categoryResult.data ?? [], taxonomyCounts?.categories ?? null),
     brands: (brandResult.error ? [] : brandResult.data ?? []).map((brand) => ({
-      id: brand.id, name: brand.name, logo_url: brand.logo_url, productCount: brand.products?.[0]?.count,
+      id: brand.id, name: brand.name, logo_url: brand.logo_url,
+      productCount: countFor(taxonomyCounts?.brands ?? null, brand.id) ?? undefined,
     })),
     products: discoveryRows.map((row) => cardById.get(row.id)!),
     frequent: frequentIds.map((id) => cardById.get(id)).filter((card): card is PricedCatalogCard => !!card),

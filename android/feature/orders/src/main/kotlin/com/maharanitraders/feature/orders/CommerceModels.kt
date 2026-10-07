@@ -22,6 +22,10 @@ data class CartLine(
   val packId: String,
   val productId: String?,
   val productName: String?,
+  /** Brand as the server reports it for this line; null when the product has none. */
+  val brandName: String? = null,
+  /** Pack/product artwork for the line; null renders the monogram tile. */
+  val imageUrl: String? = null,
   val packName: String?,
   val quantity: Int,
   val quantityUnit: String,

@@ -5,20 +5,19 @@ import { requireUser } from '@/lib/auth/session';
 import { BrandDirectory } from '@/components/retailer/brand-directory';
 import type { BrandCardData } from '@/components/retailer/brand-card';
 import { CategoryDirectory, type DirectoryCategory } from '@/components/retailer/category-directory';
+import { countFor, loadTaxonomyProductCounts } from '@/lib/retailer/taxonomy-counts';
 
 interface CategoryRow {
   id: string;
   name: string;
   image_url: string | null;
   parent_id: string | null;
-  products: { count: number }[] | null;
 }
 
 interface BrandRow {
   id: string;
   name: string;
   logo_url: string | null;
-  products: { id: string }[] | null;
 }
 
 export default async function CategoriesPage() {
@@ -27,31 +26,38 @@ export default async function CategoriesPage() {
   // Load both independent catalog dimensions together. The brand count comes
   // from the existing brands → active products relationship; no category
   // filter is applied, so brands remain an independent browse dimension.
-  const [{ data: categoryData }, { data: brandData }] = await Promise.all([
+  const [{ data: categoryData }, { data: brandData }, taxonomyCounts] = await Promise.all([
+    // Plain columns only. The `products(count)` aggregate this query used to
+    // carry is an opt-in PostgREST feature: where it is disabled the WHOLE read
+    // fails, so an admin-created category or brand never appeared here.
     supabase
       .from('categories')
-      .select('id, name, image_url, parent_id, products(count)')
+      .select('id, name, image_url, parent_id')
       .eq('is_active', true)
       .order('sort_order')
       .returns<CategoryRow[]>(),
+    // No filter on the embedded resource either: `products.is_active=eq.true`
+    // narrows (or inner-joins) the PARENT rows, which hid a brand that has no
+    // active product yet — exactly the brand an admin just created.
     supabase
       .from('brands')
-      .select('id, name, logo_url, products ( id )')
+      .select('id, name, logo_url')
       .eq('is_active', true)
-      .eq('products.is_active', true)
       .order('name')
       .returns<BrandRow[]>(),
+    loadTaxonomyProductCounts(supabase),
   ]);
 
   const categories = (categoryData ?? []).map((category) => ({
     ...category,
-    productCount: category.products?.[0]?.count ?? 0,
+    // Unknown stays unknown: a scan that could not complete is never a zero.
+    productCount: countFor(taxonomyCounts?.categories ?? null, category.id) ?? undefined,
   }));
   const brands: BrandCardData[] = (brandData ?? []).map((brand) => ({
     id: brand.id,
     name: brand.name,
     logo_url: brand.logo_url,
-    productCount: brand.products?.length ?? 0,
+    productCount: countFor(taxonomyCounts?.brands ?? null, brand.id) ?? undefined,
   }));
   const parents = categories.filter((category) => !category.parent_id);
   const rootCategories = parents.length > 0 ? parents : categories;

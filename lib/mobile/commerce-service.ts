@@ -50,6 +50,14 @@ export interface MobileCartLine {
   packId: string;
   productId: string | null;
   productName: string | null;
+  /**
+   * Brand name as the catalogue shows it. A wholesale line has to be
+   * identifiable at a glance — "Aashirvaad" is what distinguishes two 5 kg
+   * atta bags that otherwise read identically in a cart list.
+   */
+  brandName: string | null;
+  /** Pack image, else the product's primary image; null when neither exists. */
+  imageUrl: string | null;
   packName: string | null;
   quantity: number;
   quantityUnit: 'pieces';
@@ -154,6 +162,18 @@ export async function loadRetailerCartRows(session: MobileSession): Promise<Mobi
   return data as MobileCartRpcRow[];
 }
 
+/**
+ * The reason a cart line cannot be ordered, in customer language, or null when
+ * the line is fine. Availability is checked before `active` because a retired
+ * pack that is also out of stock reads more usefully as "out of stock".
+ */
+function cartLineBlocker(active: boolean, availability: 'in_stock' | 'out_of_stock' | 'unknown'): string | null {
+  if (!active) return 'This saved item is no longer available to order. Remove it, or add a current pack instead.';
+  if (availability === 'out_of_stock') return 'Out of stock right now. Remove it, or check back soon.';
+  if (availability === 'unknown') return 'Availability could not be confirmed for this item yet. Try again in a moment.';
+  return null;
+}
+
 /** Customer-facing cart snapshot: identity + current server pricing + status-only stock. */
 export async function loadMobileCart(session: MobileSession): Promise<{
   lines: MobileCartLine[];
@@ -216,11 +236,17 @@ export async function loadMobileCart(session: MobileSession): Promise<{
     // Unknown is not a promise: only the server's positive in-stock status may
     // make a line orderable. Checkout rechecks exact stock atomically later.
     const orderable = hasValidPriceAndQuantity && availability === 'in_stock';
+    // Same precedence the catalogue card uses (lib/retailer/catalog.ts
+    // `toPricedCard`): the pack's own artwork first, then the product's
+    // primary image. The cart shows the exact variant that was added.
+    const images = product ? [...product.product_images].sort((a, b) => a.sort_order - b.sort_order) : [];
     return {
       id: row.cart_item_id,
       packId: row.pack_id,
       productId: row.product_id,
       productName: row.product_name,
+      brandName: product?.brands?.name ?? null,
+      imageUrl: pack?.image_url || images[0]?.image_url || null,
       packName: row.pack_name,
       quantity: row.quantity,
       quantityUnit: 'pieces',
@@ -232,7 +258,11 @@ export async function loadMobileCart(session: MobileSession): Promise<{
       gstPercent: product?.gst_percent ?? null,
       availability,
       orderable,
-      message: pricing?.message ?? (active ? null : 'This saved item is no longer available to order.'),
+      // Every non-orderable line carries a REASON. The cart screen renders it
+      // next to the disabled checkout button, so "why can't I check out?" is
+      // answered in the shopper's own row instead of by a checkout-time
+      // rejection. A healthy line stays silent (null).
+      message: pricing?.message ?? cartLineBlocker(active, availability),
     };
   });
 

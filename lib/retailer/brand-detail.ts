@@ -4,6 +4,7 @@ import { cursorOffset, offsetCursorFor } from '@/lib/infinite-scroll/keyset';
 import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
 import type { createClient } from '@/lib/supabase/server';
+import { countFor, loadScopedProductCounts, loadTaxonomyProductCounts } from '@/lib/retailer/taxonomy-counts';
 import {
   loadCatalogPricing,
   loadFavoriteIds,
@@ -17,12 +18,22 @@ import {
 /**
  * Brand browsing for the retailer app.
  *
- * All rows come from the real `brands` → `products` relationship and only
- * active rows are returned. Product counts are counts of ACTIVE products —
- * never invented. When a category filter is requested the brand list is
- * restricted to brands carrying active products inside that category's scope
- * (the category plus its active children, matching the catalog's
- * `?category=` convention), and the shown count is scoped to that same set.
+ * All rows come from the real `brands` rows and the real `products` rows, and
+ * every count is a count of ACTIVE products — never invented.
+ *
+ * The directory read is PLAIN COLUMNS. It used to embed
+ * `products ( id, category_id )` and filter it with `products.is_active=true`,
+ * which is not a safe way to count children: an embedded-resource filter also
+ * narrows the parent rows, so a brand with no active product yet — the brand an
+ * admin has just created — was missing from the catalog entirely. Counts now
+ * come from `loadTaxonomyProductCounts` / `loadScopedProductCounts` over real
+ * product rows, so every active brand is listed (with `0` when it genuinely has
+ * no active product, and `undefined` when the count could not be read).
+ *
+ * When a category filter is requested the list is restricted to brands carrying
+ * active products inside that category's scope (the category plus its active
+ * children, matching the catalog's `?category=` convention), and the shown
+ * count is scoped to that same set.
  */
 
 const BRAND_PAGE_SIZE = 24;
@@ -40,7 +51,6 @@ interface BrandDirectoryRow {
   id: string;
   name: string;
   logo_url: string | null;
-  products: { id: string; category_id: string | null }[] | null;
 }
 
 export interface BrandDirectoryData {
@@ -57,12 +67,13 @@ export async function loadBrandDirectory(
   supabase: ReturnType<typeof createClient>,
   categoryId?: string
 ): Promise<BrandDirectoryData> {
-  const [brandResult, categoryResult] = await Promise.all([
+  const [brandResult, categoryResult, globalCounts] = await Promise.all([
+    // Plain columns. No embedded products and no embedded-resource filter: a
+    // brand with no active product yet must still be listed.
     supabase
       .from('brands')
-      .select('id, name, logo_url, products ( id, category_id )')
+      .select('id, name, logo_url')
       .eq('is_active', true)
-      .eq('products.is_active', true)
       .order('name')
       .returns<BrandDirectoryRow[]>(),
     supabase
@@ -71,6 +82,7 @@ export async function loadBrandDirectory(
       .eq('is_active', true)
       .order('sort_order')
       .returns<CategoryRow[]>(),
+    loadTaxonomyProductCounts(supabase),
   ]);
 
   const categories = (categoryResult.data ?? []).map((row) => ({
@@ -81,13 +93,14 @@ export async function loadBrandDirectory(
   const error = !!brandResult.error;
   if (error) return { brands: [], categories, error: true };
 
-  // No filter: every active brand with its active product count.
+  // No filter: EVERY active brand, with its active product count (0 when it has
+  // none — a fresh brand is not an absent brand).
   if (!categoryId) {
     const brands = (brandResult.data ?? []).map((brand) => ({
       id: brand.id,
       name: brand.name,
       logo_url: brand.logo_url,
-      productCount: brand.products ? brand.products.length : undefined,
+      productCount: countFor(globalCounts?.brands ?? null, brand.id) ?? undefined,
     }));
     return { brands, categories, error: false };
   }
@@ -100,19 +113,9 @@ export async function loadBrandDirectory(
     if (row.parent_id === categoryId && row.is_active) scopeIds.add(row.id);
   }
 
-  const scopeResult = await supabase
-    .from('products')
-    .select('id, brand_id, category_id')
-    .eq('is_active', true)
-    .in('category_id', [...scopeIds])
-    .returns<{ id: string; brand_id: string | null; category_id: string | null }[]>();
-  if (scopeResult.error) return { brands: [], categories, error: true };
-
-  const scopedByBrand = new Map<string, number>();
-  for (const row of scopeResult.data ?? []) {
-    if (!row.brand_id || !row.category_id || !scopeIds.has(row.category_id)) continue;
-    scopedByBrand.set(row.brand_id, (scopedByBrand.get(row.brand_id) ?? 0) + 1);
-  }
+  const scopedCounts = await loadScopedProductCounts(supabase, [...scopeIds]);
+  if (!scopedCounts) return { brands: [], categories, error: true };
+  const scopedByBrand = scopedCounts.brands;
 
   const brands = (brandResult.data ?? [])
     .map((brand) => {

@@ -13,7 +13,36 @@ import {
 } from '@/lib/admin/taxonomy-data';
 import type { Database } from '@/types/database.types';
 
-export type MasterDataFormState = { error?: string } | null;
+/**
+ * Revalidate every surface that renders the categories/brands master data.
+ *
+ * Both taxonomies are read by the admin lists AND by the retailer catalog
+ * (web + the mobile API's taxonomy reads), so a create/edit/toggle has to
+ * invalidate all of them together. Revalidating only `/admin/catalog*` — which
+ * is what these actions used to do — is how an admin could create a category
+ * successfully and still not see it in the catalog.
+ *
+ * The retailer pages are dynamic (they read the session cookie), so this is
+ * belt-and-braces there; it matters for any cached/ISR render of the same
+ * routes and keeps the two families in one place.
+ */
+function revalidateTaxonomyConsumers() {
+  revalidatePath('/admin/catalog');
+  revalidatePath('/admin/catalog/categories');
+  revalidatePath('/admin/catalog/brands');
+  revalidatePath('/retailer/home');
+  revalidatePath('/retailer/catalog');
+  revalidatePath('/retailer/categories');
+  revalidatePath('/retailer/brands');
+}
+
+/**
+ * The state every master-data form renders. `error` and `success` are mutually
+ * exclusive; a successful write ALWAYS answers with a confirmation naming the
+ * row that was saved, so an operator can tell "the button worked" from "the
+ * click did nothing" without reloading the page.
+ */
+export type MasterDataFormState = { error?: string; success?: string } | null;
 
 /**
  * Optional media reference for `brands.logo_url` / `categories.image_url`.
@@ -221,8 +250,8 @@ export async function createBrandAction(
   await requirePermission('master_data.manage');
 
   const parsed = brandSchema.safeParse({
-    name: formData.get('name'),
-    logoUrl: formData.get('logoUrl') ?? '',
+    name: optionalField(formData, 'name'),
+    logoUrl: optionalField(formData, 'logoUrl'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
@@ -240,11 +269,19 @@ export async function createBrandAction(
 
   const payload: BrandInsert = { name: parsed.data.name, logo_url: parsed.data.logoUrl || null };
   const { error } = await supabase.from('brands').insert(payload as unknown as never);
-  if (error) return { error: error.message.includes('duplicate') ? 'A brand with this name already exists.' : error.message };
+  if (error) {
+    return {
+      error: error.message.includes('duplicate')
+        ? 'A brand with this name already exists.'
+        : `The brand could not be saved: ${error.message}`,
+    };
+  }
 
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/brands');
-  return null;
+  // The retailer surfaces read the same `brands` rows, so they are revalidated
+  // with the admin list: a brand created here is visible in the catalog on the
+  // very next request, with no cache to go stale behind.
+  revalidateTaxonomyConsumers();
+  return { success: `“${parsed.data.name}” was added to the brand list.` };
 }
 
 export async function toggleBrandActiveAction(brandId: string, isActive: boolean) {
@@ -252,8 +289,7 @@ export async function toggleBrandActiveAction(brandId: string, isActive: boolean
   const supabase = createClient();
   const { error } = await supabase.from('brands').update({ is_active: isActive } as unknown as never).eq('id', brandId);
   if (error) throw new Error(error.message);
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/brands');
+  revalidateTaxonomyConsumers();
 }
 
 export async function updateBrandAction(
@@ -264,8 +300,8 @@ export async function updateBrandAction(
   await requirePermission('master_data.manage');
 
   const parsed = brandSchema.safeParse({
-    name: formData.get('name'),
-    logoUrl: formData.get('logoUrl') ?? '',
+    name: optionalField(formData, 'name'),
+    logoUrl: optionalField(formData, 'logoUrl'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
@@ -300,8 +336,7 @@ export async function updateBrandAction(
     await deleteMedia(existing.logo_url);
   }
 
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/brands');
+  revalidateTaxonomyConsumers();
   redirect('/admin/catalog/brands');
 }
 
@@ -324,8 +359,7 @@ export async function deleteBrandAction(brandId: string) {
 
   if (data?.logo_url) await deleteMedia(data.logo_url);
 
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/brands');
+  revalidateTaxonomyConsumers();
 }
 
 // ----------------------------------------------------------------------------
@@ -334,9 +368,19 @@ export async function deleteBrandAction(brandId: string) {
 
 const categorySchema = z.object({
   name: z.string().trim().min(2, 'Enter a category name.'),
+  // Both optional fields are also coerced from a MISSING form field to '': a
+  // disabled/absent `<select>` or `<input type=hidden>` submits nothing, and
+  // `null` used to fail the schema with the useless message "Invalid input."
+  // (the create then wrote nothing even though the name was perfectly valid).
   parentId: z.string().uuid().optional().or(z.literal('')),
   imageUrl: optionalMediaRefSchema,
 });
+
+/** A missing optional form field is the empty string, never `null`. */
+function optionalField(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === 'string' ? value : '';
+}
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
 
@@ -358,9 +402,9 @@ export async function createCategoryAction(
   await requirePermission('master_data.manage');
 
   const parsed = categorySchema.safeParse({
-    name: formData.get('name'),
-    parentId: formData.get('parentId'),
-    imageUrl: formData.get('imageUrl') ?? '',
+    name: optionalField(formData, 'name'),
+    parentId: optionalField(formData, 'parentId'),
+    imageUrl: optionalField(formData, 'imageUrl'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
@@ -384,9 +428,10 @@ export async function createCategoryAction(
   const { error } = await supabase.from('categories').insert(payload as unknown as never);
   if (error) return { error: categoryWriteError(error) };
 
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/categories');
-  return null;
+  revalidateTaxonomyConsumers();
+  return {
+    success: `“${parsed.data.name}” was added${parentId ? ' under the selected parent category' : ' as a top-level category'}.`,
+  };
 }
 
 export async function toggleCategoryActiveAction(categoryId: string, isActive: boolean) {
@@ -397,8 +442,7 @@ export async function toggleCategoryActiveAction(categoryId: string, isActive: b
     .update({ is_active: isActive } as unknown as never)
     .eq('id', categoryId);
   if (error) throw new Error(error.message);
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/categories');
+  revalidateTaxonomyConsumers();
 }
 
 export async function updateCategoryAction(
@@ -409,9 +453,9 @@ export async function updateCategoryAction(
   await requirePermission('master_data.manage');
 
   const parsed = categorySchema.safeParse({
-    name: formData.get('name'),
-    parentId: formData.get('parentId'),
-    imageUrl: formData.get('imageUrl') ?? '',
+    name: optionalField(formData, 'name'),
+    parentId: optionalField(formData, 'parentId'),
+    imageUrl: optionalField(formData, 'imageUrl'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
@@ -456,8 +500,7 @@ export async function updateCategoryAction(
     await deleteMedia(existing.image_url);
   }
 
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/categories');
+  revalidateTaxonomyConsumers();
   redirect('/admin/catalog/categories');
 }
 
@@ -480,6 +523,5 @@ export async function deleteCategoryAction(categoryId: string) {
 
   if (data?.image_url) await deleteMedia(data.image_url);
 
-  revalidatePath('/admin/catalog');
-  revalidatePath('/admin/catalog/categories');
+  revalidateTaxonomyConsumers();
 }
