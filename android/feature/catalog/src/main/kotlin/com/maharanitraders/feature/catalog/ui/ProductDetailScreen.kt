@@ -396,6 +396,10 @@ private fun PackPricingPanel(pack: ProductPackDetail, modifier: Modifier = Modif
           mrpPaise = pack.mrpPaise,
           emphasis = PriceEmphasis.Detail,
           caption = "GST inclusive · ${formatPercent(pack.gstPercent)} GST",
+          // The case rate is labelled as a case rate, next to the per-piece
+          // rate, so the two figures cannot be mistaken for one another.
+          casePricePaise = pack.derivedCasePricePaise,
+          unitsPerCase = pack.unitsPerCase,
           modifier = Modifier
             .weight(1f, fill = false)
             .testTag(ProductDetailTags.PRICE),
@@ -582,7 +586,22 @@ private fun TierTable(pack: ProductPackDetail, modifier: Modifier = Modifier) {
           horizontalArrangement = Arrangement.SpaceBetween,
         ) {
           Text(
-            text = if (upper == null) "${tier.minQuantity}+ pcs" else "${tier.minQuantity}–$upper pcs",
+            // The stored max is EXCLUSIVE ([min, max)), so the last quantity
+            // this slab actually covers is max − 1. Printing the stored 7 in
+            // "1–7 pcs" would tell a shopkeeper that 7 pieces cost this rate,
+            // and the cart would then charge them the next slab's price. This
+            // is the same conversion the web storefront's `tierRangeLabel`
+            // makes, so the two surfaces cannot disagree.
+            text = if (upper == null) {
+              "${tier.minQuantity}+ pcs"
+            } else {
+              val inclusiveMax = upper - 1
+              if (inclusiveMax <= tier.minQuantity) {
+                "${tier.minQuantity} pc"
+              } else {
+                "${tier.minQuantity}–$inclusiveMax pcs"
+              }
+            },
             style = MaterialTheme.typography.labelMedium,
             color = if (index == 0) tokens.onSaffronSurface else MaterialTheme.colorScheme.onSurface,
           )

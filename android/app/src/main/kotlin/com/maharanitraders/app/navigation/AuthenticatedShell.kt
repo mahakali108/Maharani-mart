@@ -62,6 +62,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maharanitraders.app.ui.AccountScreen
+import com.maharanitraders.app.ui.greetingFor
 import com.maharanitraders.app.ui.HomeDashboardViewModel
 import com.maharanitraders.app.ui.ShellBadgesViewModel
 import com.maharanitraders.app.ui.homeQuickActions
@@ -82,12 +83,14 @@ import com.maharanitraders.core.designsystem.components.UnavailableFeatureState
 import com.maharanitraders.core.designsystem.labels.label
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
+import com.maharanitraders.core.common.SystemTimeSource
 import com.maharanitraders.core.model.SessionSnapshot
 import com.maharanitraders.core.model.UserRole
 import com.maharanitraders.feature.catalog.CatalogTab
 import com.maharanitraders.feature.catalog.ProductDetailViewModel
 import com.maharanitraders.feature.catalog.ui.CatalogScreen
 import com.maharanitraders.feature.orders.ui.AddressBookScreen
+import com.maharanitraders.feature.orders.ui.BuyAgainScreen
 import com.maharanitraders.feature.orders.ui.QuickOrderScreen
 import com.maharanitraders.feature.catalog.ui.FavoritesScreen
 import com.maharanitraders.feature.catalog.ui.HomeScreenTags
@@ -121,6 +124,7 @@ object ShellTags {
   const val OPEN_ACCOUNT = "shell_open_account"
   const val ACCOUNT_SHEET = "shell_account_sheet"
   const val BRAND = "shell_brand"
+  const val GREETING = "shell_greeting"
   const val BOTTOM_BAR = "shell_bottom_bar"
   const val CART_BADGE = "shell_cart_badge"
   const val NOTIFICATIONS = "shell_notifications"
@@ -215,6 +219,10 @@ private fun RoutedShell(
   val showAccount = rememberSaveable { mutableStateOf(false) }
   var catalogRequest by remember { mutableStateOf(CatalogRequest()) }
   var homeSearch by rememberSaveable { mutableStateOf("") }
+  // The greeting is read from the device clock, shifted to IST (see
+  // `greetingFor`): a "Good night" at 18:30 because the server speaks UTC is
+  // exactly the kind of small wrongness that makes an app feel foreign.
+  val greeting = remember { greetingFor(SystemTimeSource().nowEpochSeconds()) }
 
   // A retailer gets the shopping home; everyone else keeps the session home.
   // The role comes from the SERVER-verified snapshot, not from anything the
@@ -589,6 +597,8 @@ private fun RoutedShell(
 @Composable
 private fun RetailerHomeTopBar(
   snapshot: SessionSnapshot,
+  /** "Good morning" for the shop's own timezone. */
+  greeting: String,
   search: String,
   onSearchChange: (String) -> Unit,
   onSearchSubmit: () -> Unit,
@@ -630,20 +640,25 @@ private fun RetailerHomeTopBar(
           modifier = Modifier.weight(1f),
           verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
         ) {
+          // The greeting carries the shopkeeper's own name when the server sent
+          // one, and the shop's name stays underneath: "who am I" and "which
+          // shop is this" are both answered without a second row of chrome.
+          val retailerName = snapshot.user.fullName?.takeIf { it.isNotBlank() }
           Text(
-            text = "Maharani Traders",
+            text = if (retailerName != null) "$greeting, $retailerName" else greeting,
             style = MaterialTheme.typography.titleMedium,
             color = tokens.onAppBar,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag(ShellTags.BRAND),
+            modifier = Modifier.testTag(ShellTags.GREETING),
           )
           Text(
-            text = snapshot.retailer?.shopName ?: "Wholesale for retailers",
+            text = snapshot.retailer?.shopName ?: "Maharani Traders",
             style = MaterialTheme.typography.labelSmall,
             color = tokens.onAppBarMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag(ShellTags.BRAND),
           )
         }
 
@@ -928,9 +943,19 @@ private fun DestinationSurface(
     MaharaniRoutes.FAVORITES -> FavoritesScreen(
       onOpenProduct = onOpenProduct,
       onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
+      // Add to cart from the saved list, through the same cart handle the
+      // catalogue's cards use — one cart, one badge, one server validation.
+      onQuickAddToCart = onQuickAddToCart,
+      quickAddPackId = quickAddPackId,
+      quickAddMessage = quickAddMessage,
+      onQuickAddMessageShown = onQuickAddMessageShown,
     )
 
     MaharaniRoutes.QUICK_ORDER -> QuickOrderScreen()
+
+    MaharaniRoutes.BUY_AGAIN -> BuyAgainScreen(
+      onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },
+    )
 
     MaharaniRoutes.CART -> CartScreen(
       onBrowseCatalog = { onOpenCatalog(CatalogRequest()) },

@@ -37,6 +37,12 @@ dependencies {
   implementation(project(":core:auth"))
   implementation(project(":core:datastore"))
   implementation(project(":core:designsystem"))
+  // Buy again and reorder REVALIDATE a previously ordered pack against today's
+  // catalogue before it is added to the cart, and re-read the shared favourite
+  // set when the cart moves a line into it. Both belong to the catalogue
+  // feature, which owns those reads; the dependency is one-way
+  // (feature:orders -> feature:catalog -> core:*), so there is no cycle.
+  implementation(project(":feature:catalog"))
 
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.runtime.compose)

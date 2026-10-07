@@ -79,6 +79,11 @@ object MaharaniRoutes {
    * quick-order page.
    */
   const val QUICK_ORDER = "quick_order"
+  /**
+   * Buy again: this shop's repeat purchases, revalidated against today's
+   * catalogue before anything is offered for reorder.
+   */
+  const val BUY_AGAIN = "buy_again"
   const val CART = "cart"
   const val ORDERS = "orders"
   /**
@@ -195,6 +200,15 @@ object MaharaniCatalog {
       // endpoints, with every add going through the revalidating cart API.
       phase = null,
       summary = "Restock known items fast: search by name or paste a list, priced by the server.",
+    ),
+    MaharaniDestination(
+      route = MaharaniRoutes.BUY_AGAIN,
+      label = "Buy again",
+      workspace = Workspace.RETAILER,
+      // Shipped with the B2B reordering upgrade: real order history, revalidated
+      // through the live catalogue and the real cart.
+      phase = null,
+      summary = "What your shop orders most, checked against today's price, stock and minimum before you add it.",
     ),
     MaharaniDestination(
       route = MaharaniRoutes.CART,

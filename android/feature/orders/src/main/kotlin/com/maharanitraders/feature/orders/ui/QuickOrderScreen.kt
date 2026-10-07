@@ -60,6 +60,8 @@ object QuickOrderTags {
   const val BULK_MATCH = "quick_order_bulk_match"
   const val BULK_ADD = "quick_order_bulk_add"
   const val BULK_LINE = "quick_order_bulk_line"
+  const val BULK_LINE_ERROR = "quick_order_bulk_line_error"
+  const val BULK_REMOVE = "quick_order_bulk_remove"
 }
 
 /**
@@ -157,6 +159,7 @@ fun QuickOrderScreen(
           onMatch = viewModel::matchBulkLines,
           onSelectPack = viewModel::onBulkPackSelect,
           onQuantityChange = viewModel::onBulkChoiceChange,
+          onToggleLine = viewModel::toggleBulkLine,
           onAdd = viewModel::addBulkMatches,
           onClear = viewModel::clearBulk,
         )
@@ -273,6 +276,7 @@ private fun BulkOrderPanel(
   onMatch: () -> Unit,
   onSelectPack: (Int, BulkMatchPack) -> Unit,
   onQuantityChange: (Int, BulkMatchPack, String) -> Unit,
+  onToggleLine: (Int) -> Unit,
   onAdd: () -> Unit,
   onClear: () -> Unit,
 ) {
@@ -326,8 +330,11 @@ private fun BulkOrderPanel(
           line = line,
           chosenPackId = state.bulkChoices[index]?.packId,
           quantity = state.bulkChoices[index]?.quantity,
+          error = state.lineErrors[index],
+          excluded = index in state.bulkExcluded,
           onSelectPack = { pack -> onSelectPack(index, pack) },
           onQuantityChange = { pack, raw -> onQuantityChange(index, pack, raw) },
+          onToggleLine = { onToggleLine(index) },
         )
       }
 
@@ -355,8 +362,13 @@ private fun BulkMatchCard(
   line: BulkMatchLine,
   chosenPackId: String?,
   quantity: Int?,
+  /** The server's refusal for THIS line, shown next to it. */
+  error: String? = null,
+  /** Taken out of the run by the shopper. */
+  excluded: Boolean = false,
   onSelectPack: (BulkMatchPack) -> Unit,
   onQuantityChange: (BulkMatchPack, String) -> Unit,
+  onToggleLine: () -> Unit = {},
 ) {
   Surface(
     shape = RoundedCornerShape(MaharaniDimens.radiusTile),
@@ -367,7 +379,51 @@ private fun BulkMatchCard(
       modifier = Modifier.padding(MaharaniDimens.spaceSm),
       verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
     ) {
-      Text(line.line, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text = line.line,
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.weight(1f),
+          maxLines = 2,
+          overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+        if (line.matched) {
+          TextButton(
+            onClick = onToggleLine,
+            modifier = Modifier
+              .heightIn(min = 40.dp)
+              .testTag("${QuickOrderTags.BULK_REMOVE}_$index"),
+          ) {
+            Text(
+              if (excluded) "Include" else "Remove",
+              style = MaterialTheme.typography.labelSmall,
+              color = if (excluded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+          }
+        }
+      }
+      if (excluded) {
+        Text(
+          "Left out of this run.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return@Column
+      }
+      // The server's own reason for THIS line, in its own words.
+      error?.let { reason ->
+        Text(
+          reason,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.error,
+          modifier = Modifier.testTag("${QuickOrderTags.BULK_LINE_ERROR}_$index"),
+        )
+      }
       if (!line.matched) {
         Text(
           line.error ?: "No orderable pack found.",

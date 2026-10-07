@@ -18,6 +18,28 @@ data class QuickOrderQuantity(
   val quantity: Int,
 )
 
+/**
+ * One pack, once, with the pieces from every line that named it.
+ *
+ * A pasted list routinely repeats a product ("2 x tea 250g" on one line and
+ * "tea 250g x 3" on another). Sending both would call the cart twice for the
+ * same pack, and the second call would either overwrite the first quantity or be
+ * refused as a duplicate — either way the shopper's intent is lost. Merging is
+ * therefore done BEFORE anything is sent, and the count of merged lines is
+ * reported so the shopper can see the list was understood rather than guessed at.
+ *
+ * The order of first appearance is kept, so the confirmation reads in the same
+ * sequence as the list that was pasted.
+ */
+fun mergeBulkSelections(selections: List<QuickOrderQuantity>): List<QuickOrderQuantity> {
+  val totals = LinkedHashMap<String, Int>()
+  for (selection in selections) {
+    if (selection.packId.isBlank()) continue
+    totals[selection.packId] = (totals[selection.packId] ?: 0) + selection.quantity.coerceAtLeast(1)
+  }
+  return totals.map { (packId, quantity) -> QuickOrderQuantity(packId, quantity) }
+}
+
 data class QuickOrderUiState(
   val term: String = "",
   val searched: Boolean = false,
@@ -36,6 +58,14 @@ data class QuickOrderUiState(
   val bulkAdding: Boolean = false,
   /** Chosen pack + quantity per matched line index. */
   val bulkChoices: Map<Int, QuickOrderQuantity> = emptyMap(),
+  /** Per-line failures from the last bulk add, keyed by pasted-line index. */
+  val lineErrors: Map<Int, String> = emptyMap(),
+  /**
+   * Pasted lines the shopper took out of the run. Indices, so a removal never
+   * renumbers the lines still on screen — the error against line 4 stays against
+   * line 4.
+   */
+  val bulkExcluded: Set<Int> = emptySet(),
   val message: String? = null,
 ) {
   val hasResults: Boolean get() = products.isNotEmpty()
@@ -180,48 +210,76 @@ class QuickOrderViewModel @Inject constructor(
   }
 
   /**
-   * Add every matched line that has a pack chosen. Lines are added one at a
-   * time through the cart endpoint so a single rejected line does not hide the
-   * fate of the others: the message reports how many actually landed.
+   * Add every matched line that has a pack chosen.
+   *
+   * Lines are merged first ([mergeBulkSelections]) so one pack is sent once,
+   * then added one at a time through the cart endpoint so a single rejected line
+   * does not hide the fate of the others. A refusal is reported ON THE LINE IT
+   * BELONGS TO as well as in the summary: "Product A: only 20 pcs available" is
+   * actionable, while one generic failure is not.
    */
   fun addBulkMatches() {
     if (_state.value.bulkAdding) return
     val state = _state.value
-    val selections = state.bulkMatches
+    val choices = state.bulkMatches
       .mapIndexedNotNull { index, line ->
         if (!line.matched) return@mapIndexedNotNull null
-        state.bulkChoices[index]
+        if (index in state.bulkExcluded) return@mapIndexedNotNull null
+        state.bulkChoices[index]?.let { index to it }
       }
-    if (selections.isEmpty()) {
+    if (choices.isEmpty()) {
       _state.update { it.copy(bulkError = "No matched lines to add.") }
       return
     }
+    val merged = mergeBulkSelections(choices.map { it.second })
+    val mergedCount = choices.size - merged.size
 
-    _state.update { it.copy(bulkAdding = true, bulkError = null, message = null) }
+    _state.update { it.copy(bulkAdding = true, bulkError = null, message = null, lineErrors = emptyMap()) }
     viewModelScope.launch {
       var added = 0
-      var failure: String? = null
-      for (selection in selections) {
+      val failures = LinkedHashMap<Int, String>()
+      for (selection in merged) {
         when (val result = cart.addCartLine(packId = selection.packId, quantity = selection.quantity)) {
           is AppResult.Success -> {
             cartCounts.record(result.value)
             added += 1
           }
           is AppResult.Failure -> {
-            if (failure == null) failure = result.error.message
+            // The first pasted line that named this pack carries the error, so
+            // the message appears where the shopper typed the product.
+            val index = choices.firstOrNull { it.second.packId == selection.packId }?.first
+            if (index != null) failures.putIfAbsent(index, result.error.message)
           }
         }
+      }
+      val summary = when {
+        added == merged.size && failures.isEmpty() -> "Added $added line${if (added == 1) "" else "s"} to the cart."
+        added > 0 -> "Added $added of ${merged.size} lines. The lines below explain what was refused."
+        else -> failures.values.firstOrNull() ?: "Nothing could be added."
       }
       _state.update {
         it.copy(
           bulkAdding = false,
-          message = when {
-            added == selections.size -> "Added $added line${if (added == 1) "" else "s"} to the cart."
-            added > 0 -> "Added $added of ${selections.size} lines. $failure"
-            else -> failure ?: "Nothing could be added."
+          lineErrors = failures,
+          message = if (mergedCount > 0) {
+            "$summary $mergedCount repeated line${if (mergedCount == 1) "" else "s"} were merged."
+          } else {
+            summary
           },
         )
       }
+    }
+  }
+
+  /** Take a matched line out of the run (or put it back). */
+  fun toggleBulkLine(index: Int) {
+    _state.update { state ->
+      val next = if (index in state.bulkExcluded) {
+        state.bulkExcluded - index
+      } else {
+        state.bulkExcluded + index
+      }
+      state.copy(bulkExcluded = next, lineErrors = state.lineErrors - index)
     }
   }
 
@@ -230,6 +288,15 @@ class QuickOrderViewModel @Inject constructor(
   }
 
   fun clearBulk() {
-    _state.update { it.copy(bulkRaw = "", bulkMatches = emptyList(), bulkChoices = emptyMap(), bulkError = null) }
+    _state.update {
+      it.copy(
+        bulkRaw = "",
+        bulkMatches = emptyList(),
+        bulkChoices = emptyMap(),
+        bulkExcluded = emptySet(),
+        lineErrors = emptyMap(),
+        bulkError = null,
+      )
+    }
   }
 }

@@ -74,6 +74,7 @@ import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.feature.catalog.CatalogTab
 import com.maharanitraders.feature.catalog.HomeCoins
 import com.maharanitraders.feature.catalog.HomeDashboard
+import com.maharanitraders.feature.catalog.HomeFrequentlyOrdered
 import com.maharanitraders.feature.catalog.HomeOrderSummary
 import com.maharanitraders.feature.catalog.HomeQuickAction
 import com.maharanitraders.feature.catalog.HomeQuickActionIcon
@@ -107,6 +108,7 @@ object HomeScreenTags {
   const val COINS_TILE = "home_coins_tile"
   const val LAST_ORDER_CARD = "home_last_order_card"
   const val RECENTLY_VIEWED_ROW = "home_recently_viewed_row"
+  const val FREQUENTLY_ORDERED_ROW = "home_frequently_ordered_row"
   const val DASHBOARD_RETRY = "home_dashboard_retry"
 }
 
@@ -354,6 +356,21 @@ fun HomeContent(
                   )
                   RecentlyViewedRail(
                     products = dashboard.recentlyViewed,
+                    onOpenProduct = onOpenProduct,
+                  )
+                }
+              }
+            }
+
+            if (dashboard.frequentlyOrdered.isNotEmpty()) {
+              item(span = full) {
+                Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                  SectionHeader(
+                    title = "Frequently ordered",
+                    subtitle = "From your own order history — tap to open today's price",
+                  )
+                  FrequentlyOrderedRail(
+                    products = dashboard.frequentlyOrdered,
                     onOpenProduct = onOpenProduct,
                   )
                 }
@@ -803,6 +820,74 @@ private fun LastOrderCard(
           .heightIn(min = MaharaniDimens.touchTarget),
       ) {
         Text("Buy again")
+      }
+    }
+  }
+}
+
+/**
+ * What this shop orders most, from its own past orders.
+ *
+ * The count is a fact about the retailer's history ("in 4 of your orders"), not
+ * a popularity ranking, and no price is shown: the rate is whatever the server
+ * says when the product opens. Tapping therefore lands on the live product
+ * rather than adding anything behind the shopper's back.
+ */
+@Composable
+private fun FrequentlyOrderedRail(
+  products: List<HomeFrequentlyOrdered>,
+  onOpenProduct: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  LazyRow(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(HomeScreenTags.FREQUENTLY_ORDERED_ROW),
+    horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
+  ) {
+    items(products, key = { it.productId }) { product ->
+      Surface(
+        onClick = { onOpenProduct(product.productId) },
+        shape = RoundedCornerShape(MaharaniDimens.radiusCard),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.width(MaharaniDimens.railCardWidth),
+      ) {
+        Column(
+          modifier = Modifier.padding(MaharaniDimens.cardPadding),
+          verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
+        ) {
+          Text(
+            text = product.name,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            minLines = 2,
+          )
+          product.packName?.let { pack ->
+            Text(
+              text = pack,
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+          Text(
+            text = "In ${product.timesOrdered} of your orders",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaharaniThemeTokens.colors.info,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          Text(
+            text = "Tap for today's price",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+          )
+        }
       }
     }
   }

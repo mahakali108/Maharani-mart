@@ -8,6 +8,7 @@ import com.maharanitraders.core.model.CatalogCategory
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.CatalogQuery
 import com.maharanitraders.core.model.CatalogSort
+import com.maharanitraders.core.model.ProductDetail
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -78,6 +79,25 @@ data class CatalogUiState(
   val brandLabel: String? = null,
   /** Message from a failed favourite toggle, for a snackbar. */
   val actionMessage: String? = null,
+
+  // -----------------------------------------------------------------------
+  // Product comparison (see ProductCompare)
+  // -----------------------------------------------------------------------
+
+  /** Products parked in the comparison tray, newest last, capped at three. */
+  val compareIds: Set<String> = emptySet(),
+  /** True while the comparison overlay is on screen. */
+  val compareOpen: Boolean = false,
+  /** True while the tray's current server details are being read. */
+  val compareLoading: Boolean = false,
+  /**
+   * The details the tray is showing, fetched from `GET /catalog/products/{id}`
+   * when the overlay opens. They are the CURRENT rows, so a comparison can
+   * never quote a rate the cart would no longer honour.
+   */
+  val compareDetails: List<ProductDetail> = emptyList(),
+  /** A comparison read that failed. The rows that did load are still shown. */
+  val compareError: String? = null,
 ) {
   val isEmpty: Boolean get() = !loading && errorMessage == null && products.isEmpty()
 
@@ -174,6 +194,16 @@ class CatalogViewModel @Inject constructor(
   private var listJob: Job? = null
   private var directoryJob: Job? = null
 
+  /**
+   * Details already read for the comparison tray, keyed by product id.
+   *
+   * It is a cache of SERVER rows for a selection the shopper is still looking
+   * at, not a local copy of the catalogue: it is dropped the moment the tray is
+   * emptied ([clearCompare]) and re-read on the next open, so a parked product
+   * is never compared at a rate the server has since changed.
+   */
+  private val compareCache = mutableMapOf<String, ProductDetail>()
+
   init {
     viewModelScope.launch { favorites.ensureLoaded() }
     viewModelScope.launch { history.ensureLoaded() }
@@ -220,6 +250,99 @@ class CatalogViewModel @Inject constructor(
 
   fun consumeActionMessage() {
     _state.update { it.copy(actionMessage = null) }
+  }
+
+  // ------------------------------------------------------------------- compare
+
+  /**
+   * Park a product in the comparison tray, or take it out.
+   *
+   * Selection is the ONLY thing that happens here — no request, no price. The
+   * current figures are read when the shopper opens the tray ([openCompare]),
+   * which is what keeps a parked product from being compared at a stale rate.
+   * A fourth selection is refused rather than silently dropping the first: a
+   * shopkeeper who taps four products must see three, and know why.
+   */
+  fun toggleCompare(productId: String) {
+    val next = ProductCompare.toggle(_state.value.compareIds, productId)
+    if (next == _state.value.compareIds) return
+    _state.update { state ->
+      state.copy(
+        compareIds = next,
+        // Closing the tray is the honest answer to removing the last product.
+        compareOpen = state.compareOpen && next.isNotEmpty(),
+        compareError = null,
+      )
+    }
+    if (next.isEmpty()) clearCompare()
+  }
+
+  fun clearCompare() {
+    compareCache.clear()
+    _state.update {
+      it.copy(compareIds = emptySet(), compareOpen = false, compareDetails = emptyList(), compareError = null)
+    }
+  }
+
+  fun openCompare() {
+    if (_state.value.compareIds.isEmpty()) return
+    _state.update { it.copy(compareOpen = true) }
+    loadCompareDetails()
+  }
+
+  fun closeCompare() {
+    _state.update { it.copy(compareOpen = false, compareError = null) }
+  }
+
+  /**
+   * Read the tray's current rows.
+   *
+   * One detail request per parked product, in parallel, and a failure names the
+   * product it belongs to instead of blanking the table: the rows that did load
+   * are still real. Details are cached for the session because the same product
+   * is commonly compared twice in one visit — and the cache is dropped whenever
+   * the tray changes, so it can never outlive the selection it was built for.
+   */
+  private fun loadCompareDetails() {
+    val ids = _state.value.compareIds.toList()
+    if (ids.isEmpty()) return
+    val cached = compareCache
+    if (ids.all { cached.containsKey(it) }) {
+      _state.update { state ->
+        state.copy(
+          compareLoading = false,
+          compareDetails = ids.mapNotNull { id -> cached[id] },
+          compareError = null,
+        )
+      }
+      return
+    }
+    _state.update { it.copy(compareLoading = true, compareError = null) }
+    viewModelScope.launch {
+      val results = ids.map { id -> id to repository.loadProduct(id) }
+      val details = mutableListOf<ProductDetail>()
+      val failed = mutableListOf<String>()
+      for ((id, result) in results) {
+        when (result) {
+          is AppResult.Success -> {
+            compareCache[id] = result.value
+            details += result.value
+          }
+          is AppResult.Failure -> failed += id
+        }
+      }
+      _state.update { state ->
+        state.copy(
+          compareLoading = false,
+          compareDetails = details,
+          compareError = if (failed.isEmpty()) null else {
+            val name = state.products.firstOrNull { it.id in failed }?.name
+              ?: "One product"
+            "$name could not be loaded right now. Try again in a moment."
+          },
+        )
+      }
+    }
   }
 
   /**

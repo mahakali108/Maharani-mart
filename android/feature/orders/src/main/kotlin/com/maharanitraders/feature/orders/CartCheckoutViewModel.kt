@@ -45,6 +45,21 @@ data class CartCheckoutUiState(
   val orderError: String? = null,
   val orderErrorCode: ApiErrorCode? = null,
   val confirmation: OrderConfirmation? = null,
+
+  // ------------------------------------------------------------------ Cart 2.0
+
+  /** Lines ticked for a bulk action. Never persisted: it is a screen gesture. */
+  val selectedLineIds: Set<String> = emptySet(),
+  /**
+   * Changes the SERVER made to this basket since the previous snapshot was read
+   * (see [cartNotices]). They are warnings, not edits: nothing in the basket is
+   * removed or re-priced without the shopper asking.
+   */
+  val cartNotices: List<CartLineNotice> = emptyList(),
+  /** Busy flag for the bulk actions (remove selected, clear cart, save). */
+  val bulkActionBusy: Boolean = false,
+  /** Outcome of the last bulk action, for a snackbar. */
+  val bulkMessage: String? = null,
 )
 
 /**
@@ -62,6 +77,12 @@ class CartCheckoutViewModel @Inject constructor(
    * state is not duplicated here — the store owns it.
    */
   private val cartCounts: CartCountStore,
+  /**
+   * "Move to favourites" from the cart writes to the ONE favourites store the
+   * catalogue and the hearts read, so a line moved out of the basket already
+   * shows as saved everywhere else.
+   */
+  private val favorites: FavoriteToggler,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(CartCheckoutUiState())
@@ -497,6 +518,132 @@ class CartCheckoutViewModel @Inject constructor(
     _state.update { it.copy(message = null) }
   }
 
+  // ------------------------------------------------------------- Cart 2.0 bulk
+
+  /**
+   * Tick one line for a bulk action.
+   *
+   * Selection is a screen gesture over the SERVER's own lines, so it is never
+   * persisted and never sent anywhere: removing the selection changes nothing
+   * about the basket. A line id that is no longer in the cart is dropped on the
+   * next successful read rather than lingering invisibly.
+   */
+  fun toggleLineSelection(lineId: String) {
+    _state.update { state ->
+      val next = if (lineId in state.selectedLineIds) {
+        state.selectedLineIds - lineId
+      } else {
+        state.selectedLineIds + lineId
+      }
+      state.copy(selectedLineIds = next)
+    }
+  }
+
+  /** Tick every line the server currently considers orderable. */
+  fun selectAllOrderable() {
+    _state.update { state ->
+      state.copy(selectedLineIds = state.cart?.lines.orEmpty().filter { it.orderable }.map { it.id }.toSet())
+    }
+  }
+
+  fun clearSelection() {
+    _state.update { it.copy(selectedLineIds = emptySet()) }
+  }
+
+  /** Forget the "the server changed this" warnings after they have been read. */
+  fun dismissNotices() {
+    _state.update { it.copy(cartNotices = emptyList()) }
+  }
+
+  fun consumeBulkMessage() {
+    _state.update { it.copy(bulkMessage = null) }
+  }
+
+  /** Remove every ticked line, one server call each, then re-read the badge. */
+  fun removeSelected() {
+    val ids = _state.value.selectedLineIds.toList()
+    if (ids.isEmpty() || _state.value.bulkActionBusy || _state.value.isCartMutating) return
+    _state.update { it.copy(bulkActionBusy = true) }
+    viewModelScope.launch {
+      var removed = 0
+      var failure: String? = null
+      for (id in ids) {
+        when (val result = repository.removeCartLine(id)) {
+          is AppResult.Success -> {
+            cartCounts.record(result.value)
+            removed += 1
+          }
+          is AppResult.Failure -> if (failure == null) failure = result.error.message
+        }
+      }
+      _state.update {
+        it.copy(
+          bulkActionBusy = false,
+          selectedLineIds = emptySet(),
+          bulkMessage = failure
+            ?: "$removed line${if (removed == 1) "" else "s"} removed from your cart.",
+        )
+      }
+      loadCartInternal()
+    }
+  }
+
+  /** Empty the basket. Each line is removed by the server, not locally. */
+  fun clearCart() {
+    val ids = _state.value.cart?.lines.orEmpty().map { it.id }
+    if (ids.isEmpty() || _state.value.bulkActionBusy || _state.value.isCartMutating) return
+    _state.update { it.copy(bulkActionBusy = true, selectedLineIds = emptySet()) }
+    viewModelScope.launch {
+      var failure: String? = null
+      for (id in ids) {
+        when (val result = repository.removeCartLine(id)) {
+          is AppResult.Success -> cartCounts.record(result.value)
+          is AppResult.Failure -> if (failure == null) failure = result.error.message
+        }
+      }
+      _state.update { it.copy(bulkActionBusy = false, bulkMessage = failure ?: "Your cart is now empty.") }
+      loadCartInternal()
+    }
+  }
+
+  /**
+   * Save every ticked line's product to favourites.
+   *
+   * It writes to the shared favourites store, so the hearts on the catalogue and
+   * the product page agree immediately — and a product that is already saved is
+   * simply left alone rather than being toggled off by accident.
+   */
+  fun moveSelectedToFavourites() {
+    val productIds = _state.value.cart?.lines.orEmpty()
+      .filter { it.id in _state.value.selectedLineIds }
+      .mapNotNull { it.productId }
+      .distinct()
+    if (productIds.isEmpty()) {
+      _state.update { it.copy(bulkMessage = "Select a line with a product to save it.") }
+      return
+    }
+    if (_state.value.bulkActionBusy) return
+    _state.update { it.copy(bulkActionBusy = true) }
+    viewModelScope.launch {
+      var saved = 0
+      var failure: String? = null
+      for (productId in productIds) {
+        when (val result = favorites.toggle(productId)) {
+          is AppResult.Success -> if (result.value) saved += 1
+          is AppResult.Failure -> if (failure == null) failure = result.error.message
+        }
+      }
+      _state.update {
+        it.copy(
+          bulkActionBusy = false,
+          bulkMessage = failure
+            ?: "$saved product${if (saved == 1) "" else "s"} saved to your favourites.",
+        )
+      }
+    }
+  }
+
+
   /**
    * Consume the cart's last error after a surface has shown it.
    *
@@ -519,10 +666,14 @@ class CartCheckoutViewModel @Inject constructor(
       when (val result = operation()) {
         is AppResult.Success -> {
           cartCounts.record(result.value)
-          _state.update {
-            it.copy(
+          _state.update { current ->
+            current.copy(
               isCartMutating = false,
               cart = result.value,
+              cartNotices = cartNotices(current.cart?.lines.orEmpty(), result.value.lines),
+              selectedLineIds = current.selectedLineIds.filter { id ->
+                result.value.lines.any { line -> line.id == id }
+              }.toSet(),
               cartError = null,
               cartErrorCode = null,
               cartOffline = false,
@@ -547,14 +698,25 @@ class CartCheckoutViewModel @Inject constructor(
 
   private suspend fun loadCartInternal(): Boolean {
     val needsReconciliationReview = _state.value.cartNeedsRefresh
+    val previous = _state.value.cart
     _state.update { it.copy(cartLoading = true, cartError = null, cartErrorCode = null) }
     return when (val result = repository.loadCart()) {
       is AppResult.Success -> {
         cartCounts.record(result.value)
+        // The server re-prices and re-stocks every read, so the difference
+        // between the last snapshot and this one IS the list of things that
+        // changed while the shopper was away.
+        val notices = cartNotices(previous?.lines.orEmpty(), result.value.lines)
         _state.update {
           it.copy(
             cartLoading = false,
             cart = result.value,
+            cartNotices = notices,
+            // Selection follows the cart: a line the server no longer returns
+            // cannot stay ticked.
+            selectedLineIds = it.selectedLineIds.filter { id ->
+              result.value.lines.any { line -> line.id == id }
+            }.toSet(),
             cartError = null,
             cartErrorCode = null,
             cartOffline = false,

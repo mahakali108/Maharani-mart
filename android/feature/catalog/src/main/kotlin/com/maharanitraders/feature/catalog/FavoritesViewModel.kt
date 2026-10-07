@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.maharanitraders.core.common.AppResult
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.CatalogQuery
+import com.maharanitraders.core.model.PackAvailability
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -13,6 +14,52 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * How the saved list is ordered.
+ *
+ * Only orderings the SERVER's own rows can answer are offered: the catalogue
+ * row carries a name and a per-piece rate, so name and price are real. There is
+ * deliberately no "recently saved" — the catalogue row has no saved-at
+ * timestamp, and inventing one would put the list in an order the shopper
+ * cannot predict.
+ */
+enum class FavoritesSort(val label: String) {
+  NAME("Name: A to Z"),
+  PRICE_LOW("Price: low to high"),
+  PRICE_HIGH("Price: high to low"),
+}
+
+/**
+ * The saved list as the shopper asked to see it.
+ *
+ * Sorting and the in-stock filter are pure view operations over rows the server
+ * PRICED and STOCKED: nothing is re-priced, and a hidden row is simply not
+ * drawn. A product the server priced without a rate sorts LAST rather than
+ * first, because "cheapest" must never mean "the price we could not read".
+ */
+fun favoritesView(
+  products: List<CatalogProduct>,
+  sort: FavoritesSort,
+  inStockOnly: Boolean,
+): List<CatalogProduct> {
+  val filtered = if (inStockOnly) {
+    products.filter { it.pack?.availability != PackAvailability.OUT_OF_STOCK }
+  } else {
+    products
+  }
+  return when (sort) {
+    FavoritesSort.NAME -> filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    FavoritesSort.PRICE_LOW -> filtered.sortedWith(
+      compareBy(nullsLast()) { product -> product.pack?.unitPricePaise }
+        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
+    )
+    FavoritesSort.PRICE_HIGH -> filtered.sortedWith(
+      compareBy(nullsLast()) { product -> product.pack?.unitPricePaise?.let { -it } }
+        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
+    )
+  }
+}
 
 /**
  * The favourites list state.
@@ -35,8 +82,20 @@ data class FavoritesUiState(
   val resultCount: Int? = null,
   /** Message from a failed favourite toggle, for a snackbar. */
   val actionMessage: String? = null,
+  /** How the saved list is ordered. A view preference over server rows. */
+  val sort: FavoritesSort = FavoritesSort.NAME,
+  /** Hide what the server currently reports as out of stock. */
+  val inStockOnly: Boolean = false,
 ) {
   val isEmpty: Boolean get() = !loading && errorMessage == null && products.isEmpty()
+
+  /** The rows to draw, in the order the shopper chose. */
+  val visibleProducts: List<CatalogProduct>
+    get() = favoritesView(products, sort, inStockOnly)
+
+  /** Everything saved is out of stock — a different sentence from "saved nothing". */
+  val allHiddenByFilter: Boolean
+    get() = products.isNotEmpty() && visibleProducts.isEmpty()
 }
 
 /**
@@ -131,6 +190,22 @@ class FavoritesViewModel @Inject constructor(
 
   fun consumeActionMessage() {
     _state.update { it.copy(actionMessage = null) }
+  }
+
+  /** Re-order the saved list. No request: it re-sorts the rows on screen. */
+  fun selectSort(sort: FavoritesSort) {
+    _state.update { it.copy(sort = sort) }
+  }
+
+  /**
+   * Hide (or show) what the server reports as out of stock.
+   *
+   * The filter is over the availability the SERVER just returned for these
+   * rows, so "in stock" here is the same two-state fact the cards show — never
+   * a stock count, which this API deliberately does not publish.
+   */
+  fun toggleInStockOnly() {
+    _state.update { it.copy(inStockOnly = !it.inStockOnly) }
   }
 
   private suspend fun fetch(cursor: String?, append: Boolean) {

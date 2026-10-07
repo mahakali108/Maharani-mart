@@ -35,6 +35,11 @@ data class HomeDashboard(
   val lastOrder: HomeOrderSummary? = null,
   val recentlyViewed: List<RecentlyViewedProduct> = emptyList(),
   /**
+   * What this shop orders most, from its own order history. Empty when the
+   * account has none, and the rail is then simply not drawn.
+   */
+  val frequentlyOrdered: List<HomeFrequentlyOrdered> = emptyList(),
+  /**
    * A dashboard read that failed. Non-null does NOT hide the discovery content:
    * the home shows the note and keeps the shop on screen.
    */
@@ -44,7 +49,7 @@ data class HomeDashboard(
 ) {
   /** Nothing at all was returned: the sections below are all omitted. */
   val isEmpty: Boolean
-    get() = coins == null && lastOrder == null && recentlyViewed.isEmpty()
+    get() = coins == null && lastOrder == null && recentlyViewed.isEmpty() && frequentlyOrdered.isEmpty()
 }
 
 /**
@@ -67,6 +72,22 @@ data class HomeCoins(
  * price, stock and MOQ are what decide — this summary is a shortcut to that
  * flow, never a copy of it.
  */
+/**
+ * One product this shop buys repeatedly, derived from its OWN order history.
+ *
+ * Only identity travels here (and the count of past orders that contained it) —
+ * no price and no stock, because a figure remembered on the device would be
+ * yesterday's by the time it is read. Tapping opens the product, where the
+ * current rate and availability arrive from the server.
+ */
+data class HomeFrequentlyOrdered(
+  val productId: String,
+  val name: String,
+  val packName: String?,
+  /** Past orders (of the pages read) that contained this pack. */
+  val timesOrdered: Int,
+)
+
 data class HomeOrderSummary(
   val id: String,
   val orderNumber: String,

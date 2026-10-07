@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +72,13 @@ object CommerceTags {
   const val CART_SAVE = "commerce_cart_save"
   const val CART_SAVE_NAME = "commerce_cart_save_name"
   const val CART_SAVE_CONFIRM = "commerce_cart_save_confirm"
+  /** Cart 2.0: bulk selection, the server-change warnings and bulk actions. */
+  const val CART_SELECT = "commerce_cart_select"
+  const val CART_SELECTION_BAR = "commerce_cart_selection_bar"
+  const val CART_NOTICES = "commerce_cart_notices"
+  const val CART_REMOVE_SELECTED = "commerce_cart_remove_selected"
+  const val CART_SAVE_SELECTED = "commerce_cart_save_selected"
+  const val CART_CLEAR = "commerce_cart_clear"
   const val CHECKOUT_SCREEN = "commerce_checkout_screen"
   const val CHECKOUT_QUOTE = "commerce_checkout_quote"
   const val CHECKOUT_SUBMIT = "commerce_checkout_submit"
@@ -249,6 +257,10 @@ private fun CartContent(
       ) { Text(if (state.cartLoading) "Refreshing cart…" else "Refresh shared cart") }
     }
     state.message?.let { InlineMessage(it, onDismiss = viewModel::clearMessage) }
+    // The outcome of a bulk action (remove selected, clear cart, save to
+    // favourites): stated once, and dismissible, so a batch that partly failed
+    // is never silently reported as a success.
+    state.bulkMessage?.let { InlineMessage(it, onDismiss = viewModel::consumeBulkMessage) }
     saveForLaterError?.let { InlineMessage(it, isError = true) }
     saveForLaterMessage?.let { InlineMessage(it) }
 
@@ -261,10 +273,31 @@ private fun CartContent(
         modifier = Modifier.fillMaxWidth().height(260.dp).testTag(CommerceTags.CART_EMPTY),
       )
     } else {
+      // What the server changed since the last read. Each warning names the
+      // line it belongs to and what moved — a silently re-priced basket is
+      // exactly the failure this screen must not have.
+      CartNoticeList(
+        notices = state.cartNotices,
+        onDismiss = viewModel::dismissNotices,
+      )
+
+      CartSelectionBar(
+        state = state,
+        onSelectAll = viewModel::selectAllOrderable,
+        onClear = viewModel::clearSelection,
+        onRemoveSelected = viewModel::removeSelected,
+        onSaveSelected = viewModel::moveSelectedToFavourites,
+        onClearCart = viewModel::clearCart,
+        onSaveForLater = { onSaveForLater(it) },
+        saveForLaterBusy = saveForLaterBusy,
+      )
+
       cart?.lines?.forEach { line ->
         CartLineCard(
           line = line,
-          busy = state.isCartMutating || state.cartNeedsRefresh || state.cartLoading,
+          selected = line.id in state.selectedLineIds,
+          onToggleSelection = { viewModel.toggleLineSelection(line.id) },
+          busy = state.isCartMutating || state.cartNeedsRefresh || state.cartLoading || state.bulkActionBusy,
           onIncrease = { viewModel.increment(line.id) },
           onDecrease = { viewModel.decrement(line.id) },
           onRemove = { viewModel.removeCartLine(line.id) },
@@ -349,6 +382,9 @@ private fun CartLineCard(
   onSaveForLater: () -> Unit,
   saveForLaterBusy: Boolean,
   modifier: Modifier = Modifier,
+  /** Whether this line is ticked for a bulk action. */
+  selected: Boolean = false,
+  onToggleSelection: () -> Unit = {},
 ) {
   Surface(
     modifier = modifier.fillMaxWidth().testTag(CommerceTags.CART_ITEM),
@@ -364,6 +400,16 @@ private fun CartLineCard(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
+        // The checkbox is the row's bulk-action handle. It is a real checkbox
+        // (not a coloured card) so TalkBack announces its state and the tick is
+        // the state — colour is only reinforcement.
+        Checkbox(
+          checked = selected,
+          onCheckedChange = { onToggleSelection() },
+          modifier = Modifier
+            .size(MaharaniDimens.touchTarget)
+            .testTag("${CommerceTags.CART_SELECT}_${line.id}"),
+        )
         CartLineImage(
           url = line.imageUrl,
           fallbackLabel = line.productName ?: line.packName ?: "Item",
@@ -489,6 +535,170 @@ private fun CartLineImage(url: String?, fallbackLabel: String, modifier: Modifie
       }
     },
   )
+}
+
+/**
+ * What the server changed in this basket.
+ *
+ * These are WARNINGS, never silent edits: the app does not drop a line the
+ * server re-priced, and does not adjust a quantity by itself. Each notice names
+ * the line and states the change in the server's own figures, so the shopper
+ * decides what to do about it.
+ */
+@Composable
+private fun CartNoticeList(
+  notices: List<CartLineNotice>,
+  onDismiss: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  if (notices.isEmpty()) return
+  val tokens = MaharaniThemeTokens.colors
+  Surface(
+    color = tokens.warningSurface,
+    contentColor = tokens.warning,
+    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(CommerceTags.CART_NOTICES),
+  ) {
+    Column(
+      modifier = Modifier.padding(MaharaniDimens.spaceMd),
+      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text = "Your cart changed",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold,
+          modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 40.dp)) { Text("Dismiss") }
+      }
+      notices.forEach { notice ->
+        Text(
+          text = "${notice.productName}: ${notice.detail}",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurface,
+        )
+      }
+      Text(
+        text = "Prices, stock and minimums are always the server's. Nothing has been changed for you.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
+}
+
+/**
+ * The bulk-action bar.
+ *
+ * Every control here writes through the real cart endpoints — remove, save for
+ * later — or the shared favourites store, so there is no local deletion that
+ * could disagree with the server. The count is stated in words as well as
+ * numbers, and "Clear cart" is a plain button because an accidental tap is
+ * recoverable by re-adding, not by a support ticket.
+ */
+@Composable
+private fun CartSelectionBar(
+  state: CartCheckoutUiState,
+  onSelectAll: () -> Unit,
+  onClear: () -> Unit,
+  onRemoveSelected: () -> Unit,
+  onSaveSelected: () -> Unit,
+  onClearCart: () -> Unit,
+  onSaveForLater: (String) -> Unit,
+  saveForLaterBusy: Boolean,
+  modifier: Modifier = Modifier,
+) {
+  val selected = state.selectedLineIds
+  Surface(
+    color = MaterialTheme.colorScheme.surfaceContainerLow,
+    shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(CommerceTags.CART_SELECTION_BAR),
+  ) {
+    Column(
+      modifier = Modifier.padding(MaharaniDimens.spaceMd),
+      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        Text(
+          text = if (selected.isEmpty()) {
+            "Select lines to act on them in bulk"
+          } else {
+            "${selected.size} line${if (selected.size == 1) "" else "s"} selected"
+          },
+          style = MaterialTheme.typography.titleSmall,
+          modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onSelectAll, enabled = !state.bulkActionBusy) { Text("Select all") }
+        if (selected.isNotEmpty()) {
+          TextButton(onClick = onClear, enabled = !state.bulkActionBusy) { Text("Clear") }
+        }
+      }
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+      ) {
+        OutlinedButton(
+          onClick = onSaveSelected,
+          enabled = selected.isNotEmpty() && !state.bulkActionBusy,
+          modifier = Modifier
+            .weight(1f)
+            .heightIn(min = MaharaniDimens.touchTarget)
+            .testTag(CommerceTags.CART_SAVE_SELECTED),
+          shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+        ) { Text("Save to favourites") }
+
+        OutlinedButton(
+          onClick = {
+            if (selected.size == 1) onSaveForLater(selected.first())
+          },
+          enabled = selected.size == 1 && !state.bulkActionBusy && !saveForLaterBusy,
+          modifier = Modifier
+            .weight(1f)
+            .heightIn(min = MaharaniDimens.touchTarget),
+          shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+        ) { Text("Save for later") }
+      }
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+      ) {
+        OutlinedButton(
+          onClick = onRemoveSelected,
+          enabled = selected.isNotEmpty() && !state.bulkActionBusy,
+          modifier = Modifier
+            .weight(1f)
+            .heightIn(min = MaharaniDimens.touchTarget)
+            .testTag(CommerceTags.CART_REMOVE_SELECTED),
+          shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+        ) { Text(if (state.bulkActionBusy) "Working…" else "Remove selected") }
+
+        OutlinedButton(
+          onClick = onClearCart,
+          enabled = state.cart?.lines?.isNotEmpty() == true && !state.bulkActionBusy,
+          modifier = Modifier
+            .weight(1f)
+            .heightIn(min = MaharaniDimens.touchTarget)
+            .testTag(CommerceTags.CART_CLEAR),
+          shape = RoundedCornerShape(MaharaniDimens.radiusTile),
+        ) { Text("Clear cart") }
+      }
+    }
+  }
 }
 
 @Composable

@@ -267,17 +267,30 @@ data class OrderDelivery(
     get() = items.any { it.quantityMissing > 0 || it.quantityDamaged > 0 }
 }
 
+/** One line the server refused during a reorder, with its own reason. */
+data class ReorderLineFailure(
+  val packId: String,
+  val quantity: Int,
+  val message: String,
+)
+
 /**
  * What a reorder actually achieved.
  *
- * [addedCount] counts the lines the server accepted; a failure stops the
- * replay and is reported with the error instead, because the lines already
- * added remain in the server cart and the app must not claim otherwise.
+ * [addedCount] counts the lines the server accepted and [failures] names the
+ * ones it refused. A refusal no longer STOPS the replay: the shopper asked for
+ * the whole order, so the lines the warehouse can still fill go into the cart
+ * and the rest are reported line by line — "Product A: only 20 pcs available"
+ * rather than one generic failure that hides which line it was.
+ *
+ * The lines already accepted are in the server cart either way, which is why
+ * the caller re-reads the badge instead of assuming nothing happened.
  */
 data class ReorderOutcome(
   val requestedCount: Int,
   val addedCount: Int,
   val cart: CartSnapshot?,
+  val failures: List<ReorderLineFailure> = emptyList(),
 )
 
 data class RetailerOrder(
