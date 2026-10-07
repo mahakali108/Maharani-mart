@@ -124,7 +124,7 @@ card radius cannot drift between screens:
 | Group | Values |
 | --- | --- |
 | Spacing | `spaceXxs 2` · `spaceXs 4` · `spaceSm 8` · `spaceMd 12` · `spaceLg 16` · `spaceXl 24` · `spaceXxl 32` |
-| Layout | `pageGutter 16` · `cardGap 10` · `touchTarget 48` · `searchFieldHeight 46` · `bottomBarHeight 64` |
+| Layout | `pageGutter 16` · `cardGap 10` · `cardPadding 10` · `touchTarget 48` · `searchFieldHeight 48` · `bottomBarHeight 64` |
 | Radii | `radiusCard 16` · `radiusTile 12` · `radiusField 26` · `radiusChip 8` · `radiusPill 999` |
 | Media | `productImageRatio 1:1` · `railCardWidth 168` · `categoryTileWidth 88` · `categoryTileImage 64` · `brandTileWidth 84` · `bannerHeight 156` · `heroImageHeight 300` |
 | Elevation | `cardElevation 1` · `appBarElevation 2` (flat, modern; depth comes from borders and tone) |

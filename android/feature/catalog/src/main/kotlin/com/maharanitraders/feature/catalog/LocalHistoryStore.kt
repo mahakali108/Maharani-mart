@@ -179,19 +179,23 @@ class LocalHistoryStore @Inject constructor(
   /** Percent-escape the two delimiters and `%` itself, so fields cannot merge. */
   private fun encode(value: String): String = value
     .replace("%", "%25")
-    .replace(RECORD.toString(), "%1F")
-    .replace(FIELD.toString(), "%1E")
+    .replace(RECORD, "%1F")
+    .replace(FIELD, "%1E")
 
   private fun decode(value: String): String = value
-    .replace("%1F", RECORD.toString())
-    .replace("%1E", FIELD.toString())
+    .replace("%1F", RECORD)
+    .replace("%1E", FIELD)
     .replace("%25", "%")
 
   private companion object {
     const val KEY_RECENT_SEARCHES = "recent_searches_v1"
     const val KEY_RECENTLY_VIEWED = "recently_viewed_v1"
-    const val RECORD = '\u001F'
-    const val FIELD = '\u001E'
+
+    // The delimiters are Strings, not Chars: `joinToString` takes a
+    // CharSequence separator, and a Char there is a compile error — which is
+    // exactly how this was caught (the Android CI job, not a device).
+    const val RECORD = "\u001F"
+    const val FIELD = "\u001E"
     const val MAX_SEARCHES = 8
     const val MAX_VIEWED = 12
     const val MAX_TERM_LENGTH = 60
