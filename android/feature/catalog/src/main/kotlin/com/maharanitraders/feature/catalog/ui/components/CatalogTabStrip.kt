@@ -1,5 +1,6 @@
 package com.maharanitraders.feature.catalog.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -30,15 +32,22 @@ import com.maharanitraders.feature.catalog.ui.CatalogScreenTags
 /**
  * The Catalogue's segmented control: Products | Categories | Brands.
  *
- * One pill, three equal segments, the selected one filled with the primary
- * colour — the standard Material segmented shape, drawn as a [Surface] so the
- * app carries no extra dependency and the corners match every other pill in the
- * app.
+ * One pill, three equal segments. The selected segment is filled with the
+ * Maharani brand red and its label is white and semibold; the unselected ones
+ * sit on the shared neutral track in muted ink. That is three cues at once
+ * (fill, weight, contrast) rather than a single colour shift, so "which pane am
+ * I on" survives a screenshot, a colour-vision difference and a bright shop
+ * window alike.
+ *
+ * The track is a real surface with a hairline outline instead of a floating
+ * pill: the control is a primary navigation element, and on a white header a
+ * white-on-white control reads as decoration — the exact "looks unfinished"
+ * problem this redesign removes.
  *
  * Accessibility: the row is a [selectableGroup] and each segment is
  * `selectable` with [Role.Tab], so TalkBack announces "tab, 2 of 3, selected"
  * rather than three unlabelled buttons; every segment keeps the 48dp touch
- * target even though the pill is shorter.
+ * target even though the pill is drawn tighter.
  */
 @Composable
 fun CatalogTabStrip(
@@ -48,7 +57,8 @@ fun CatalogTabStrip(
 ) {
   Surface(
     shape = RoundedCornerShape(MaharaniDimens.radiusPill),
-    color = MaterialTheme.colorScheme.surfaceVariant,
+    color = MaterialTheme.colorScheme.surfaceContainer,
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     modifier = modifier
       .fillMaxWidth()
       .testTag(CatalogScreenTags.TAB_ROW),
@@ -56,9 +66,9 @@ fun CatalogTabStrip(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(3.dp)
+        .padding(4.dp)
         .selectableGroup(),
-      horizontalArrangement = Arrangement.spacedBy(3.dp),
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       CatalogTab.entries.forEach { tab ->
@@ -68,13 +78,7 @@ fun CatalogTabStrip(
             .weight(1f)
             .heightIn(min = MaharaniDimens.touchTarget)
             .clip(RoundedCornerShape(MaharaniDimens.radiusPill))
-            .background(
-              if (isSelected) {
-                MaterialTheme.colorScheme.primary
-              } else {
-                MaterialTheme.colorScheme.surfaceVariant
-              }
-            )
+            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .selectable(
               selected = isSelected,
               role = Role.Tab,

@@ -284,8 +284,8 @@ rest of the API: `newRequestId()` → `enforceRateLimit` → `requireMobileSessi
 | --- | --- | --- | --- |
 | GET | `/catalog/products?q&categoryId&brandId&sort&minPrice&maxPrice&discount&maxMoq&inStock&new&offers&fav&cursor` | retailer | `loadCatalogBatch` (`lib/retailer/catalog-batches.ts`) → `lib/retailer/catalog.ts` pricing, `catalog-params.ts` (`CATALOG_SORTS`, `sanitizeSearchTerm`, `CATALOG_PAGE_SIZE = 24`, result cap 240) |
 | GET | `/catalog/products/{id}` | retailer | product **or** pack id. `loadProductsByIds` + `priceCatalogPack` + `loadPackTiers` + gallery (`product_pack_images`, `product_packs.image_url`, `product_images`). A pack id marks that pack `selected: true`. |
-| GET | `/catalog/categories` | retailer | `lib/retailer/home-data.ts`, ordered by `sort_order` |
-| GET | `/catalog/brands` | retailer | `lib/retailer/home-data.ts`, ordered by `name` |
+| GET | `/catalog/categories` | retailer | `loadMobileTaxonomy` → `loadTaxonomyScope` (`lib/mobile/catalog-service.ts`); active rows by `sort_order`, plain columns, caller's RLS token |
+| GET | `/catalog/brands` | retailer | the same read; active rows by `name` |
 | GET | `/home` | retailer | `loadRetailerHome` — banners (`isBannerVisible` + `resolveBannerTarget`), categories, brands, and a discovery rail that is **the first batch of the real catalogue**, not a separately curated list |
 
 **Query semantics.** `inStock`, `new`, `offers` and `fav` are explicit `=1`
@@ -294,6 +294,18 @@ flags and default off. `minPrice`/`maxPrice` are rupees; a negative value,
 `cursor` is `400 invalid_request` with the offending field named. An unknown
 `sort` falls back to `recommended` instead of erroring, so an older app asking
 for a sort a newer server dropped still gets a catalogue.
+
+**Taxonomy contract (`/catalog/categories`, `/catalog/brands`).**
+`categories` is `{ id, name, imageUrl, parentName, productCount }` and `brands` is
+`{ id, name, logoUrl, productCount }`. `productCount` is the number of ACTIVE
+products the shop publishes for that category or brand, counted on the server
+from real product rows; it is `null` when the count could not be completed, and
+never a partial sum or a placeholder zero. An empty array means **the shop
+publishes none** — a read that fails is `503 database_unavailable`, never
+`200` with an empty body, so the app can tell "nothing here" apart from "this
+did not load" and its Retry can actually change something. Counts are advisory
+metadata: they never gate a filter, and the product list remains the authority
+on what is orderable.
 
 **There is no `limit` parameter.** The batch size is the server's
 `CATALOG_PAGE_SIZE` (24) and keyset cursors are aligned to it; a client asking

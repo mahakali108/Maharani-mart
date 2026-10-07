@@ -28,6 +28,16 @@ object MaharaniDimens {
   /** Grid/rail gap between cards. */
   val cardGap = 10.dp
 
+  /**
+   * Inside a product card.
+   *
+   * 10dp rather than the 12dp page rhythm: at 360dp two cards leave ~159dp
+   * each, and those 4dp decide whether a two-line product name fits or clips.
+   * The card and its skeleton read the same token, so the loading grid and the
+   * loaded grid have identical geometry and the images do not jump.
+   */
+  val cardPadding = 10.dp
+
   // Corner radii (mirror MaterialTheme.shapes; exposed for Canvas-drawn art).
   val radiusCard = 16.dp
   val radiusTile = 12.dp

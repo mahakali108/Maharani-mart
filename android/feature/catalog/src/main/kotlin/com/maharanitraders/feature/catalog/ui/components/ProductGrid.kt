@@ -69,6 +69,16 @@ fun ProductGrid(
   isFavorite: (CatalogProduct) -> Boolean = { it.isFavorite },
   isFavoritePending: (CatalogProduct) -> Boolean = { false },
   onToggleFavorite: ((String) -> Unit)? = null,
+  /**
+   * A slot drawn ABOVE the first card, inside the same scroller.
+   *
+   * The catalogue puts its filter controls here rather than pinning them: a
+   * sticky control block plus a sticky search header left ~230dp of a 640dp
+   * phone for the cards themselves, which is the "everything is chrome" look
+   * this redesign removes. As a grid item the controls scroll away with the
+   * content and come back when the shopper scrolls up.
+   */
+  header: (LazyGridScope.() -> Unit)? = null,
   footer: (LazyGridScope.() -> Unit)? = null,
 ) {
   LazyVerticalGrid(
@@ -79,6 +89,7 @@ fun ProductGrid(
     horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
     verticalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
   ) {
+    header?.invoke(this)
     productCardItems(
       products = products,
       onOpenProduct = onOpenProduct,

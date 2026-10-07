@@ -3,28 +3,28 @@ package com.maharanitraders.core.designsystem.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Brand palette, transcribed from the EXISTING web tokens plus the native
- * shopping-redesign brief:
+ * Brand palette.
  *
- *   - `tailwind.config.ts` → `primary` (premium red) and `action` (buy blue)
- *   - the launcher background asset ships the same brand red (#C8102E)
- *   - the native redesign promotes the marketplace blue to the app's PRIMARY
- *     commerce colour (Flipkart-style shopping chrome) while the brand red
- *     stays the identity colour of the crown mark, the splash and accents;
- *     both come from the SAME web tokens, so nothing here is invented.
- *   - the saffron scale and the cool page greys are the one addition of the
- *     native brief (restrained accents, light-blue page backgrounds). They are
- *     design tokens, not data: no product, price or stock value lives here.
+ * MAHARANI RED IS THE PRIMARY. The brand red scale below (#C8102E at
+ * [BrandRed600]) is the app's `primary` — app bar, selected tab, bottom-bar
+ * selection, primary buttons, prices' accent and progress — and it is the same
+ * red as the launcher background asset and the web's `primary` token in
+ * `tailwind.config.ts`, so the app and the storefront cannot drift apart.
  *
- * The native brief asks for a ROYAL / DEEP BLUE primary with a WARM GOLDEN
- * accent, so the [RoyalBlue] scale below is the commerce chrome (app bar,
- * bottom navigation, buttons, selection) and the existing saffron scale is the
- * accent family the theme is built on. The brand red stays the identity colour
- * (crown mark, launcher, splash, "New" ribbon) — three families, each with one
- * job, rather than everything in one blue.
+ * What the rest of the palette is for:
+ *   - [Saffron] is the one accent ([ColorScheme.secondary]): offer badges,
+ *     wholesale highlights and small emphatic surfaces;
+ *   - [Neutral] page/surface greys keep white cards on a continuous, warm
+ *     neutral background — the app deliberately has no blue chrome;
+ *   - [Success]/[OutOfStockRose] are the stock states (green in stock, rose
+ *     unavailable) and are never used decoratively;
+ *   - [Ink] is text and elevation-by-surface.
  *
- * Note for reviewers: use these tokens (or the Material 3 scheme built from
- * them in [MaharaniTheme]) instead of literal hex values in screens.
+ * The web storefront still carries its own `action` blue in `tailwind.config.ts`
+ * (that is a web token, not an app one); nothing on this layer is blue, so the
+ * native app cannot render blue chrome by accident.
+ *
+ * No product, price or stock value lives here: these are design tokens only.
  */
 object MaharaniPalette {
 
@@ -40,33 +40,6 @@ object MaharaniPalette {
   val BrandRed800 = Color(0xFF8C0F24)
   val BrandRed900 = Color(0xFF771023)
   val BrandRed950 = Color(0xFF41040F)
-
-  // Action blue — the retailer "buy" colour on the web (Add to cart, Place order).
-  val ActionBlue50 = Color(0xFFF0F6FF)
-  val ActionBlue100 = Color(0xFFDCEBFF)
-  val ActionBlue200 = Color(0xFFB9D8FF)
-  val ActionBlue300 = Color(0xFF8CBDFF)
-  val ActionBlue400 = Color(0xFF5C9AF8)
-  val ActionBlue500 = Color(0xFF2874F0)
-  val ActionBlue600 = Color(0xFF1E5FD8)
-  val ActionBlue700 = Color(0xFF1A4DB4)
-  val ActionBlue800 = Color(0xFF1A4394)
-  val ActionBlue900 = Color(0xFF1A3C78)
-
-  // Royal blue — the PRIMARY chrome family: app bar, bottom navigation, primary
-  // buttons, selected states. A deep, saturated royal blue rather than the
-  // lighter marketplace blue: it is the colour the whole shop is built on, so it
-  // has to hold white text at every size (contrast 8.4:1 at 600).
-  val RoyalBlue50 = Color(0xFFEEF3FF)
-  val RoyalBlue100 = Color(0xFFDCE6FF)
-  val RoyalBlue200 = Color(0xFFBCCEFF)
-  val RoyalBlue300 = Color(0xFF93ACF8)
-  val RoyalBlue400 = Color(0xFF6285EC)
-  val RoyalBlue500 = Color(0xFF3A61D8)
-  val RoyalBlue600 = Color(0xFF2348BE) // primary core
-  val RoyalBlue700 = Color(0xFF1B3A9E)
-  val RoyalBlue800 = Color(0xFF172F7E)
-  val RoyalBlue900 = Color(0xFF132861)
 
   // Ink — text and neutral surfaces.
   val Ink50 = Color(0xFFF6F6F6)
@@ -102,16 +75,19 @@ object MaharaniPalette {
   val Saffron800 = Color(0xFF854D0E)
   val Saffron900 = Color(0xFF78350F)
 
-  // Cool page greys — the light-blue-tinted backgrounds the native redesign
-  // puts behind white cards, so the shop reads as one continuous surface.
-  val PageLight = Color(0xFFF3F6FB)
-  val Cool50 = Color(0xFFF8FAFD)
-  val Cool100 = Color(0xFFEFF3F9)
-  val Cool200 = Color(0xFFE3EAF3)
-  val Cool300 = Color(0xFFD3DDEA)
-  val PageDark = Color(0xFF0D1218)
-  val SurfaceDark = Color(0xFF151C25)
-  val SurfaceDarkHigh = Color(0xFF1E2732)
+  // Page and surface neutrals — the light, WARM-NEUTRAL backgrounds the native
+  // shopping UI puts behind white cards, so the shop reads as one continuous
+  // surface and the brand red is the only strong colour on screen. Deliberately
+  // not blue-tinted: a cool page grey is what made the whole app read as
+  // "marketplace blue" even when nothing on it was blue.
+  val NeutralPage = Color(0xFFF7F6F7)
+  val Neutral50 = Color(0xFFFBFAFA)
+  val Neutral100 = Color(0xFFF2F1F2)
+  val Neutral200 = Color(0xFFE7E5E6)
+  val Neutral300 = Color(0xFFD8D5D7)
+  val PageDark = Color(0xFF121013)
+  val SurfaceDark = Color(0xFF1A1719)
+  val SurfaceDarkHigh = Color(0xFF252124)
 
   val Warning50 = Color(0xFFFFFBEB)
   val Warning600 = Color(0xFFD97706)

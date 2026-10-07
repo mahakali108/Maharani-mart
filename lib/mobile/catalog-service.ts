@@ -33,10 +33,12 @@ import {
   toMobileCatalogProducts,
   type MobileBanner,
   type MobileBannerRow,
+  type MobileBrandRow,
   type MobileCatalogBrand,
   type MobileCatalogCategory,
   type MobileCatalogFilters,
   type MobileCatalogProduct,
+  type MobileCategoryRow,
   type MobilePriceTier,
 } from '@/lib/mobile/catalog';
 import type { ListCursor } from '@/lib/infinite-scroll/cursor';
@@ -81,21 +83,6 @@ interface AreaRow {
   area_id: string | null;
 }
 
-interface RawCategoryRow {
-  id: string;
-  name: string;
-  image_url: string | null;
-  parent_id: string | null;
-  products: { count: number }[] | null;
-}
-
-interface RawBrandRow {
-  id: string;
-  name: string;
-  logo_url: string | null;
-  products: { count: number }[] | null;
-}
-
 /** The raw taxonomy rows the shared catalogue service needs to scope a filter. */
 interface TaxonomyRow {
   categories: { id: string; name: string; parent_id: string | null }[];
@@ -118,38 +105,143 @@ export async function loadMobileCatalogContext(session: MobileSession): Promise<
   return { areaId: retailer?.area_id ?? null, ...taxonomy };
 }
 
+/** How many product rows one count-scan page reads. */
+const TAXONOMY_COUNT_PAGE_SIZE = 500;
+
 /**
- * Active categories and brands, in wire shape.
+ * How many pages the count scan will read before counts become UNKNOWN.
  *
- * Both tables are public master data under their existing RLS policies
- * (`is_active or is_staff_or_above()`), so this widens nothing — and the counts
- * are the real active-product aggregates, with `null` where an aggregate could
- * not be read rather than an invented zero.
+ * The scan is a bounded read of two small columns (`category_id`,
+ * `brand_id`) over active products, so it is exact for any catalogue up to
+ * `TAXONOMY_COUNT_PAGE_SIZE * TAXONOMY_COUNT_MAX_PAGES` products. Past that
+ * bound the counts are reported as `null` (unknown) rather than as an
+ * approximation or a partial sum — the shopper is told "tap to browse" instead
+ * of being shown a number the server did not actually count.
  */
+const TAXONOMY_COUNT_MAX_PAGES = 10;
+
+interface ProductScopeRow {
+  id: string;
+  category_id: string | null;
+  brand_id: string | null;
+}
+
+/** Active products per category and per brand, or `null` when unknown. */
+interface TaxonomyCounts {
+  categories: Map<string, number>;
+  brands: Map<string, number>;
+}
+
+/**
+ * Count active products per category and brand with a bounded keyset scan.
+ *
+ * WHY NOT `products(count)`: the aggregate embed is an optional PostgREST
+ * capability, and when a project does not enable it the aggregate query fails
+ * as a WHOLE — the category list would disappear along with its counts. That
+ * failure cannot be reproduced here (it needs the real PostgREST), so the read
+ * is built on the one query shape this API already uses everywhere else (plain
+ * columns, `is_active`, RLS under the caller's own token) and the count is
+ * derived on the server from real rows.
+ *
+ * Returns `null` when the scan could not complete — a failed request or a
+ * catalogue larger than the bound — because an incomplete count is unknown,
+ * not zero.
+ */
+async function loadTaxonomyCounts(supabase: SupabaseClient): Promise<TaxonomyCounts | null> {
+  const categories = new Map<string, number>();
+  const brands = new Map<string, number>();
+  let cursor: string | null = null;
+
+  for (let page = 0; page < TAXONOMY_COUNT_MAX_PAGES; page += 1) {
+    let query = supabase
+      .from('products')
+      .select('id, category_id, brand_id')
+      .eq('is_active', true)
+      .order('id')
+      .limit(TAXONOMY_COUNT_PAGE_SIZE);
+    if (cursor !== null) query = query.gt('id', cursor);
+
+    const { data, error } = await query.returns<ProductScopeRow[]>();
+    if (error) return null;
+
+    const rows = data ?? [];
+    for (const row of rows) {
+      if (row.category_id) categories.set(row.category_id, (categories.get(row.category_id) ?? 0) + 1);
+      if (row.brand_id) brands.set(row.brand_id, (brands.get(row.brand_id) ?? 0) + 1);
+    }
+
+    if (rows.length < TAXONOMY_COUNT_PAGE_SIZE) return { categories, brands };
+    cursor = rows[rows.length - 1]!.id;
+  }
+
+  // The bound was reached: the catalogue is bigger than this scan, so no count
+  // can be claimed. Unknown, never a truncated sum.
+  return null;
+}
+
+interface TaxonomyScope {
+  categoryRows: MobileCategoryRow[];
+  brandRows: MobileBrandRow[];
+  /** `null` when the counts could not be read completely. */
+  categoryCounts: Map<string, number> | null;
+  brandCounts: Map<string, number> | null;
+}
+
+/**
+ * Active categories and brands, plus their active-product counts.
+ *
+ * THROWS when the taxonomy itself cannot be read. That is the point: an empty
+ * list has to mean "the shop publishes no categories", and a failure has to
+ * mean "this read did not happen". Coalescing a failed query into `[]` — which
+ * is what this function used to do — rendered a silent, permanently empty
+ * Categories pane whose Retry could never change anything, because the request
+ * had actually succeeded with an empty body.
+ *
+ * The COUNTS are separate and optional: when counting fails the taxonomy is
+ * still returned with `productCount: null`, so a count outage degrades the
+ * number, not the list.
+ */
+async function loadTaxonomyScope(supabase: SupabaseClient): Promise<TaxonomyScope> {
+  const [categoryResult, brandResult] = await Promise.all([
+    supabase
+      .from('categories')
+      .select('id, name, image_url, parent_id')
+      .eq('is_active', true)
+      .order('sort_order')
+      .returns<MobileCategoryRow[]>(),
+    supabase
+      .from('brands')
+      .select('id, name, logo_url')
+      .eq('is_active', true)
+      .order('name')
+      .returns<MobileBrandRow[]>(),
+  ]);
+
+  if (categoryResult.error) {
+    throw new Error(`Categories could not be read: ${categoryResult.error.message}`);
+  }
+  if (brandResult.error) {
+    throw new Error(`Brands could not be read: ${brandResult.error.message}`);
+  }
+
+  const counts = await loadTaxonomyCounts(supabase);
+
+  return {
+    categoryRows: categoryResult.data ?? [],
+    brandRows: brandResult.data ?? [],
+    categoryCounts: counts?.categories ?? null,
+    brandCounts: counts?.brands ?? null,
+  };
+}
+
+/** Active categories and brands, in wire shape. Throws when the read fails. */
 export async function loadMobileTaxonomy(
   session: MobileSession
 ): Promise<{ categories: MobileCatalogCategory[]; brands: MobileCatalogBrand[] }> {
-  const supabase = retailerSupabase(session);
-  const [{ data: categoryRows }, { data: brandRows }] = await Promise.all([
-    supabase
-      .from('categories')
-      .select('id, name, image_url, parent_id, products(count)')
-      .eq('is_active', true)
-      .eq('products.is_active', true)
-      .order('sort_order')
-      .returns<RawCategoryRow[]>(),
-    supabase
-      .from('brands')
-      .select('id, name, logo_url, products(count)')
-      .eq('is_active', true)
-      .eq('products.is_active', true)
-      .order('name')
-      .returns<RawBrandRow[]>(),
-  ]);
-
+  const scope = await loadTaxonomyScope(retailerSupabase(session));
   return {
-    categories: toMobileCategories(categoryRows ?? []),
-    brands: toMobileBrands(brandRows ?? []),
+    categories: toMobileCategories(scope.categoryRows, scope.categoryCounts),
+    brands: toMobileBrands(scope.brandRows, scope.brandCounts),
   };
 }
 
@@ -452,31 +544,22 @@ export async function loadMobileHome(
 ): Promise<MobileHome> {
   const supabase = retailerSupabase(session);
 
-  const [{ data: retailer }, { data: bannerRows }, { data: categoryRows }, { data: brandRows }] =
-    await Promise.all([
-      supabase.from('retailers').select('area_id').eq('id', session.userId).maybeSingle<AreaRow>(),
-      // Same narrowing as the web home: active rows in the caller's area. The
-      // IST schedule window is applied below by `isBannerVisible`, the one
-      // place that decides it.
-      (async () => {
-        const { data } = await supabase.from('banners').select('*').eq('is_active', true);
-        return { data };
-      })(),
-      supabase
-        .from('categories')
-        .select('id, name, image_url, parent_id, products(count)')
-        .eq('is_active', true)
-        .eq('products.is_active', true)
-        .order('sort_order')
-        .returns<RawCategoryRow[]>(),
-      supabase
-        .from('brands')
-        .select('id, name, logo_url, products(count)')
-        .eq('is_active', true)
-        .eq('products.is_active', true)
-        .order('name')
-        .returns<RawBrandRow[]>(),
-    ]);
+  const [{ data: retailer }, { data: bannerRows }, taxonomy] = await Promise.all([
+    supabase.from('retailers').select('area_id').eq('id', session.userId).maybeSingle<AreaRow>(),
+    // Same narrowing as the web home: active rows in the caller's area. The
+    // IST schedule window is applied below by `isBannerVisible`, the one
+    // place that decides it.
+    (async () => {
+      const { data } = await supabase.from('banners').select('*').eq('is_active', true);
+      return { data };
+    })(),
+    // The SAME taxonomy read the catalogue panes use — one query shape, so the
+    // home rails and the Categories/Brands panes can never disagree about the
+    // shop's master data. A taxonomy outage degrades the two rails (and the
+    // filter scope) and nothing else: unlike the catalogue panes, home still
+    // returns banners and the product rail, so it does not fail as a whole.
+    loadTaxonomyScope(supabase).catch(() => null),
+  ]);
 
   const areaId = retailer?.area_id ?? null;
 
@@ -493,28 +576,30 @@ export async function loadMobileHome(
     banners = [];
   }
 
-  const taxonomy = {
-    categories: (categoryRows ?? []).map((row) => ({
+  const scope = {
+    categories: (taxonomy?.categoryRows ?? []).map((row) => ({
       id: row.id,
       name: row.name,
       parent_id: row.parent_id,
     })),
-    brands: (brandRows ?? []).map((row) => ({ id: row.id, name: row.name })),
+    brands: (taxonomy?.brandRows ?? []).map((row) => ({ id: row.id, name: row.name })),
   };
 
   const batch = await loadCatalogBatch(
     supabase,
     { userId: session.userId, areaId },
     filters,
-    taxonomy.categories,
-    taxonomy.brands,
+    scope.categories,
+    scope.brands,
     null
   );
 
   return {
     banners,
-    categories: toMobileCategories(categoryRows ?? []),
-    brands: toMobileBrands(brandRows ?? []),
+    // A `null` counts map is passed through as null: an unreadable count is
+    // unknown, and must not be multiplied into a zero for every tile.
+    categories: toMobileCategories(taxonomy?.categoryRows ?? [], taxonomy?.categoryCounts ?? null),
+    brands: toMobileBrands(taxonomy?.brandRows ?? [], taxonomy?.brandCounts ?? null),
     products: toMobileCatalogProducts(batch.cards),
     nextCursor: batch.nextCursor,
   };

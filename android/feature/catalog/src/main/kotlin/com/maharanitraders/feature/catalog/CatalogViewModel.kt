@@ -190,10 +190,18 @@ class CatalogViewModel @Inject constructor(
     _state.update { it.copy(actionMessage = null) }
   }
 
-  /** Switch pane. Free: every pane is rendered from state this screen already has. */
+  /**
+   * Switch pane. Free: every pane is rendered from state this screen already
+   * has.
+   *
+   * The directory filter is a LOCAL narrowing of the pane being looked at, so
+   * it is dropped on the way out: a shopper who typed "ri" in Categories and
+   * then opened Brands must not be shown an empty brand list filtered by a term
+   * they typed for a different list.
+   */
   fun selectTab(tab: CatalogTab) {
     if (_state.value.tab == tab) return
-    _state.update { it.copy(tab = tab) }
+    _state.update { it.copy(tab = tab, directoryFilter = "") }
   }
 
   /** Narrow the directory panes to names the server already sent. No request. */
@@ -269,6 +277,19 @@ class CatalogViewModel @Inject constructor(
   }
 
   /**
+   * The IME search action: search NOW instead of waiting out the debounce.
+   *
+   * It cancels the pending debounce so the term is read once, not twice, and
+   * runs the same [reload] every other query change runs — there is no separate
+   * "submitted search" code path that could rank or filter differently from a
+   * typed one.
+   */
+  fun submitSearch() {
+    searchJob?.cancel()
+    reload()
+  }
+
+  /**
    * Apply (or clear) the category filter. Tapping a tile in the Categories pane
    * is the same call, and it moves the shopper to the product list so they can
    * see what the filter did — one catalogue, one result set.
@@ -310,6 +331,26 @@ class CatalogViewModel @Inject constructor(
       )
     }
     if (changed) reload()
+  }
+
+  /**
+   * Clear the applied CATEGORY and BRAND scope in one step.
+   *
+   * The "All" affordances mean "no scope", which is both filters at once, and
+   * [selectCategory]/[selectBrand] each reload on their own — clearing both
+   * through them fired two catalogue reads for one tap and let the first,
+   * already-obsolete response race the second. One state update, one read.
+   *
+   * Search, sort and the in-stock switch are deliberately NOT touched: this is
+   * the scope control, not `clearFilters()`.
+   */
+  fun clearScope() {
+    val current = _state.value
+    if (current.query.categoryId == null && current.query.brandId == null) return
+    _state.update {
+      it.copy(query = it.query.copy(categoryId = null, brandId = null), brandLabel = null)
+    }
+    reload()
   }
 
   fun toggleInStockOnly() {

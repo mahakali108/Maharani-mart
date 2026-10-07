@@ -767,8 +767,11 @@ describe('GET /api/mobile/v1/catalog/categories and /brands', () => {
   it('returns real categories with rolled-up active product counts', async () => {
     install(threeProductTables());
     const payload = await body(await listCategories(request('/api/mobile/v1/catalog/categories')));
+    // The fixture is three products: two in Rice (PRODUCT_1, PRODUCT_3) and one
+    // in Oils. The counts are the server's own count of the real `products`
+    // rows, not a number carried on the category row.
     expect(payload.data.categories).toEqual([
-      { id: CATEGORY_1, name: 'Rice', imageUrl: null, parentName: null, productCount: 1 },
+      { id: CATEGORY_1, name: 'Rice', imageUrl: null, parentName: null, productCount: 2 },
       { id: CATEGORY_2, name: 'Oils', imageUrl: null, parentName: null, productCount: 1 },
     ]);
   });
@@ -780,6 +783,93 @@ describe('GET /api/mobile/v1/catalog/categories and /brands', () => {
     expect(payload.data.brands).toEqual([
       { id: BRAND_2, name: 'Fortune', logoUrl: null, productCount: 1 },
       { id: BRAND_1, name: 'Maharani', logoUrl: null, productCount: 2 },
+    ]);
+  });
+
+  it('reads the taxonomy without an aggregate embed', async () => {
+    // Regression guard for the Categories/Brands outage: the taxonomy read used
+    // `products(count)`, a PostgREST aggregate that is opt-in
+    // (`db-aggregates-enabled`). Where it is unavailable the WHOLE query fails,
+    // so the category list disappeared rather than losing just its counts.
+    const client = install(threeProductTables());
+    await listCategories(request('/api/mobile/v1/catalog/categories'));
+    await listBrands(request('/api/mobile/v1/catalog/brands'));
+
+    for (const table of ['categories', 'brands']) {
+      const query = client.queries.find((q) => q.table === table);
+      expect(query, `${table} was never read`).toBeTruthy();
+      expect(query!.select).not.toContain('count');
+      // No filter is sent at an embedded resource either: those are the
+      // aggregate syntax's companion and are meaningless without it.
+      expect(query!.filters.every((filter) => !filter.column.includes('.'))).toBe(true);
+    }
+  });
+
+  it('answers 503 when the taxonomy read fails instead of an empty shop', async () => {
+    // A failed read used to be coalesced into `[]` and returned as HTTP 200, so
+    // the app rendered "no categories yet" — with a Retry that could never
+    // change anything. A failure is now a failure.
+    install(threeProductTables(), { tableErrors: { categories: 'permission denied for table categories' } });
+    const response = await listCategories(request('/api/mobile/v1/catalog/categories'));
+    expect(response.status).toBe(503);
+    const payload = await body(response);
+    expect(payload.error).toMatchObject({ code: 'database_unavailable' });
+    expect(payload.error.message).toContain('try again');
+  });
+
+  it('answers 503 for brands too, and the retry is a real request', async () => {
+    const client = install(threeProductTables(), { tableErrors: { brands: 'permission denied for table brands' } });
+
+    const first = await listBrands(request('/api/mobile/v1/catalog/brands'));
+    expect(first.status).toBe(503);
+
+    const readsBefore = client.queries.filter((q) => q.table === 'brands').length;
+    const second = await listBrands(request('/api/mobile/v1/catalog/brands'));
+    expect(second.status).toBe(503);
+    // Retry issues a NEW read of the taxonomy rather than replaying a cached
+    // answer, which is what makes it worth tapping.
+    expect(client.queries.filter((q) => q.table === 'brands').length).toBeGreaterThan(readsBefore);
+  });
+
+  it('keeps a genuinely empty taxonomy a 200 with empty lists', async () => {
+    // Empty is not an error: nothing was published, and the app is told so.
+    const tables = threeProductTables();
+    tables.categories = [];
+    tables.brands = [];
+    install(tables);
+
+    const categories = await body(await listCategories(request('/api/mobile/v1/catalog/categories')));
+    const brands = await body(await listBrands(request('/api/mobile/v1/catalog/brands')));
+    expect(categories.data.categories).toEqual([]);
+    expect(brands.data.brands).toEqual([]);
+  });
+
+  it('reports unknown counts rather than zero when counting fails', async () => {
+    // The count scan is a separate read. When it cannot complete, the taxonomy
+    // still answers — with `null` counts, so the app can say "tap to browse"
+    // instead of claiming a category is empty.
+    const tables = threeProductTables();
+    tables.categories = [{ id: CATEGORY_1, name: 'Rice', image_url: null, parent_id: null, is_active: true }];
+    install(tables, { tableErrors: { products: 'statement timeout' } });
+
+    const payload = await body(await listCategories(request('/api/mobile/v1/catalog/categories')));
+    expect(payload.data.categories).toEqual([
+      { id: CATEGORY_1, name: 'Rice', imageUrl: null, parentName: null, productCount: null },
+    ]);
+  });
+
+  it('counts a category with no active products as a real zero', async () => {
+    const tables = threeProductTables();
+    tables.categories = [
+      { id: CATEGORY_1, name: 'Rice', image_url: null, parent_id: null, is_active: true },
+      { id: '00000000-0000-4000-8000-0000000000aa', name: 'Empty shelf', image_url: null, parent_id: null, is_active: true },
+    ];
+    install(tables);
+
+    const payload = await body(await listCategories(request('/api/mobile/v1/catalog/categories')));
+    expect(payload.data.categories).toEqual([
+      { id: CATEGORY_1, name: 'Rice', imageUrl: null, parentName: null, productCount: 2 },
+      { id: '00000000-0000-4000-8000-0000000000aa', name: 'Empty shelf', imageUrl: null, parentName: null, productCount: 0 },
     ]);
   });
 });
@@ -921,17 +1011,38 @@ describe('mobile catalogue mapping', () => {
     expect(toMobileCatalogProduct(card({ imageUrl: undefined })).imageUrl).toBeNull();
   });
 
-  it('rolls a parent category up with its children and reports unknown honestly', () => { {
+  it('rolls a parent category up with its children and reports unknown honestly', () => {
     const rows = [
-      { id: 'c-parent', name: 'Rice', image_url: null, parent_id: null, products: [{ count: 2 }] },
-      { id: 'c-child', name: 'Basmati', image_url: null, parent_id: 'c-parent', products: [{ count: 3 }] },
-      { id: 'c-orphan', name: 'Oils', image_url: null, parent_id: null, products: null },
+      { id: 'c-parent', name: 'Rice', image_url: null, parent_id: null },
+      { id: 'c-child', name: 'Basmati', image_url: null, parent_id: 'c-parent' },
+      { id: 'c-orphan', name: 'Oils', image_url: null, parent_id: null },
     ];
-    const categories = toMobileCategories(rows);
+    // A completed scan: the parent's own 2 active products plus the child's 3.
+    const counts = new Map([
+      ['c-parent', 2],
+      ['c-child', 3],
+    ]);
+    const categories = toMobileCategories(rows, counts);
     expect(categories).toHaveLength(2);
     expect(categories[0]).toMatchObject({ id: 'c-parent', productCount: 5 });
-    expect(categories[1]).toMatchObject({ id: 'c-orphan', productCount: null });
-  } });
+    // The map is complete, so a missing key is a real zero, not "unknown".
+    expect(categories[1]).toMatchObject({ id: 'c-orphan', productCount: 0 });
+
+    // No counts at all => unknown, never zero.
+    expect(toMobileCategories(rows, null).map((row) => row.productCount)).toEqual([null, null]);
+  });
+
+  it('lists a flat taxonomy in full', () => {
+    // Every row is a child of something: the pane must still show the shop's
+    // real categories instead of an empty directory.
+    const rows = [
+      { id: 'c-1', name: 'Rice', image_url: null, parent_id: 'root' },
+      { id: 'c-2', name: 'Oils', image_url: null, parent_id: 'root' },
+    ];
+    const categories = toMobileCategories(rows, new Map([['c-1', 4]]));
+    expect(categories.map((row) => row.id)).toEqual(['c-1', 'c-2']);
+    expect(categories.map((row) => row.productCount)).toEqual([4, 0]);
+  });
 
   it('applies the existing banner schedule and area targeting', () => {
     const now = Date.parse('2026-06-15T00:00:00.000Z');
