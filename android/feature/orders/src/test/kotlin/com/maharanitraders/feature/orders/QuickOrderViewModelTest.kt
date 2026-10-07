@@ -274,11 +274,18 @@ class QuickOrderViewModelTest {
     assertEquals(listOf("pack-2" to 3), cart.adds)
 
     // Putting it back is the same index, so the error against line 0 stays
-    // against line 0.
+    // against line 0. Only the newly included line is sent: re-sending pack-2
+    // would ADD to the quantity already in the cart.
     viewModel.toggleBulkLine(0)
     viewModel.addBulkMatches()
     advanceUntilIdle()
     assertEquals(listOf("pack-2" to 3, "pack-1" to 2), cart.adds)
+
+    // A third run with nothing new left says so instead of doubling the order.
+    viewModel.addBulkMatches()
+    advanceUntilIdle()
+    assertEquals(listOf("pack-2" to 3, "pack-1" to 2), cart.adds)
+    assertTrue(viewModel.state.value.bulkError.orEmpty().contains("already in your cart"))
   }
 }
 

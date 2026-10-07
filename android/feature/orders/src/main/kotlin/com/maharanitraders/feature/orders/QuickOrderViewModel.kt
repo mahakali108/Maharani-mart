@@ -66,6 +66,15 @@ data class QuickOrderUiState(
    * line 4.
    */
   val bulkExcluded: Set<Int> = emptySet(),
+  /**
+   * Pasted lines the server has already accepted in this session.
+   *
+   * Without this, tapping "Add matched lines" twice would send the same pack
+   * again, and the cart's merge rule would ADD the second quantity to the
+   * first: paste a list, tap twice, order double. A line that has landed is
+   * done; taking it out of the run ([bulkExcluded]) is what clears the mark.
+   */
+  val bulkAdded: Set<Int> = emptySet(),
   val message: String? = null,
 ) {
   val hasResults: Boolean get() = products.isNotEmpty()
@@ -225,10 +234,22 @@ class QuickOrderViewModel @Inject constructor(
       .mapIndexedNotNull { index, line ->
         if (!line.matched) return@mapIndexedNotNull null
         if (index in state.bulkExcluded) return@mapIndexedNotNull null
+        if (index in state.bulkAdded) return@mapIndexedNotNull null
         state.bulkChoices[index]?.let { index to it }
       }
     if (choices.isEmpty()) {
-      _state.update { it.copy(bulkError = "No matched lines to add.") }
+      val pending = state.bulkMatches.indices.count { index ->
+        state.bulkMatches[index].matched && index !in state.bulkExcluded && index !in state.bulkAdded
+      }
+      _state.update {
+        it.copy(
+          bulkError = if (pending == 0 && state.bulkAdded.isNotEmpty()) {
+            "Those lines are already in your cart. Take one out of the run to add it again."
+          } else {
+            "No matched lines to add."
+          },
+        )
+      }
       return
     }
     val merged = mergeBulkSelections(choices.map { it.second })
@@ -238,17 +259,22 @@ class QuickOrderViewModel @Inject constructor(
     viewModelScope.launch {
       var added = 0
       val failures = LinkedHashMap<Int, String>()
+      val landed = LinkedHashSet<Int>()
       for (selection in merged) {
+        // Every pasted line that named this pack: with merging, two lines can
+        // own one pack, and both must be marked as landed or the duplicate
+        // would be sent again on the next run.
+        val owners = choices.filter { it.second.packId == selection.packId }.map { it.first }
         when (val result = cart.addCartLine(packId = selection.packId, quantity = selection.quantity)) {
           is AppResult.Success -> {
             cartCounts.record(result.value)
             added += 1
+            landed += owners
           }
           is AppResult.Failure -> {
             // The first pasted line that named this pack carries the error, so
             // the message appears where the shopper typed the product.
-            val index = choices.firstOrNull { it.second.packId == selection.packId }?.first
-            if (index != null) failures.putIfAbsent(index, result.error.message)
+            owners.firstOrNull()?.let { index -> failures.putIfAbsent(index, result.error.message) }
           }
         }
       }
@@ -261,6 +287,7 @@ class QuickOrderViewModel @Inject constructor(
         it.copy(
           bulkAdding = false,
           lineErrors = failures,
+          bulkAdded = it.bulkAdded + landed,
           message = if (mergedCount > 0) {
             "$summary $mergedCount repeated line${if (mergedCount == 1) "" else "s"} were merged."
           } else {
@@ -271,15 +298,23 @@ class QuickOrderViewModel @Inject constructor(
     }
   }
 
-  /** Take a matched line out of the run (or put it back). */
+  /**
+   * Take a matched line out of the run (or put it back).
+   *
+   * Taking a line that has already landed out of the run clears its "added"
+   * mark, so including it again and running DOES send it — the shopper asked
+   * for it again, and the cart's merge is then the intended outcome rather
+   * than a surprise. Nothing is removed from the cart by this app.
+   */
   fun toggleBulkLine(index: Int) {
     _state.update { state ->
-      val next = if (index in state.bulkExcluded) {
-        state.bulkExcluded - index
-      } else {
-        state.bulkExcluded + index
-      }
-      state.copy(bulkExcluded = next, lineErrors = state.lineErrors - index)
+      val excluding = index !in state.bulkExcluded
+      val next = if (excluding) state.bulkExcluded + index else state.bulkExcluded - index
+      state.copy(
+        bulkExcluded = next,
+        bulkAdded = if (excluding) state.bulkAdded - index else state.bulkAdded,
+        lineErrors = state.lineErrors - index,
+      )
     }
   }
 
@@ -294,6 +329,7 @@ class QuickOrderViewModel @Inject constructor(
         bulkMatches = emptyList(),
         bulkChoices = emptyMap(),
         bulkExcluded = emptySet(),
+        bulkAdded = emptySet(),
         lineErrors = emptyMap(),
         bulkError = null,
       )
