@@ -108,6 +108,69 @@ class CommerceViewModelTest {
   }
 
   @Test
+  fun `opening the cart re-reads the server so a line added elsewhere appears`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val cartCounts = CartCountStore(repository)
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), cartCounts)
+    advanceUntilIdle()
+    val readsAfterFirstOpen = repository.loadCartCalls
+
+    // Another surface (a home or catalogue card, an order reorder, a restored
+    // saved cart, or the web shop) added a line. This ViewModel still holds the
+    // snapshot it read when the tab last appeared.
+    repository.cart = initialCart.copy(
+      lines = initialCart.lines + CART_LINE.copy(id = "line-2", quantity = 2, lineTotalPaise = 20_000),
+      lineCount = 2,
+      itemCount = 8,
+    )
+    viewModel.refreshCartOnOpen()
+    advanceUntilIdle()
+
+    assertEquals(readsAfterFirstOpen + 1, repository.loadCartCalls)
+    assertEquals(listOf("line-1", "line-2"), viewModel.state.value.cart?.lines?.map { it.id })
+    // One cart, one count: the badge moves with the same server response the
+    // screen renders.
+    assertEquals(2, cartCounts.state.value.lineCount)
+    assertEquals(8, cartCounts.state.value.itemCount)
+  }
+
+  @Test
+  fun `opening the cart during a change in flight never fetches a competing snapshot`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+    advanceUntilIdle()
+    val readsBefore = repository.loadCartCalls
+
+    // A cart write is in flight: the server's answer to it is the newest truth,
+    // so an appearance must not race a read against it.
+    viewModel.addCartLine("pack-1", 6)
+    viewModel.refreshCartOnOpen()
+    advanceUntilIdle()
+
+    assertEquals(readsBefore, repository.loadCartCalls)
+    assertEquals(1, repository.addCalls.size)
+
+    // The guard is transient: the next appearance reads normally, so a quick add
+    // made while the cart tab was closed still shows up on the following open.
+    viewModel.refreshCartOnOpen()
+    advanceUntilIdle()
+    assertEquals(readsBefore + 1, repository.loadCartCalls)
+  }
+
+  @Test
+  fun `opening the cart while the first read is still running does not double-fetch`() = runTest(dispatcher) {
+    val repository = FakeCommerceRepository()
+    val viewModel = CartCheckoutViewModel(repository, AppPreferences(MemoryPreferenceStore()), CartCountStore(repository))
+
+    // No advanceUntilIdle: the initial read is still in flight, and the screen
+    // composes at exactly this moment.
+    viewModel.refreshCartOnOpen()
+    advanceUntilIdle()
+
+    assertEquals(1, repository.loadCartCalls)
+  }
+
+  @Test
   fun `reloadAddressesIfStale picks up an address created in the address book`() = runTest(dispatcher) {
     val repository = FakeCommerceRepository().apply {
       // First read (checkout entry): the retailer has no saved address yet.

@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,6 +32,7 @@ import com.maharanitraders.core.designsystem.components.PriceBlock
 import com.maharanitraders.core.designsystem.components.PriceEmphasis
 import com.maharanitraders.core.designsystem.components.StockBadge
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
+import com.maharanitraders.core.model.CatalogPack
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.PackAvailability
 import com.maharanitraders.feature.catalog.ui.CatalogTags
@@ -39,6 +44,33 @@ const val PRODUCT_CARD_TAG = "catalog_product_tile"
 
 /** Test tag of the favourite control drawn on a product tile. */
 const val FAVORITE_TOGGLE_TAG = "catalog_favorite_toggle"
+
+/**
+ * Test tag of the card's quick add-to-cart control. The pack id is appended so
+ * a Compose UI test can address one card's button in a grid of many.
+ */
+const val ADD_TO_CART_TAG = "catalog_add_to_cart"
+
+/**
+ * The quantity a quick add sends: the pack's MOQ, never a smaller number.
+ *
+ * The server re-validates MOQ, stock and price on every cart write, so this is
+ * about sending a request that has a chance of being accepted rather than about
+ * the app deciding anything — a button that posted 1 for a pack with MOQ 12
+ * would simply be rejected, which reads to a shopkeeper as a broken button. A
+ * pack the server priced without an MOQ means one piece.
+ */
+fun quickAddQuantity(pack: CatalogPack): Int = (pack.moq ?: 1).coerceAtLeast(1)
+
+/**
+ * Whether a card may offer the quick add control at all.
+ *
+ * A pack the server marked out of stock, or one it deliberately priced without
+ * a rate, gets no button: the same rule the product detail applies to its own
+ * add action, so the two surfaces cannot disagree about what is orderable.
+ */
+fun canQuickAdd(pack: CatalogPack?): Boolean =
+  pack != null && pack.availability != PackAvailability.OUT_OF_STOCK && pack.unitPricePaise != null
 
 /**
  * One product card — the atom every rail and grid in the app is built from.
@@ -84,6 +116,15 @@ fun ProductCard(
   favoritePending: Boolean = false,
   /** Null hides the control entirely — a surface with no favourite affordance. */
   onToggleFavorite: (() -> Unit)? = null,
+  /**
+   * Quick add to the cart. Null hides the control, which is what a non-retailer
+   * or a surface with no cart behind it must get — the card never becomes a
+   * button that cannot work. The caller sends `(packId, quantity)` and the
+   * cart API re-validates everything.
+   */
+  onAddToCart: (() -> Unit)? = null,
+  /** True while THIS card's add is in flight; shows a spinner in place of the label. */
+  addPending: Boolean = false,
 ) {
   val pack = product.pack
   val outOfStock = pack?.availability == PackAvailability.OUT_OF_STOCK
@@ -220,6 +261,46 @@ fun ProductCard(
             compact = true,
             modifier = Modifier.testTag(CatalogTags.AVAILABILITY),
           )
+        }
+
+        // Resolved once: the pack that may be added, or null when this card
+        // must not offer the action at all.
+        val addablePack = pack?.takeIf { candidate -> canQuickAdd(candidate) }
+        if (onAddToCart != null) {
+          if (addablePack != null) {
+            Button(
+              onClick = onAddToCart,
+              enabled = !addPending,
+              modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = MaharaniDimens.touchTarget)
+                .testTag("${ADD_TO_CART_TAG}_${addablePack.packId}"),
+            ) {
+              if (addPending) {
+                CircularProgressIndicator(
+                  strokeWidth = 2.dp,
+                  modifier = Modifier.size(18.dp),
+                  color = MaterialTheme.colorScheme.onPrimary,
+                )
+              } else {
+                // The label states the quantity the tap will send, because the
+                // MOQ is the fact a wholesale buyer checks before adding.
+                Text("Add ${quickAddQuantity(addablePack)} to cart")
+              }
+            }
+          } else {
+            // Honest, inert notice instead of a button the cart would reject:
+            // this pack cannot be ordered right now. Tagged with a stable id so
+            // a UI test can still find the card it belongs to.
+            Text(
+              text = if (outOfStock) "Out of stock — cannot add" else "Not orderable right now",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.testTag("${ADD_TO_CART_TAG}_${pack?.packId ?: product.id}"),
+            )
+          }
         }
       }
     }

@@ -35,6 +35,14 @@ fun LazyGridScope.productCardItems(
   isFavoritePending: (CatalogProduct) -> Boolean = { false },
   /** Null hides the control: not every grid offers favouriting. */
   onToggleFavorite: ((String) -> Unit)? = null,
+  /**
+   * Quick add to the cart, `(packId, quantity)`. Null hides the card's control
+   * entirely — a surface with no cart behind it (or a non-retailer session)
+   * passes null and the cards stay browse-only.
+   */
+  onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  /** The pack whose add is in flight, so exactly one card shows a spinner. */
+  quickAddPackId: String? = null,
 ) {
   items(products, key = { it.id }) { product ->
     ProductCard(
@@ -43,6 +51,13 @@ fun LazyGridScope.productCardItems(
       isFavorite = isFavorite(product),
       favoritePending = isFavoritePending(product),
       onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(product.id) } },
+      onAddToCart = onQuickAddToCart?.let { add ->
+        {
+          val pack = product.pack
+          if (pack != null) add(pack.packId, quickAddQuantity(pack))
+        }
+      },
+      addPending = quickAddPackId != null && quickAddPackId == product.pack?.packId,
       modifier = Modifier.fillMaxWidth(),
     )
   }
@@ -69,6 +84,8 @@ fun ProductGrid(
   isFavorite: (CatalogProduct) -> Boolean = { it.isFavorite },
   isFavoritePending: (CatalogProduct) -> Boolean = { false },
   onToggleFavorite: ((String) -> Unit)? = null,
+  onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  quickAddPackId: String? = null,
   /**
    * A slot drawn ABOVE the first card, inside the same scroller.
    *
@@ -96,6 +113,8 @@ fun ProductGrid(
       isFavorite = isFavorite,
       isFavoritePending = isFavoritePending,
       onToggleFavorite = onToggleFavorite,
+      onQuickAddToCart = onQuickAddToCart,
+      quickAddPackId = quickAddPackId,
     )
     footer?.invoke(this)
   }

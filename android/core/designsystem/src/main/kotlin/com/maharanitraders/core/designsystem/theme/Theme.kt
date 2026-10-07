@@ -25,17 +25,26 @@ import androidx.compose.ui.unit.dp
  *  - `primaryContainer` → the soft pink supporting surface
  *    ([MaharaniPalette.BrandRed50]) used behind selected tiles and the
  *    bottom-navigation indicator.
- *  - `secondary` → WARM GOLD ([MaharaniPalette.Saffron500]): the accent that
- *    makes offers and highlights pop against red — offer badges, wholesale
- *    emphasis, banner accents.
- *  - `tertiary`  → BRAND RED as identity (the crown mark and the "New"
- *    ribbon). Never a destructive action, so red keeps meaning "Maharani".
+ *  - `secondary` → WARM AMBER ([MaharaniPalette.Saffron500]): the SAVINGS
+ *    family — offer badges, wholesale emphasis, banner accents.
+ *  - `tertiary`  → VIOLET ([MaharaniPalette.Violet600]): the SHORTCUT/account
+ *    family — Quick order, Saved carts, Security, Reorder and the "Starting
+ *    soon" coupon state.
  *  - `error`     → rose, used for failures and "Out of stock" only.
+ *
+ * Beyond Material's slots the app carries three more coherent families in
+ * [MaharaniExtraColors], so screens never pick a colour ad hoc:
+ *  - GREEN  `inStock`      — availability and success;
+ *  - BLUE   `info`         — neutral facts (delivery, lead time, GST split);
+ *  - ROSE   `highlight`    — emphasis that is neither success nor failure
+ *    ("New" launches, notification badges).
  *
  * Backgrounds are WARM NEUTRALS ([MaharaniPalette.NeutralPage] and friends) so
  * white cards sit on one continuous surface while every content surface stays
- * white (or near-black in dark mode). There is no blue chrome anywhere: the
- * biggest colour on screen is the brand red, the second is the page itself.
+ * white (or near-black in dark mode). Blue is never chrome — it is only ever
+ * the `info` fact token — so the biggest colour on screen stays the brand red,
+ * the second the page itself, and the accents (amber, violet, green, blue,
+ * rose) each keep exactly one job.
  * Elevation is carried by surfaces, not shadows, and gradients appear in
  * exactly two places (the app bar and the splash).
  *
@@ -54,11 +63,13 @@ private val LightColors = lightColorScheme(
   onSecondary = MaharaniPalette.Ink950,
   secondaryContainer = MaharaniPalette.Saffron100,
   onSecondaryContainer = MaharaniPalette.Saffron800,
-  // Brand red: identity only (crown, "New" ribbon, splash). Never a failure.
-  tertiary = MaharaniPalette.BrandRed600,
+  // Violet: the SHORTCUT / account identity family (Quick order, Saved carts,
+  // Security, Reorder). Red stays the action colour, amber the savings colour,
+  // violet the "tools" colour — one hue per job, no screen inventing its own.
+  tertiary = MaharaniPalette.Violet600,
   onTertiary = MaharaniPalette.White,
-  tertiaryContainer = MaharaniPalette.BrandRed50,
-  onTertiaryContainer = MaharaniPalette.BrandRed700,
+  tertiaryContainer = MaharaniPalette.Violet50,
+  onTertiaryContainer = MaharaniPalette.Violet700,
   background = MaharaniPalette.NeutralPage,
   onBackground = MaharaniPalette.Ink900,
   surface = MaharaniPalette.White,
@@ -92,10 +103,10 @@ private val DarkColors = darkColorScheme(
   onSecondary = MaharaniPalette.Ink950,
   secondaryContainer = MaharaniPalette.Saffron900,
   onSecondaryContainer = MaharaniPalette.Saffron100,
-  tertiary = MaharaniPalette.BrandRed400,
+  tertiary = MaharaniPalette.Violet300,
   onTertiary = MaharaniPalette.Ink950,
-  tertiaryContainer = MaharaniPalette.BrandRed900,
-  onTertiaryContainer = MaharaniPalette.BrandRed100,
+  tertiaryContainer = MaharaniPalette.Violet900,
+  onTertiaryContainer = MaharaniPalette.Violet100,
   background = MaharaniPalette.PageDark,
   onBackground = MaharaniPalette.Ink50,
   surface = MaharaniPalette.SurfaceDark,

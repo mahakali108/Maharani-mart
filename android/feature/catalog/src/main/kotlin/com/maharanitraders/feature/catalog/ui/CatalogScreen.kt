@@ -88,6 +88,11 @@ object CatalogScreenTags {
   const val END_OF_LIST = "catalog_end_of_list"
   const val CLEAR_FILTERS = "catalog_clear_filters"
 
+  /** Recent search chips: remembered terms, tappable and clearable. */
+  const val RECENT_SEARCHES = "catalog_recent_searches"
+  const val RECENT_SEARCH_CHIP = "catalog_recent_search_chip"
+  const val CLEAR_RECENT_SEARCHES = "catalog_clear_recent_searches"
+
   /** The directory panes' local (on-device) filter field. */
   const val DIRECTORY_FILTER = "catalog_directory_filter"
   const val DIRECTORY_GRID = "catalog_directory_grid"
@@ -122,10 +127,27 @@ fun CatalogScreen(
   /** Opened on this pane. The Categories/Brands deep links land on their own tab. */
   initialTab: CatalogTab = CatalogTab.PRODUCTS,
   onOpenProduct: (productId: String) -> Unit,
+  /**
+   * Quick add to the cart from a card, `(packId, quantity)`. The shell passes
+   * the real cart action for a retailer session and leaves it null otherwise, so
+   * the cards never offer an action this account does not have.
+   */
+  onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  /** The pack whose add is in flight, so one card shows a spinner and no more. */
+  quickAddPackId: String? = null,
+  /**
+   * The cart's own last failure, when a quick add did not succeed. The cart is
+   * owned by the shell, so the message arrives as data and is reported by this
+   * screen's snackbar — a failed add that said nothing would look like a tap
+   * that did nothing.
+   */
+  quickAddMessage: String? = null,
+  onQuickAddMessageShown: () -> Unit = {},
   modifier: Modifier = Modifier,
   viewModel: CatalogViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
 
   // Deep links from the home screen and the shell arrive as arguments, not as
   // state the ViewModel guesses at. They are applied ONCE per distinct request:
@@ -162,6 +184,16 @@ fun CatalogScreen(
     }
   }
 
+  // A failed quick add is reported the same way a failed favourite toggle is:
+  // once, on the screen the shopper is looking at, and then consumed.
+  LaunchedEffect(quickAddMessage) {
+    val message = quickAddMessage
+    if (message != null) {
+      snackbarHostState.showSnackbar(message)
+      onQuickAddMessageShown()
+    }
+  }
+
   Scaffold(
     snackbarHost = { SnackbarHost(snackbarHostState) },
     modifier = modifier,
@@ -171,6 +203,9 @@ fun CatalogScreen(
       favorites = favorites,
       onSearchChange = viewModel::onSearchChange,
       onSearchSubmit = viewModel::submitSearch,
+      recentSearches = recentSearches,
+      onUseRecentSearch = viewModel::useRecentSearch,
+      onClearRecentSearches = viewModel::clearRecentSearches,
       onSelectTab = viewModel::selectTab,
       onDirectoryFilterChange = viewModel::onDirectoryFilterChange,
       onRetryDirectories = viewModel::retryDirectories,
@@ -185,6 +220,8 @@ fun CatalogScreen(
       onLoadMore = viewModel::loadMore,
       onOpenProduct = onOpenProduct,
       onToggleFavorite = viewModel::toggleFavorite,
+      onQuickAddToCart = onQuickAddToCart,
+      quickAddPackId = quickAddPackId,
       modifier = Modifier.padding(padding),
     )
   }
@@ -197,6 +234,10 @@ fun CatalogContent(
   onSearchChange: (String) -> Unit,
   /** The keyboard's search action: search immediately instead of debouncing. */
   onSearchSubmit: () -> Unit = {},
+  /** Terms this device remembered, newest first. Never server data. */
+  recentSearches: List<String> = emptyList(),
+  onUseRecentSearch: (String) -> Unit = {},
+  onClearRecentSearches: () -> Unit = {},
   onSelectTab: (CatalogTab) -> Unit = {},
   onDirectoryFilterChange: (String) -> Unit = {},
   onRetryDirectories: () -> Unit = {},
@@ -211,6 +252,8 @@ fun CatalogContent(
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
   onToggleFavorite: ((String) -> Unit)? = null,
+  onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  quickAddPackId: String? = null,
   modifier: Modifier = Modifier,
 ) {
   // The grid's scroll position lives HERE, not inside the Products branch: the
@@ -225,6 +268,9 @@ fun CatalogContent(
       onSearchSubmit = onSearchSubmit,
       onDirectoryFilterChange = onDirectoryFilterChange,
       onSelectTab = onSelectTab,
+      recentSearches = recentSearches,
+      onUseRecentSearch = onUseRecentSearch,
+      onClearRecentSearches = onClearRecentSearches,
     )
 
     when (state.tab) {
@@ -241,6 +287,8 @@ fun CatalogContent(
         onLoadMore = onLoadMore,
         onOpenProduct = onOpenProduct,
         onToggleFavorite = onToggleFavorite,
+        onQuickAddToCart = onQuickAddToCart,
+        quickAddPackId = quickAddPackId,
         gridState = gridState,
       )
 
@@ -286,6 +334,9 @@ private fun CatalogHeader(
   onSearchSubmit: () -> Unit,
   onDirectoryFilterChange: (String) -> Unit,
   onSelectTab: (CatalogTab) -> Unit,
+  recentSearches: List<String> = emptyList(),
+  onUseRecentSearch: (String) -> Unit = {},
+  onClearRecentSearches: () -> Unit = {},
 ) {
   Surface(
     color = MaterialTheme.colorScheme.surface,
@@ -309,6 +360,16 @@ private fun CatalogHeader(
             loading = state.loading && state.products.isNotEmpty(),
             testTag = CatalogScreenTags.SEARCH_FIELD,
           )
+          // The chips appear only while the field is EMPTY: a shopper who is
+          // mid-word does not need nine other searches crowding the input, and
+          // one who has just arrived gets their repeat orders one tap away.
+          if (state.query.search.isBlank() && recentSearches.isNotEmpty()) {
+            RecentSearchChips(
+              terms = recentSearches,
+              onSelect = onUseRecentSearch,
+              onClear = onClearRecentSearches,
+            )
+          }
         } else {
           MaharaniSearchBar(
             value = state.directoryFilter,
@@ -327,6 +388,65 @@ private fun CatalogHeader(
         CatalogTabStrip(selected = state.tab, onSelect = onSelectTab)
       }
       HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+  }
+}
+
+/**
+ * The remembered search terms, as tappable chips with one clear action.
+ *
+ * These are the ONLY thing on the catalogue that did not come from the server:
+ * they are terms this device remembers because the shopper typed them (see
+ * `LocalHistoryStore`). A chip runs the same query path as typing the words, so
+ * it can never produce a different list, and the whole row is dropped the moment
+ * the account signs out.
+ */
+@Composable
+private fun RecentSearchChips(
+  terms: List<String>,
+  onSelect: (String) -> Unit,
+  onClear: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(CatalogScreenTags.RECENT_SEARCHES),
+    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    ) {
+      Text(
+        text = "Recent searches",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.weight(1f),
+      )
+      TextButton(
+        onClick = onClear,
+        modifier = Modifier
+          .heightIn(min = MaharaniDimens.touchTarget)
+          .testTag(CatalogScreenTags.CLEAR_RECENT_SEARCHES),
+      ) {
+        Text("Clear")
+      }
+    }
+    LazyRow(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    ) {
+      items(terms, key = { it.lowercase() }) { term ->
+        FilterChip(
+          selected = false,
+          onClick = { onSelect(term) },
+          label = { Text(term, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+          modifier = Modifier.testTag(CatalogScreenTags.RECENT_SEARCH_CHIP),
+          colors = catalogChipColors(),
+        )
+      }
     }
   }
 }
@@ -354,6 +474,8 @@ private fun CatalogProductsPane(
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
   onToggleFavorite: ((String) -> Unit)?,
+  onQuickAddToCart: ((String, Int) -> Unit)?,
+  quickAddPackId: String?,
   gridState: LazyGridState,
 ) {
   // The controls and the count live INSIDE the scroller, in the grid's header
@@ -446,6 +568,8 @@ private fun CatalogProductsPane(
       isFavorite = { product -> favorites.isFavorite(product.id, product.isFavorite) },
       isFavoritePending = { product -> favorites.isPending(product.id) },
       onToggleFavorite = onToggleFavorite,
+      onQuickAddToCart = onQuickAddToCart,
+      quickAddPackId = quickAddPackId,
       header = {
         item(span = { GridItemSpan(maxLineSpan) }) { controls() }
       },

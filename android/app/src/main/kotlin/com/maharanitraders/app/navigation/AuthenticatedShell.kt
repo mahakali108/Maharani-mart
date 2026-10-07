@@ -62,7 +62,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maharanitraders.app.ui.AccountScreen
+import com.maharanitraders.app.ui.HomeDashboardViewModel
 import com.maharanitraders.app.ui.ShellBadgesViewModel
+import com.maharanitraders.app.ui.homeQuickActions
 import com.maharanitraders.app.ui.SessionHomeScreen
 import com.maharanitraders.app.ui.UnsupportedAccountScreen
 import com.maharanitraders.core.designsystem.IsoDateDisplay
@@ -441,6 +443,13 @@ private fun RoutedShell(
       ) {
         routing.destinations.forEach { destination ->
           composable(destination.route) {
+            // A cart handle for the two surfaces that can quick-add: the home
+            // dashboard's cards and the catalogue's cards.
+            val quickAdd = quickAddCartHandle(
+              enabled = canUseRetailerCommerce &&
+                (destination.route == MaharaniRoutes.HOME || destination.route == MaharaniRoutes.CATALOG),
+            )
+
             DestinationSurface(
               destination = destination,
               snapshot = snapshot,
@@ -464,6 +473,11 @@ private fun RoutedShell(
                   popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                 }
               },
+              cartLineCount = cartLineCount,
+              onQuickAddToCart = quickAdd?.add,
+              quickAddPackId = quickAdd?.pendingPackId,
+              quickAddMessage = quickAdd?.message,
+              onQuickAddMessageShown = { quickAdd?.onMessageShown?.invoke() },
             )
           }
         }
@@ -785,6 +799,47 @@ private fun AccountDialog(
   )
 }
 
+/**
+ * Everything a quick-adding surface needs from the cart, or null when this
+ * session has no cart to add to.
+ *
+ * The cart action itself is the real `CartCheckoutViewModel.addCartLine`, so a
+ * tap here is the same server round trip as adding from the Product detail
+ * screen — including the shared badge update (`CartCountStore`), which is why
+ * the bottom bar's bubble moves without the shell counting anything.
+ *
+ * [pendingPackId] is cleared when the mutation finishes, whichever way it
+ * finished: a spinner that outlived a failed add would claim work was still in
+ * progress when the server had already answered.
+ */
+@Composable
+private fun quickAddCartHandle(enabled: Boolean): QuickAddCartHandle? {
+  if (!enabled) return null
+  val cart: CartCheckoutViewModel = hiltViewModel()
+  val state by cart.state.collectAsStateWithLifecycle()
+  var pendingPackId by remember { mutableStateOf<String?>(null) }
+  LaunchedEffect(state.isCartMutating) {
+    if (!state.isCartMutating) pendingPackId = null
+  }
+  return QuickAddCartHandle(
+    add = { packId, quantity ->
+      pendingPackId = packId
+      cart.addCartLine(packId, quantity)
+    },
+    pendingPackId = pendingPackId.takeIf { state.isCartMutating },
+    message = state.cartError,
+    onMessageShown = cart::clearCartError,
+  )
+}
+
+/** The cart facts a quick-adding screen draws, as one value. */
+private data class QuickAddCartHandle(
+  val add: (String, Int) -> Unit,
+  val pendingPackId: String?,
+  val message: String?,
+  val onMessageShown: () -> Unit,
+)
+
 @Composable
 private fun DestinationSurface(
   destination: MaharaniDestination,
@@ -800,9 +855,26 @@ private fun DestinationSurface(
   onOpenOrder: (String) -> Unit,
   /** Open another destination of this account (the Account tab's shortcuts). */
   onOpenDestination: (String) -> Unit,
+  /** The server's own saved-cart line count, for the cart shortcut's badge. */
+  cartLineCount: Int?,
+  /**
+   * Quick add from a card, when this session has a cart at all. The shell owns
+   * the cart action (and therefore the server round trip and the badge update);
+   * the screens only draw the control.
+   */
+  onQuickAddToCart: ((String, Int) -> Unit)?,
+  /** The pack whose add is in flight, for a single-card spinner. */
+  quickAddPackId: String?,
+  /** The cart's own last error, shown once by the catalogue's snackbar. */
+  quickAddMessage: String?,
+  onQuickAddMessageShown: () -> Unit,
 ) {
   when (destination.route) {
     MaharaniRoutes.HOME -> if (retailerHome) {
+      // The dashboard is assembled ONE level up (it needs the wallet and orders
+      // features at once); this screen only draws what it is handed.
+      val dashboardViewModel: HomeDashboardViewModel = hiltViewModel()
+      val dashboard by dashboardViewModel.state.collectAsStateWithLifecycle()
       RetailerHomeScreen(
         onOpenCatalog = { search, categoryId, brandId, brandLabel ->
           onOpenCatalog(CatalogRequest(search, categoryId, brandId, brandLabel))
@@ -810,6 +882,15 @@ private fun DestinationSurface(
         onOpenProduct = onOpenProduct,
         // "View all" on a home rail opens the catalogue on that rail's pane.
         onOpenDirectory = { tab -> onOpenCatalog(CatalogRequest(tab = tab)) },
+        onOpenDestination = onOpenDestination,
+        quickActions = homeQuickActions(availableRoutes),
+        dashboard = dashboard,
+        onRetryDashboard = dashboardViewModel::load,
+        cartLineCount = cartLineCount,
+        onOpenCoins = { onOpenDestination(MaharaniRoutes.COINS) },
+        onOpenOrder = onOpenOrder,
+        onQuickAddToCart = onQuickAddToCart,
+        quickAddPackId = quickAddPackId,
       )
     } else {
       SessionHomeScreen(snapshot = snapshot, onSignOut = onSignOut)
@@ -822,6 +903,10 @@ private fun DestinationSurface(
       initialBrandLabel = catalogRequest.brandLabel,
       initialTab = catalogRequest.tab,
       onOpenProduct = onOpenProduct,
+      onQuickAddToCart = onQuickAddToCart,
+      quickAddPackId = quickAddPackId,
+      quickAddMessage = quickAddMessage,
+      onQuickAddMessageShown = onQuickAddMessageShown,
     )
 
     // One catalogue implementation, opened on its Categories pane. The drawer's

@@ -59,6 +59,10 @@ dependencies {
   implementation(project(":core:model"))
   implementation(project(":core:network"))
   implementation(project(":core:designsystem"))
+  // The search/recently-viewed history is the only thing this app persists
+  // locally, and it goes through the shared NON-SENSITIVE preference store
+  // (`maharani_preferences`) rather than a private file of its own.
+  implementation(project(":core:datastore"))
 
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.lifecycle.runtime.ktx)
