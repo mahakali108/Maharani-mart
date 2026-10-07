@@ -160,6 +160,18 @@ class BuyAgainTest {
   }
 
   @Test
+  fun `an unconfirmed availability is not offered as orderable`() {
+    // "unknown" is the server saying it could not confirm stock. Treating it as
+    // in stock would put a line in the cart that checkout may refuse.
+    val candidate = buyAgainCandidates(listOf(order("o", "2026-10-05T10:00:00Z", listOf(item("p"))))).single()
+    val revalidated = revalidateBuyAgainItem(
+      BuyAgainItem(candidate = candidate),
+      detail("p", price = 8_000, availability = PackAvailability.UNKNOWN),
+    )
+    assertEquals(BuyAgainStatus.UNKNOWN, revalidated.status)
+  }
+
+  @Test
   fun `a pack the catalogue no longer publishes is not swapped for another pack`() {
     val candidate = buyAgainCandidates(listOf(order("o", "2026-10-05T10:00:00Z", listOf(item("p"))))).single()
     val item = BuyAgainItem(candidate = candidate)
