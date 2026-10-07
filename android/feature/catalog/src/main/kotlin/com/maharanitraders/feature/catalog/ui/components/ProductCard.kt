@@ -79,7 +79,10 @@ fun quickAddQuantity(pack: CatalogPack): Int = (pack.moq ?: 1).coerceAtLeast(1)
  * add action, so the two surfaces cannot disagree about what is orderable.
  */
 fun canQuickAdd(pack: CatalogPack?): Boolean =
-  pack != null && pack.availability != PackAvailability.OUT_OF_STOCK && pack.unitPricePaise != null
+  pack != null &&
+    pack.availability != PackAvailability.OUT_OF_STOCK &&
+    pack.unitPricePaise != null &&
+    quickAddQuantity(pack) <= CartQuantityRules.MAX_QUANTITY
 
 /**
  * One product card — the atom every rail and grid in the app is built from.
@@ -132,6 +135,8 @@ fun ProductCard(
    * cart API re-validates everything.
    */
   onAddToCart: (() -> Unit)? = null,
+  /** Opens the validated MOQ/stock-aware quantity sheet instead of adding a fixed quantity. */
+  onSelectQuantity: (() -> Unit)? = null,
   /** True while THIS card's add is in flight; shows a spinner in place of the label. */
   addPending: Boolean = false,
   /** Null hides the control: not every grid offers comparison. */
@@ -210,8 +215,8 @@ fun ProductCard(
           Text(
             text = brand.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
@@ -287,13 +292,15 @@ fun ProductCard(
           )
         }
 
-        // Resolved once: the pack that may be added, or null when this card
-        // must not offer the action at all.
+        // The catalogue opens a quantity selector; compact rails and saved
+        // products may retain a one-tap MOQ add. Both routes use the same cart
+        // endpoint, which re-validates price and stock.
         val addablePack = pack?.takeIf { candidate -> canQuickAdd(candidate) }
-        if (onAddToCart != null) {
+        val orderAction = onSelectQuantity ?: onAddToCart
+        if (orderAction != null) {
           if (addablePack != null) {
             Button(
-              onClick = onAddToCart,
+              onClick = orderAction,
               enabled = !addPending,
               modifier = Modifier
                 .fillMaxWidth()
@@ -306,9 +313,9 @@ fun ProductCard(
                   modifier = Modifier.size(18.dp),
                   color = MaterialTheme.colorScheme.onPrimary,
                 )
+              } else if (onSelectQuantity != null) {
+                Text("Select Qty")
               } else {
-                // The label states the quantity the tap will send, because the
-                // MOQ is the fact a wholesale buyer checks before adding.
                 Text("Add ${quickAddQuantity(addablePack)} to cart")
               }
             }
@@ -336,7 +343,7 @@ fun ProductCard(
             enabled = compareSelected || !compareFull,
             modifier = Modifier
               .fillMaxWidth()
-              .heightIn(min = 40.dp)
+              .heightIn(min = MaharaniDimens.touchTarget)
               .testTag("${COMPARE_TOGGLE_TAG}_${product.id}"),
             contentPadding = PaddingValues(horizontal = 4.dp),
           ) {

@@ -47,24 +47,25 @@ import com.maharanitraders.feature.catalog.ui.CatalogTags
  * rounded into "0 items".
  *
  * Sizes are fixed rather than content-driven, so a two-column grid at 360dp
- * lines up: 96dp artwork band on top, a two-line name block, one count line.
+ * lines up: a compact artwork band, a two-line name block, one count line.
  * Tapping a tile applies that filter and moves to the product list, so the
  * selection the shopper just made is immediately visible in real products.
  */
 
-/** The "All products" tile: the scope that clears whichever filter is applied. */
+/** A neutral "All …" tile that clears the filter represented by its directory. */
 @Composable
 fun DirectoryAllCard(
   selected: Boolean,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  title: String = "All products",
   totalCount: Int? = null,
 ) {
   val tokens = MaharaniThemeTokens.colors
   TileSurface(
     selected = selected,
     onClick = onClick,
-    contentDescription = "All products",
+    contentDescription = if (selected) "$title, selected" else title,
     modifier = modifier.testTag(CatalogTags.DIRECTORY_ALL),
   ) {
     Column {
@@ -86,14 +87,15 @@ fun DirectoryAllCard(
         }
       }
       TileCaption(
-        title = "All products",
+        title = title,
         // The count is the CATALOGUE TOTAL and is only ever shown when this tile
         // is the applied scope — otherwise the number would belong to the
         // filtered result set and would be a lie about the whole shop. With no
         // count from the server the subtitle stays in words.
         subtitle = when {
           selected && totalCount != null -> "$totalCount products in the catalogue"
-          selected -> "Every published product"
+          selected && title == "All products" -> "Every published product"
+          selected -> "Browse all ${title.removePrefix("All ").lowercase()}"
           else -> "Clear this filter"
         },
       )
@@ -112,7 +114,7 @@ fun CategoryCard(
   TileSurface(
     selected = selected,
     onClick = onClick,
-    contentDescription = category.name,
+    contentDescription = if (selected) "Selected category: ${category.name}" else "Category: ${category.name}",
     modifier = modifier.testTag(CatalogTags.DIRECTORY_TILE),
   ) {
     Column {
@@ -153,7 +155,7 @@ fun BrandCard(
   TileSurface(
     selected = selected,
     onClick = onClick,
-    contentDescription = brand.name,
+    contentDescription = if (selected) "Selected brand: ${brand.name}" else "Brand: ${brand.name}",
     modifier = modifier.testTag(CatalogTags.DIRECTORY_TILE),
   ) {
     Column {
@@ -288,7 +290,7 @@ private fun SelectionBadge(modifier: Modifier = Modifier) {
 }
 
 /** The one artwork band height both tiles use, so a mixed row still lines up. */
-private val TILE_ART_HEIGHT = 96.dp
+private val TILE_ART_HEIGHT = 84.dp
 
 /** A short label used above each directory pane's grid. */
 @Composable

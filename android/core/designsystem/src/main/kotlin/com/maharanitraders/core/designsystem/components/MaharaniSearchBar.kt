@@ -49,7 +49,7 @@ fun MaharaniSearchBar(
   onValueChange: (String) -> Unit,
   onSubmit: () -> Unit,
   modifier: Modifier = Modifier,
-  placeholder: String = "Search products, brands and pack sizes",
+  placeholder: String = "Search products, brands...",
   loading: Boolean = false,
   enabled: Boolean = true,
   onBar: Boolean = false,
@@ -60,15 +60,12 @@ fun MaharaniSearchBar(
   Surface(
     modifier = modifier.fillMaxWidth(),
     shape = RoundedCornerShape(MaharaniDimens.radiusField),
-    // On a page the field is a soft neutral well with a hairline edge, not a
-    // white pill on a white header: a shadow alone made it read as a blank strip
-    // in the middle of the catalogue.
-    color = if (onBar) tokens.appBarField else MaterialTheme.colorScheme.surfaceContainerLow,
+    // A white search surface with a hairline outline and just enough lift to
+    // read as the primary browse control without becoming a large hero element.
+    color = if (onBar) tokens.appBarField else MaterialTheme.colorScheme.surface,
     contentColor = if (onBar) tokens.onAppBarField else MaterialTheme.colorScheme.onSurface,
     border = if (onBar) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    // No shadow on either variant: depth on a page comes from the field's own
-    // tone and hairline edge, and on the app bar there is nothing to cast onto.
-    shadowElevation = 0.dp,
+    shadowElevation = if (onBar) 0.dp else 1.dp,
   ) {
     Row(
       modifier = Modifier

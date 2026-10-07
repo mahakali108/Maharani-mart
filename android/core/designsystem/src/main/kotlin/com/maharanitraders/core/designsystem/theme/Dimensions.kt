@@ -58,7 +58,9 @@ object MaharaniDimens {
   val bottomBarHeight = 64.dp
 
   // Cards and imagery.
-  val productImageRatio = 1f
+  // Slightly landscape: a prominent but compact image window keeps two-column
+  // wholesale cards dense without cropping labels or stretching pack shots.
+  val productImageRatio = 1.12f
   val railCardWidth = 168.dp
   val categoryTileWidth = 88.dp
   val categoryTileImage = 64.dp
