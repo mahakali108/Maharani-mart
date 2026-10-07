@@ -58,8 +58,10 @@ class FavoritesViewTest {
 
   @Test
   fun `the in-stock filter hides only what the server reports as out of stock`() {
+    // Sorted by name, so the survivors are "Atta" then "Rice"; "Oil" is the row
+    // the server reports as out of stock.
     val view = favoritesView(listOf(rice, atta, oil), FavoritesSort.NAME, inStockOnly = true)
-    assertThat(view.map { it.id }).containsExactly("1", "2").inOrder()
+    assertThat(view.map { it.name }).containsExactly("Atta", "Rice").inOrder()
   }
 
   @Test

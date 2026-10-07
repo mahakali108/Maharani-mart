@@ -113,8 +113,10 @@ class ProductCompareTest {
     )
     assertThat(rows.first { it.label == "Price per piece" }.values)
       .containsExactly(NOT_PUBLISHED, "₹50 / pc", NOT_PUBLISHED).inOrder()
+    // The unpriced pack is still IN STOCK — an unreadable rate is not a stock
+    // state, and the two columns must not be conflated.
     assertThat(rows.first { it.label == "Availability" }.values)
-      .containsExactly("Not confirmed", "Out of stock", NOT_PUBLISHED).inOrder()
+      .containsExactly("In stock", "Out of stock", NOT_PUBLISHED).inOrder()
   }
 
   @Test
