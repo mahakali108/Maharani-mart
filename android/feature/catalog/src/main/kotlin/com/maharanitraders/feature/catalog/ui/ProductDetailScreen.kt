@@ -545,8 +545,6 @@ private fun PackSelector(
   }
 }
 
-/** The server's slab table, so "buy more, pay less" is a real published rate. */
-@Composable
 /** Server facts about the product, rendered as label/value rows. */
 @Composable
 private fun ProductFacts(detail: ProductDetail, modifier: Modifier = Modifier) {
