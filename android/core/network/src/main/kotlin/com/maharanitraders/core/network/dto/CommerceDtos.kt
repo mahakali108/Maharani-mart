@@ -20,6 +20,13 @@ data class MobileCartLineDto(
   val packId: String,
   val productId: String? = null,
   val productName: String? = null,
+  /**
+   * Brand shown on the catalogue card. Defaulted so a line decoded from an
+   * older server payload still parses instead of failing the whole cart.
+   */
+  val brandName: String? = null,
+  /** Pack artwork, else the product's primary image; null renders the monogram. */
+  val imageUrl: String? = null,
   val packName: String? = null,
   val quantity: Int,
   val quantityUnit: String = "pieces",

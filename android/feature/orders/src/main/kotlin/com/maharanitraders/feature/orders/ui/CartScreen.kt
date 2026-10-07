@@ -1,12 +1,15 @@
 package com.maharanitraders.feature.orders.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -32,13 +35,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.SubcomposeAsyncImage
 import com.maharanitraders.core.designsystem.MoneyFormat
+import com.maharanitraders.core.designsystem.components.SkeletonSurface
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
+import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.designsystem.components.EmptyState
 import com.maharanitraders.core.designsystem.components.ErrorState
 import com.maharanitraders.core.designsystem.components.LoadingState
@@ -56,6 +64,7 @@ object CommerceTags {
   const val CART_EMPTY = "commerce_cart_empty"
   const val CART_CHECKOUT = "commerce_cart_checkout"
   const val CART_ADD = "commerce_cart_add"
+  const val CART_ITEM_IMAGE = "commerce_cart_item_image"
   const val CART_QUANTITY = "commerce_cart_quantity"
   const val SAVE_FOR_LATER = "commerce_save_for_later"
   const val CHECKOUT_SCREEN = "commerce_checkout_screen"
@@ -215,17 +224,34 @@ private fun CartContent(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      // Checkout is only offered when the SERVER considers every line
+      // orderable (active pack, valid price for the current MOQ, positive
+      // stock). A blocked line is explained above instead of letting the
+      // shopper walk into a checkout the server will refuse.
+      val blockedLine = cart?.lines?.firstOrNull { !it.orderable }
       Button(
         onClick = viewModel::beginCheckout,
-        enabled = !state.isCartMutating && !state.cartNeedsRefresh && !state.cartLoading &&
-          !state.addressesLoading && !state.orderSubmitting && !state.pendingOrderUncertain,
-        modifier = Modifier.fillMaxWidth().testTag(CommerceTags.CART_CHECKOUT),
+        enabled = blockedLine == null && !state.isCartMutating && !state.cartNeedsRefresh &&
+          !state.cartLoading && !state.addressesLoading && !state.orderSubmitting &&
+          !state.pendingOrderUncertain,
+        modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget)
+          .testTag(CommerceTags.CART_CHECKOUT),
       ) {
         Text(when {
           state.pendingOrderUncertain -> "Check earlier order first"
           state.addressesLoading -> "Loading delivery details…"
-          else -> "Review order"
+          blockedLine != null -> "Fix unavailable items to check out"
+          else -> "Proceed to Checkout"
         })
+      }
+      blockedLine?.let { line ->
+        Text(
+          text = "${line.productName ?: "An item"} cannot be ordered right now: " +
+            (line.message ?: "it is out of stock or no longer priced for your shop.") +
+            " Update or remove it to continue.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.error,
+        )
       }
     }
 
@@ -256,16 +282,38 @@ private fun CartLineCard(
       modifier = Modifier.padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      Text(
-        text = line.productName ?: "Unavailable product",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-      )
-      Text(
-        text = line.packName ?: "Pack no longer available",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        CartLineImage(
+          url = line.imageUrl,
+          fallbackLabel = line.productName ?: line.packName ?: "Item",
+          modifier = Modifier.size(72.dp).clip(RoundedCornerShape(14.dp)),
+        )
+        Column(
+          modifier = Modifier.weight(1f),
+          verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+          line.brandName?.let { brand ->
+            Text(
+              text = brand.uppercase(),
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          Text(
+            text = line.productName ?: "Unavailable product",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+          )
+          Text(
+            text = line.packName ?: "Pack no longer available",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
       Text(
         text = when (line.availability) {
           "in_stock" -> "In stock · final quantity is checked at order time"
@@ -329,6 +377,40 @@ private fun CartLineCard(
       ) { Text(if (saveForLaterBusy) "Saving for later…" else "Save for later") }
     }
   }
+}
+
+/**
+ * Cart line artwork.
+ *
+ * Same rules as the catalogue's ProductImage: centred `Fit` on the shared
+ * placeholder surface (never stretched, never cropped into an unreadable
+ * label), the skeleton while the bytes arrive, and a monogram tile when there
+ * is no image at all — a cart row must keep its shape in every state.
+ */
+@Composable
+private fun CartLineImage(url: String?, fallbackLabel: String, modifier: Modifier = Modifier) {
+  SubcomposeAsyncImage(
+    model = url,
+    contentDescription = fallbackLabel,
+    contentScale = ContentScale.Fit,
+    modifier = modifier
+      .background(MaharaniThemeTokens.colors.imagePlaceholder)
+      .testTag(CommerceTags.CART_ITEM_IMAGE),
+    loading = { SkeletonSurface(modifier = Modifier.fillMaxSize()) },
+    error = {
+      Box(
+        modifier = Modifier.fillMaxSize().background(MaharaniThemeTokens.colors.imagePlaceholder),
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(
+          text = fallbackLabel.trim().take(1).uppercase(),
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+          color = MaharaniThemeTokens.colors.onImagePlaceholder,
+        )
+      }
+    },
+  )
 }
 
 @Composable
