@@ -271,10 +271,13 @@ than accepting an unverified deep link.
   and server-change cases added to `OrderJourneyViewModelTest`, `CommerceViewModelTest`
   and `QuickOrderViewModelTest`. The repository's static Android gates
   (`tests/android-project-integrity.test.ts`) were run over the changed tree.
-  **Kotlin compilation, `testDebugUnitTest`, `lintDebug` and `assembleDebug` cannot be
-  executed in the verifying environment** (no JDK or Android SDK); they run in the
-  `android-apk.yml` job, and no Kotlin build result is claimed here unless that job is
-  green on the head commit.
+  Kotlin compilation, `testDebugUnitTest`, `lintDebug` and `assembleDebug` run in the
+  `android-apk.yml` job: on the head commit of this change set
+  (run `37653044207`, branch `arena/c225d7d0-maharani-mart`) that job is **GREEN** —
+  every module compiles, the Kotlin unit tests pass, `lintDebug` passes, and
+  `assembleDebug` produced a non-empty debug APK (`maharani-traders-debug-apk`,
+  15,670,632 bytes) whose `applicationId` the job re-checked with `aapt` as
+  `com.maharanitraders.app`.
 - No endpoint, migration, RLS policy or pricing rule was added or changed for this change
   set: every new surface reads existing endpoints, which is why the web suite
   (`typecheck`, `lint`, `test`, `build`) is unchanged and still green.
