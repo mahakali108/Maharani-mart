@@ -17,9 +17,12 @@ class GreetingTest {
   }
 
   @Test
-  fun `shifts UTC into the shop's own evening`() {
-    // 15:30 UTC is 21:00 in India: "Good evening", not "Good afternoon".
-    assertThat(greetingFor(1_796_601_600L + 15 * 3600L + 30 * 60L)).isEqualTo("Good evening")
+  fun `shifts UTC into the shop's own evening and night`() {
+    // 14:30 UTC is 20:00 in India: still evening, not afternoon.
+    assertThat(greetingFor(1_796_601_600L + 14 * 3600L + 30 * 60L)).isEqualTo("Good evening")
+    // 15:30 UTC is 21:00 in India: night, not evening. Reading the hour as UTC
+    // is what makes an app greet a shopkeeper wrongly all year round.
+    assertThat(greetingFor(1_796_601_600L + 15 * 3600L + 30 * 60L)).isEqualTo("Good night")
   }
 
   @Test
