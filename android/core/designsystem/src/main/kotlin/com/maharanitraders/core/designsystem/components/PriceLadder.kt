@@ -51,10 +51,13 @@ data class QuantityLadderRow(
 fun quantityLadder(tiers: List<PriceTier>, unitLabel: String = "pc"): List<QuantityLadderRow> {
   if (tiers.size < 2) return emptyList()
   return tiers.map { tier ->
+    // Captured in a local: `PriceTier` is a public property of another module,
+    // so Kotlin will not smart-cast it to non-null after the check below.
+    val max = tier.maxQuantity
     val range = when {
-      tier.maxQuantity == null -> "${tier.minQuantity}+ $unitLabel"
-      tier.maxQuantity - 1 <= tier.minQuantity -> "${tier.minQuantity} $unitLabel"
-      else -> "${tier.minQuantity}–${tier.maxQuantity - 1} $unitLabel"
+      max == null -> "${tier.minQuantity}+ $unitLabel"
+      max - 1 <= tier.minQuantity -> "${tier.minQuantity} $unitLabel"
+      else -> "${tier.minQuantity}–${max - 1} $unitLabel"
     }
     QuantityLadderRow(
       rangeLabel = range,

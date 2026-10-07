@@ -76,15 +76,18 @@ class HomeDashboardViewModel @Inject constructor(
           spentPaise = summary.coinsSpentPaise,
         )
       }
-      val orders = (orderResult as? AppResult.Success)?.value?.orders.orEmpty()
-      val lastOrder = orders.firstOrNull()?.let { order -> order.toHomeSummary() }
+      // Named for what it holds: the constructor's `orders` is the repository,
+      // and a local with the same name would make the two calls below read
+      // ambiguously.
+      val orderRows = (orderResult as? AppResult.Success)?.value?.orders.orEmpty()
+      val lastOrder = orderRows.firstOrNull()?.let { order -> order.toHomeSummary() }
       // "Frequently ordered" is THIS shop's own repeat list, aggregated from the
       // order rows the dashboard just read — no second request, and no
       // popularity signal invented on the device.
-      val frequentlyOrdered = if (orders.isEmpty()) {
+      val frequentlyOrdered = if (orderRows.isEmpty()) {
         emptyList()
       } else {
-        buyAgainCandidates(orders, limit = HOME_FREQUENT_LIMIT).map { candidate ->
+        buyAgainCandidates(orderRows, limit = HOME_FREQUENT_LIMIT).map { candidate ->
           HomeFrequentlyOrdered(
             productId = candidate.productId,
             name = candidate.productName ?: candidate.packName ?: "Product",

@@ -62,11 +62,11 @@ object ProductCompare {
     if (details.isEmpty()) return emptyList()
     return listOf(
       CompareRow("Brand", details.map { it.brandName ?: NOT_PUBLISHED }),
-      CompareRow("Pack size", details.map { packSize(it.pack) }),
-      CompareRow("Price per piece", details.map { perPiece(it.pack) }),
-      CompareRow("Price per case", details.map { perCase(it.pack) }),
-      CompareRow("Minimum order", details.map { minimum(it.pack) }),
-      CompareRow("Availability", details.map { availability(it.pack) }),
+      CompareRow("Pack size", details.map { packSize(pack(it)) }),
+      CompareRow("Price per piece", details.map { perPiece(pack(it)) }),
+      CompareRow("Price per case", details.map { perCase(pack(it)) }),
+      CompareRow("Minimum order", details.map { minimum(pack(it)) }),
+      CompareRow("Availability", details.map { availability(pack(it)) }),
       CompareRow("GST", details.map { gst(it) }),
       CompareRow("Lead time", details.map { leadTime(it) }),
     )
