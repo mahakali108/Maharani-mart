@@ -72,6 +72,7 @@ class CatalogViewModelTest {
   private fun viewModel(api: FakeCatalogApi) = CatalogViewModel(
     repository = catalogRepository(api, dispatcher),
     favorites = favoritesStore(api, dispatcher),
+    history = localHistoryStore(),
   )
 
   private fun envelope(

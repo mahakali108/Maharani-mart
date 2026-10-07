@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,30 +33,60 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maharanitraders.core.designsystem.MoneyFormat
+import com.maharanitraders.core.designsystem.components.AccentIcon
+import com.maharanitraders.core.designsystem.components.BellGlyph
+import com.maharanitraders.core.designsystem.components.BookmarkGlyph
+import com.maharanitraders.core.designsystem.components.ChatGlyph
+import com.maharanitraders.core.designsystem.components.BoltGlyph
+import com.maharanitraders.core.designsystem.components.BrandGlyph
+import com.maharanitraders.core.designsystem.components.CartGlyph
+import com.maharanitraders.core.designsystem.components.CategoryGlyph
+import com.maharanitraders.core.designsystem.components.CoinGlyph
 import com.maharanitraders.core.designsystem.components.CrownGlyph
 import com.maharanitraders.core.designsystem.components.EmptyState
 import com.maharanitraders.core.designsystem.components.ErrorState
+import com.maharanitraders.core.designsystem.components.HeartGlyph
+import com.maharanitraders.core.designsystem.components.HomeGlyph
 import com.maharanitraders.core.designsystem.components.HomeSkeleton
+import com.maharanitraders.core.designsystem.components.MetricTile
 import com.maharanitraders.core.designsystem.components.OfflineState
+import com.maharanitraders.core.designsystem.components.OfferGlyph
+import com.maharanitraders.core.designsystem.components.OrdersGlyph
+import com.maharanitraders.core.designsystem.components.QuickActionTile
+import com.maharanitraders.core.designsystem.components.RefreshGlyph
 import com.maharanitraders.core.designsystem.components.SectionHeader
+import com.maharanitraders.core.designsystem.components.SortGlyph
+import com.maharanitraders.core.designsystem.theme.AccentTone
 import com.maharanitraders.core.designsystem.theme.MaharaniDimens
 import com.maharanitraders.core.designsystem.theme.MaharaniThemeTokens
 import com.maharanitraders.core.model.CatalogBrand
 import com.maharanitraders.core.model.CatalogCategory
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.feature.catalog.CatalogTab
+import com.maharanitraders.feature.catalog.HomeCoins
+import com.maharanitraders.feature.catalog.HomeDashboard
+import com.maharanitraders.feature.catalog.HomeOrderSummary
+import com.maharanitraders.feature.catalog.HomeQuickAction
+import com.maharanitraders.feature.catalog.HomeQuickActionIcon
 import com.maharanitraders.feature.catalog.HomeUiState
 import com.maharanitraders.feature.catalog.HomeViewModel
+import com.maharanitraders.feature.catalog.RecentlyViewedProduct
 import com.maharanitraders.feature.catalog.ui.components.BrandTile
 import com.maharanitraders.feature.catalog.ui.components.BannerCarousel
 import com.maharanitraders.feature.catalog.ui.components.CategoryTile
 import com.maharanitraders.feature.catalog.ui.components.ProductCard
+import com.maharanitraders.feature.catalog.ui.components.ProductImage
 import com.maharanitraders.feature.catalog.ui.components.productCardItems
+import com.maharanitraders.feature.catalog.ui.components.quickAddQuantity
 
 /** Test tags for the retailer home surface. */
 object HomeScreenTags {
@@ -66,6 +98,16 @@ object HomeScreenTags {
   const val PRODUCT_GRID = "home_product_grid"
   const val REFRESH = "home_refresh"
   const val WELCOME = "home_welcome_panel"
+
+  /** The shortcut grid: one tag per tile, suffixed with the action's route. */
+  const val QUICK_ACTIONS = "home_quick_actions"
+  fun quickAction(route: String) = "home_quick_action_$route"
+
+  /** The shop's own numbers. Each renders only when the server returned one. */
+  const val COINS_TILE = "home_coins_tile"
+  const val LAST_ORDER_CARD = "home_last_order_card"
+  const val RECENTLY_VIEWED_ROW = "home_recently_viewed_row"
+  const val DASHBOARD_RETRY = "home_dashboard_retry"
 }
 
 /**
@@ -87,9 +129,14 @@ object HomeScreenTags {
  * field so it stays visible while scrolling, exactly like the reference UX);
  * submitting it hands the term to the catalogue.
  *
- * Cart and orders live on their own Phase E tabs, not inside this home payload;
- * a Coins wallet summary, notifications and schemes remain later work. This
- * screen offers no affordance that pretends otherwise.
+ * Below the welcome panel sit the RETAILER tools, each fed by its own endpoint:
+ * shortcut tiles (only for routes this session may open), the Coins tile from
+ * the wallet summary, the last order from the caller's own history — with a
+ * "Buy again" action that opens the order, where the real reorder replays the
+ * stored pieces at TODAY's price and stock — and a recently-viewed rail from the
+ * device history. None of them is a fallback: a section the server did not fill
+ * is not drawn, and a failed dashboard read is reported without taking the shop
+ * off the screen.
  */
 @Composable
 fun RetailerHomeScreen(
@@ -101,6 +148,31 @@ fun RetailerHomeScreen(
    * separate screen, because there is only one catalogue.
    */
   onOpenDirectory: (CatalogTab) -> Unit,
+  /**
+   * Open another destination of this account — the shortcut tiles' destination.
+   * The caller passes only routes the SERVER-verified session can open, so a
+   * tile is never a dead end.
+   */
+  onOpenDestination: (String) -> Unit = {},
+  /** The shortcuts to draw. Empty (the default) draws no shortcut grid at all. */
+  quickActions: List<HomeQuickAction> = emptyList(),
+  /** The shop's own numbers: Coins, the last order, recently viewed products. */
+  dashboard: HomeDashboard? = null,
+  onRetryDashboard: () -> Unit = {},
+  /** The server's own saved-cart line count, or null before it has answered. */
+  cartLineCount: Int? = null,
+  /** Open the Coins destination (the shell owns the route table). */
+  onOpenCoins: () -> Unit = {},
+  /** Open one order's detail — where the real reorder lives. */
+  onOpenOrder: (String) -> Unit = {},
+  /**
+   * Quick add to the cart from a card, `(packId, quantity)`. Null (the default)
+   * hides the card's add control entirely, which is what a non-retailer — or a
+   * surface with no cart behind it — must get.
+   */
+  onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  /** The pack currently being added, so exactly one card shows a spinner. */
+  quickAddPackId: String? = null,
   modifier: Modifier = Modifier,
   viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -118,6 +190,15 @@ fun RetailerHomeScreen(
     onOpenBrand = { brand -> onOpenCatalog("", null, brand.id, brand.name) },
     onOpenDirectory = onOpenDirectory,
     onOpenProduct = onOpenProduct,
+    onOpenDestination = onOpenDestination,
+    quickActions = quickActions,
+    dashboard = dashboard,
+    onRetryDashboard = onRetryDashboard,
+    cartLineCount = cartLineCount,
+    onOpenCoins = onOpenCoins,
+    onOpenOrder = onOpenOrder,
+    onQuickAddToCart = onQuickAddToCart,
+    quickAddPackId = quickAddPackId,
     modifier = modifier,
   )
 }
@@ -143,6 +224,15 @@ fun HomeContent(
   onOpenBrand: (CatalogBrand) -> Unit,
   onOpenDirectory: (CatalogTab) -> Unit,
   onOpenProduct: (String) -> Unit,
+  onOpenDestination: (String) -> Unit = {},
+  quickActions: List<HomeQuickAction> = emptyList(),
+  dashboard: HomeDashboard? = null,
+  onRetryDashboard: () -> Unit = {},
+  cartLineCount: Int? = null,
+  onOpenCoins: () -> Unit = {},
+  onOpenOrder: (String) -> Unit = {},
+  onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  quickAddPackId: String? = null,
   modifier: Modifier = Modifier,
 ) {
   LazyVerticalGrid(
@@ -219,6 +309,58 @@ fun HomeContent(
             }
           }
 
+          // Shortcuts first: the fastest way to a repeat order. The list is
+          // built by the shell from the destinations THIS session may open, so
+          // every tile lands on a real screen.
+          if (quickActions.isNotEmpty()) {
+            item(span = full) {
+              QuickActionGrid(
+                actions = quickActions,
+                onOpenDestination = onOpenDestination,
+                cartLineCount = cartLineCount,
+              )
+            }
+          }
+
+          // The shop's own numbers. Each card renders only when the server
+          // actually returned that figure.
+          if (dashboard != null) {
+            if (dashboard.errorMessage != null) {
+              item(span = full) {
+                InlineErrorBanner(
+                  message = dashboard.errorMessage,
+                  offline = dashboard.offline,
+                  onRetry = if (dashboard.retryable) onRetryDashboard else null,
+                  retryTag = HomeScreenTags.DASHBOARD_RETRY,
+                )
+              }
+            }
+            dashboard.coins?.let { coins ->
+              item(span = full) {
+                CoinsTile(coins = coins, onOpenCoins = onOpenCoins)
+              }
+            }
+            dashboard.lastOrder?.let { order ->
+              item(span = full) {
+                LastOrderCard(order = order, onOpenOrder = onOpenOrder)
+              }
+            }
+            if (dashboard.recentlyViewed.isNotEmpty()) {
+              item(span = full) {
+                Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                  SectionHeader(
+                    title = "Recently viewed",
+                    subtitle = "Pick up where you left off — today's price loads on the product",
+                  )
+                  RecentlyViewedRail(
+                    products = dashboard.recentlyViewed,
+                    onOpenProduct = onOpenProduct,
+                  )
+                }
+              }
+            }
+          }
+
           if (home.categories.isNotEmpty()) {
             item(span = full) {
               Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
@@ -260,6 +402,8 @@ fun HomeContent(
                   isFavorite = isFavorite,
                   isFavoritePending = isFavoritePending,
                   onToggleFavorite = onToggleFavorite,
+                  onQuickAddToCart = onQuickAddToCart,
+                  quickAddPackId = quickAddPackId,
                 )
               }
             }
@@ -280,6 +424,8 @@ fun HomeContent(
               isFavorite = isFavorite,
               isFavoritePending = isFavoritePending,
               onToggleFavorite = onToggleFavorite,
+              onQuickAddToCart = onQuickAddToCart,
+              quickAddPackId = quickAddPackId,
             )
           }
 
@@ -401,6 +547,8 @@ private fun RecentRail(
   isFavorite: (CatalogProduct) -> Boolean,
   isFavoritePending: (CatalogProduct) -> Boolean,
   onToggleFavorite: ((String) -> Unit)?,
+  onQuickAddToCart: ((String, Int) -> Unit)? = null,
+  quickAddPackId: String? = null,
   modifier: Modifier = Modifier,
 ) {
   LazyRow(
@@ -416,6 +564,13 @@ private fun RecentRail(
         isFavorite = isFavorite(product),
         favoritePending = isFavoritePending(product),
         onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(product.id) } },
+        onAddToCart = onQuickAddToCart?.let { add ->
+          {
+            val pack = product.pack
+            if (pack != null) add(pack.packId, quickAddQuantity(pack))
+          }
+        },
+        addPending = quickAddPackId != null && quickAddPackId == product.pack?.packId,
         modifier = Modifier.width(MaharaniDimens.railCardWidth),
       )
     }
@@ -428,6 +583,7 @@ private fun InlineErrorBanner(
   message: String,
   offline: Boolean,
   onRetry: (() -> Unit)?,
+  retryTag: String = HomeScreenTags.REFRESH,
   modifier: Modifier = Modifier,
 ) {
   Surface(
@@ -458,10 +614,271 @@ private fun InlineErrorBanner(
         TextButton(
           onClick = onRetry,
           modifier = Modifier
-            .heightIn(min = 40.dp)
-            .testTag(HomeScreenTags.REFRESH),
+            .heightIn(min = MaharaniDimens.touchTarget)
+            .testTag(retryTag),
         ) {
           Text("Retry")
+        }
+      }
+    }
+  }
+}
+
+/**
+ * The shortcut grid: four tiles per row, wrapping as the window widens.
+ *
+ * The tiles come from the shell, which builds them from the destinations the
+ * session can actually open — so this grid can never advertise a screen the
+ * account may not enter, and there is no "coming soon" tile anywhere in it.
+ * The cart tile carries the SERVER's own line count (the same number the shell's
+ * bottom-bar badge shows); a null count draws no bubble rather than a false 0.
+ */
+@Composable
+private fun QuickActionGrid(
+  actions: List<HomeQuickAction>,
+  onOpenDestination: (String) -> Unit,
+  cartLineCount: Int?,
+  modifier: Modifier = Modifier,
+) {
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(HomeScreenTags.QUICK_ACTIONS),
+    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
+  ) {
+    actions.chunked(4).forEach { row ->
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
+      ) {
+        row.forEach { action ->
+          QuickActionTile(
+            label = action.label,
+            tone = action.tone,
+            onClick = { onOpenDestination(action.route) },
+            // Only the cart tile badges, and only with the server's own count.
+            badgeCount = if (action.icon == HomeQuickActionIcon.CART) cartLineCount else null,
+            modifier = Modifier
+              .weight(1f)
+              .testTag(HomeScreenTags.quickAction(action.route)),
+            glyph = { tint -> QuickActionGlyph(action.icon, tint) },
+          )
+        }
+        // Keeps the last row's tiles the same width as every other row, rather
+        // than stretching three tiles across four columns.
+        repeat(4 - row.size) {
+          Box(modifier = Modifier.weight(1f))
+        }
+      }
+    }
+  }
+}
+
+/** The glyph for one shortcut. Drawn from the shared 24-grid icon set. */
+@Composable
+private fun QuickActionGlyph(icon: HomeQuickActionIcon, tint: Color) {
+  val size = Modifier.size(22.dp)
+  when (icon) {
+    HomeQuickActionIcon.SHOP -> HomeGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.CATEGORY -> CategoryGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.BRAND -> BrandGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.ORDERS -> OrdersGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.CART -> CartGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.REORDER -> RefreshGlyph(modifier = size, tint = tint)
+    // A filled heart: the tile is "the products you saved", so an outline
+    // heart would read as "not saved".
+    HomeQuickActionIcon.FAVORITES -> HeartGlyph(modifier = size, filled = true, tint = tint)
+    HomeQuickActionIcon.QUICK_ORDER -> BoltGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.SAVED_CARTS -> BookmarkGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.COINS -> CoinGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.COUPONS -> OfferGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.SUPPORT -> ChatGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.NOTIFICATIONS -> BellGlyph(modifier = size, tint = tint)
+    HomeQuickActionIcon.REPORTS -> SortGlyph(modifier = size, tint = tint)
+  }
+}
+
+/**
+ * The Coins balance, as the wallet endpoint reported it.
+ *
+ * The caption spells out what the number IS (funded minus spent) instead of
+ * showing a bare figure, and no coin rule is invented here: the wallet screen
+ * remains the place where the ledger and the redemption rules live.
+ */
+@Composable
+private fun CoinsTile(
+  coins: HomeCoins,
+  onOpenCoins: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  MetricTile(
+    label = "Maharani Coins",
+    value = MoneyFormat.formatPaise(coins.balancePaise),
+    tone = AccentTone.AMBER,
+    caption = "Funded ${MoneyFormat.formatPaise(coins.fundedPaise)} · " +
+      "spent ${MoneyFormat.formatPaise(coins.spentPaise)}",
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(HomeScreenTags.COINS_TILE),
+    trailing = {
+      TextButton(onClick = onOpenCoins, modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget)) {
+        Text("Ledger")
+      }
+    },
+    glyph = { tint -> CoinGlyph(modifier = Modifier.size(22.dp), tint = tint) },
+  )
+}
+
+/**
+ * The most recent order, from the caller's own history endpoint.
+ *
+ * "Reorder" opens the ORDER, not a rebuilt basket: the order detail replays the
+ * stored pieces through the cart API, so today's price, stock and MOQ decide —
+ * a reorder built from this card's summary would be quoting history.
+ */
+@Composable
+private fun LastOrderCard(
+  order: HomeOrderSummary,
+  onOpenOrder: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val tokens = MaharaniThemeTokens.colors
+  Surface(
+    shape = RoundedCornerShape(MaharaniDimens.radiusCard),
+    color = MaterialTheme.colorScheme.surface,
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(HomeScreenTags.LAST_ORDER_CARD),
+  ) {
+    Column(
+      modifier = Modifier.padding(MaharaniDimens.spaceMd),
+      verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
+      ) {
+        AccentIcon(tone = AccentTone.BLUE, size = 40.dp) { tint ->
+          OrdersGlyph(modifier = Modifier.size(22.dp), tint = tint)
+        }
+        Column(
+          modifier = Modifier.weight(1f),
+          verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
+        ) {
+          Text(
+            text = "Last order",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          Text(
+            text = order.orderNumber,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          Text(
+            text = order.statusLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = tokens.info,
+          )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+          Text(
+            text = MoneyFormat.formatPaise(order.totalPaise),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+          )
+          Text(
+            text = "${order.itemCount} item(s)",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+      OutlinedButton(
+        onClick = { onOpenOrder(order.id) },
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(min = MaharaniDimens.touchTarget),
+      ) {
+        Text("Buy again")
+      }
+    }
+  }
+}
+
+/**
+ * Recently viewed products, from the DEVICE history only.
+ *
+ * The tile shows what the server said about the product's identity when it was
+ * opened — name, brand, pack and artwork — and deliberately no price: a rate
+ * cached on the device would be yesterday's, and this app never displays money
+ * the server did not just confirm. Tapping opens the product detail, where the
+ * live price arrives.
+ */
+@Composable
+private fun RecentlyViewedRail(
+  products: List<RecentlyViewedProduct>,
+  onOpenProduct: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  LazyRow(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(HomeScreenTags.RECENTLY_VIEWED_ROW),
+    horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
+  ) {
+    items(products, key = { it.id }) { product ->
+      Surface(
+        onClick = { onOpenProduct(product.id) },
+        shape = RoundedCornerShape(MaharaniDimens.radiusCard),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.width(MaharaniDimens.railCardWidth),
+      ) {
+        Column(
+          modifier = Modifier.padding(MaharaniDimens.cardPadding),
+          verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+        ) {
+          ProductImage(
+            url = product.imageUrl,
+            fallbackLabel = product.name,
+            modifier = Modifier
+              .fillMaxWidth()
+              .aspectRatio(MaharaniDimens.productImageRatio)
+              .clip(RoundedCornerShape(MaharaniDimens.radiusTile)),
+          )
+          product.brandName?.let { brand ->
+            Text(
+              text = brand.uppercase(),
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.primary,
+              fontWeight = FontWeight.SemiBold,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+          Text(
+            text = product.name,
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            minLines = 2,
+          )
+          product.packName?.let { pack ->
+            Text(
+              text = pack,
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+          Text(
+            text = "Tap for today's price",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaharaniThemeTokens.colors.info,
+          )
         }
       }
     }

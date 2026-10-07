@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -67,6 +68,9 @@ object CommerceTags {
   const val CART_ITEM_IMAGE = "commerce_cart_item_image"
   const val CART_QUANTITY = "commerce_cart_quantity"
   const val SAVE_FOR_LATER = "commerce_save_for_later"
+  const val CART_SAVE = "commerce_cart_save"
+  const val CART_SAVE_NAME = "commerce_cart_save_name"
+  const val CART_SAVE_CONFIRM = "commerce_cart_save_confirm"
   const val CHECKOUT_SCREEN = "commerce_checkout_screen"
   const val CHECKOUT_QUOTE = "commerce_checkout_quote"
   const val CHECKOUT_SUBMIT = "commerce_checkout_submit"
@@ -89,6 +93,14 @@ fun CartScreen(
   val state by viewModel.state.collectAsStateWithLifecycle()
   val savedCartsViewModel: SavedCartsViewModel = hiltViewModel()
   val savedCartsState by savedCartsViewModel.state.collectAsStateWithLifecycle()
+
+  // Entering the cart (including coming back to the tab) asks the server for the
+  // current basket: lines can have been added from the home/catalogue cards, an
+  // order, or a restored saved cart while this screen was not on top. The call
+  // is a no-op while a read or a mutation is already in flight.
+  LaunchedEffect(Unit) {
+    viewModel.refreshCartOnOpen()
+  }
   when {
     state.confirmation != null -> OrderConfirmationContent(
       order = state.confirmation!!,
@@ -110,6 +122,13 @@ fun CartScreen(
       saveForLaterBusy = savedCartsState.savingKey?.startsWith("save-for-later:") == true,
       saveForLaterMessage = savedCartsState.message,
       saveForLaterError = savedCartsState.error,
+      // Save the whole basket as a named list. The endpoint stores pack ids and
+      // quantities only, and revalidates availability and minimums when the list
+      // is restored — so a saved cart is a reorder shortcut, never a stored price.
+      saveCartName = savedCartsState.createName,
+      onSaveCartNameChange = savedCartsViewModel::onCreateName,
+      onSaveCart = savedCartsViewModel::saveCurrentCart,
+      saveCartBusy = savedCartsState.savingKey == "save",
       modifier = modifier,
     )
   }
@@ -124,8 +143,56 @@ private fun CartContent(
   saveForLaterBusy: Boolean,
   saveForLaterMessage: String?,
   saveForLaterError: String?,
+  saveCartName: String,
+  onSaveCartNameChange: (String) -> Unit,
+  onSaveCart: () -> Unit,
+  saveCartBusy: Boolean,
   modifier: Modifier = Modifier,
 ) {
+  // The dialog's own open/closed state. It is not in the ViewModel because it is
+  // a property of this screen's composition, not of the cart.
+  var saveDialogOpen by remember { mutableStateOf(false) }
+
+  if (saveDialogOpen) {
+    AlertDialog(
+      onDismissRequest = { if (!saveCartBusy) saveDialogOpen = false },
+      title = { Text("Save this cart") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+          Text(
+            "Name this basket so you can restore it in one tap. Prices, stock and " +
+              "minimums are checked again when you restore it.",
+            style = MaterialTheme.typography.bodySmall,
+          )
+          OutlinedTextField(
+            value = saveCartName,
+            onValueChange = onSaveCartNameChange,
+            singleLine = true,
+            label = { Text("List name") },
+            supportingText = { Text("Up to 60 characters") },
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag(CommerceTags.CART_SAVE_NAME),
+          )
+        }
+      },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            onSaveCart()
+            saveDialogOpen = false
+          },
+          enabled = saveCartName.isNotBlank() && !saveCartBusy,
+          modifier = Modifier.testTag(CommerceTags.CART_SAVE_CONFIRM),
+        ) {
+          Text(if (saveCartBusy) "Saving…" else "Save cart")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { saveDialogOpen = false }, enabled = !saveCartBusy) { Text("Cancel") }
+      },
+    )
+  }
   if (state.cartLoading && state.cart == null) {
     LoadingState("Loading your shared cart…", modifier)
     return
@@ -253,6 +320,17 @@ private fun CartContent(
           color = MaterialTheme.colorScheme.error,
         )
       }
+    }
+
+    OutlinedButton(
+      onClick = { saveDialogOpen = true },
+      enabled = !state.isCartMutating && !state.cartNeedsRefresh && !state.cartLoading,
+      modifier = Modifier
+        .fillMaxWidth()
+        .heightIn(min = MaharaniDimens.touchTarget)
+        .testTag(CommerceTags.CART_SAVE),
+    ) {
+      Text("Save this cart")
     }
 
     OutlinedButton(onClick = onBrowseCatalog, modifier = Modifier.fillMaxWidth()) {

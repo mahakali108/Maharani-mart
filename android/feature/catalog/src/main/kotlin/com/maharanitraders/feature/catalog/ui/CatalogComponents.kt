@@ -40,16 +40,18 @@ object CatalogTags {
 }
 
 /**
- * Brand-red "New" ribbon, driven by the server's `is_new_launch` flag. The app
- * never decides what is new: the flag arrives on the card or the detail.
+ * Rose "New" ribbon, driven by the server's `is_new_launch` flag. The app never
+ * decides what is new: the flag arrives on the card or the detail.
  */
 @Composable
 fun NewLaunchBadge(modifier: Modifier = Modifier) {
+  val tokens = MaharaniThemeTokens.colors
   Surface(
-    // Brand red, not the gold accent: "New" is identity (the same red as the
-    // crown and the launcher), while gold belongs to offers and highlights.
-    color = MaterialTheme.colorScheme.tertiary,
-    contentColor = MaterialTheme.colorScheme.onTertiary,
+    // Rose highlight, not gold: gold is reserved for OFFERS, and a "New" chip
+    // that looked like a discount would misstate what the server said. Rose is
+    // the design system's emphasis tone — neither a saving nor a failure.
+    color = tokens.highlight,
+    contentColor = MaterialTheme.colorScheme.surface,
     shape = RoundedCornerShape(MaharaniDimens.radiusChip),
     modifier = modifier.testTag(CatalogTags.NEW_LAUNCH),
   ) {

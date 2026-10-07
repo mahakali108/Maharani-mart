@@ -85,6 +85,7 @@ class ProductDetailViewModelTest {
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
       favorites = favoritesStore(api, dispatcher),
+      history = localHistoryStore(),
       savedStateHandle = handle("pack-1"),
     )
     advanceUntilIdle()
@@ -105,6 +106,7 @@ class ProductDetailViewModelTest {
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
       favorites = favoritesStore(api, dispatcher),
+      history = localHistoryStore(),
       savedStateHandle = handle("p1"),
     )
     advanceUntilIdle()
@@ -130,6 +132,7 @@ class ProductDetailViewModelTest {
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
       favorites = favoritesStore(api, dispatcher),
+      history = localHistoryStore(),
       savedStateHandle = handle("missing"),
     )
     advanceUntilIdle()
@@ -147,6 +150,7 @@ class ProductDetailViewModelTest {
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
       favorites = favoritesStore(api, dispatcher),
+      history = localHistoryStore(),
       savedStateHandle = handle("p1"),
     )
     advanceUntilIdle()
@@ -164,6 +168,7 @@ class ProductDetailViewModelTest {
     val viewModel = ProductDetailViewModel(
       repository = catalogRepository(api, dispatcher),
       favorites = favoritesStore(api, dispatcher),
+      history = localHistoryStore(),
       savedStateHandle = handle(null),
     )
     advanceUntilIdle()

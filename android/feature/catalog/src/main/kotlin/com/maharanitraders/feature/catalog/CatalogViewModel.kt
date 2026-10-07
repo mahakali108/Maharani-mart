@@ -152,6 +152,13 @@ data class CatalogUiState(
 class CatalogViewModel @Inject constructor(
   private val repository: CatalogRepository,
   private val favorites: FavoritesStore,
+  /**
+   * The device-local search history. Terms the shopper actually searched are
+   * remembered here (never on the server, which has no such table) and offered
+   * back as chips, so a wholesale buyer's repeat searches are one tap instead of
+   * retyping long product names on a phone keyboard.
+   */
+  private val history: LocalHistoryStore,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(CatalogUiState())
@@ -160,14 +167,39 @@ class CatalogViewModel @Inject constructor(
   /** The shared favourite set. The catalogue keeps no copy of its own. */
   val favoriteState: StateFlow<FavoritesSnapshot> = favorites.state
 
+  /** Recent searches, newest first. Empty until the store has loaded. */
+  val recentSearches: StateFlow<List<String>> = history.recentSearches
+
   private var searchJob: Job? = null
   private var listJob: Job? = null
   private var directoryJob: Job? = null
 
   init {
     viewModelScope.launch { favorites.ensureLoaded() }
+    viewModelScope.launch { history.ensureLoaded() }
     loadDirectories()
     reload()
+  }
+
+  /**
+   * Run a term from the recent-search chips.
+   *
+   * It goes through the same query state and the same [reload] as a typed
+   * search, so a chip cannot rank, filter or price differently from typing the
+   * same words — and the term moves to the front of the history, which is what
+   * makes the chips useful rather than stale.
+   */
+  fun useRecentSearch(term: String) {
+    val trimmed = term.trim()
+    if (trimmed.isEmpty()) return
+    searchJob?.cancel()
+    _state.update { it.copy(query = it.query.copy(search = trimmed), tab = CatalogTab.PRODUCTS) }
+    viewModelScope.launch { history.recordSearch(trimmed) }
+    reload()
+  }
+
+  fun clearRecentSearches() {
+    viewModelScope.launch { history.clearSearches() }
   }
 
   /**
@@ -286,7 +318,22 @@ class CatalogViewModel @Inject constructor(
    */
   fun submitSearch() {
     searchJob?.cancel()
+    rememberCurrentSearch()
     reload()
+  }
+
+  /**
+   * Remember the term the shopper actually committed to (the IME action, or a
+   * home-screen search handed to this screen). Typing alone is deliberately not
+   * recorded: the debounce fires on every prefix, and a history full of `a`,
+   * `at`, `att` prefixes is noise, not a shortcut. Blank terms are ignored, and
+   * the write is fire-and-forget because a failed history write must never
+   * affect the search that is already running.
+   */
+  private fun rememberCurrentSearch() {
+    val term = _state.value.query.search.trim()
+    if (term.isEmpty()) return
+    viewModelScope.launch { history.recordSearch(term) }
   }
 
   /**
@@ -408,6 +455,9 @@ class CatalogViewModel @Inject constructor(
     _state.update {
       it.copy(tab = tab, query = nextQuery, brandLabel = nextLabel, directoryFilter = "")
     }
+    // A search that arrived with a destination (the home screen's field, a
+    // restored tab) is a committed search, so it earns a chip like any other.
+    rememberCurrentSearch()
     reload()
   }
 

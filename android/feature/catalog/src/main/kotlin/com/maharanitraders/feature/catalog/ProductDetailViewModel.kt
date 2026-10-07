@@ -64,6 +64,13 @@ data class ProductDetailUiState(
 class ProductDetailViewModel @Inject constructor(
   private val repository: CatalogRepository,
   private val favorites: FavoritesStore,
+  /**
+   * The device-local view history, so the home screen can offer the products
+   * this shopper was just looking at. Only the identity the server returned is
+   * recorded — never a price or a stock state, which would be stale the moment
+   * the screen closed (see [RecentlyViewedProduct]).
+   */
+  private val history: LocalHistoryStore,
   savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -107,15 +114,29 @@ class ProductDetailViewModel @Inject constructor(
 
     viewModelScope.launch {
       when (val result = repository.loadProduct(productId)) {
-        is AppResult.Success -> _state.update {
-          it.copy(
-            loading = false,
-            refreshing = false,
-            detail = result.value,
-            notFound = false,
-            errorMessage = null,
-            offline = false,
-            selectedPackId = it.selectedPackId ?: result.value.selectedPack?.packId,
+        is AppResult.Success -> {
+          _state.update {
+            it.copy(
+              loading = false,
+              refreshing = false,
+              detail = result.value,
+              notFound = false,
+              errorMessage = null,
+              offline = false,
+              selectedPackId = it.selectedPackId ?: result.value.selectedPack?.packId,
+            )
+          }
+          // Recorded only AFTER the server answered, and only from its own
+          // fields: a product that failed to load is not "recently viewed".
+          val detail = result.value
+          history.recordView(
+            RecentlyViewedProduct(
+              id = detail.id,
+              name = detail.name,
+              brandName = detail.brandName,
+              packName = detail.selectedPack?.packName,
+              imageUrl = detail.heroImages.firstOrNull(),
+            ),
           )
         }
 

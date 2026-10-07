@@ -93,6 +93,26 @@ class CartCheckoutViewModel @Inject constructor(
     }
   }
 
+  /**
+   * Re-read the shared basket when the cart surface APPEARS.
+   *
+   * The basket can change from outside this screen: a quick add on a home or
+   * catalogue card, a reorder from an order, a restore from a saved cart, or the
+   * same account shopping on the web. A retained ViewModel would otherwise keep
+   * rendering the snapshot it read when the tab was last open, and a shopkeeper
+   * who has just tapped "Add" would read that as a broken button.
+   *
+   * It is deliberately a no-op while a read or a write is already in flight —
+   * `cartLoading` starts true and is set before the first request leaves — so
+   * opening the tab can never double-fetch the cart or overwrite a mutation's
+   * response with an older snapshot.
+   */
+  fun refreshCartOnOpen() {
+    val current = _state.value
+    if (current.cartLoading || current.isCartMutating || current.orderSubmitting) return
+    refreshCart()
+  }
+
   /** Retry address setup or refresh the shared basket and its server quote. */
   fun refreshCheckout() {
     if (!_state.value.hasAddressSelection) beginCheckout() else refreshCart()
@@ -475,6 +495,18 @@ class CartCheckoutViewModel @Inject constructor(
 
   fun clearMessage() {
     _state.update { it.copy(message = null) }
+  }
+
+  /**
+   * Consume the cart's last error after a surface has shown it.
+   *
+   * A quick add from the catalogue's cards happens on a different screen from
+   * the cart, so the message must be readable there and then dismissed — the
+   * same pattern the catalogue already uses for a failed favourite toggle, and
+   * the only way the same failure is not reported twice.
+   */
+  fun clearCartError() {
+    _state.update { it.copy(cartError = null, cartErrorCode = null) }
   }
 
   private fun mutateCart(operation: suspend () -> AppResult<CartSnapshot>) {

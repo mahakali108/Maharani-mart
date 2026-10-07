@@ -89,6 +89,54 @@ object MaharaniPalette {
   val SurfaceDark = Color(0xFF1A1719)
   val SurfaceDarkHigh = Color(0xFF252124)
 
+  // Violet — the app's TERTIARY identity family (Material's `tertiary` role):
+  // Quick Order, Saved carts, the account/security shortcuts and the "Reorder"
+  // emphasis. It is the third leg of the brand triangle (red, amber, violet) so
+  // a screen can separate NAVIGATION (red) from SAVINGS (amber) from SHORTCUTS
+  // (violet) without inventing a colour per screen.
+  val Violet50 = Color(0xFFF5F3FF)
+  val Violet100 = Color(0xFFEDE9FE)
+  val Violet200 = Color(0xFFDDD6FE)
+  val Violet300 = Color(0xFFC4B5FD)
+  val Violet400 = Color(0xFFA78BFA)
+  val Violet500 = Color(0xFF8B5CF6)
+  val Violet600 = Color(0xFF7C3AED) // tertiary core
+  val Violet700 = Color(0xFF6D28D9)
+  val Violet800 = Color(0xFF5B21B6)
+  val Violet900 = Color(0xFF4C1D95)
+  val Violet950 = Color(0xFF2E1065)
+
+  // Info blue — INFORMATIONAL chrome only: delivery/lead-time facts, the
+  // "how wholesale pricing works" notes and the tax split on an invoice. It is
+  // never an action colour: tapping is red, everywhere.
+  val Info50 = Color(0xFFEFF6FF)
+  val Info100 = Color(0xFFDBEAFE)
+  val Info200 = Color(0xFFBFDBFE)
+  val Info300 = Color(0xFF93C5FD)
+  val Info400 = Color(0xFF60A5FA)
+  val Info500 = Color(0xFF3B82F6)
+  val Info600 = Color(0xFF2563EB)
+  val Info700 = Color(0xFF1D4ED8)
+  val Info800 = Color(0xFF1E40AF)
+  val Info900 = Color(0xFF1E3A8A)
+  val Info950 = Color(0xFF172554)
+
+  // Rose/pink — the app's HIGHLIGHT family: the notification and offer
+  // emphasis, "New launch" companions and the empty-state art. Deliberately a
+  // warmer, lighter hue than [OutOfStockRose] so a highlight can never be
+  // mistaken for a failure state.
+  val Highlight50 = Color(0xFFFDF2F8)
+  val Highlight100 = Color(0xFFFCE7F3)
+  val Highlight200 = Color(0xFFFBCFE8)
+  val Highlight300 = Color(0xFFF9A8D4)
+  val Highlight400 = Color(0xFFF472B6)
+  val Highlight500 = Color(0xFFEC4899)
+  val Highlight600 = Color(0xFFDB2777)
+  val Highlight700 = Color(0xFFBE185D)
+  val Highlight800 = Color(0xFF9D174D)
+  val Highlight900 = Color(0xFF831843)
+  val Highlight950 = Color(0xFF500724)
+
   val Warning50 = Color(0xFFFFFBEB)
   val Warning600 = Color(0xFFD97706)
   val Warning700 = Color(0xFFB45309)

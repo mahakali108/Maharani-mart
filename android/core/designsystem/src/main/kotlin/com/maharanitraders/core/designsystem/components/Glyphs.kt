@@ -493,3 +493,45 @@ fun BrandGlyph(
     drawCircle(tint, radius = px(3.2f), center = point(12f, 17.8f), style = Stroke(px(1.8f)))
   }
 }
+
+/**
+ * Bookmark: saved carts and named restock lists.
+ *
+ * A distinct mark from the cart trolley on purpose — "the basket I am filling
+ * now" and "the list I keep for later" are two different objects, and a grid
+ * that drew one glyph for both would be ambiguous at 22dp.
+ */
+@Composable
+fun BookmarkGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Saved carts", modifier) {
+    drawPath(polygon(6.6f, 3.4f, 17.4f, 3.4f, 17.4f, 20.6f, 12f, 15.6f, 6.6f, 20.6f), tint)
+  }
+}
+
+/**
+ * Speech bubble: support and help.
+ *
+ * Support is a conversation, not an alert: the bell means "something happened",
+ * this means "ask us".
+ */
+@Composable
+fun ChatGlyph(
+  modifier: Modifier = Modifier,
+  tint: Color = LocalContentColor.current,
+) {
+  Glyph("Support", modifier) {
+    drawRoundRect(
+      tint,
+      topLeft = point(3.4f, 4.4f),
+      size = Size(px(17.2f), px(12.6f)),
+      cornerRadius = CornerRadius(px(3f)),
+      style = Stroke(px(1.8f)),
+    )
+    drawPath(polygon(8.2f, 16.6f, 13.4f, 16.6f, 9.4f, 20.6f), tint)
+    drawLine(tint, point(7.4f, 8.6f), point(16.6f, 8.6f), px(1.6f), cap = StrokeCap.Round)
+    drawLine(tint, point(7.4f, 12.2f), point(13.6f, 12.2f), px(1.6f), cap = StrokeCap.Round)
+  }
+}

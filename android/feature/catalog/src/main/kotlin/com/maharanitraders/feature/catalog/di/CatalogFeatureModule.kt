@@ -3,6 +3,7 @@ package com.maharanitraders.feature.catalog.di
 import com.maharanitraders.core.common.SessionScopedStore
 import com.maharanitraders.feature.catalog.CatalogRepository
 import com.maharanitraders.feature.catalog.FavoritesStore
+import com.maharanitraders.feature.catalog.LocalHistoryStore
 import com.maharanitraders.feature.catalog.NetworkCatalogRepository
 import dagger.Binds
 import dagger.Module
@@ -35,4 +36,14 @@ abstract class CatalogFeatureModule {
   @Binds
   @IntoSet
   abstract fun bindFavoritesSessionScoped(impl: FavoritesStore): SessionScopedStore
+
+  /**
+   * The search/recently-viewed history is device-local state for ONE account, so
+   * it joins the same set: sign-out (or a rejected token) empties it before the
+   * next retailer can use the phone, and the lists are dropped from disk as well
+   * as from memory.
+   */
+  @Binds
+  @IntoSet
+  abstract fun bindLocalHistorySessionScoped(impl: LocalHistoryStore): SessionScopedStore
 }

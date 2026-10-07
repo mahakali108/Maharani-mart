@@ -51,9 +51,10 @@ segments (blue-on-grey) were mistaken for disabled controls.
 
 The Material 3 scheme in `theme/Theme.kt` is built from these palettes (light and
 dark), so screens reference `MaterialTheme.colorScheme.*` or
-`MaharaniThemeTokens.colors.*` — never a literal hex. There is no blue anywhere
-in the app layer: `MaharaniPalette` no longer defines an action-blue family at
-all, so a blue control cannot be reintroduced by accident. (The **web**
+`MaharaniThemeTokens.colors.*` — never a literal hex. No blue *action* family
+exists: tapping is red on every surface, and the blue that was added later (see
+§2.1) is an informational FACT token, not a control, so a blue button cannot be
+reintroduced by accident. (The **web**
 storefront keeps its own `action` blue in `tailwind.config.ts`; that is a web
 token, not an app one, and `tests/pdp-flipkart-style.test.ts` still pins it.)
 
@@ -61,6 +62,57 @@ token, not an app one, and `tests/pdp-flipkart-style.test.ts` still pins it.)
 `postSplashScreenTheme` exactly as before — the launcher and splash identity is
 unchanged, and the static guard in `tests/android-project-integrity.test.ts`
 still asserts it.
+
+---
+
+## 2.1 The multi-colour system: one hue per job
+
+Red-primary was never meant to mean red-*only*. A shop screen has to answer
+several different questions at once — *what can I tap*, *what saves me money*,
+*what is available*, *what is a fact*, *what is new* — and answering all of them
+in one hue is what makes an app look like a form. The palette is therefore
+organised as six families with exactly one job each. Nothing here is decorative:
+every family is reachable only through a named token, and the token resolves for
+the active theme.
+
+| Family | Job | Light token | Dark token | Where it may appear |
+| --- | --- | --- | --- | --- |
+| **Brand red** | Action and identity | `primary` `BrandRed600`, `action`, `actionContainer` | `BrandRed400` / `BrandRed900` | Primary buttons, app bar, selected tab/segment, links, focus, the crown mark, the cart badge |
+| **Amber** | Savings and offers | `secondary` `Saffron500`, `saffron*` | `Saffron300` / `Saffron900` | Offer badges, price-saving emphasis, slab highlights, the Coins balance tile |
+| **Violet** | Tools and account shortcuts | `tertiary` `Violet600`, `violet*` | `Violet300` / `Violet900` | Quick order, saved carts, security, reorder, the "starting soon" coupon state |
+| **Green** | Availability and success | `inStock`, `inStockSurface` | `Success50` / `Success900` | In-stock badges, "worth restocking", delivered states |
+| **Blue** | Neutral facts (never an action) | `info`, `infoSurface` | `Info300` / `Info950` | Delivery and lead-time facts, the wholesale-pricing note, GST split, reports |
+| **Rose** | Highlight: neither success nor failure | `highlight`, `highlightSurface`, `outOfStock*` | `Highlight300` / `Highlight950` | "New launch" companions, notification emphasis, out-of-stock and failures |
+
+Two rules keep the set from turning into a rainbow:
+
+1. **A screen names a tone, never a colour.** `theme/ExtraColors.kt` exposes
+   `AccentTone { BRAND, AMBER, VIOLET, GREEN, BLUE, ROSE }` and a single
+   `accent(tone)` resolver that returns the `(tint, surface, onSurface)` triple
+   for the current theme. `components/AccentSurfaces.kt` is the only consumer
+   that turns a tone into pixels — `AccentIcon`, `QuickActionTile`, `MetricTile`
+   and `InfoCard` — so a shortcut grid cannot invent a shade, and dark mode is
+   solved once instead of at each call site. Every surface keeps a text label
+   next to its colour, so no state is conveyed by hue alone.
+2. **Rose never means "available".** Out-of-stock, failures and the highlight
+   family sit in the same pink-red neighbourhood as the brand, so the highlight
+   values are deliberately warmer and lighter than `OutOfStockRose`, and the
+   informational blue is never used for a button. The one place a colour would
+   have been ambiguous — a "New" ribbon next to an out-of-stock chip — resolves
+   to rose-tinted highlight text plus a written word on both chips.
+
+Measured contrast (light mode, WCAG 2.1): body and label text on the page or on
+white cards clears 4.5:1; the accent `onSurface` inks are chosen from the 800/900
+steps of their family (violet 700 on violet 50, saffron 800 on saffron 50, info
+900 on info 50, highlight 800 on highlight 50, brand red 700 on red 50), each
+above 7:1 for text; the dark-mode trio mirrors it (300-step tint on a 900/950
+surface). The green and rose stock chips pair a 600-step ink with a 50-step
+surface on white cards, again above 4.5:1.
+
+The families are also what the retailer home's shortcut grid is built from: the
+tiles arrive as `(route, label, icon, tone)` data from the shell, so adding a
+shortcut is a one-line change and the colour is chosen from this table rather
+than picked per screen.
 
 ---
 
@@ -72,28 +124,28 @@ card radius cannot drift between screens:
 | Group | Values |
 | --- | --- |
 | Spacing | `spaceXxs 2` · `spaceXs 4` · `spaceSm 8` · `spaceMd 12` · `spaceLg 16` · `spaceXl 24` · `spaceXxl 32` |
-| Layout | `pageGutter 16` · `cardGap 10` · `touchTarget 48` · `searchFieldHeight 46` · `bottomBarHeight 64` |
+| Layout | `pageGutter 16` · `cardGap 10` · `cardPadding 10` · `touchTarget 48` · `searchFieldHeight 48` · `bottomBarHeight 64` |
 | Radii | `radiusCard 16` · `radiusTile 12` · `radiusField 26` · `radiusChip 8` · `radiusPill 999` |
 | Media | `productImageRatio 1:1` · `railCardWidth 168` · `categoryTileWidth 88` · `categoryTileImage 64` · `brandTileWidth 84` · `bannerHeight 156` · `heroImageHeight 300` |
 | Elevation | `cardElevation 1` · `appBarElevation 2` (flat, modern; depth comes from borders and tone) |
 
 `theme/ExtraColors.kt` — tokens the Material scheme does not model: `action*` (= brand red),
 `inStock*` / `outOfStock*` / `warning*` (stock language), `brandMark*`,
-`saffron*`, the app-bar gradient pair (`appBarStart`, `appBarEnd`, `onAppBar`,
-`onAppBarMuted`, `appBarField`, `onAppBarField`, `appBarFieldHint`),
-`skeletonBase` / `skeletonHighlight` (neutral), `imagePlaceholder` /
-`onImagePlaceholder` (neutral),
-`scrim`. Light and dark values are both declared; dark mode is not an
+`saffron*`, the accent families added in §2.1 (`info*`, `violet*`, `highlight*`)
+with their `onSurface` inks, the app-bar gradient pair (`appBarStart`,
+`appBarEnd`, `onAppBar`, `onAppBarMuted`, `appBarField`, `onAppBarField`,
+`appBarFieldHint`), `skeletonBase` / `skeletonHighlight` (neutral),
+`imagePlaceholder` / `onImagePlaceholder` (neutral), `scrim`. Light and dark values are both declared; dark mode is not an
 afterthought bolted on with `copy(alpha = …)`.
 
 `theme/Typography.kt` — the full M3 role scale (display/headline/title/body/label)
 with tightened line heights for dense retail rows.
 
 **Icons.** `material-icons-*` is deliberately *not* a dependency (see the note in
-`gradle/libs.versions.toml`). `components/Glyphs.kt` draws the 15 needed marks on
-a `Canvas` in a 24×24 grid — search, close, menu, back, chevron, home, category,
-cart, orders, account, pin, crown, refresh, filter, sort — each with a content
-description. They cost no APK weight, cannot disagree with the theme (they take a
+`gradle/libs.versions.toml`). `components/Glyphs.kt` draws the needed marks on a
+`Canvas` in a 24×24 grid — search, close, menu, back, chevron, home, category,
+cart, orders, account, pin, crown, refresh, filter, sort, bell, heart, check,
+coin, offer, bolt, brand, bookmark, chat — each with a content description. They cost no APK weight, cannot disagree with the theme (they take a
 `tint`), and are ordinary composables, so they work anywhere an icon slot does
 (`NavigationBarItem.icon`, `FilterChip.trailingIcon`, …).
 
@@ -518,3 +570,10 @@ APK artifact — are reported in the pull request. The 360/393/412dp widths are
 checked by layout arithmetic (two `Adaptive(158.dp)` columns at every one of
 them, fixed 48dp targets, no fixed-width child wider than the viewport) rather
 than on a device screen.
+
+The 2026-10-07 change set (§2.1, the home dashboard, the card quick add, the
+recent-search chips and the cart's refresh-on-appearance) is in the same
+position: `tests/android-project-integrity.test.ts` and the web suite run
+locally and pass, and the Kotlin compilation, unit tests and APK are verified by
+the `android-apk.yml` job on the pushed commit. No Kotlin build result is
+claimed here.

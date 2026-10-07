@@ -27,6 +27,22 @@ data class MaharaniExtraColors(
   val outOfStockSurface: Color,
   val warning: Color,
   val warningSurface: Color,
+  /** Informational facts only (delivery, lead time, GST split). Never an action. */
+  val info: Color,
+  val infoSurface: Color,
+  val onInfoSurface: Color,
+  /** Violet: the shortcut / account family, mirroring Material's `tertiary`. */
+  val violet: Color,
+  val violetSurface: Color,
+  val onVioletSurface: Color,
+  /**
+   * Rose highlight: emphasis that is neither success nor failure ("New"
+   * launches, the notification badge's emphasis). Deliberately distinct from
+   * [outOfStock], so a highlight can never be read as a failure.
+   */
+  val highlight: Color,
+  val highlightSurface: Color,
+  val onHighlightSurface: Color,
   /** Brand red, used for the crown mark and identity accents on light chrome. */
   val brandMark: Color,
   val brandMarkSurface: Color,
@@ -65,6 +81,15 @@ internal val LightExtraColors = MaharaniExtraColors(
   outOfStockSurface = MaharaniPalette.OutOfStockRoseSurface,
   warning = MaharaniPalette.Warning600,
   warningSurface = MaharaniPalette.Warning50,
+  info = MaharaniPalette.Info700,
+  infoSurface = MaharaniPalette.Info50,
+  onInfoSurface = MaharaniPalette.Info900,
+  violet = MaharaniPalette.Violet600,
+  violetSurface = MaharaniPalette.Violet50,
+  onVioletSurface = MaharaniPalette.Violet700,
+  highlight = MaharaniPalette.Highlight700,
+  highlightSurface = MaharaniPalette.Highlight50,
+  onHighlightSurface = MaharaniPalette.Highlight800,
   brandMark = MaharaniPalette.BrandRed600,
   brandMarkSurface = MaharaniPalette.BrandRed50,
   saffron = MaharaniPalette.Saffron600,
@@ -100,6 +125,15 @@ internal val DarkExtraColors = MaharaniExtraColors(
   outOfStockSurface = MaharaniPalette.OutOfStockRoseSurfaceDark,
   warning = MaharaniPalette.Warning600,
   warningSurface = MaharaniPalette.Warning900,
+  info = MaharaniPalette.Info300,
+  infoSurface = MaharaniPalette.Info950,
+  onInfoSurface = MaharaniPalette.Info100,
+  violet = MaharaniPalette.Violet300,
+  violetSurface = MaharaniPalette.Violet950,
+  onVioletSurface = MaharaniPalette.Violet100,
+  highlight = MaharaniPalette.Highlight300,
+  highlightSurface = MaharaniPalette.Highlight950,
+  onHighlightSurface = MaharaniPalette.Highlight100,
   brandMark = MaharaniPalette.BrandRed400,
   brandMarkSurface = MaharaniPalette.BrandRed950,
   saffron = MaharaniPalette.Saffron300,
@@ -118,3 +152,61 @@ internal val DarkExtraColors = MaharaniExtraColors(
   onImagePlaceholder = MaharaniPalette.Ink500,
   scrim = Color(0xB3000000),
 )
+
+/**
+ * The six accent families, in the ONE order screens should reach for them.
+ *
+ * A screen picks a [AccentTone], never a colour: the tone resolves through the
+ * `accent` extension below into the container/tint pair that is correct for the
+ * current theme,
+ * so a shortcut tile cannot be legible in light mode and unreadable in dark
+ * mode, and two screens cannot give the same job two different colours.
+ */
+enum class AccentTone {
+  /** Brand red: the primary action of a surface (Shop, Cart, Checkout). */
+  BRAND,
+
+  /** Amber: savings and offers. */
+  AMBER,
+
+  /** Violet: tools and account shortcuts (Quick order, Saved carts). */
+  VIOLET,
+
+  /** Green: availability, success and "worth restocking". */
+  GREEN,
+
+  /** Blue: neutral facts (delivery, lead time, reports). */
+  BLUE,
+
+  /** Rose: highlights that are neither success nor failure (New, favourites). */
+  ROSE,
+}
+
+/**
+ * One accent, resolved for the active theme: the glyph/edge [tint], the
+ * [surface] container it sits on, and [onSurface] for text inside that
+ * container.
+ */
+@Immutable
+data class MaharaniAccentColors(
+  val tint: Color,
+  val surface: Color,
+  val onSurface: Color,
+)
+
+/**
+ * Resolve an [AccentTone] to concrete colours.
+ *
+ * Read through the token holder — `MaharaniThemeTokens.colors`, held under a
+ * local name — and call `accent(tone)` on it, so dark mode is handled here
+ * rather than at every call site. No call site spells a token holder as
+ * `colors`, which keeps this file the only place that names a colour at all.
+ */
+fun MaharaniExtraColors.accent(tone: AccentTone): MaharaniAccentColors = when (tone) {
+  AccentTone.BRAND -> MaharaniAccentColors(action, actionContainer, onActionContainer)
+  AccentTone.AMBER -> MaharaniAccentColors(saffron, saffronSurface, onSaffronSurface)
+  AccentTone.VIOLET -> MaharaniAccentColors(violet, violetSurface, onVioletSurface)
+  AccentTone.GREEN -> MaharaniAccentColors(inStock, inStockSurface, inStock)
+  AccentTone.BLUE -> MaharaniAccentColors(info, infoSurface, onInfoSurface)
+  AccentTone.ROSE -> MaharaniAccentColors(highlight, highlightSurface, onHighlightSurface)
+}
