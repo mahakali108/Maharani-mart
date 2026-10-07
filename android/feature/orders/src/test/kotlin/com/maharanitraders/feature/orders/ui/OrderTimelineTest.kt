@@ -53,9 +53,23 @@ class OrderTimelineTest {
       entry("delivered", "2026-10-03T10:00:00Z"),
     )
     val steps = orderTimeline(history, "delivered")
+    // The second "delivered" row is the order's current state, so everything
+    // recorded before it — including the return in between — is history, not
+    // something still to come.
     assertEquals(OrderTimelineState.DONE, steps[0].state)
-    assertEquals(OrderTimelineState.LATER, steps[1].state)
+    assertEquals(OrderTimelineState.DONE, steps[1].state)
     assertEquals(OrderTimelineState.CURRENT, steps[2].state)
+  }
+
+  @Test
+  fun `a row recorded after the current status stays visible but is not 'now'`() {
+    val history = listOf(
+      entry("confirmed", "2026-10-01T10:00:00Z"),
+      entry("delivered", "2026-10-02T10:00:00Z"),
+    )
+    val steps = orderTimeline(history, "confirmed")
+    assertEquals(OrderTimelineState.CURRENT, steps[0].state)
+    assertEquals(OrderTimelineState.LATER, steps[1].state)
   }
 
   @Test

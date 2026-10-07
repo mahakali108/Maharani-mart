@@ -247,7 +247,9 @@ class QuickOrderViewModelTest {
   @Test
   fun `a line taken out of the run is not added, and can be put back`() = runTest(dispatcher) {
     val cart = FakeCartWriter().apply {
-      addResults += AppResult.Success(CartSnapshot(emptyList(), null, false, lineCount = 1, itemCount = 2))
+      // Two runs: the first adds the second line only, the second adds both.
+      addResults += AppResult.Success(CartSnapshot(emptyList(), null, false, lineCount = 1, itemCount = 3))
+      addResults += AppResult.Success(CartSnapshot(emptyList(), null, false, lineCount = 2, itemCount = 5))
     }
     val (viewModel, _, _) = build(
       repository = FakeQuickOrderRepository().apply {
