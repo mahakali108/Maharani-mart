@@ -118,7 +118,7 @@ export default async function CartPage() {
               href="/retailer/catalog"
               className="flex h-11 items-center gap-2 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2"
             >
-              Continue shopping <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              Browse Products <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
             <Link
               href="/retailer/quick-order"

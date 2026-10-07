@@ -189,7 +189,7 @@ private fun CartContent(
       EmptyState(
         title = "Your cart is empty",
         message = "Add products from the live catalogue. The cart is shared with your signed-in shop account.",
-        actionLabel = "Browse catalogue",
+        actionLabel = "Browse Products",
         onAction = onBrowseCatalog,
         modifier = Modifier.fillMaxWidth().height(260.dp).testTag(CommerceTags.CART_EMPTY),
       )
