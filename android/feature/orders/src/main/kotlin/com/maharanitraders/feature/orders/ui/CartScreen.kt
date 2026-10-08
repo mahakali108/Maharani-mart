@@ -769,7 +769,7 @@ private fun CouponPanel(
       when {
         couponCode != null -> Row(verticalAlignment = Alignment.CenterVertically) {
           Text("Applied: $couponCode", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-          TextButton(onClick = onRemove, enabled = !busy, modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget).testTag("cart_remove_${line.id}")) { Text("Remove") }
+          TextButton(onClick = onRemove, enabled = !busy, modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget).testTag("cart_coupon_remove")) { Text("Remove") }
         }
         couponUnavailable -> Text(
           "The applied coupon could not be checked. Refresh the cart before checkout.",
