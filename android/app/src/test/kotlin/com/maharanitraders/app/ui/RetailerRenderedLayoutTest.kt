@@ -214,7 +214,7 @@ class RetailerRenderedLayoutTest {
             onOpenProduct = { navigate(MaharaniRoutes.productDetail(it)) })
           MaharaniRoutes.CATALOG, MaharaniRoutes.CATEGORIES, MaharaniRoutes.BRANDS -> CatalogContent(
             CatalogUiState(loading = false, products = products, categories = categories, brands = brands, categoriesLoaded = true, brandsLoaded = true,
-              tab = if(route == MaharaniRoutes.CATEGORIES) CatalogTab.CATEGORIES else if(route == MaharaniRoutes.BRANDS) CatalogTab.BRANDS else request.tab),
+              tab = if(route == MaharaniRoutes.CATEGORIES) CatalogTab.CATEGORIES else if(route == MaharaniRoutes.BRANDS) CatalogTab.BRANDS else CatalogTab.PRODUCTS),
             onSearchChange = {}, onSelectTab = { navigate(if(it == CatalogTab.CATEGORIES) MaharaniRoutes.CATEGORIES else if(it == CatalogTab.BRANDS) MaharaniRoutes.BRANDS else MaharaniRoutes.CATALOG) },
             onSelectCategory = { navigate(MaharaniRoutes.CATALOG) }, onSelectSort = {}, onToggleInStock = {}, onClearBrand = {}, onClearFilters = {}, onRetry = {}, onLoadMore = {},
             onOpenProduct = { navigate(MaharaniRoutes.productDetail(it)) })
