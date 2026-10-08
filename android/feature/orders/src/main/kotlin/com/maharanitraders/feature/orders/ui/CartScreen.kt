@@ -999,7 +999,7 @@ private fun AddressChoice(
 }
 
 @Composable
-private fun QuoteTotals(quote: com.maharanitraders.feature.orders.CheckoutQuote) {
+fun QuoteTotals(quote: com.maharanitraders.feature.orders.CheckoutQuote) {
   Surface(
     shape = RoundedCornerShape(16.dp),
     color = MaterialTheme.colorScheme.surfaceContainerLow,

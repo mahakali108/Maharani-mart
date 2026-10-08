@@ -126,6 +126,22 @@ class RetailerRenderedLayoutTest {
   @Test fun detail360() = detailChecks(360)
   @Test fun detail393() = detailChecks(393)
   @Test fun detail412() = detailChecks(412)
+  @Composable private fun detailFixture() {
+    val detailPack = ProductPackDetail("pack", "1 kg pouch", 12, 6, true, 12500, 75000, 5.0, 15000, 150000,
+      emptyList(), PackAvailability.IN_STOCK, true, emptyList(), null)
+    val detail = ProductDetail("p1", "Long product detail name", "Test supplier", "category", "Staples", "kg", null,
+      5.0, 2, false, false, false, emptyList(), listOf(detailPack))
+    ProductDetailContent(ProductDetailUiState(loading = false, detail = detail), {}, {}, {}, { _, _ -> }, true)
+  }
+  private fun quoteChecks(width: Int) {
+    val address = DeliveryAddress("address", "Test shop", "Test road", null, null, true)
+    render(width) { QuoteTotals(CheckoutQuote(emptyList(), 87500, 4375, 1000, 90875, 5000, 500, 4500, null, address)) }
+    for(label in listOf("Subtotal", "GST", "Coupon discount", "Grand total", "Coins available", "Coins applied", "Coins balance after applying"))
+      compose.onNodeWithText(label).assertIsDisplayed()
+  }
+  @Test fun serverTotals360() = quoteChecks(360)
+  @Test fun serverTotals393() = quoteChecks(393)
+  @Test fun serverTotals412() = quoteChecks(412)
   private val cartLine = CartLine("line", "pack", "p1", "Long grocery product name for compact shopping", "Test supplier", null,
     "1 kg pouch", 7, "pieces", 1, 6, 12, 12500, 87500, 5.0, "in_stock", true, null)
   @Composable private fun cart() {
@@ -199,6 +215,7 @@ class RetailerRenderedLayoutTest {
           MaharaniRoutes.CART -> cart()
           MaharaniRoutes.ORDERS -> OrderHistoryContent(OrderHistoryUiState(loading = false, orders = listOf(order)), {}, {}, {})
           MaharaniRoutes.ACCOUNT -> AccountScreen(snapshot, {})
+          MaharaniRoutes.PRODUCT_DETAIL -> detailFixture()
           else -> androidx.compose.material3.Text("Test destination $route")
         }
       }
@@ -213,6 +230,11 @@ class RetailerRenderedLayoutTest {
     compose.onNodeWithTag("shell_tab_${MaharaniRoutes.CATALOG}").performClick()
     compose.onNodeWithTag(CatalogScreenTags.TAB_CATEGORIES).performClick()
     compose.onNodeWithTag("shell_tab_${MaharaniRoutes.CATALOG}").assertIsSelected()
+    compose.onNodeWithTag("shell_tab_${MaharaniRoutes.CATALOG}").performClick()
+    compose.onAllNodesWithTag(PRODUCT_CARD_TAG).onFirst().performClick()
+    compose.onNodeWithTag(ProductDetailTags.ADD_TO_CART).assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+    // Detail has its own back app bar; use the real back glyph to return.
+    compose.onNodeWithContentDescription("Back").performClick()
     compose.onNodeWithTag(ShellTags.OPEN_ACCOUNT).performClick()
     compose.onNodeWithText("Test owner").assertIsDisplayed()
   }
