@@ -1158,7 +1158,7 @@ class CatalogViewModelTest {
 
     "rice".forEachIndexed { index, _ ->
       viewModel.onSearchChange("rice".substring(0, index + 1))
-      advanceTimeBy(50)
+      advanceTimeBy(50L)
     }
     advanceUntilIdle()
 

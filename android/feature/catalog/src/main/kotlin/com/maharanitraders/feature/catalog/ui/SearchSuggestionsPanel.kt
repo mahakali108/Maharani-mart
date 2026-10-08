@@ -119,7 +119,7 @@ fun SearchSuggestionPanel(
 
       when {
         error != null -> SuggestionError(message = error, onRetry = onRetry)
-        loading && suggestions.isEmpty() -> Box(
+        loading && suggestions.isEmpty -> Box(
           modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = MaharaniDimens.touchTarget)
@@ -129,7 +129,7 @@ fun SearchSuggestionPanel(
           CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         }
 
-        suggestions.isEmpty() -> Text(
+        suggestions.isEmpty -> Text(
           text = "No product, brand or category matches \u201C${term.trim()}\u201D. " +
             "The list below still shows the product results.",
           style = MaterialTheme.typography.bodySmall,

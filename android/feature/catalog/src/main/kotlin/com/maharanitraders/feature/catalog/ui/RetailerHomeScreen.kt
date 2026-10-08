@@ -659,8 +659,6 @@ private fun BrandRail(
   }
 }
 
-/** The "Recently added" rail: real cards at rail width. */
-@Composable
 /**
  * One horizontal rail of real catalogue products.
  *
