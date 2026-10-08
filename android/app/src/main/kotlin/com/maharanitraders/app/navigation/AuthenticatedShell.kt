@@ -266,6 +266,10 @@ private fun RoutedShell(
   }
 
   fun selectTab(destination: MaharaniDestination) {
+    // Categories is a Shop sub-route. Restoring Shop's saved stack here can
+    // restore Categories again and make tapping Shop appear to do nothing.
+    if (destination.route == MaharaniRoutes.CATALOG && currentRoute == MaharaniRoutes.CATEGORIES &&
+      navController.popBackStack(MaharaniRoutes.CATALOG, inclusive = false)) return
     if (destination.route == currentRoute) return
     navController.navigate(destination.route) {
       // One entry per destination, state preserved across switches.

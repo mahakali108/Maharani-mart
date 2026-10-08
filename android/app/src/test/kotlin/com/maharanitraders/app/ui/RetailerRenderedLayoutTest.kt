@@ -246,6 +246,7 @@ class RetailerRenderedLayoutTest {
     compose.onNodeWithTag(CatalogScreenTags.TAB_CATEGORIES).performClick()
     compose.onNodeWithTag("shell_tab_${MaharaniRoutes.CATALOG}").assertIsSelected()
     compose.onNodeWithTag("shell_tab_${MaharaniRoutes.CATALOG}").performClick()
+    compose.waitUntil(timeoutMillis = 5000) { compose.onAllNodesWithTag(PRODUCT_CARD_TAG).fetchSemanticsNodes().isNotEmpty() }
     compose.onAllNodesWithTag(PRODUCT_CARD_TAG).onFirst().performClick()
     compose.onNodeWithTag(ProductDetailTags.ADD_TO_CART).assertIsDisplayed().assertHeightIsAtLeast(48.dp)
     // Detail has its own back app bar; use the real back glyph to return.
