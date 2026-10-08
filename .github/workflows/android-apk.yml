@@ -5,8 +5,10 @@
 # capacitor.config.ts, www/ and scripts/android-postsync.mjs.
 #
 # It builds the committed native Kotlin/Compose project in android/ and nothing
-# else. No release signing, no key, no AAB, no Play Store publication — a debug
-# APK signed by Gradle's throwaway debug keystore only.
+# else. No release signing, no key, no AAB publication — a debug APK signed by
+# Gradle's throwaway debug keystore only, plus an UNSIGNED release APK and AAB
+# built purely for size measurement (scripts/android-apk-size-report.py).
+# Play-store publication is a separate, human-controlled step.
 
 name: Native Android Debug APK
 
@@ -19,6 +21,7 @@ on:
       - 'lib/mobile/**'
       - 'lib/permissions/**'
       - 'tests/**'
+      - 'scripts/android-apk-size-report.py'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/android-apk.yml'
@@ -29,6 +32,7 @@ on:
       - 'lib/mobile/**'
       - 'lib/permissions/**'
       - 'tests/**'
+      - 'scripts/android-apk-size-report.py'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/android-apk.yml'
@@ -228,12 +232,96 @@ jobs:
           test -x "$AAPT"
           "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.maharanitraders.app'"
 
+      # The RELEASE APK and AAB are built UNSIGNED on purpose: no keystore, no
+      # secret, no publication. Their only job is to measure what a production
+      # artifact weighs (R8 + resource shrinking enabled) and how large the
+      # Play-delivered slices would be. Size never fails the build here; the
+      # report states PASS / ABOVE TARGET and humans decide.
+      - name: Build unsigned release APK and AAB for size measurement
+        working-directory: android
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace assembleRelease bundleRelease 2>&1 | tee -a /tmp/gradle.log
+
+      - name: Measure artifact sizes and generate breakdown
+        run: |
+          set -o pipefail
+          python3 scripts/android-apk-size-report.py \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            android/app/build/outputs/apk/release/*.apk \
+            android/app/build/outputs/bundle/release/*.aab \
+            | tee /tmp/size-report.md
+          cat /tmp/size-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Best effort only: proves what a device would actually download from
+      # Play (bundletool splits the AAB per ABI/density/language). Any failure
+      # here warns and moves on — it must never turn a green build red.
+      - name: Estimate Play delivery size with bundletool (best effort)
+        run: |
+          set +e
+          BT_VERSION=1.18.1
+          curl -fsSL -o /tmp/bundletool.jar \
+            "https://github.com/google/bundletool/releases/download/${BT_VERSION}/bundletool-all-${BT_VERSION}.jar"
+          if [ ! -s /tmp/bundletool.jar ]; then
+            echo "::warning::bundletool unavailable — skipping Play-delivery measurement"
+            exit 0
+          fi
+          AAB=$(ls android/app/build/outputs/bundle/release/*.aab | head -1)
+          java -jar /tmp/bundletool.jar build-apks \
+            --bundle="$AAB" --output=/tmp/app-device.apks --overwrite \
+            --ks="$HOME/.android/debug.keystore" --ks-pass pass:android \
+            --ks-key-alias androiddebugkey --key-pass pass:android
+          if [ -f /tmp/app-device.apks ]; then
+            {
+              echo ""
+              echo "### Play delivery estimate (bundletool)"
+              echo ""
+              echo '```'
+              java -jar /tmp/bundletool.jar get-size total --apks=/tmp/app-device.apks 2>&1
+              echo '```'
+              echo ""
+              echo "(device-configuration split set; a real device receives strictly less than the universal APK)"
+            } | tee -a /tmp/size-report.md
+          fi
+          exit 0
+
+      - name: Post the size report to the pull request
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
+                 --json number --jq '.[0].number' 2>/dev/null)
+          if [ -z "$PR" ] || [ "$PR" = "null" ]; then
+            echo "no open pull request for $GITHUB_REF_NAME — size report stays in the job summary and artifact"
+            exit 0
+          fi
+          {
+            printf '### Android artifact size report — `%s`\n\n' "${GITHUB_SHA:0:7}"
+            head -c 55000 /tmp/size-report.md
+          } > /tmp/size-comment.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file /tmp/size-comment.md \
+            || echo "::warning::could not post the size comment"
+
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v7.0.1
         with:
           name: maharani-traders-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload release APK, AAB, and size report
+        if: success()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: maharani-traders-release-artifacts
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
+            /tmp/size-report.md
           if-no-files-found: error
           retention-days: 7
 
@@ -259,6 +347,7 @@ jobs:
             echo "=== kotlin diagnostics (build) ==="
             grep -E "^(e|w): " /tmp/gradle.log 2>/dev/null | sed 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -60
             echo "=== android unit test failures ==="; cat /tmp/test-failures.txt 2>/dev/null
+            echo "=== artifact size report ==="; cat /tmp/size-report.md 2>/dev/null
             echo "=== gradle log tail ==="; tail -60 /tmp/gradle.log 2>/dev/null
           } > "$OUT" 2>&1
           wc -l "$OUT" || true
