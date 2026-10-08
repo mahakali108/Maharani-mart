@@ -252,8 +252,8 @@ class RetailerRenderedLayoutTest {
     // Detail has its own back app bar; use the real back glyph to return.
     compose.onNodeWithContentDescription("Navigate back").performClick()
     compose.onNodeWithTag(ShellTags.OPEN_ACCOUNT).performClick()
-    compose.waitUntil(timeoutMillis = 5000) { compose.onAllNodesWithText("Test owner").fetchSemanticsNodes().size == 1 }
-    compose.onNodeWithText("Test owner").assertIsDisplayed()
+    // Drawer and profile can both carry identity; assert the routed profile.
+    compose.onNode(hasText("Test owner") and hasAnyAncestor(hasTestTag(AccountScreenTags.PROFILE))).assertIsDisplayed()
   }
   @Test fun shell360() = shellChecks(360)
   @Test fun shell393() = shellChecks(393)
