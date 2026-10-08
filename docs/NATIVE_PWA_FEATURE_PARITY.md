@@ -24,15 +24,20 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 
 ## Current upgrade evidence — 2026-10-08
 
-The historical IMPLEMENTED rows below describe earlier code coverage, **not this
-upgrade's production signoff**. Changed HOME-01/HOME-02/CAT-10/PLAT-05 behavior is
-**PARTIAL**: native compilation and 21 JVM-rendered width checks now have CI
-evidence, but Cart/populated Orders/full shell, live real-data/device lifecycle and
-visual screenshot acceptance are not yet verified. Fatal lint/debug/release assembly passed in run `37741621723`; this does not
-replace live-data/device/visual signoff. See `RETAILER_MEGA_UPGRADE_AUDIT.md` and
-`RETAILER_MEGA_UPGRADE_EVIDENCE.md`. Search uses `q`, not `search`. Parent names
-are mapped, but parent IDs/tree browsing are not claimed. Native banner actions
-only support an allowlist; external/unknown targets remain non-actionable art.
+Historical IMPLEMENTED rows are code/integration coverage, not live device signoff.
+Final automated UX run `37762817214` passed: 413 Android tests, including 33
+JVM-rendered checks. Cart, server quote totals, populated Orders and the actual
+NavHost/Scaffold/bars/badges/navigation transitions now have rendered evidence
+at 360/393/412dp. Test data exists only in `src/test`; shell rendering substitutes
+content data through a null-by-default internal injection seam, not a demo mode.
+
+Live Keystore/process-death/session A/B, admin UI→DB→API→Android, real network
+imagery and exhaustive visual screenshot acceptance remain **BLOCKED**: no
+SDK/emulator/device, authorized test accounts or reference attachment available.
+Changed feature rows are still **PARTIAL** for that live acceptance, not new
+production IMPLEMENTED claims. See `FINAL_LIVE_UX_ACCEPTANCE.md` for exact test
+scopes and `evidence/ANDROID_RUN_37762817214.md` for artifact/report evidence.
+Search uses `q`; category parent names are displayed, not a full tree browser.
 
 ## 1. Authentication, session and access control
 

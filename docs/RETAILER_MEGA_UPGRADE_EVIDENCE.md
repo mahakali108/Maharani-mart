@@ -2,6 +2,13 @@
 
 ## Overall: PARTIAL
 
+**Latest continuation:** see `FINAL_LIVE_UX_ACCEPTANCE.md`. Run `37762817214`
+passes 413 Android tests / 33 rendered checks and final builds, superseding the
+older test counts and pending rendered gaps below. Exact current/baseline APK
+bytes are in `evidence/ANDROID_RUN_37762817214.md`. Live session/admin/reference
+visual acceptance remains BLOCKED. The rest of this file is prior-iteration
+history, not the latest acceptance table.
+
 Baseline: `4aff485a8cb59fd4a12218f3d6a9d62ae97a6069`. Session branch: `arena/ff1279ad-maharani-mart`. Audit: `RETAILER_MEGA_UPGRADE_AUDIT.md`. No feature was deleted, no reset/force-push/merge performed.
 
 ## Already integrated, preserved
