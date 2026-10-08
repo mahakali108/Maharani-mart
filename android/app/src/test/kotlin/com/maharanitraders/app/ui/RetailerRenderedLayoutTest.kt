@@ -144,11 +144,13 @@ class RetailerRenderedLayoutTest {
   @Test fun serverTotals412() = quoteChecks(412)
   private val cartLine = CartLine("line", "pack", "p1", "Long grocery product name for compact shopping", "Test supplier", null,
     "1 kg pouch", 7, "pieces", 1, 6, 12, 12500, 87500, 5.0, "in_stock", true, null)
+  private var increaseCalls = 0
+  private var checkoutCalls = 0
   @Composable private fun cart() {
     CartContent(CartCheckoutUiState(cartLoading = false, cart = CartSnapshot(listOf(cartLine), null, false, 1, 7)),
       CartUiActions(
       applyCoupon = {},
-      beginCheckout = {},
+      beginCheckout = { checkoutCalls++ },
       checkPendingOrder = {},
       clearCart = {},
       clearMessage = {},
@@ -156,7 +158,7 @@ class RetailerRenderedLayoutTest {
       consumeBulkMessage = {},
       decrement = { _ -> },
       dismissNotices = {},
-      increment = { _ -> },
+      increment = { _ -> increaseCalls++ },
       moveSelectedToFavourites = {},
       refreshCart = {},
       removeCartLine = { _ -> },
@@ -171,9 +173,11 @@ class RetailerRenderedLayoutTest {
     render(width) { cart() }
     compose.onNodeWithTag(CommerceTags.CART_ITEM_IMAGE).assertIsDisplayed()
     compose.onNodeWithTag("${CommerceTags.CART_QUANTITY}_plus_line").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
+    check(increaseCalls > 0)
     compose.onNodeWithTag("cart_remove_line").performScrollTo().assertHeightIsAtLeast(48.dp)
     compose.onNodeWithText("MOQ 6 pcs · increment 1").performScrollTo().assertIsDisplayed()
-    compose.onNodeWithTag(CommerceTags.CART_CHECKOUT).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+    compose.onNodeWithTag(CommerceTags.CART_CHECKOUT).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
+    check(checkoutCalls > 0)
     val viewport = compose.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
     val cta = compose.onNodeWithTag(CommerceTags.CART_CHECKOUT).fetchSemanticsNode().boundsInRoot
     check(cta.left >= viewport.left && cta.right <= viewport.right)
@@ -234,7 +238,7 @@ class RetailerRenderedLayoutTest {
     compose.onAllNodesWithTag(PRODUCT_CARD_TAG).onFirst().performClick()
     compose.onNodeWithTag(ProductDetailTags.ADD_TO_CART).assertIsDisplayed().assertHeightIsAtLeast(48.dp)
     // Detail has its own back app bar; use the real back glyph to return.
-    compose.onNodeWithContentDescription("Back").performClick()
+    compose.onNodeWithContentDescription("Navigate back").performClick()
     compose.onNodeWithTag(ShellTags.OPEN_ACCOUNT).performClick()
     compose.onNodeWithText("Test owner").assertIsDisplayed()
   }
