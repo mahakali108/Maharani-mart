@@ -186,6 +186,7 @@ dependencies {
   // ui-test-manifest supplies the ComponentActivity the rule hosts; it is a
   // debugImplementation, so it never reaches a release artifact.
   testImplementation(libs.robolectric)
+  testImplementation(libs.androidx.compose.ui.test)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   // The base-URL test resolves endpoints with OkHttp's own URL parser — the

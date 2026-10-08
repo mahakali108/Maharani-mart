@@ -125,9 +125,10 @@ junit = { module = "junit:junit", version.ref = "junit" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
-# ui-test-junit4/ui-test-manifest are pinned to the SAME `composeUi` version as
-# the runtime artifacts, so a rendered test can never be compiled against a
-# semantics tree that differs from the one the app draws.
+# ui-test / ui-test-junit4 / ui-test-manifest are pinned to the SAME `composeUi`
+# version as the runtime artifacts, so a rendered test can never be compiled
+# against a semantics tree that differs from the one the app draws.
+androidx-compose-ui-test = { module = "androidx.compose.ui:ui-test", version.ref = "composeUi" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "composeUi" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "composeUi" }
 
