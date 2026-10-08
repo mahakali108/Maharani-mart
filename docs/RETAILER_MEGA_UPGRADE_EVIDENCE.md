@@ -16,23 +16,23 @@ Native Kotlin/Compose; real home/category/brand catalog, semantic Material 3 the
 - PASS: migrated PostgreSQL/RLS category/brand edit + deactivate/reactivate retailer retrieval tests, 11 taxonomy tests passing locally. Existing create/action/authorization/API tests preserved.
 - PASS: converted native lint to abort on real errors. It exposed three existing connectivity permission errors. Corrected `ACCESS_NETWORK_STATE` declaration in the owning `core:common` library; latest CI pending below.
 
-## Exact artifact measurements (run 37735735162, implementation 0eb828c)
+## Exact final artifact measurements (run 37741621723, implementation 42a7e5b)
 
 | APK | Baseline bytes | Measured after bytes | After decimal MB | Status |
 |---|---:|---:|---:|---|
-| `app-debug.apk` | 16,352,566 | 16,368,950 | 16.368950 | PASS |
-| `app-release-unsigned.apk` | 2,847,649 | 2,847,649 | 2.847649 | PASS |
+| `app-debug.apk` | 16,352,566 | 16,371,253 | 16.371253 | PASS |
+| `app-release-unsigned.apk` | 2,847,649 | 2,849,737 | 2.849737 | PASS |
 
-Debug increase: 16,384 bytes. Both below 30,000,000 bytes. Release is unsigned measurement output, not a distribution release. Artifact names: `maharani-traders-debug-apk`, `maharani-traders-release-artifacts`. These sizes do **not** certify later commits until rebuilt/measured.
+Debug increase: 18,687 bytes; release increase: 2,088 bytes. Both below 30,000,000 bytes. Release is unsigned measurement output, not a distribution release. Artifact names: `maharani-traders-debug-apk`, `maharani-traders-release-artifacts`. Final measured artifact report: `evidence/ANDROID_RUN_37741621723.md`; subsequent commits only update documentation/evidence workflow.
 
 Audit found eight .so entries (DataStore shared counter + AndroidX graphics path across four ABIs), 242,900 bytes; no bundled fonts/JSON data, no duplicate ZIP entries. Release contains 15 raster resource files (187,126 compressed bytes). R8/resource shrinking remains enabled; debug-only tooling preserved. No need to delete functionality for size. Previous script claim of zero native libraries is contradicted by measured inventory, which is authoritative.
 
 ## Tests and CI
 - PASS: initial full web 114 files / 2,126 tests; typecheck/lint/production build.
 - PASS: latest inspected web job `37740368478` completed all checks with two additional taxonomy tests (expected total 2,128; exact console total not yet retrieved).
-- PASS: original Android reports contain 380 tests, zero failures. After new render tests: all test tasks completed with zero failing tests in run `37740368478`.
+- PASS: original Android reports contain 380 tests, zero failures. Final reports contain 401 tests (including all 21 rendered tests), zero failures/ignored. After new render tests: all test tasks completed with zero failing tests in run `37740368478`.
 - PARTIAL: run `37739444606` failed three PDP size assertions; corrected. Run `37740368478` then failed fatal `:core:common:lintDebug` permission errors; corrected without suppression/baseline/check deletion.
-- PASS: final run `37741621723` at commit `42a7e5b` completed successfully: web checks, native tests, fatal lint, debug assembly, debug package identity `com.maharanitraders.app`, unsigned release APK/AAB and uploads. Exact latest measurements are being retrieved by runner-side evidence.
+- PASS: final run `37741621723` at commit `42a7e5b` completed successfully: web checks, native tests, fatal lint, debug assembly, debug package identity `com.maharanitraders.app`, unsigned release APK/AAB and uploads. Runner-side evidence run `37743746412` also completed successfully; all 11 modules report zero lint errors/fatal (24 non-fatal issues), 401 Android tests and zero failures/ignored.
 - BLOCKED: local JDK/Android SDK unavailable. No repeated local Gradle attempt or local pass claim. Artifact/log redirect hosts are inaccessible here; runner-side evidence uses actual artifacts and reachable GitHub API. GitHub check annotations exposed root failures.
 
 ## Responsive and live acceptance boundaries
