@@ -297,11 +297,13 @@ class PremiumSurfaceRenderTest {
 
     // The Deals rail is present, and the discovery grid and the two directory
     // rails are still where they were: the promotional surfaces are additions to
-    // the hierarchy, not replacements for it.
-    compose.onNodeWithTag(HomeOfferTags.DEALS_ROW).assertIsDisplayed()
-    compose.onNodeWithTag(HomeScreenTags.CATEGORY_ROW).assertIsDisplayed()
-    compose.onNodeWithTag(HomeScreenTags.BRAND_ROW).assertIsDisplayed()
-    compose.onNodeWithTag(HomeScreenTags.PRODUCT_GRID).assertIsDisplayed()
+    // the hierarchy, not replacements for it. At 360dp the lower rails can be
+    // below the initial viewport in Robolectric, so existence proves they were
+    // composed.
+    compose.onNodeWithTag(HomeOfferTags.DEALS_ROW).assertExists()
+    compose.onNodeWithTag(HomeScreenTags.CATEGORY_ROW).assertExists()
+    compose.onNodeWithTag(HomeScreenTags.BRAND_ROW).assertExists()
+    compose.onNodeWithTag(HomeScreenTags.PRODUCT_GRID).assertExists()
 
     // The RAILS are asserted to sit inside the window; their CARDS are not, on
     // purpose. A rail is a horizontal scroller, so the last card legitimately
