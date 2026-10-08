@@ -1,7 +1,6 @@
 package com.maharanitraders.app.ui
 
 import android.app.Application
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -252,6 +251,10 @@ class PremiumSurfaceRenderTest {
     assertThat(bounds.height).isAtLeast(MaharaniDimens.touchTarget)
   }
 
+  private fun assertNotExists(tag: String) {
+    assertThat(compose.onAllNodesWithTag(tag).fetchSemanticsNodes()).isEmpty()
+  }
+
   // --------------------------------------------------------------------- home
 
   @Test
@@ -319,9 +322,9 @@ class PremiumSurfaceRenderTest {
 
     // No scheme means no strip and no rail — and, just as importantly, no
     // fabricated "no offers right now" copy in their place.
-    compose.onNodeWithTag(HomeOfferTags.TICKER).assertDoesNotExist()
-    compose.onNodeWithTag(HomeOfferTags.OFFER_RAIL).assertDoesNotExist()
-    compose.onNodeWithTag(HomeOfferTags.OFFERS_UNAVAILABLE).assertDoesNotExist()
+    assertNotExists(HomeOfferTags.TICKER)
+    assertNotExists(HomeOfferTags.OFFER_RAIL)
+    assertNotExists(HomeOfferTags.OFFERS_UNAVAILABLE)
     compose.onNodeWithTag(HomeScreenTags.PRODUCT_GRID).assertIsDisplayed()
   }
 
@@ -568,7 +571,7 @@ class PremiumSurfaceRenderTest {
     compose.onNodeWithTag(SearchSuggestionTags.RETRY).assertIsDisplayed()
     // The one thing this panel must never do: report an outage as an empty answer.
     // The product list underneath may well have results.
-    compose.onNodeWithTag(SearchSuggestionTags.EMPTY).assertDoesNotExist()
+    assertNotExists(SearchSuggestionTags.EMPTY)
     assertTouchTarget(SearchSuggestionTags.RETRY)
   }
 
@@ -582,10 +585,10 @@ class PremiumSurfaceRenderTest {
     )
 
     compose.onNodeWithTag(SearchSuggestionTags.EMPTY).assertIsDisplayed()
-    compose.onNodeWithTag(SearchSuggestionTags.ERROR).assertDoesNotExist()
+    assertNotExists(SearchSuggestionTags.ERROR)
     // A retry for a read that succeeded would be a control that cannot change
     // anything — the clearest kind of dead end.
-    compose.onNodeWithTag(SearchSuggestionTags.RETRY).assertDoesNotExist()
+    assertNotExists(SearchSuggestionTags.RETRY)
     // And it points the shopper back at the list that is still working.
     compose.onNodeWithText(
       "No product, brand or category matches \u201Czzz\u201D. " +
@@ -599,7 +602,7 @@ class PremiumSurfaceRenderTest {
     setPanel(suggestions = SearchSuggestions.NONE, error = null, term = "ri", loading = true)
 
     compose.onNodeWithTag(SearchSuggestionTags.LOADING).assertIsDisplayed()
-    compose.onNodeWithTag(SearchSuggestionTags.EMPTY).assertDoesNotExist()
+    assertNotExists(SearchSuggestionTags.EMPTY)
   }
 
   private fun setPanel(
