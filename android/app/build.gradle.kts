@@ -105,6 +105,15 @@ android {
         // sequence at all.
         "kotlin/" + "**",
         "META-INF/*.kotlin_module",
+        // License/notice stubs duplicated from every upstream artifact — pure
+        // documentation, never read on-device. META-INF/services is NOT
+        // excluded (ServiceLoader lookups), nor anything else reflective.
+        "META-INF/LICENSE*",
+        "META-INF/NOTICE*",
+        "META-INF/DEPENDENCIES",
+        "META-INF/AL2.0",
+        "META-INF/LGPL2.1",
+        "META-INF/INDEX.LIST",
       )
     }
   }
@@ -169,7 +178,6 @@ dependencies {
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.turbine)
-  testImplementation(libs.androidx.test.core)
   testImplementation(libs.truth)
   // The base-URL test resolves endpoints with OkHttp's own URL parser — the
   // same implementation Retrofit uses — so the test cannot disagree with the
@@ -177,6 +185,9 @@ dependencies {
   testImplementation(platform(libs.okhttp.bom))
   testImplementation(libs.okhttp)
 
-  androidTestImplementation(libs.androidx.test.junit)
-  androidTestImplementation(libs.androidx.test.espresso)
+  // No androidTestImplementation dependencies: the project ships unit tests
+  // only, and the 2026-10 size audit removed the unused androidx.test:core /
+  // androidx.test.ext:junit / espresso-core scaffolding (no androidTest source
+  // set exists anywhere). Re-add them WITH the first instrumented test —
+  // test-only artifacts never reach the APK either way.
 }

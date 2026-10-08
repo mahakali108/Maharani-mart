@@ -64,9 +64,6 @@ coil = "3.4.0"
 
 junit = "4.13.2"
 turbine = "1.2.1"
-androidxTestCore = "1.6.1"
-androidxTestJunit = "1.2.1"
-espresso = "3.5.1"
 truth = "1.4.5"
 
 [libraries]
@@ -91,8 +88,9 @@ androidx-compose-foundation = { module = "androidx.compose.foundation:foundation
 androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "composeMaterial3" }
 
 # Kotlin / coroutines / serialization
+# kotlinx-coroutines-core arrives transitively via coroutines-android; it is
+# deliberately not aliased (2026-10 size audit: no module declares it).
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
-kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 
@@ -106,9 +104,10 @@ okhttp = { module = "com.squareup.okhttp3:okhttp" }
 okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver" }
 
 # Dependency injection
+# hilt-android-testing is intentionally absent: the project runs JVM unit tests
+# only, and no @HiltAndroidTest exists (2026-10 size audit).
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
-hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", version.ref = "hilt" }
 
 # Image loading (introduced with the catalog in Phase B, used from Phase D)
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
@@ -118,9 +117,6 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 junit = { module = "junit:junit", version.ref = "junit" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
-androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
-androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestJunit" }
-androidx-test-espresso = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
