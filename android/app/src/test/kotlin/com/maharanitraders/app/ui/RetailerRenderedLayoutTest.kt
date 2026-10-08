@@ -236,7 +236,10 @@ class RetailerRenderedLayoutTest {
       }
     }
     compose.onNodeWithTag(ShellTags.BRAND).assertIsDisplayed()
-    compose.onNodeWithTag(ShellTags.CART_BADGE).assertIsDisplayed()
+    val badge = compose.onNodeWithTag(ShellTags.CART_BADGE)
+    try { badge.assertIsDisplayed() } catch (e: AssertionError) {
+      throw AssertionError("Badge bounds=" + badge.fetchSemanticsNode().boundsInRoot + " bottom=" + compose.onNodeWithTag(ShellTags.BOTTOM_BAR).fetchSemanticsNode().boundsInRoot + " viewport=" + compose.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot + " tree=" + compose.onRoot().printToString().take(12000), e)
+    }
     for (route in listOf(MaharaniRoutes.CATALOG, MaharaniRoutes.BRANDS, MaharaniRoutes.ORDERS, MaharaniRoutes.CART, MaharaniRoutes.HOME)) {
       compose.onNodeWithTag("shell_tab_$route").performClick().assertIsSelected()
       compose.onNodeWithTag(ShellTags.BOTTOM_BAR).assertIsDisplayed()
