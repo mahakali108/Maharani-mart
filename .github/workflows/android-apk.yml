@@ -270,12 +270,18 @@ jobs:
             curl -fsSL -o /tmp/bundletool.jar \
               "https://github.com/google/bundletool/releases/download/${BT_VERSION}/bundletool-all-${BT_VERSION}.jar"
             echo "curl exit: $?  jar bytes: $(stat -c%s /tmp/bundletool.jar 2>/dev/null || echo 0)"
-            ls -la "$HOME/.android/" 2>&1 | head -5
+            # THROWAWAY measurement keystore, generated fresh on the runner:
+            # build-apks signs its output, and this signature is never used for
+            # distribution — only for get-size measurement. No real key, no
+            # secret, nothing persisted.
+            keytool -genkeypair -keystore /tmp/size.keystore -storepass android \
+              -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 \
+              -validity 1 -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
             AAB=$(ls android/app/build/outputs/bundle/release/*.aab 2>/dev/null | head -1)
             echo "bundle: $AAB"
             java -jar /tmp/bundletool.jar build-apks \
               --bundle="$AAB" --output=/tmp/app-device.apks --overwrite \
-              --ks="$HOME/.android/debug.keystore" --ks-pass pass:android \
+              --ks=/tmp/size.keystore --ks-pass pass:android \
               --ks-key-alias androiddebugkey --key-pass pass:android 2>&1
             echo "build-apks exit: $?"
             if [ -f /tmp/app-device.apks ]; then
