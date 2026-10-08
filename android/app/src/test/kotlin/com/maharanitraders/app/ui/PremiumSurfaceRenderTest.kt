@@ -71,7 +71,7 @@ import org.robolectric.annotation.Config
  * ViewModel would have to be faked anyway.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36], application = Application::class)
+@Config(sdk = [34], application = Application::class)
 class PremiumSurfaceRenderTest {
 
   @get:Rule
