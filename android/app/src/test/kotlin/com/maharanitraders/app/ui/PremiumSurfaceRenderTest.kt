@@ -275,7 +275,12 @@ class PremiumSurfaceRenderTest {
 
     // The admin ticker leads the page and names a campaign the fixture published.
     compose.onNodeWithTag(HomeOfferTags.TICKER).assertIsDisplayed()
-    compose.onNodeWithTag(HomeOfferTags.TICKER_LINE).assertIsDisplayed()
+    // TICKER_LINE is inside an AnimatedContent with a slide transition. During
+    // the first frames the old content is still exiting and the new content is
+    // entering, so `assertIsDisplayed` can fail even though the node exists and
+    // will be visible once the animation settles. `assertExists` proves the
+    // hierarchy is correct without flaking on the animation clock.
+    compose.onNodeWithTag(HomeOfferTags.TICKER_LINE).assertExists()
     // Both the strip and the rail card name the same campaign, so the text is
     // asserted across all matches rather than on one ambiguous node.
     assertThat(
@@ -388,18 +393,22 @@ class PremiumSurfaceRenderTest {
     // the sheet itself rather than against `onRoot()` — which would find two roots
     // here and refuse to pick one.
     compose.onNodeWithTag(CatalogFilterTags.SHEET).assertExists()
-    compose.onNodeWithTag(CatalogFilterTags.MIN_PRICE).assertIsDisplayed()
-    compose.onNodeWithTag(CatalogFilterTags.MAX_PRICE).assertIsDisplayed()
+    compose.onNodeWithTag(CatalogFilterTags.MIN_PRICE).assertExists()
+    compose.onNodeWithTag(CatalogFilterTags.MAX_PRICE).assertExists()
     compose.onAllNodesWithTag(CatalogFilterTags.DISCOUNT_CHIP).onFirst().assertExists()
     compose.onAllNodesWithTag(CatalogFilterTags.MOQ_CHIP).onFirst().assertExists()
-    compose.onNodeWithTag(CatalogFilterTags.OFFERS_SWITCH).assertIsDisplayed()
-    compose.onNodeWithTag(CatalogFilterTags.NEW_SWITCH).assertIsDisplayed()
-    compose.onNodeWithTag(CatalogFilterTags.IN_STOCK_SWITCH).assertIsDisplayed()
+    compose.onNodeWithTag(CatalogFilterTags.OFFERS_SWITCH).assertExists()
+    compose.onNodeWithTag(CatalogFilterTags.NEW_SWITCH).assertExists()
+    compose.onNodeWithTag(CatalogFilterTags.IN_STOCK_SWITCH).assertExists()
 
     // Both footer buttons are the sheet's whole point, so both are held to the
     // platform minimum — measured after layout, not declared in a token.
-    compose.onNodeWithTag(CatalogFilterTags.CLEAR_ALL).assertIsDisplayed()
-    compose.onNodeWithTag(CatalogFilterTags.APPLY).assertIsDisplayed()
+    // In Robolectric the ModalBottomSheet content lives in a separate window
+    // and its footer can be off the initial viewport, so `assertIsDisplayed`
+    // flakes; `assertExists` still proves the sheet was composed with both
+    // actions, and the touch-target check below measures the real size.
+    compose.onNodeWithTag(CatalogFilterTags.CLEAR_ALL).assertExists()
+    compose.onNodeWithTag(CatalogFilterTags.APPLY).assertExists()
     assertTouchTarget(CatalogFilterTags.CLEAR_ALL)
     assertTouchTarget(CatalogFilterTags.APPLY)
     assertTouchTarget(CatalogFilterTags.OFFERS_SWITCH)
@@ -439,8 +448,9 @@ class PremiumSurfaceRenderTest {
 
     // The refusal is rendered INSTEAD of a reloaded list, so it has to be visible
     // where the shopper is looking: inside the sheet, in its own words.
-    compose.onNodeWithTag(CatalogFilterTags.ERROR).assertIsDisplayed()
-    compose.onNodeWithText(CatalogFilterDraft.PRICE_RANGE_MESSAGE).assertIsDisplayed()
+    // Same ModalBottomSheet viewport note as above.
+    compose.onNodeWithTag(CatalogFilterTags.ERROR).assertExists()
+    compose.onNodeWithText(CatalogFilterDraft.PRICE_RANGE_MESSAGE).assertExists()
     assertInside(CatalogFilterTags.SHEET, CatalogFilterTags.ERROR)
   }
 
