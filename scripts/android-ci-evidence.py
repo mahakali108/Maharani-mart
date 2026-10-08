@@ -35,7 +35,7 @@ for report in reports:
     root = ET.parse(report).getroot()
     issues = root.findall('issue')
     errors = [i for i in issues if i.get('severity') in ('Error', 'Fatal')]
-    print(f'- `{report.name}`: {len(errors)} errors/fatal, {len(issues)-len(errors)} other issues.')
+    print(f'- `{report.relative_to(current)}`: {len(errors)} errors/fatal, {len(issues)-len(errors)} other issues.')
     for issue in errors:
         print(f'  - {issue.get("id")}: {issue.get("message")}')
 # HTML test reports expose totals even when upload excludes test-results XML.

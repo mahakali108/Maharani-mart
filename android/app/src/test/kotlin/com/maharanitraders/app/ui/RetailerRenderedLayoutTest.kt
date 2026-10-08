@@ -71,7 +71,7 @@ class RetailerRenderedLayoutTest {
   private fun categoryChecks(width: Int) {
     render(width) { catalog(CatalogTab.CATEGORIES) }
     compose.onNodeWithText("Staples and groceries").assertIsDisplayed()
-    compose.onNodeWithText("Food · 2 products").assertIsDisplayed()
+    compose.onNodeWithText("Food · 2 items").assertIsDisplayed()
   }
   @Test fun categories360() = categoryChecks(360)
   @Test fun categories393() = categoryChecks(393)
