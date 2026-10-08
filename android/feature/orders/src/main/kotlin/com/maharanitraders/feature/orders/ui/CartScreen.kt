@@ -125,7 +125,7 @@ fun CartScreen(
     )
     else -> CartContent(
       state = state,
-      viewModel = viewModel,
+      actions = CartUiActions.from(viewModel),
       onBrowseCatalog = onBrowseCatalog,
       onSaveForLater = { lineId -> savedCartsViewModel.saveForLater(lineId, viewModel::refreshCart) },
       saveForLaterBusy = savedCartsState.savingKey?.startsWith("save-for-later:") == true,
@@ -143,10 +143,54 @@ fun CartScreen(
   }
 }
 
+data class CartUiActions(
+  val applyCoupon: () -> Unit,
+  val beginCheckout: () -> Unit,
+  val checkPendingOrder: () -> Unit,
+  val clearCart: () -> Unit,
+  val clearMessage: () -> Unit,
+  val clearSelection: () -> Unit,
+  val consumeBulkMessage: () -> Unit,
+  val decrement: (String) -> Unit,
+  val dismissNotices: () -> Unit,
+  val increment: (String) -> Unit,
+  val moveSelectedToFavourites: () -> Unit,
+  val refreshCart: () -> Unit,
+  val removeCartLine: (String) -> Unit,
+  val removeCoupon: () -> Unit,
+  val removeSelected: () -> Unit,
+  val selectAllOrderable: () -> Unit,
+  val setCouponInput: (String) -> Unit,
+  val toggleLineSelection: (String) -> Unit,
+) {
+  companion object {
+    fun from(viewModel: CartCheckoutViewModel) = CartUiActions(
+      applyCoupon = viewModel::applyCoupon,
+      beginCheckout = viewModel::beginCheckout,
+      checkPendingOrder = viewModel::checkPendingOrder,
+      clearCart = viewModel::clearCart,
+      clearMessage = viewModel::clearMessage,
+      clearSelection = viewModel::clearSelection,
+      consumeBulkMessage = viewModel::consumeBulkMessage,
+      decrement = viewModel::decrement,
+      dismissNotices = viewModel::dismissNotices,
+      increment = viewModel::increment,
+      moveSelectedToFavourites = viewModel::moveSelectedToFavourites,
+      refreshCart = viewModel::refreshCart,
+      removeCartLine = viewModel::removeCartLine,
+      removeCoupon = viewModel::removeCoupon,
+      removeSelected = viewModel::removeSelected,
+      selectAllOrderable = viewModel::selectAllOrderable,
+      setCouponInput = viewModel::setCouponInput,
+      toggleLineSelection = viewModel::toggleLineSelection,
+    )
+  }
+}
+
 @Composable
-private fun CartContent(
+fun CartContent(
   state: CartCheckoutUiState,
-  viewModel: CartCheckoutViewModel,
+  actions: CartUiActions,
   onBrowseCatalog: () -> Unit,
   onSaveForLater: (String) -> Unit,
   saveForLaterBusy: Boolean,
@@ -207,8 +251,8 @@ private fun CartContent(
     return
   }
   if (state.cart == null && state.cartError != null) {
-    if (state.cartOffline) OfflineState(modifier, onRetry = viewModel::refreshCart)
-    else ErrorState(state.cartError, modifier, retryable = true, onRetry = viewModel::refreshCart)
+    if (state.cartOffline) OfflineState(modifier, onRetry = actions.refreshCart)
+    else ErrorState(state.cartError, modifier, retryable = true, onRetry = actions.refreshCart)
     return
   }
 
@@ -234,12 +278,12 @@ private fun CartContent(
         message = "Do not create a new order with a different request. Check the server status or retry the same request safely.",
         isError = true,
       )
-      OutlinedButton(onClick = viewModel::checkPendingOrder) { Text("Check order status") }
+      OutlinedButton(onClick = actions.checkPendingOrder) { Text("Check order status") }
     }
     state.orderError?.let {
       InlineMessage(it, isError = true)
       if (state.pendingOrderUncertain) {
-        OutlinedButton(onClick = viewModel::checkPendingOrder) { Text("Check order status") }
+        OutlinedButton(onClick = actions.checkPendingOrder) { Text("Check order status") }
       }
     }
     state.cartError?.let { InlineMessage(it, isError = true) }
@@ -252,16 +296,16 @@ private fun CartContent(
     }
     if (state.cartNeedsRefresh || state.cartError != null) {
       OutlinedButton(
-        onClick = viewModel::refreshCart,
+        onClick = actions.refreshCart,
         enabled = !state.cartLoading && !state.isCartMutating,
         modifier = Modifier.fillMaxWidth(),
       ) { Text(if (state.cartLoading) "Refreshing cart…" else "Refresh shared cart") }
     }
-    state.message?.let { InlineMessage(it, onDismiss = viewModel::clearMessage) }
+    state.message?.let { InlineMessage(it, onDismiss = actions.clearMessage) }
     // The outcome of a bulk action (remove selected, clear cart, save to
     // favourites): stated once, and dismissible, so a batch that partly failed
     // is never silently reported as a success.
-    state.bulkMessage?.let { InlineMessage(it, onDismiss = viewModel::consumeBulkMessage) }
+    state.bulkMessage?.let { InlineMessage(it, onDismiss = actions.consumeBulkMessage) }
     saveForLaterError?.let { InlineMessage(it, isError = true) }
     saveForLaterMessage?.let { InlineMessage(it) }
 
@@ -279,16 +323,16 @@ private fun CartContent(
       // exactly the failure this screen must not have.
       CartNoticeList(
         notices = state.cartNotices,
-        onDismiss = viewModel::dismissNotices,
+        onDismiss = actions.dismissNotices,
       )
 
       CartSelectionBar(
         state = state,
-        onSelectAll = viewModel::selectAllOrderable,
-        onClear = viewModel::clearSelection,
-        onRemoveSelected = viewModel::removeSelected,
-        onSaveSelected = viewModel::moveSelectedToFavourites,
-        onClearCart = viewModel::clearCart,
+        onSelectAll = actions.selectAllOrderable,
+        onClear = actions.clearSelection,
+        onRemoveSelected = actions.removeSelected,
+        onSaveSelected = actions.moveSelectedToFavourites,
+        onClearCart = actions.clearCart,
         onSaveForLater = { onSaveForLater(it) },
         saveForLaterBusy = saveForLaterBusy,
       )
@@ -297,11 +341,11 @@ private fun CartContent(
         CartLineCard(
           line = line,
           selected = line.id in state.selectedLineIds,
-          onToggleSelection = { viewModel.toggleLineSelection(line.id) },
+          onToggleSelection = { actions.toggleLineSelection(line.id) },
           busy = state.isCartMutating || state.cartNeedsRefresh || state.cartLoading || state.bulkActionBusy,
-          onIncrease = { viewModel.increment(line.id) },
-          onDecrease = { viewModel.decrement(line.id) },
-          onRemove = { viewModel.removeCartLine(line.id) },
+          onIncrease = { actions.increment(line.id) },
+          onDecrease = { actions.decrement(line.id) },
+          onRemove = { actions.removeCartLine(line.id) },
           onSaveForLater = { onSaveForLater(line.id) },
           saveForLaterBusy = saveForLaterBusy,
         )
@@ -314,9 +358,9 @@ private fun CartContent(
           input = state.couponInput,
           busy = state.couponBusy || state.isCartMutating || state.cartLoading || state.cartNeedsRefresh,
           error = state.couponError,
-          onInput = viewModel::setCouponInput,
-          onApply = viewModel::applyCoupon,
-          onRemove = viewModel::removeCoupon,
+          onInput = actions.setCouponInput,
+          onApply = actions.applyCoupon,
+          onRemove = actions.removeCoupon,
         )
       }
 
@@ -331,7 +375,7 @@ private fun CartContent(
       // shopper walk into a checkout the server will refuse.
       val blockedLine = cart?.lines?.firstOrNull { !it.orderable }
       Button(
-        onClick = viewModel::beginCheckout,
+        onClick = actions.beginCheckout,
         enabled = blockedLine == null && !state.isCartMutating && !state.cartNeedsRefresh &&
           !state.cartLoading && !state.addressesLoading && !state.orderSubmitting &&
           !state.pendingOrderUncertain,
@@ -457,7 +501,7 @@ private fun CartLineCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
       ) {
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
           Text(
             text = line.unitPricePaise?.let { "${MoneyFormat.formatPaise(it)} / piece" }
               ?: "Current price unavailable",
@@ -471,13 +515,13 @@ private fun CartLineCard(
           )
           line.gstPercent?.let { Text("GST rate ${formatPercent(it)}", style = MaterialTheme.typography.labelSmall) }
         }
-        TextButton(onClick = onRemove, enabled = !busy) { Text("Remove") }
+        TextButton(onClick = onRemove, enabled = !busy, modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget).testTag("cart_remove_${line.id}")) { Text("Remove") }
       }
       Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(
           onClick = onDecrease,
           enabled = !busy && line.quantity - line.quantityIncrement >= (line.moq ?: 1),
-          modifier = Modifier.testTag("${CommerceTags.CART_QUANTITY}_minus_${line.id}"),
+          modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget).testTag("${CommerceTags.CART_QUANTITY}_minus_${line.id}"),
         ) { Text("−") }
         Text(
           text = "${line.quantity} ${line.quantityUnit}",
@@ -488,12 +532,11 @@ private fun CartLineCard(
         OutlinedButton(
           onClick = onIncrease,
           enabled = !busy && line.quantity < 100_000,
-          modifier = Modifier.testTag("${CommerceTags.CART_QUANTITY}_plus_${line.id}"),
+          modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget).testTag("${CommerceTags.CART_QUANTITY}_plus_${line.id}"),
         ) { Text("+") }
-        Spacer(Modifier.width(8.dp))
-        line.moq?.let {
-          Text("MOQ $it pcs · increment ${line.quantityIncrement}", style = MaterialTheme.typography.labelSmall)
-        }
+      }
+      line.moq?.let {
+        Text("MOQ $it pcs · increment ${line.quantityIncrement}", style = MaterialTheme.typography.labelSmall)
       }
       TextButton(
         onClick = onSaveForLater,
@@ -726,7 +769,7 @@ private fun CouponPanel(
       when {
         couponCode != null -> Row(verticalAlignment = Alignment.CenterVertically) {
           Text("Applied: $couponCode", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-          TextButton(onClick = onRemove, enabled = !busy) { Text("Remove") }
+          TextButton(onClick = onRemove, enabled = !busy, modifier = Modifier.heightIn(min = MaharaniDimens.touchTarget).testTag("cart_remove_${line.id}")) { Text("Remove") }
         }
         couponUnavailable -> Text(
           "The applied coupon could not be checked. Refresh the cart before checkout.",

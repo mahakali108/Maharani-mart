@@ -13,7 +13,9 @@ import com.maharanitraders.core.model.*
 import com.maharanitraders.feature.catalog.*
 import com.maharanitraders.feature.catalog.ui.*
 import com.maharanitraders.feature.catalog.ui.components.*
-import com.maharanitraders.feature.orders.OrderHistoryUiState
+import com.maharanitraders.feature.orders.*
+import com.maharanitraders.feature.orders.ui.*
+import com.maharanitraders.app.navigation.*
 import com.maharanitraders.feature.orders.ui.OrderHistoryContent
 import org.junit.Rule
 import org.junit.Test
@@ -124,4 +126,98 @@ class RetailerRenderedLayoutTest {
   @Test fun detail360() = detailChecks(360)
   @Test fun detail393() = detailChecks(393)
   @Test fun detail412() = detailChecks(412)
+  private val cartLine = CartLine("line", "pack", "p1", "Long grocery product name for compact shopping", "Test supplier", null,
+    "1 kg pouch", 7, "pieces", 1, 6, 12, 12500, 87500, 5.0, "in_stock", true, null)
+  @Composable private fun cart() {
+    CartContent(CartCheckoutUiState(cartLoading = false, cart = CartSnapshot(listOf(cartLine), null, false, 1, 7)),
+      CartUiActions(
+      applyCoupon = {},
+      beginCheckout = {},
+      checkPendingOrder = {},
+      clearCart = {},
+      clearMessage = {},
+      clearSelection = {},
+      consumeBulkMessage = {},
+      decrement = { _ -> },
+      dismissNotices = {},
+      increment = { _ -> },
+      moveSelectedToFavourites = {},
+      refreshCart = {},
+      removeCartLine = { _ -> },
+      removeCoupon = {},
+      removeSelected = {},
+      selectAllOrderable = {},
+      setCouponInput = { _ -> },
+      toggleLineSelection = { _ -> },
+    ), {}, {}, false, null, null, "", {}, {}, false)
+  }
+  private fun cartChecks(width: Int) {
+    render(width) { cart() }
+    compose.onNodeWithTag(CommerceTags.CART_ITEM_IMAGE).assertIsDisplayed()
+    compose.onNodeWithTag("${CommerceTags.CART_QUANTITY}_plus_line").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
+    compose.onNodeWithTag("cart_remove_line").performScrollTo().assertHeightIsAtLeast(48.dp)
+    compose.onNodeWithText("MOQ 6 pcs · increment 1").performScrollTo().assertIsDisplayed()
+    compose.onNodeWithTag(CommerceTags.CART_CHECKOUT).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+    val viewport = compose.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
+    val cta = compose.onNodeWithTag(CommerceTags.CART_CHECKOUT).fetchSemanticsNode().boundsInRoot
+    check(cta.left >= viewport.left && cta.right <= viewport.right)
+  }
+  @Test fun cart360() = cartChecks(360)
+  @Test fun cart393() = cartChecks(393)
+  @Test fun cart412() = cartChecks(412)
+  private val order = RetailerOrder("order", "TEST-2026-001", "confirmed", 87500, 4375, 1000, 90875,
+    "2026-10-08T10:00:00Z", "2026-10-08T10:00:00Z", null, null,
+    listOf(OrderItem("item", "p1", "pack", "Test grocery product", "1 kg pouch", 7, "pieces", 7, 12, 12500, 5.0, 87500)), 500, 90375)
+  private fun populatedOrderChecks(width: Int) {
+    render(width) { OrderHistoryContent(OrderHistoryUiState(loading = false, orders = listOf(order)), {}, {}, {}) }
+    compose.onNodeWithText("TEST-2026-001").assertIsDisplayed()
+    compose.onNodeWithText("Test grocery product · 7 pieces").assertIsDisplayed()
+    compose.onNodeWithTag("order_reorder_order").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
+  }
+  @Test fun populatedOrders360() = populatedOrderChecks(360)
+  @Test fun populatedOrders393() = populatedOrderChecks(393)
+  @Test fun populatedOrders412() = populatedOrderChecks(412)
+  private fun shellChecks(width: Int) {
+    val snapshot = SessionSnapshot(SessionUser("test", null, UserRole.RETAILER, "Test owner", null, true),
+      RetailerContext(RetailerStatus.ACTIVE, "Test shop"), null,
+      NavigationPolicy("/retailer/home", listOf(Workspace.RETAILER), setOf("orders.create", "orders.view.own")))
+    val source = object : ShellRenderSource {
+      override val cartCount = 1
+      override val unreadCount = 2
+      @Composable override fun Content(route: String, request: CatalogRequest, navigate: (String) -> Unit) {
+        when (route) {
+          MaharaniRoutes.HOME -> HomeContent(HomeUiState(loading = false, home = RetailerHome(emptyList(), categories, brands, products, null)),
+            {}, { navigate(MaharaniRoutes.CATALOG) }, onOpenCategory = { navigate(MaharaniRoutes.CATEGORIES) },
+            onOpenBrand = { navigate(MaharaniRoutes.BRANDS) }, onOpenDirectory = { navigate(if(it == CatalogTab.CATEGORIES) MaharaniRoutes.CATEGORIES else MaharaniRoutes.BRANDS) },
+            onOpenProduct = { navigate(MaharaniRoutes.productDetail(it)) })
+          MaharaniRoutes.CATALOG, MaharaniRoutes.CATEGORIES, MaharaniRoutes.BRANDS -> CatalogContent(
+            CatalogUiState(loading = false, products = products, categories = categories, brands = brands, categoriesLoaded = true, brandsLoaded = true,
+              tab = if(route == MaharaniRoutes.CATEGORIES) CatalogTab.CATEGORIES else if(route == MaharaniRoutes.BRANDS) CatalogTab.BRANDS else request.tab),
+            onSearchChange = {}, onSelectTab = { navigate(if(it == CatalogTab.CATEGORIES) MaharaniRoutes.CATEGORIES else if(it == CatalogTab.BRANDS) MaharaniRoutes.BRANDS else MaharaniRoutes.CATALOG) },
+            onSelectCategory = { navigate(MaharaniRoutes.CATALOG) }, onSelectSort = {}, onToggleInStock = {}, onClearBrand = {}, onClearFilters = {}, onRetry = {}, onLoadMore = {},
+            onOpenProduct = { navigate(MaharaniRoutes.productDetail(it)) })
+          MaharaniRoutes.CART -> cart()
+          MaharaniRoutes.ORDERS -> OrderHistoryContent(OrderHistoryUiState(loading = false, orders = listOf(order)), {}, {}, {})
+          MaharaniRoutes.ACCOUNT -> AccountScreen(snapshot, {})
+          else -> androidx.compose.material3.Text("Test destination $route")
+        }
+      }
+    }
+    render(width) { AuthenticatedShell(snapshot, {}, source) }
+    compose.onNodeWithTag(ShellTags.BRAND).assertIsDisplayed()
+    compose.onNodeWithTag(ShellTags.CART_BADGE).assertIsDisplayed()
+    for (route in listOf(MaharaniRoutes.CATALOG, MaharaniRoutes.BRANDS, MaharaniRoutes.ORDERS, MaharaniRoutes.CART, MaharaniRoutes.HOME)) {
+      compose.onNodeWithTag("shell_tab_$route").performClick().assertIsSelected()
+      compose.onNodeWithTag(ShellTags.BOTTOM_BAR).assertIsDisplayed()
+    }
+    compose.onNodeWithTag("shell_tab_${MaharaniRoutes.CATALOG}").performClick()
+    compose.onNodeWithTag(CatalogScreenTags.TAB_CATEGORIES).performClick()
+    compose.onNodeWithTag("shell_tab_${MaharaniRoutes.CATALOG}").assertIsSelected()
+    compose.onNodeWithTag(ShellTags.OPEN_ACCOUNT).performClick()
+    compose.onNodeWithText("Test owner").assertIsDisplayed()
+  }
+  @Test fun shell360() = shellChecks(360)
+  @Test fun shell393() = shellChecks(393)
+  @Test fun shell412() = shellChecks(412)
+
 }

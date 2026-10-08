@@ -172,14 +172,23 @@ private val BOTTOM_NAV_ROUTES = listOf(
  * and the workspaces the server allowed. Nothing here decides a permission —
  * that stays with the server, and every protected API call is re-checked there.
  */
+/** Repository/UI injection seam for rendering tests; production passes null.
+ * Contains no fixture or default data. The same NavHost, bars and padding render. */
+internal interface ShellRenderSource {
+  val cartCount: Int?
+  val unreadCount: Int?
+  @Composable fun Content(route: String, request: CatalogRequest, navigate: (String) -> Unit)
+}
+
 @Composable
-fun AuthenticatedShell(
+internal fun AuthenticatedShell(
   snapshot: SessionSnapshot,
   onSignOut: () -> Unit,
+  renderSource: ShellRenderSource? = null,
 ) {
   when (val routing = remember(snapshot) { MaharaniRouter.resolveSession(snapshot) }) {
     is SessionRouting.Unsupported -> UnsupportedAccountScreen(routing.reason, onSignOut)
-    is SessionRouting.Ready -> RoutedShell(snapshot, routing, onSignOut)
+    is SessionRouting.Ready -> RoutedShell(snapshot, routing, onSignOut, renderSource)
   }
 }
 
@@ -189,22 +198,22 @@ private fun RoutedShell(
   snapshot: SessionSnapshot,
   routing: SessionRouting.Ready,
   onSignOut: () -> Unit,
+  renderSource: ShellRenderSource?,
 ) {
   val navController = rememberNavController()
   val drawerState = rememberDrawerState(DrawerValue.Closed)
   val scope = rememberCoroutineScope()
   // The two badges read the shared stores; the shell never counts anything
   // itself — see ShellBadgesViewModel.
-  val badges: ShellBadgesViewModel = hiltViewModel()
-  val cartLineCount by badges.cartLineCount.collectAsStateWithLifecycle()
-  val unreadCount by badges.unreadCount.collectAsStateWithLifecycle()
-
-  LaunchedEffect(Unit) { badges.refresh() }
+  val badges: ShellBadgesViewModel? = if (renderSource == null) hiltViewModel() else null
+  val cartLineCount = if (badges != null) badges.cartLineCount.collectAsStateWithLifecycle().value else renderSource?.cartCount
+  val unreadCount = if (badges != null) badges.unreadCount.collectAsStateWithLifecycle().value else renderSource?.unreadCount
+  LaunchedEffect(Unit) { badges?.refresh() }
 
   // Every sign-out in the shell goes through here, so the previous account's
   // badge counts are cleared before the session ends.
   val handleSignOut: () -> Unit = {
-    badges.onSignOut()
+    badges?.onSignOut()
     onSignOut()
   }
   val backStackEntry by navController.currentBackStackEntryAsState()
@@ -381,7 +390,7 @@ private fun RoutedShell(
               }
               if (currentRoute != MaharaniRoutes.ACCOUNT) {
                 IconButton(
-                  onClick = { showAccount.value = true },
+                  onClick = { navController.navigate(MaharaniRoutes.ACCOUNT) { launchSingleTop = true } },
                   modifier = Modifier.testTag(ShellTags.OPEN_ACCOUNT),
                 ) {
                   AccountGlyph(modifier = Modifier.size(22.dp))
@@ -405,6 +414,7 @@ private fun RoutedShell(
           ) {
             bottomItems.forEach { destination ->
               NavigationBarItem(
+                modifier = Modifier.testTag("shell_tab_${destination.route}"),
                 selected = destination.route == selectedTabRoute,
                 onClick = { selectTab(destination) },
                 icon = {
@@ -452,6 +462,9 @@ private fun RoutedShell(
       ) {
         routing.destinations.forEach { destination ->
           composable(destination.route) {
+            if (renderSource != null) {
+              renderSource.Content(destination.route, catalogRequest) { navController.navigate(it) { launchSingleTop = true } }
+            } else {
             // A cart handle for the two surfaces that can quick-add: the home
             // dashboard's cards and the catalogue's cards.
             val quickAdd = quickAddCartHandle(
@@ -488,6 +501,7 @@ private fun RoutedShell(
               quickAddMessage = quickAdd?.message,
               onQuickAddMessageShown = { quickAdd?.onMessageShown?.invoke() },
             )
+            }
           }
         }
 
@@ -547,7 +561,9 @@ private fun RoutedShell(
             navArgument(ProductDetailViewModel.ARG_PRODUCT_ID) { type = NavType.StringType },
           ),
         ) {
-          if (canUseRetailerCommerce) {
+          if (renderSource != null) {
+            renderSource.Content(MaharaniRoutes.PRODUCT_DETAIL, catalogRequest) { navController.navigate(it) }
+          } else if (canUseRetailerCommerce) {
             val cartViewModel: CartCheckoutViewModel = hiltViewModel()
             val cartState by cartViewModel.state.collectAsStateWithLifecycle()
             ProductDetailScreen(
