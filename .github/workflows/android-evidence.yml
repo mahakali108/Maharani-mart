@@ -13,7 +13,7 @@ on:
       run_id:
         description: Completed native build run to inspect
         required: true
-        default: '37735735162'
+        default: '37741621723'
       baseline_run_id:
         description: Completed baseline build run
         required: true
@@ -35,7 +35,7 @@ jobs:
       - name: Download actual artifacts on runner
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37735735162' }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37741621723' }}
           BASELINE_RUN_ID: ${{ inputs.baseline_run_id || '37730602450' }}
         run: |
           set -euo pipefail
@@ -47,7 +47,7 @@ jobs:
       - name: Measure, inspect reports and publish evidence through GitHub API
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37735735162' }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37741621723' }}
           BASELINE_RUN_ID: ${{ inputs.baseline_run_id || '37730602450' }}
         run: |
           set -euo pipefail

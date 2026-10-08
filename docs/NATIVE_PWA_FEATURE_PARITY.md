@@ -26,8 +26,10 @@ the web app uses, or it is derived by arithmetic that is written down once and s
 
 The historical IMPLEMENTED rows below describe earlier code coverage, **not this
 upgrade's production signoff**. Changed HOME-01/HOME-02/CAT-10/PLAT-05 behavior is
-**PARTIAL / pending verification** until native compilation, tests and real-data
-360/393/412dp checks pass. See `RETAILER_MEGA_UPGRADE_AUDIT.md` and
+**PARTIAL**: native compilation and 21 JVM-rendered width checks now have CI
+evidence, but Cart/populated Orders/full shell, live real-data/device lifecycle and
+visual screenshot acceptance are not yet verified. Fatal lint/debug/release assembly passed in run `37741621723`; this does not
+replace live-data/device/visual signoff. See `RETAILER_MEGA_UPGRADE_AUDIT.md` and
 `RETAILER_MEGA_UPGRADE_EVIDENCE.md`. Search uses `q`, not `search`. Parent names
 are mapped, but parent IDs/tree browsing are not claimed. Native banner actions
 only support an allowlist; external/unknown targets remain non-actionable art.
