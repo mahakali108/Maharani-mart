@@ -2,6 +2,8 @@ package com.maharanitraders.app.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -224,7 +226,15 @@ class RetailerRenderedLayoutTest {
         }
       }
     }
-    render(width) { AuthenticatedShell(snapshot, {}, source) }
+    compose.setContent {
+      MaharaniTheme(darkTheme = false) {
+        // Shell must fill the actual Activity window; an oversized required
+        // height would place its bottom navigation outside the test window.
+        Box(Modifier.requiredWidth(width.dp).fillMaxHeight().testTag("viewport")) {
+          AuthenticatedShell(snapshot, {}, source)
+        }
+      }
+    }
     compose.onNodeWithTag(ShellTags.BRAND).assertIsDisplayed()
     compose.onNodeWithTag(ShellTags.CART_BADGE).assertIsDisplayed()
     for (route in listOf(MaharaniRoutes.CATALOG, MaharaniRoutes.BRANDS, MaharaniRoutes.ORDERS, MaharaniRoutes.CART, MaharaniRoutes.HOME)) {
