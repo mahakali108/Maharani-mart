@@ -80,6 +80,11 @@ fun CategoryTile(
       textAlign = TextAlign.Center,
     )
 
+    category.parentName?.takeIf { it.isNotBlank() }?.let { parent ->
+      Text(parent, style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
     category.productCount?.let { count ->
       Text(
         text = "$count items",

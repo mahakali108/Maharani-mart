@@ -350,7 +350,7 @@ fun ProductCard(
             Text(
               text = when {
                 compareSelected -> "✓ Comparing"
-                compareFull -> "Compare (3 max)"
+                compareFull -> "Compare (${com.maharanitraders.feature.catalog.ProductCompare.MAX_PRODUCTS} max)"
                 else -> "Compare"
               },
               style = MaterialTheme.typography.labelSmall,

@@ -74,6 +74,7 @@ object CatalogMapper {
     name = dto.name,
     imageUrl = dto.imageUrl.orNullIfBlank(),
     productCount = dto.productCount,
+    parentName = dto.parentName,
   )
 
   fun brand(dto: CatalogBrandDto): CatalogBrand = CatalogBrand(

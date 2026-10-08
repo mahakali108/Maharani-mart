@@ -84,7 +84,7 @@ data class CatalogUiState(
   // Product comparison (see ProductCompare)
   // -----------------------------------------------------------------------
 
-  /** Products parked in the comparison tray, newest last, capped at three. */
+  /** Products parked in the comparison tray, newest last, capped at four. */
   val compareIds: Set<String> = emptySet(),
   /** True while the comparison overlay is on screen. */
   val compareOpen: Boolean = false,

@@ -148,21 +148,14 @@ data class CatalogRequest(
   val tab: CatalogTab = CatalogTab.PRODUCTS,
 )
 
-/**
- * The five tabs of the shopping bottom bar, in drawer order.
- *
- * `CATALOG` (not `CATEGORIES`) is the second tab: the catalogue is the app's one
- * discovery surface and it contains the Categories and Brands panes, so the bar
- * does not need — and must not have — a second, competing directory tab. The
- * Categories drawer entry stays, and opens the same screen on its Categories
- * pane.
- */
+/** Five retail tabs in deliberate order. Account stays in header/drawer;
+ * Categories opens Shop's existing directory pane; Brands has its own tab. */
 private val BOTTOM_NAV_ROUTES = listOf(
   MaharaniRoutes.HOME,
   MaharaniRoutes.CATALOG,
-  MaharaniRoutes.CART,
+  MaharaniRoutes.BRANDS,
   MaharaniRoutes.ORDERS,
-  MaharaniRoutes.ACCOUNT,
+  MaharaniRoutes.CART,
 )
 
 /**
@@ -232,13 +225,13 @@ private fun RoutedShell(
   val canUseRetailerCommerce = snapshot.role == UserRole.RETAILER &&
     snapshot.navigation.can("orders.create") && snapshot.navigation.can("orders.view.own")
 
-  val bottomItems = routing.destinations.filter { it.route in BOTTOM_NAV_ROUTES }
+  val bottomItems = BOTTOM_NAV_ROUTES.mapNotNull { route -> routing.destinations.firstOrNull { it.route == route } }
   val drawerItems = routing.destinations.filter { it.route !in BOTTOM_NAV_ROUTES }
   // The drawer's "Categories" entry renders the SAME catalogue on its Categories
   // pane, so it counts as the Catalog tab: the bar stays visible and keeps its
   // selection instead of vanishing because a second route to one screen is open.
   val selectedTabRoute = if (
-    currentRoute == MaharaniRoutes.CATEGORIES || currentRoute == MaharaniRoutes.BRANDS
+    currentRoute == MaharaniRoutes.CATEGORIES
   ) {
     MaharaniRoutes.CATALOG
   } else {
@@ -305,7 +298,9 @@ private fun RoutedShell(
             // field's text, so submit reads the state it already holds.
             onSearchSubmit = { openCatalog(CatalogRequest(search = homeSearch.trim())) },
             onOpenDrawer = ::openDrawer,
-            onOpenAccount = { showAccount.value = true },
+            onOpenAccount = { navController.navigate(MaharaniRoutes.ACCOUNT) { launchSingleTop = true } },
+            onOpenCart = { navController.navigate(MaharaniRoutes.CART) { launchSingleTop = true } },
+            cartLineCount = cartLineCount,
             onOpenNotifications = {
               navController.navigate(MaharaniRoutes.NOTIFICATIONS) { launchSingleTop = true }
             },
@@ -321,6 +316,7 @@ private fun RoutedShell(
                 when (currentRoute) {
                   MaharaniRoutes.ORDER_INVOICE -> "Invoice"
                   MaharaniRoutes.ORDER_DELIVERY -> "Delivery record"
+                  MaharaniRoutes.PRODUCT_DETAIL -> "Product details"
                   else -> "Order details"
                 }
               )
@@ -610,6 +606,8 @@ private fun RetailerHomeTopBar(
   onOpenDrawer: () -> Unit,
   onOpenAccount: () -> Unit,
   onOpenNotifications: () -> Unit,
+  onOpenCart: () -> Unit,
+  cartLineCount: Int?,
   unreadCount: Int?,
   modifier: Modifier = Modifier,
 ) {
@@ -650,20 +648,20 @@ private fun RetailerHomeTopBar(
           // shop is this" are both answered without a second row of chrome.
           val retailerName = snapshot.user.fullName?.takeIf { it.isNotBlank() }
           Text(
-            text = if (retailerName != null) "$greeting, $retailerName" else greeting,
+            text = "Maharani Traders",
             style = MaterialTheme.typography.titleMedium,
             color = tokens.onAppBar,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag(ShellTags.GREETING),
+            modifier = Modifier.testTag(ShellTags.BRAND),
           )
           Text(
-            text = snapshot.retailer?.shopName ?: "Maharani Traders",
+            text = snapshot.retailer?.shopName ?: retailerName?.let { "$greeting, $it" } ?: greeting,
             style = MaterialTheme.typography.labelSmall,
             color = tokens.onAppBarMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag(ShellTags.BRAND),
+            modifier = Modifier.testTag(ShellTags.GREETING),
           )
         }
 
@@ -683,6 +681,16 @@ private fun RetailerHomeTopBar(
             },
           ) {
             BellGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
+          }
+        }
+
+        IconButton(onClick = onOpenCart) {
+          BadgedBox(badge = {
+            if (cartLineCount != null && cartLineCount > 0) Badge {
+              Text(if (cartLineCount > 99) "99+" else cartLineCount.toString())
+            }
+          }) {
+            CartGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
           }
         }
 
@@ -904,6 +912,21 @@ private fun DestinationSurface(
         onOpenDirectory = { tab -> onOpenCatalog(CatalogRequest(tab = tab)) },
         onOpenDestination = onOpenDestination,
         quickActions = homeQuickActions(availableRoutes),
+        onOpenBanner = { raw ->
+          when (val target = com.maharanitraders.feature.catalog.homeBannerTarget(raw)) {
+            is com.maharanitraders.feature.catalog.HomeBannerTarget.Catalog ->
+              onOpenCatalog(CatalogRequest(target.search, target.categoryId, target.brandId))
+            is com.maharanitraders.feature.catalog.HomeBannerTarget.Product -> onOpenProduct(target.id)
+            com.maharanitraders.feature.catalog.HomeBannerTarget.Offers ->
+              if (MaharaniRoutes.SCHEMES in availableRoutes) onOpenDestination(MaharaniRoutes.SCHEMES)
+            com.maharanitraders.feature.catalog.HomeBannerTarget.Coupons ->
+              if (MaharaniRoutes.COUPONS in availableRoutes) onOpenDestination(MaharaniRoutes.COUPONS)
+            null -> Unit
+          }
+        },
+        onOpenOffers = if (MaharaniRoutes.SCHEMES in availableRoutes) {
+          { onOpenDestination(MaharaniRoutes.SCHEMES) }
+        } else null,
         dashboard = dashboard,
         onRetryDashboard = dashboardViewModel::load,
         cartLineCount = cartLineCount,

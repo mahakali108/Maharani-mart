@@ -181,7 +181,7 @@ export async function loadCatalogBatch(
     // carry their own barcode. RLS already hides inactive packs from a
     // retailer, and the explicit is_active filter keeps staff sessions honest
     // too. Internal SKU codes are deliberately NOT a search field.
-    const [{ data: brandMatches }, { data: categoryMatches }, { data: packMatches }] = await Promise.all([
+    const [brandResult, categoryResult, packResult] = await Promise.all([
       supabase.from('brands').select('id').eq('is_active', true).ilike('name', like).returns<{ id: string }[]>(),
       supabase.from('categories').select('id').eq('is_active', true).ilike('name', like).returns<{ id: string }[]>(),
       supabase
@@ -192,6 +192,14 @@ export async function loadCatalogBatch(
         .limit(PACK_MATCH_LIMIT)
         .returns<{ product_id: string }[]>(),
     ]);
+    // A failed entity search is not an empty match. Let the API return its
+    // retryable failure instead of a misleading partial/no-results answer.
+    for (const result of [brandResult, categoryResult, packResult]) {
+      if (result.error) throw new Error(`Catalogue search unavailable: ${result.error.message}`);
+    }
+    const brandMatches = brandResult.data;
+    const categoryMatches = categoryResult.data;
+    const packMatches = packResult.data;
     matchingBrandIds = (brandMatches ?? []).map((row) => row.id);
     matchingCategoryIds = (categoryMatches ?? []).map((row) => row.id);
     // De-duplicated and bounded so the disjunction below stays a sane
@@ -246,7 +254,8 @@ export async function loadCatalogBatch(
   if (!needsDerivedPricing) {
     // MODE 1 — the database serves the batch through the sort's index.
     const order = catalogOrder(filters.sort);
-    const { data, count } = await applyCursor(applyKeysetOrder(query, order), cursor, order, CATALOG_PAGE_SIZE);
+    const { data, count, error } = await applyCursor(applyKeysetOrder(query, order), cursor, order, CATALOG_PAGE_SIZE);
+    if (error) throw error;
     const rows = (data ?? []) as unknown as CatalogProductRow[];
     const batch = toListBatch(rows, CATALOG_PAGE_SIZE, (row) => keysetCursorFor(row, order));
     const cards = await priceCatalogProducts(supabase, batch.items, userId, areaId, favoriteIds, frequency);
@@ -261,7 +270,8 @@ export async function loadCatalogBatch(
   // MODE 2 — bounded working set, priced, filtered and ranked in memory, then
   // batched out. The cap is disclosed by `resultCapped` rather than hidden.
   const offset = cursorOffset(cursor);
-  const { data, count } = await query.limit(CATALOG_MAX_ROWS);
+  const { data, count, error } = await query.limit(CATALOG_MAX_ROWS);
+  if (error) throw error;
   const rows = (data ?? []) as unknown as CatalogProductRow[];
   const priced = await priceCatalogProducts(supabase, rows, userId, areaId, favoriteIds, frequency);
 

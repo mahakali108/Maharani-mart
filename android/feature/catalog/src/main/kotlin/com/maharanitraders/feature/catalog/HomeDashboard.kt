@@ -32,6 +32,7 @@ data class HomeDashboard(
   /** True until the first dashboard read has answered. */
   val loading: Boolean = true,
   val coins: HomeCoins? = null,
+  val offers: List<HomeOffer> = emptyList(),
   val lastOrder: HomeOrderSummary? = null,
   val recentlyViewed: List<RecentlyViewedProduct> = emptyList(),
   /**
@@ -138,3 +139,6 @@ data class HomeQuickAction(
   val icon: HomeQuickActionIcon,
   val tone: AccentTone,
 )
+
+/** Admin scheme identity/dates only: no inferred product discount or eligibility. */
+data class HomeOffer(val id: String, val title: String, val description: String?, val endsAt: String)

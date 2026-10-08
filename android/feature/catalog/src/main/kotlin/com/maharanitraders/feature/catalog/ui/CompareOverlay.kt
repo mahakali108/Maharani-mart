@@ -46,13 +46,13 @@ object CompareTags {
 }
 
 private object CompareColumns {
-  /** Width of the label rail; the rest is split between up to three products. */
+  /** Width of the label rail; the rest is split between up to four products. */
   val LABEL = 104.dp
   val ARTWORK_HEADER = 148.dp
 }
 
 /**
- * Side-by-side comparison of up to three products, drawn over the catalogue.
+ * Side-by-side comparison of up to four products, drawn over the catalogue.
  *
  * Every cell is a value the server published for the signed-in retailer
  * (see [ProductCompare.rows]): the overlay holds no product of its own, and a
@@ -60,7 +60,7 @@ private object CompareColumns {
  * in from another row. Details are fetched fresh when the overlay opens, so a
  * comparison can never quote yesterday's rate.
  *
- * The table scrolls horizontally rather than shrinking type: three columns plus
+ * The table scrolls horizontally rather than shrinking type: four columns plus
  * the label rail do not fit 360dp at a readable size, and squeezing them until
  * they do is how a comparison becomes unreadable.
  */
@@ -118,7 +118,7 @@ fun CompareOverlay(
           contentAlignment = Alignment.Center,
         ) {
           Text(
-            text = "Select two or three products to see them side by side.",
+            text = "Select two or four products to see them side by side.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -139,7 +139,7 @@ fun CompareOverlay(
               Box(modifier = Modifier.heightIn(min = CompareColumns.ARTWORK_HEADER))
               rows.forEach { row -> CompareLabelCell(row.label) }
             }
-            details.forEach { detail ->
+            details.forEachIndexed { productIndex, detail ->
               Column(
                 modifier = Modifier.width(132.dp),
                 verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXxs),
@@ -149,8 +149,8 @@ fun CompareOverlay(
                   onOpen = { onOpenProduct(detail.id) },
                   onRemove = { onRemove(detail.id) },
                 )
-                rows.forEachIndexed { index, row ->
-                  CompareValueCell(row.values.getOrNull(index).orEmpty())
+                rows.forEach { row ->
+                  CompareValueCell(row.values.getOrNull(productIndex).orEmpty())
                 }
               }
             }
@@ -238,14 +238,14 @@ private fun CompareProductHeader(
         onClick = onOpen,
         modifier = Modifier
           .weight(1f)
-          .heightIn(min = 44.dp),
+          .heightIn(min = MaharaniDimens.touchTarget),
         contentPadding = PaddingValues(horizontal = 4.dp),
       ) { Text("View", style = MaterialTheme.typography.labelSmall) }
       TextButton(
         onClick = onRemove,
         modifier = Modifier
           .weight(1f)
-          .heightIn(min = 44.dp)
+          .heightIn(min = MaharaniDimens.touchTarget)
           .testTag("${CompareTags.REMOVE}_${detail.id}"),
         contentPadding = PaddingValues(horizontal = 4.dp),
       ) {

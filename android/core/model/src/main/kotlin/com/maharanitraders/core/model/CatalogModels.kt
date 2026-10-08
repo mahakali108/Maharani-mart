@@ -149,6 +149,7 @@ data class CatalogCategory(
   val name: String,
   val imageUrl: String?,
   val productCount: Int?,
+  val parentName: String? = null,
 )
 
 data class CatalogBrand(
