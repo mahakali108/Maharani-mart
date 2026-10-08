@@ -1,6 +1,9 @@
 name: Android artifact evidence
 
 on:
+  workflow_run:
+    workflows: ['Native Android Debug APK']
+    types: [completed]
   push:
     paths:
       - '.github/workflows/android-evidence.yml'
@@ -22,6 +25,7 @@ permissions:
 
 jobs:
   evidence:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'arena/ff1279ad-maharani-mart' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -31,7 +35,7 @@ jobs:
       - name: Download actual artifacts on runner
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: ${{ inputs.run_id || '37735735162' }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37735735162' }}
           BASELINE_RUN_ID: ${{ inputs.baseline_run_id || '37730602450' }}
         run: |
           set -euo pipefail
@@ -43,7 +47,7 @@ jobs:
       - name: Measure, inspect reports and publish evidence through GitHub API
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: ${{ inputs.run_id || '37735735162' }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37735735162' }}
           BASELINE_RUN_ID: ${{ inputs.baseline_run_id || '37730602450' }}
         run: |
           set -euo pipefail
