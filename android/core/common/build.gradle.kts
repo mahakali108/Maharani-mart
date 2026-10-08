@@ -25,7 +25,7 @@ android {
   }
 
   lint {
-    abortOnError = false
+    abortOnError = true
   }
 }
 

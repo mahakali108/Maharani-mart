@@ -480,6 +480,8 @@ private fun CatalogHeader(
         ),
         verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
       ) {
+        CatalogTabStrip(selected = state.tab, onSelect = onSelectTab)
+
         if (state.tab == CatalogTab.PRODUCTS) {
           MaharaniSearchBar(
             value = state.query.search,
@@ -513,7 +515,6 @@ private fun CatalogHeader(
           )
         }
 
-        CatalogTabStrip(selected = state.tab, onSelect = onSelectTab)
       }
       HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }

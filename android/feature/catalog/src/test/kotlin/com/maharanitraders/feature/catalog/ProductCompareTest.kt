@@ -58,14 +58,22 @@ class ProductCompareTest {
   )
 
   @Test
-  fun `the tray takes three products and refuses a fourth`() {
+  fun `published zero GST is not missing`() {
+    val zeroTax = detail("zero", "B", pack("p", 500)).copy(gstPercent = 0.0)
+    assertThat(ProductCompare.rows(listOf(zeroTax)).first { it.label == "GST" }.values).containsExactly("0%")
+  }
+
+  @Test
+  fun `the tray takes four products and refuses a fifth`() {
     var selected = ProductCompare.toggle(emptySet(), "a")
     selected = ProductCompare.toggle(selected, "b")
     selected = ProductCompare.toggle(selected, "c")
     assertThat(selected).containsExactly("a", "b", "c")
 
-    // A refused fourth selection is NOT a silent swap: the tray stays as it was.
-    assertThat(ProductCompare.toggle(selected, "d")).containsExactly("a", "b", "c")
+    selected = ProductCompare.toggle(selected, "d")
+    assertThat(selected).containsExactly("a", "b", "c", "d")
+    // Refusal must not silently replace an existing selection.
+    assertThat(ProductCompare.toggle(selected, "e")).containsExactly("a", "b", "c", "d")
   }
 
   @Test

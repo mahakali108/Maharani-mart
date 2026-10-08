@@ -49,7 +49,7 @@ fun MaharaniSearchBar(
   onValueChange: (String) -> Unit,
   onSubmit: () -> Unit,
   modifier: Modifier = Modifier,
-  placeholder: String = "Search products, brands...",
+  placeholder: String = "Search products, brands, categories…",
   loading: Boolean = false,
   enabled: Boolean = true,
   onBar: Boolean = false,

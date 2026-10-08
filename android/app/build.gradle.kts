@@ -119,10 +119,8 @@ android {
   }
 
   lint {
-    // Phase B: lint RUNS in CI and reports, but does not fail the build while the
-    // shell is still being built out. Flipped to abortOnError = true in Phase H
-    // (docs/NATIVE_ANDROID_MIGRATION_PLAN.md §5).
-    abortOnError = false
+    // Acceptance gate: actual lint errors must fail CI.
+    abortOnError = true
     warningsAsErrors = false
     disable += listOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
   }
@@ -190,4 +188,11 @@ dependencies {
   // androidx.test.ext:junit / espresso-core scaffolding (no androidTest source
   // set exists anywhere). Re-add them WITH the first instrumented test —
   // test-only artifacts never reach the APK either way.
+}
+
+// Rendered Compose regressions run only in the JVM test APK/environment.
+dependencies {
+  testImplementation("org.robolectric:robolectric:4.16.1")
+  testImplementation("androidx.compose.ui:ui-test-junit4:1.10.3")
+  debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.3")
 }

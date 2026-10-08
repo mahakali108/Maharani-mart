@@ -383,7 +383,11 @@ jobs:
           PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
                  --json number --jq '.[0].number' 2>/dev/null)
           if [ -z "$PR" ] || [ "$PR" = "null" ]; then
-            echo "no open pull request for $GITHUB_REF_NAME — nothing to post"
+            # Session branches may intentionally have no duplicate PR. Keep
+            # diagnostics accessible via api.github.com, not blocked blob hosts.
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+              -f body="$(printf '### Android CI diagnostics\n\n```\n'; head -c 55000 /tmp/diagnostics.txt; printf '\n```\n')" \
+              || echo "::warning::could not post commit diagnostics"
             exit 0
           fi
           {

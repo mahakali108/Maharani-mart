@@ -1,0 +1,57 @@
+name: Android artifact evidence
+
+on:
+  workflow_run:
+    workflows: ['Native Android Debug APK']
+    types: [completed]
+  push:
+    paths:
+      - '.github/workflows/android-evidence.yml'
+      - 'scripts/android-ci-evidence.py'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Completed native build run to inspect
+        required: true
+        default: '37741621723'
+      baseline_run_id:
+        description: Completed baseline build run
+        required: true
+        default: '37730602450'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  evidence:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'arena/ff1279ad-maharani-mart' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+      - name: Download actual artifacts on runner
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37741621723' }}
+          BASELINE_RUN_ID: ${{ inputs.baseline_run_id || '37730602450' }}
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ && "$BASELINE_RUN_ID" =~ ^[0-9]+$ ]]
+          gh run view "$RUN_ID" --json status,conclusion,headSha > /tmp/run.json
+          gh run view "$BASELINE_RUN_ID" --json status,conclusion,headSha > /tmp/baseline.json
+          gh run download "$RUN_ID" --dir /tmp/current
+          gh run download "$BASELINE_RUN_ID" --dir /tmp/baseline
+      - name: Measure, inspect reports and publish evidence through GitHub API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id || '37741621723' }}
+          BASELINE_RUN_ID: ${{ inputs.baseline_run_id || '37730602450' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/android-ci-evidence.py /tmp/current /tmp/baseline /tmp/run.json /tmp/baseline.json > /tmp/evidence.md
+          cat /tmp/evidence.md >> "$GITHUB_STEP_SUMMARY"
+          SHA=$(python3 -c 'import json;print(json.load(open("/tmp/run.json"))["headSha"])')
+          gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/comments" -f body="$(cat /tmp/evidence.md)"

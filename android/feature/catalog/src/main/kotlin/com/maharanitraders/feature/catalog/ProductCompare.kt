@@ -47,8 +47,8 @@ const val NOT_PUBLISHED = "Not published"
  */
 object ProductCompare {
 
-  /** Compare at most three products: more will not fit a phone, side by side. */
-  const val MAX_PRODUCTS = 3
+  /** Compare up to four products in the horizontally scrollable table. */
+  const val MAX_PRODUCTS = 4
 
   /** Add (or remove) one product, refusing to grow past [MAX_PRODUCTS]. */
   fun toggle(selected: Set<String>, productId: String): Set<String> {
@@ -106,7 +106,7 @@ object ProductCompare {
 
   private fun gst(detail: ProductDetail): String {
     val value = detail.gstPercent
-    if (value <= 0.0) return NOT_PUBLISHED
+    if (!value.isFinite() || value < 0.0) return NOT_PUBLISHED
     val rounded = Math.round(value * 100.0) / 100.0
     return "${trimFraction(rounded)}%"
   }

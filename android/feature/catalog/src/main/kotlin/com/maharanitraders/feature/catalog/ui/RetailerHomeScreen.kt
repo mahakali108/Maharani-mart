@@ -158,6 +158,8 @@ fun RetailerHomeScreen(
   onOpenDestination: (String) -> Unit = {},
   /** The shortcuts to draw. Empty (the default) draws no shortcut grid at all. */
   quickActions: List<HomeQuickAction> = emptyList(),
+  onOpenBanner: ((String) -> Unit)? = null,
+  onOpenOffers: (() -> Unit)? = null,
   /** The shop's own numbers: Coins, the last order, recently viewed products. */
   dashboard: HomeDashboard? = null,
   onRetryDashboard: () -> Unit = {},
@@ -194,6 +196,8 @@ fun RetailerHomeScreen(
     onOpenProduct = onOpenProduct,
     onOpenDestination = onOpenDestination,
     quickActions = quickActions,
+    onOpenBanner = onOpenBanner,
+    onOpenOffers = onOpenOffers,
     dashboard = dashboard,
     onRetryDashboard = onRetryDashboard,
     cartLineCount = cartLineCount,
@@ -228,6 +232,8 @@ fun HomeContent(
   onOpenProduct: (String) -> Unit,
   onOpenDestination: (String) -> Unit = {},
   quickActions: List<HomeQuickAction> = emptyList(),
+  onOpenBanner: ((String) -> Unit)? = null,
+  onOpenOffers: (() -> Unit)? = null,
   dashboard: HomeDashboard? = null,
   onRetryDashboard: () -> Unit = {},
   cartLineCount: Int? = null,
@@ -303,11 +309,23 @@ fun HomeContent(
             }
           }
 
-          item(span = full) {
-            if (home.banners.isNotEmpty()) {
-              BannerCarousel(banners = home.banners)
-            } else {
-              WelcomePanel()
+          // Admin banner titles also form a compact information rail. No local
+          // campaign text, balances or inferred discounts are inserted here.
+          if (home.banners.isNotEmpty()) {
+            item(span = full) {
+              LazyRow(horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                items(home.banners, key = { it.id }) { banner ->
+                  Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = RoundedCornerShape(MaharaniDimens.radiusPill),
+                  ) {
+                    Text(banner.title, style = MaterialTheme.typography.labelMedium,
+                      maxLines = 1, overflow = TextOverflow.Ellipsis,
+                      modifier = Modifier.width(260.dp).padding(horizontal = 12.dp, vertical = 8.dp))
+                  }
+                }
+              }
             }
           }
 
@@ -322,6 +340,117 @@ fun HomeContent(
                 cartLineCount = cartLineCount,
               )
             }
+          }
+
+          item(span = full) {
+            if (home.banners.isNotEmpty()) {
+              BannerCarousel(banners = home.banners, onOpenRoute = onOpenBanner)
+            } else {
+              WelcomePanel()
+            }
+          }
+
+          if (home.categories.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Shop by category",
+                  subtitle = "Everything the shop stocks, by aisle",
+                  actionLabel = "View all",
+                  onAction = { onOpenDirectory(CatalogTab.CATEGORIES) },
+                )
+                CategoryRail(categories = home.categories, onSelect = onOpenCategory)
+              }
+            }
+          }
+
+          if (dashboard?.offers?.isNotEmpty() == true && onOpenOffers != null) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(title = "Offers & campaigns", actionLabel = "View all", onAction = onOpenOffers)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap)) {
+                  items(dashboard.offers, key = { it.id }) { offer ->
+                    Surface(
+                      onClick = onOpenOffers,
+                      color = MaterialTheme.colorScheme.secondaryContainer,
+                      contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                      shape = RoundedCornerShape(MaharaniDimens.radiusCard),
+                      modifier = Modifier.width(240.dp).heightIn(min = MaharaniDimens.touchTarget),
+                    ) {
+                      Column(Modifier.padding(MaharaniDimens.spaceMd), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(offer.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        offer.description?.takeIf { it.isNotBlank() }?.let {
+                          Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        com.maharanitraders.core.designsystem.IsoDateDisplay.formatDate(offer.endsAt)?.let {
+                          Text("Ends $it", style = MaterialTheme.typography.labelSmall)
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          if (home.brands.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Featured brands",
+                  subtitle = "The houses you stock",
+                  actionLabel = "View all",
+                  onAction = { onOpenDirectory(CatalogTab.BRANDS) },
+                )
+                BrandRail(brands = home.brands, onSelect = onOpenBrand)
+              }
+            }
+          }
+
+          state.recentError?.let { message ->
+            item(span = full) {
+              InlineErrorBanner(message = "Newest products: $message", offline = false, onRetry = onRetry)
+            }
+          }
+
+          if (state.recent.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Recently added",
+                  subtitle = "Newest in your catalogue",
+                )
+                RecentRail(
+                  products = state.recent,
+                  onOpenProduct = onOpenProduct,
+                  isFavorite = isFavorite,
+                  isFavoritePending = isFavoritePending,
+                  onToggleFavorite = onToggleFavorite,
+                  onQuickAddToCart = onQuickAddToCart,
+                  quickAddPackId = quickAddPackId,
+                )
+              }
+            }
+          }
+
+          if (home.products.isNotEmpty()) {
+            item(span = full) {
+              SectionHeader(
+                title = "Browse products",
+                subtitle = "Wholesale rates priced for your shop",
+                actionLabel = "View all",
+                onAction = onOpenCatalog,
+              )
+            }
+            productCardItems(
+              products = home.products,
+              onOpenProduct = onOpenProduct,
+              isFavorite = isFavorite,
+              isFavoritePending = isFavoritePending,
+              onToggleFavorite = onToggleFavorite,
+              onQuickAddToCart = onQuickAddToCart,
+              quickAddPackId = quickAddPackId,
+            )
           }
 
           // The shop's own numbers. Each card renders only when the server
@@ -376,74 +505,6 @@ fun HomeContent(
                 }
               }
             }
-          }
-
-          if (home.categories.isNotEmpty()) {
-            item(span = full) {
-              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                SectionHeader(
-                  title = "Shop by category",
-                  subtitle = "Everything the shop stocks, by aisle",
-                  actionLabel = "View all",
-                  onAction = { onOpenDirectory(CatalogTab.CATEGORIES) },
-                )
-                CategoryRail(categories = home.categories, onSelect = onOpenCategory)
-              }
-            }
-          }
-
-          if (home.brands.isNotEmpty()) {
-            item(span = full) {
-              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                SectionHeader(
-                  title = "Featured brands",
-                  subtitle = "The houses you stock",
-                  actionLabel = "View all",
-                  onAction = { onOpenDirectory(CatalogTab.BRANDS) },
-                )
-                BrandRail(brands = home.brands, onSelect = onOpenBrand)
-              }
-            }
-          }
-
-          if (state.recent.isNotEmpty()) {
-            item(span = full) {
-              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                SectionHeader(
-                  title = "Recently added",
-                  subtitle = "Newest in your catalogue",
-                )
-                RecentRail(
-                  products = state.recent,
-                  onOpenProduct = onOpenProduct,
-                  isFavorite = isFavorite,
-                  isFavoritePending = isFavoritePending,
-                  onToggleFavorite = onToggleFavorite,
-                  onQuickAddToCart = onQuickAddToCart,
-                  quickAddPackId = quickAddPackId,
-                )
-              }
-            }
-          }
-
-          if (home.products.isNotEmpty()) {
-            item(span = full) {
-              SectionHeader(
-                title = "Browse products",
-                subtitle = "Wholesale rates priced for your shop",
-                actionLabel = "View all",
-                onAction = onOpenCatalog,
-              )
-            }
-            productCardItems(
-              products = home.products,
-              onOpenProduct = onOpenProduct,
-              isFavorite = isFavorite,
-              isFavoritePending = isFavoritePending,
-              onToggleFavorite = onToggleFavorite,
-              onQuickAddToCart = onQuickAddToCart,
-              quickAddPackId = quickAddPackId,
-            )
           }
 
           item(span = full) {
@@ -657,36 +718,19 @@ private fun QuickActionGrid(
   cartLineCount: Int?,
   modifier: Modifier = Modifier,
 ) {
-  Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .testTag(HomeScreenTags.QUICK_ACTIONS),
-    verticalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
+  LazyRow(
+    modifier = modifier.fillMaxWidth().testTag(HomeScreenTags.QUICK_ACTIONS),
+    horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
   ) {
-    actions.chunked(4).forEach { row ->
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
-      ) {
-        row.forEach { action ->
-          QuickActionTile(
-            label = action.label,
-            tone = action.tone,
-            onClick = { onOpenDestination(action.route) },
-            // Only the cart tile badges, and only with the server's own count.
-            badgeCount = if (action.icon == HomeQuickActionIcon.CART) cartLineCount else null,
-            modifier = Modifier
-              .weight(1f)
-              .testTag(HomeScreenTags.quickAction(action.route)),
-            glyph = { tint -> QuickActionGlyph(action.icon, tint) },
-          )
-        }
-        // Keeps the last row's tiles the same width as every other row, rather
-        // than stretching three tiles across four columns.
-        repeat(4 - row.size) {
-          Box(modifier = Modifier.weight(1f))
-        }
-      }
+    items(actions, key = { it.route }) { action ->
+      QuickActionTile(
+        label = action.label,
+        tone = action.tone,
+        onClick = { onOpenDestination(action.route) },
+        badgeCount = if (action.icon == HomeQuickActionIcon.CART) cartLineCount else null,
+        modifier = Modifier.width(80.dp).testTag(HomeScreenTags.quickAction(action.route)),
+        glyph = { tint -> QuickActionGlyph(action.icon, tint) },
+      )
     }
   }
 }

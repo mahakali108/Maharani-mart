@@ -1,6 +1,7 @@
 package com.maharanitraders.feature.catalog.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -649,7 +650,7 @@ private fun DetailBottomBar(
           onClick = onAddToCart,
           enabled = !addingToCart && !cartLoading && !cartNeedsRefresh && pack.moq > 0 && pack.unitPricePaise != null &&
             pack.availability == PackAvailability.IN_STOCK,
-          modifier = Modifier.fillMaxWidth().testTag(ProductDetailTags.ADD_TO_CART),
+          modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget).testTag(ProductDetailTags.ADD_TO_CART),
         ) {
           if (addingToCart || cartLoading) CircularProgressIndicator(strokeWidth = 2.dp)
           else Text("Add ${pack.moq} pieces to cart")

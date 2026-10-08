@@ -181,3 +181,24 @@ describe('admin brand creation', () => {
     expect(audit[0]).toMatchObject({ action: 'insert', table_name: 'brands', changed_by: adminId });
   });
 });
+
+
+describe.each(['categories', 'brands'] as const)('%s edit and visibility through RLS', (table) => {
+  it('publishes an admin edit to retailers and hides deactivated rows', async () => {
+    const initial = uniqueName('Before edit');
+    const updated = uniqueName('After edit');
+    const id = await as(db, adminId, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(`insert into ${table} (name) values ($1) returning id`, [initial]);
+      return rows[0]!.id;
+    });
+    await as(db, adminId, (tx) => tx.query(`update ${table} set name = $1 where id = $2`, [updated, id]));
+    const visible = await as(db, retailerId, (tx) => tx.query<{ name: string }>(`select name from ${table} where id = $1`, [id]));
+    expect(visible.rows[0]?.name).toBe(updated);
+    await as(db, adminId, (tx) => tx.query(`update ${table} set is_active = false where id = $1`, [id]));
+    const hidden = await as(db, retailerId, (tx) => tx.query(`select id from ${table} where id = $1`, [id]));
+    expect(hidden.rows).toEqual([]);
+    await as(db, adminId, (tx) => tx.query(`update ${table} set is_active = true where id = $1`, [id]));
+    const restored = await as(db, retailerId, (tx) => tx.query(`select id from ${table} where id = $1`, [id]));
+    expect(restored.rows).toHaveLength(1);
+  });
+});
