@@ -254,34 +254,38 @@ jobs:
           cat /tmp/size-report.md >> "$GITHUB_STEP_SUMMARY"
 
       # Best effort only: proves what a device would actually download from
-      # Play (bundletool splits the AAB per ABI/density/language). Any failure
-      # here warns and moves on — it must never turn a green build red.
+      # Play (bundletool splits the AAB per ABI/density/language). Every code
+      # path — success or failure — appends its evidence to the size report so
+      # a silent skip is impossible; failure warns and moves on and never
+      # turns a green build red.
       - name: Estimate Play delivery size with bundletool (best effort)
         run: |
           set +e
           BT_VERSION=1.18.1
-          curl -fsSL -o /tmp/bundletool.jar \
-            "https://github.com/google/bundletool/releases/download/${BT_VERSION}/bundletool-all-${BT_VERSION}.jar"
-          if [ ! -s /tmp/bundletool.jar ]; then
-            echo "::warning::bundletool unavailable — skipping Play-delivery measurement"
-            exit 0
-          fi
-          AAB=$(ls android/app/build/outputs/bundle/release/*.aab | head -1)
-          java -jar /tmp/bundletool.jar build-apks \
-            --bundle="$AAB" --output=/tmp/app-device.apks --overwrite \
-            --ks="$HOME/.android/debug.keystore" --ks-pass pass:android \
-            --ks-key-alias androiddebugkey --key-pass pass:android
-          if [ -f /tmp/app-device.apks ]; then
-            {
-              echo ""
-              echo "### Play delivery estimate (bundletool)"
-              echo ""
-              echo '```'
+          {
+            echo ""
+            echo "### Play delivery estimate (bundletool ${BT_VERSION})"
+            echo ""
+            echo '```'
+            curl -fsSL -o /tmp/bundletool.jar \
+              "https://github.com/google/bundletool/releases/download/${BT_VERSION}/bundletool-all-${BT_VERSION}.jar"
+            echo "curl exit: $?  jar bytes: $(stat -c%s /tmp/bundletool.jar 2>/dev/null || echo 0)"
+            ls -la "$HOME/.android/" 2>&1 | head -5
+            AAB=$(ls android/app/build/outputs/bundle/release/*.aab 2>/dev/null | head -1)
+            echo "bundle: $AAB"
+            java -jar /tmp/bundletool.jar build-apks \
+              --bundle="$AAB" --output=/tmp/app-device.apks --overwrite \
+              --ks="$HOME/.android/debug.keystore" --ks-pass pass:android \
+              --ks-key-alias androiddebugkey --key-pass pass:android 2>&1
+            echo "build-apks exit: $?"
+            if [ -f /tmp/app-device.apks ]; then
               java -jar /tmp/bundletool.jar get-size total --apks=/tmp/app-device.apks 2>&1
-              echo '```'
-              echo ""
-              echo "(device-configuration split set; a real device receives strictly less than the universal APK)"
-            } | tee -a /tmp/size-report.md
+              echo "get-size exit: $?"
+            fi
+            echo '```'
+          } | tee -a /tmp/size-report.md
+          if ! grep -q "get-size exit: 0" /tmp/size-report.md; then
+            echo "::warning::bundletool could not estimate Play delivery size — see the size report for its exact error"
           fi
           exit 0
 

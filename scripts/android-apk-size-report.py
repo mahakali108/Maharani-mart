@@ -209,6 +209,26 @@ def render_aab_splits(path: str) -> list[str]:
         "than the numbers above."
     )
     out.append("")
+    out.append("Estimated per-device delivery (base code + resources + ONE ABI slice; density/locale splits shrink this further):")
+    out.append("")
+    with zipfile.ZipFile(path) as zf:
+        entries = [zi for zi in zf.infolist() if not zi.is_dir()]
+        fixed = sum(
+            zi.compress_size
+            for zi in entries
+            if "/lib/" not in zi.filename
+            and not zi.filename.startswith("BUNDLE-METADATA")
+        )
+        abis: dict[str, int] = defaultdict(int)
+        for zi in entries:
+            parts = zi.filename.split("/")
+            if len(parts) >= 4 and parts[1] == "lib":
+                abis[parts[2]] += zi.compress_size
+        for abi, comp in sorted(abis.items()):
+            out.append(f"- ~{(fixed + comp) / 1_000_000:.2f} MB to an **{abi}** device ({comp:,} bytes of native code)")
+        if not abis:
+            out.append(f"- ~{fixed / 1_000_000:.2f} MB to any device (no native code)")
+    out.append("")
     return out
 
 
