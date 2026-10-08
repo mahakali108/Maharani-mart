@@ -87,7 +87,12 @@ class PremiumSurfaceRenderTest {
    * the acceptance criteria is covered too.
    */
   private object Widths {
-    const val NARROW_360 = "w360dp-h640dp-normal-long-notround-any-xhdpi-keyshidden-nonav"
+    // 360dp is the narrowest width still in wide use. The height is set to 800dp
+    // (taller than the 640dp AOSP small-phone) so the LazyVerticalGrid composes
+    // enough rows for the deals rail to be in the tree even on the narrowest
+    // width — otherwise Robolectric's lazy layout would skip it and the test
+    // would flake on viewport height rather than width.
+    const val NARROW_360 = "w360dp-h800dp-normal-long-notround-any-xhdpi-keyshidden-nonav"
     const val MEDIUM_393 = "w393dp-h851dp-normal-long-notround-any-440dpi-keyshidden-nonav"
     const val WIDE_412 = "w412dp-h892dp-normal-long-notround-any-420dpi-keyshidden-nonav"
   }
