@@ -32,6 +32,7 @@ import {
   toMobileBrands,
   toMobileCategories,
   toMobileCatalogProducts,
+  toMobileHomeSchemes,
   type MobileBanner,
   type MobileBannerRow,
   type MobileBrandRow,
@@ -40,7 +41,9 @@ import {
   type MobileCatalogFilters,
   type MobileCatalogProduct,
   type MobileCategoryRow,
+  type MobileHomeScheme,
   type MobilePriceTier,
+  type MobileSchemeRow,
 } from '@/lib/mobile/catalog';
 import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 import type { MobileSession } from '@/lib/mobile/auth';
@@ -453,16 +456,41 @@ export interface MobileHome {
   /** Discovery rail: the first catalogue batch in the default sort. */
   products: MobileCatalogProduct[];
   nextCursor: string | null;
+  /**
+   * The admin's live offers (schemes), in-window and active.
+   *
+   * The web home (`lib/retailer/home-data.ts`) has always carried these; the
+   * mobile home did not, which is why the native shop had banners and categories
+   * but no offers rail at all. Same rows, same scheduler, same honesty: an empty
+   * list means no offer is live right now.
+   */
+  schemes: MobileHomeScheme[];
+  /**
+   * True when the scheme read itself FAILED, as opposed to returning nothing.
+   *
+   * The two must stay distinguishable: an empty list is "no offer is running"
+   * (the rail is simply not drawn), while a failed read must not let the app
+   * announce that the shop has no offers. A scheme outage never takes the home
+   * down — banners, taxonomy and the catalogue batch are still returned.
+   */
+  schemesUnavailable: boolean;
 }
 
+/** The web home's own offer cap: the six soonest-ending live schemes. */
+const MOBILE_HOME_SCHEME_LIMIT = 6;
+
 /**
- * The retailer home payload for Phase D: real banners, real taxonomy and a real
- * catalogue batch.
+ * The retailer home payload: real banners, real taxonomy, the admin's live
+ * offers and a real catalogue batch.
  *
- * Deliberately NOT included yet — commerce reads have dedicated Phase E
- * endpoints, and adding summaries here would duplicate responses without a
- * home contract. Coins wallet/history and schemes belong to later work. The
- * home remains a catalogue/discovery payload, not a second commerce API.
+ * DELIBERATELY NOT HERE: commerce reads have dedicated endpoints, and the
+ * Offers/Deals/Best-sellers RAILS are ordinary catalogue batches the app fetches
+ * through `GET /catalog/products` (`offers=1`, `sort=frequent`) — the same tested
+ * list path, priced and paginated by the server. Adding them here would
+ * duplicate that response inside a discovery payload. The schemes below are here
+ * because they have no list endpoint of their own on the home path: they are the
+ * merchandising rows the admin published, and the ticker/offers rail reads them
+ * from the same answer as the banners.
  */
 export async function loadMobileHome(
   session: MobileSession,
@@ -470,8 +498,9 @@ export async function loadMobileHome(
   nowMs: number = Date.now()
 ): Promise<MobileHome> {
   const supabase = retailerSupabase(session);
+  const nowIso = new Date(nowMs).toISOString();
 
-  const [{ data: retailer }, { data: bannerRows }, taxonomy] = await Promise.all([
+  const [{ data: retailer }, { data: bannerRows }, taxonomy, schemeResult] = await Promise.all([
     supabase.from('retailers').select('area_id').eq('id', session.userId).maybeSingle<AreaRow>(),
     // Same narrowing as the web home: active rows in the caller's area. The
     // IST schedule window is applied below by `isBannerVisible`, the one
@@ -486,6 +515,26 @@ export async function loadMobileHome(
     // filter scope) and nothing else: unlike the catalogue panes, home still
     // returns banners and the product rail, so it does not fail as a whole.
     loadTaxonomyScope(supabase).catch(() => null),
+    // Active + in-window offers, ordered by soonest-ending first: exactly the
+    // web home's read (`lib/retailer/home-data.ts`), so a scheme the storefront
+    // shows is a scheme the app shows. Wrapped so a thrown read degrades to
+    // `schemesUnavailable` instead of taking banners and taxonomy down with it.
+    (async (): Promise<{ data: MobileSchemeRow[] | null; error: { message: string } | null }> => {
+      try {
+        const result = await supabase
+          .from('schemes')
+          .select('id, name, description, is_festival, starts_at, ends_at')
+          .eq('is_active', true)
+          .lte('starts_at', nowIso)
+          .gte('ends_at', nowIso)
+          .order('ends_at')
+          .limit(MOBILE_HOME_SCHEME_LIMIT)
+          .returns<MobileSchemeRow[]>();
+        return { data: result.data, error: result.error };
+      } catch (cause) {
+        return { data: null, error: { message: cause instanceof Error ? cause.message : 'unreadable' } };
+      }
+    })(),
   ]);
 
   const areaId = retailer?.area_id ?? null;
@@ -529,5 +578,7 @@ export async function loadMobileHome(
     brands: toMobileBrands(taxonomy?.brandRows ?? [], taxonomy?.brandCounts ?? null),
     products: toMobileCatalogProducts(batch.cards),
     nextCursor: batch.nextCursor,
+    schemes: schemeResult.error ? [] : toMobileHomeSchemes(schemeResult.data ?? []),
+    schemesUnavailable: !!schemeResult.error,
   };
 }

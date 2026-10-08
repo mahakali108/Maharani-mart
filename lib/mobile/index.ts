@@ -75,6 +75,7 @@ export {
   toMobileCategories,
   toMobileBrands,
   toMobileBanners,
+  toMobileHomeSchemes,
 } from '@/lib/mobile/catalog';
 export type {
   MobileAvailability,
@@ -84,9 +85,27 @@ export type {
   MobileCatalogCategory,
   MobileCatalogBrand,
   MobileBanner,
+  MobileHomeScheme,
+  MobileSchemeRow,
   MobilePriceTier,
   ParsedCatalogQuery,
 } from '@/lib/mobile/catalog';
+
+// Cross-entity search suggestions (products, pack barcodes, brands, categories).
+// `search-service.ts` is server-only: it reads through the caller's RLS client.
+export {
+  MOBILE_SEARCH_MIN_TERM,
+  MOBILE_SEARCH_PRODUCT_LIMIT,
+  MOBILE_SEARCH_BRAND_LIMIT,
+  MOBILE_SEARCH_CATEGORY_LIMIT,
+} from '@/lib/mobile/search-service';
+export type {
+  MobileSearchMatchKind,
+  MobileSearchProduct,
+  MobileSearchBrand,
+  MobileSearchCategory,
+  MobileSearchSuggestions,
+} from '@/lib/mobile/search-service';
 
 // Phase C — authentication. The GoTrue-facing clients live in
 // `clients.ts` rather than in `supabase.ts`, which stays strictly

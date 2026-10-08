@@ -9,6 +9,8 @@ import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.CatalogQuery
 import com.maharanitraders.core.model.CatalogSort
 import com.maharanitraders.core.model.ProductDetail
+import com.maharanitraders.core.model.SearchSuggestion
+import com.maharanitraders.core.model.SearchSuggestions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -79,6 +81,37 @@ data class CatalogUiState(
   val brandLabel: String? = null,
   /** Message from a failed favourite toggle, for a snackbar. */
   val actionMessage: String? = null,
+
+  // -----------------------------------------------------------------------
+  // Filter sheet (see CatalogFilters)
+  // -----------------------------------------------------------------------
+
+  /** True while the bottom-sheet filter UI is open. */
+  val filtersOpen: Boolean = false,
+  /**
+   * Why the last Apply was refused, or null.
+   *
+   * A refusal is shown INSTEAD of reloading: sending a bound the server would
+   * drop (`minPrice=abc`) would render an unfiltered list behind a control that
+   * looks applied, which is the exact failure this sheet must not have.
+   */
+  val filterError: String? = null,
+
+  // -----------------------------------------------------------------------
+  // Cross-entity search suggestions
+  // -----------------------------------------------------------------------
+
+  /** The latest suggestion answer. [SearchSuggestions.NONE] before the first. */
+  val suggestions: SearchSuggestions = SearchSuggestions.NONE,
+  val suggestionsLoading: Boolean = false,
+  /**
+   * A failed suggestion read. Kept strictly apart from an empty answer: the
+   * server not answering must never render as "no match" (and the product list
+   * below keeps working, because it is a different request).
+   */
+  val suggestionsError: String? = null,
+  /** Whether the suggestion panel is on screen. The shopper dismisses it. */
+  val suggestionsVisible: Boolean = false,
 
   // -----------------------------------------------------------------------
   // Product comparison (see ProductCompare)
@@ -193,6 +226,7 @@ class CatalogViewModel @Inject constructor(
   private var searchJob: Job? = null
   private var listJob: Job? = null
   private var directoryJob: Job? = null
+  private var suggestionJob: Job? = null
 
   /**
    * Details already read for the comparison tray, keyed by product id.
@@ -223,7 +257,15 @@ class CatalogViewModel @Inject constructor(
     val trimmed = term.trim()
     if (trimmed.isEmpty()) return
     searchJob?.cancel()
-    _state.update { it.copy(query = it.query.copy(search = trimmed), tab = CatalogTab.PRODUCTS) }
+    suggestionJob?.cancel()
+    _state.update {
+      it.copy(
+        query = it.query.copy(search = trimmed),
+        tab = CatalogTab.PRODUCTS,
+        suggestionsVisible = false,
+        suggestionsLoading = false,
+      )
+    }
     viewModelScope.launch { history.recordSearch(trimmed) }
     reload()
   }
@@ -356,7 +398,14 @@ class CatalogViewModel @Inject constructor(
    */
   fun selectTab(tab: CatalogTab) {
     if (_state.value.tab == tab) return
-    _state.update { it.copy(tab = tab, directoryFilter = "") }
+    suggestionJob?.cancel()
+    // The panel is a PRODUCTS surface: the directory panes have their own
+    // on-device name filter. Hiding it here is what stops a shopper who typed on
+    // Products, switched to Brands and switched back from being greeted by a
+    // suggestion panel for a term that is no longer in the field.
+    _state.update {
+      it.copy(tab = tab, directoryFilter = "", suggestionsVisible = false, suggestionsLoading = false)
+    }
   }
 
   /** Narrow the directory panes to names the server already sent. No request. */
@@ -429,6 +478,129 @@ class CatalogViewModel @Inject constructor(
       delay(SEARCH_DEBOUNCE_MS)
       reload()
     }
+    loadSuggestions(value)
+  }
+
+  /**
+   * Read cross-entity suggestions for a typed term.
+   *
+   * Debounced separately from the product list, because the two answers are used
+   * differently: suggestions are a typing aid and are cheap to drop, while the
+   * list is the result set. A stale answer is DISCARDED by comparing the term the
+   * server echoed (`SearchSuggestions.query`, the sanitized term it matched) with
+   * what is in the field now — without that guard a slow response for "ri" lands
+   * after "rice" and the panel contradicts the list underneath it.
+   *
+   * A failure sets [CatalogUiState.suggestionsError] and leaves the list alone;
+   * it is never allowed to read as "nothing matches".
+   */
+  fun loadSuggestions(term: String) {
+    suggestionJob?.cancel()
+    val trimmed = term.trim()
+    if (trimmed.length < SUGGESTION_MIN_TERM) {
+      _state.update {
+        it.copy(
+          suggestions = SearchSuggestions.NONE,
+          suggestionsLoading = false,
+          suggestionsError = null,
+          suggestionsVisible = false,
+        )
+      }
+      return
+    }
+    _state.update { it.copy(suggestionsLoading = true, suggestionsError = null, suggestionsVisible = true) }
+    suggestionJob = viewModelScope.launch {
+      delay(SUGGESTION_DEBOUNCE_MS)
+      when (val result = repository.loadSearchSuggestions(trimmed)) {
+        is AppResult.Success -> _state.update { state ->
+          val answer = result.value
+          val current = state.query.search.trim()
+          // The server sanitizes the term (it strips `%`, `_`, quotes and
+          // punctuation), so the echo is compared against the sanitized current
+          // term rather than the raw one — otherwise every answer would look
+          // stale and the panel would never appear.
+          if (!SearchSuggestionsMatch.isFor(answer, current)) {
+            // A dropped answer must not leave the panel spinning: whatever request
+            // is current now owns the loading flag, and if there is none the panel
+            // has to come to rest on what it already has.
+            return@update state.copy(suggestionsLoading = false)
+          }
+          state.copy(
+            suggestions = answer,
+            suggestionsLoading = false,
+            suggestionsError = null,
+            suggestionsVisible = true,
+          )
+        }
+
+        is AppResult.Failure -> _state.update { state ->
+          state.copy(
+            suggestionsLoading = false,
+            suggestionsError = result.error.message,
+          )
+        }
+      }
+    }
+  }
+
+  /** Hide the suggestion panel without clearing the term or the result list. */
+  fun dismissSuggestions() {
+    suggestionJob?.cancel()
+    _state.update { it.copy(suggestionsVisible = false, suggestionsLoading = false) }
+  }
+
+  /**
+   * Take a BRAND suggestion.
+   *
+   * The typed term is cleared on the way in: keeping "fortune" as a product
+   * search AND as a brand filter would intersect two constraints the shopper only
+   * ever meant as one, and can legitimately return nothing. The scope the shopper
+   * tapped is the scope that is applied — one state change, one catalogue read.
+   */
+  fun selectSuggestedBrand(brandId: String, label: String?) {
+    searchJob?.cancel()
+    suggestionJob?.cancel()
+    _state.update { state ->
+      state.copy(
+        tab = CatalogTab.PRODUCTS,
+        query = state.query.copy(search = "", brandId = brandId),
+        brandLabel = label ?: state.brands.firstOrNull { brand -> brand.id == brandId }?.name ?: state.brandLabel,
+        directoryFilter = "",
+        suggestions = SearchSuggestions.NONE,
+        suggestionsVisible = false,
+        suggestionsLoading = false,
+      )
+    }
+    reload()
+  }
+
+  /** Take a CATEGORY suggestion. Same reasoning as [selectSuggestedBrand]. */
+  fun selectSuggestedCategory(categoryId: String) {
+    searchJob?.cancel()
+    suggestionJob?.cancel()
+    _state.update { state ->
+      state.copy(
+        tab = CatalogTab.PRODUCTS,
+        query = state.query.copy(search = "", categoryId = categoryId),
+        directoryFilter = "",
+        suggestions = SearchSuggestions.NONE,
+        suggestionsVisible = false,
+        suggestionsLoading = false,
+      )
+    }
+    reload()
+  }
+
+  /**
+   * Take a PRODUCT suggestion: the screen opens the product, this only closes the
+   * panel and commits the term to the recent-search history (the shopper meant
+   * it — that is what makes the chips useful).
+   */
+  fun selectSuggestedProduct(productId: String) {
+    suggestionJob?.cancel()
+    val term = _state.value.query.search.trim()
+    if (term.isNotEmpty()) viewModelScope.launch { history.recordSearch(term) }
+    _state.update { it.copy(suggestionsVisible = false, suggestionsLoading = false) }
   }
 
   /**
@@ -441,6 +613,11 @@ class CatalogViewModel @Inject constructor(
    */
   fun submitSearch() {
     searchJob?.cancel()
+    // The IME action COMMITS the term: the result list is now the answer, so the
+    // typing aid goes away. Leaving it up would keep a second, narrower answer
+    // (six products, four brands) competing with the paginated list underneath.
+    suggestionJob?.cancel()
+    _state.update { it.copy(suggestionsVisible = false, suggestionsLoading = false) }
     rememberCurrentSearch()
     reload()
   }
@@ -466,10 +643,13 @@ class CatalogViewModel @Inject constructor(
    */
   fun selectCategory(categoryId: String?) {
     val changed = _state.value.query.categoryId != categoryId
+    suggestionJob?.cancel()
     _state.update {
       it.copy(
         tab = CatalogTab.PRODUCTS,
         query = it.query.copy(categoryId = categoryId),
+        suggestionsVisible = false,
+        suggestionsLoading = false,
       )
     }
     if (changed) reload()
@@ -530,8 +710,71 @@ class CatalogViewModel @Inject constructor(
   }
 
   fun clearFilters() {
-    _state.update { it.copy(query = CatalogQuery.DEFAULT, brandLabel = null) }
+    _state.update { it.copy(query = CatalogQuery.DEFAULT, brandLabel = null, filterError = null) }
     reload()
+  }
+
+  // ------------------------------------------------------------------ filters
+
+  /** Open the bottom-sheet filter UI on the filters that are ALREADY applied. */
+  fun openFilters() {
+    _state.update { it.copy(filtersOpen = true, filterError = null) }
+  }
+
+  fun closeFilters() {
+    _state.update { it.copy(filtersOpen = false, filterError = null) }
+  }
+
+  /**
+   * The draft the sheet should open with: the applied query, not a blank one.
+   *
+   * Deliberately NOT wired as the sheet's `initialDraft` source in the composable
+   * — the screen reads [CatalogUiState.query] and builds the draft from it, so the
+   * panel the shopper sees is derived from the same state the list was fetched
+   * with rather than from a second read of the ViewModel that could be one
+   * recomposition stale.
+   */
+  fun currentFilterDraft(): CatalogFilterDraft = CatalogFilterDraft.from(_state.value.query)
+
+  /**
+   * Apply the sheet.
+   *
+   * ONE state change and ONE catalogue read: every bound is folded into the query
+   * together, because applying them one field at a time would fire a request per
+   * field and let an obsolete response race the final one — the same burst that
+   * [applyInitialRequest] exists to prevent.
+   *
+   * A draft the server could not act on is REFUSED with the reason, and nothing
+   * is reloaded: the list on screen keeps its honest filter chips rather than
+   * silently becoming unfiltered behind a control that looks applied.
+   */
+  fun applyFilters(draft: CatalogFilterDraft) {
+    when (val outcome = draft.applyTo(_state.value.query)) {
+      is CatalogFilterOutcome.Refused -> _state.update { it.copy(filterError = outcome.message) }
+      is CatalogFilterOutcome.Apply -> {
+        val changed = outcome.query != _state.value.query
+        _state.update { it.copy(query = outcome.query, filtersOpen = false, filterError = null) }
+        // Nothing changed means nothing to re-read: the shopper opened the sheet,
+        // looked at it and applied what was already applied.
+        if (changed) reload()
+      }
+    }
+  }
+
+  /**
+   * The sheet's "Clear all".
+   *
+   * It clears the FILTERS, not the shopper's place: the search term, the
+   * category/brand scope and the sort survive, because "clear filters" on a
+   * category page that also throws away the category is a control that costs the
+   * shopper their navigation. [clearFilters] — the empty state's button — is the
+   * one that resets everything.
+   */
+  fun clearAllFilters() {
+    val next = _state.value.query.withAdvancedFiltersCleared()
+    val changed = next != _state.value.query
+    _state.update { it.copy(query = next, filterError = null) }
+    if (changed) reload()
   }
 
   /**
@@ -560,12 +803,19 @@ class CatalogViewModel @Inject constructor(
     brandId: String? = null,
     brandLabel: String? = null,
     tab: CatalogTab = CatalogTab.PRODUCTS,
+    /**
+     * Open already narrowed to the server's offer filter — the home Deals rail's
+     * "Shop offers". Folded into the SAME query update as everything else, so a
+     * deep link still costs one catalogue read.
+     */
+    offersOnly: Boolean = false,
   ) {
     val current = _state.value
     val nextQuery = current.query.copy(
       search = search.trim(),
       categoryId = categoryId,
       brandId = brandId,
+      offersOnly = offersOnly,
     )
     val nextLabel = if (brandId == null) {
       null
@@ -574,10 +824,19 @@ class CatalogViewModel @Inject constructor(
     }
     if (nextQuery == current.query && nextLabel == current.brandLabel && tab == current.tab) return
 
-    // The pending debounce (if the shopper is typing) belongs to the old query.
+    // The pending debounce (if the shopper is typing) belongs to the old query,
+    // and so does any suggestion panel still on screen.
     searchJob?.cancel()
+    suggestionJob?.cancel()
     _state.update {
-      it.copy(tab = tab, query = nextQuery, brandLabel = nextLabel, directoryFilter = "")
+      it.copy(
+        tab = tab,
+        query = nextQuery,
+        brandLabel = nextLabel,
+        directoryFilter = "",
+        suggestionsVisible = false,
+        suggestionsLoading = false,
+      )
     }
     // A search that arrived with a destination (the home screen's field, a
     // restored tab) is a committed search, so it earns a chip like any other.
@@ -655,6 +914,19 @@ class CatalogViewModel @Inject constructor(
 
   companion object {
     const val SEARCH_DEBOUNCE_MS = 300L
+
+    /**
+     * Suggestions are a typing aid, so they wait a little longer than the list
+     * before spending a request: the shopper is still typing, and a partial
+     * prefix would only be replaced by the next keystroke.
+     */
+    const val SUGGESTION_DEBOUNCE_MS = 220L
+
+    /**
+     * The server's own floor (`MOBILE_SEARCH_MIN_TERM`): below it the endpoint
+     * reads nothing and answers `searched: false`, so there is no request to make.
+     */
+    const val SUGGESTION_MIN_TERM = 2
 
     /** Keep the rendered list stable across batches. */
     fun dedupeById(existing: List<CatalogProduct>, incoming: List<CatalogProduct>): List<CatalogProduct> {

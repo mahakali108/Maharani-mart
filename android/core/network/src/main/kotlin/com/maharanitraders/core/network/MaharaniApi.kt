@@ -8,6 +8,7 @@ import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.CatalogBrandsDto
 import com.maharanitraders.core.network.dto.CatalogCategoriesDto
 import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.CatalogSearchDto
 import com.maharanitraders.core.network.dto.CartLineRequestDto
 import com.maharanitraders.core.network.dto.CartQuantityRequestDto
 import com.maharanitraders.core.network.dto.CheckoutQuoteDto
@@ -181,8 +182,42 @@ interface MaharaniApi {
      * priced and stocked exactly as it is everywhere else.
      */
     @Query("fav") favoritesOnly: String? = null,
+    /**
+     * The derived filters below are the ones the SERVER resolves against the
+     * price it computed for THIS retailer (`lib/mobile/catalog.ts` →
+     * `parseCatalogQuery`, applied in `lib/retailer/catalog-batches.ts`).
+     *
+     * None of them can be applied on the device: a price band, a discount floor
+     * or an MOQ ceiling compares against a rate that only exists after the
+     * retailer/area override and the slab table have been resolved, and pushing
+     * them into the query is what keeps the list the shopper sees identical to
+     * the list checkout would honour. Every one is nullable, and Retrofit omits
+     * nulls, so an unset filter is never sent as a zero bound.
+     */
+    @Query("minPrice") minPrice: String? = null,
+    @Query("maxPrice") maxPrice: String? = null,
+    @Query("discount") minDiscount: String? = null,
+    @Query("maxMoq") maxMoq: String? = null,
+    /** `1` restricts the page to rows carrying an offer or a real MRP discount. */
+    @Query("offers") offersOnly: String? = null,
+    /** `1` restricts the page to the admin's new-launch rows. */
+    @Query("new") newOnly: String? = null,
     @Query("cursor") cursor: String? = null,
   ): ApiEnvelope<List<CatalogProductDto>>
+
+  /**
+   * Cross-entity search suggestions: products (by name or product barcode),
+   * packs (by pack name or pack barcode, folded onto their parent product),
+   * brands and categories.
+   *
+   * This is the SAME four-read answer the web storefront's suggestion loader
+   * gives, and it is navigation-only: no price, stock or MOQ crosses this
+   * boundary, so a suggestion can never quote a number the priced row would
+   * contradict. A failed read is a 503 the caller must report as a failure —
+   * never as "no results".
+   */
+  @GET("api/mobile/v1/catalog/search")
+  suspend fun catalogSearch(@Query("q") search: String): ApiEnvelope<CatalogSearchDto>
 
   /**
    * One product with every active pack priced at its own MOQ.
@@ -202,12 +237,14 @@ interface MaharaniApi {
   suspend fun catalogBrands(): ApiEnvelope<CatalogBrandsDto>
 
   /**
-   * The retailer home payload: admin-published banners, the real category strip
-   * and the first catalogue batch.
+   * The retailer home payload: admin-published banners, the admin's LIVE offers,
+   * the real category and brand strips, and the first catalogue batch.
    *
-   * Cart and order history use dedicated Phase E endpoints and are NOT part of
-   * this discovery response. Coins wallet/history and schemes remain later
-   * work, and an empty `banners` list is a normal answer rather than a failure.
+   * Cart, order history, Coins and notifications use their own endpoints and are
+   * NOT part of this discovery response — the home dashboard reads them
+   * separately so one outage cannot blank the shop. An empty `banners` list and
+   * an empty `schemes` list are both normal answers rather than failures;
+   * `schemesUnavailable` is the flag that says the offer read itself failed.
    */
   @GET("api/mobile/v1/home")
   suspend fun retailerHome(): ApiEnvelope<RetailerHomeDto>

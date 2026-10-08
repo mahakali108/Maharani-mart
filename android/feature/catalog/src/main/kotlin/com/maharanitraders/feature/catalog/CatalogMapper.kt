@@ -4,21 +4,26 @@ import com.maharanitraders.core.model.CatalogBrand
 import com.maharanitraders.core.model.CatalogCategory
 import com.maharanitraders.core.model.CatalogPack
 import com.maharanitraders.core.model.CatalogProduct
+import com.maharanitraders.core.model.HomeScheme
 import com.maharanitraders.core.model.PackAvailability
 import com.maharanitraders.core.model.PriceTier
 import com.maharanitraders.core.model.ProductDetail
 import com.maharanitraders.core.model.ProductPackDetail
 import com.maharanitraders.core.model.PromoBanner
 import com.maharanitraders.core.model.RetailerHome
+import com.maharanitraders.core.model.SearchSuggestion
+import com.maharanitraders.core.model.SearchSuggestions
 import com.maharanitraders.core.network.dto.CatalogBrandDto
 import com.maharanitraders.core.network.dto.CatalogCategoryDto
 import com.maharanitraders.core.network.dto.CatalogPackDto
 import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.CatalogSearchDto
 import com.maharanitraders.core.network.dto.PriceTierDto
 import com.maharanitraders.core.network.dto.ProductDetailDto
 import com.maharanitraders.core.network.dto.ProductPackDetailDto
 import com.maharanitraders.core.network.dto.PromoBannerDto
 import com.maharanitraders.core.network.dto.RetailerHomeDto
+import com.maharanitraders.core.network.dto.MobileSchemeDto
 
 /**
  * Wire model to domain model, written out field by field.
@@ -92,13 +97,68 @@ object CatalogMapper {
     linkUrl = dto.linkUrl.orNullIfBlank(),
   )
 
+  /**
+   * One live offer row.
+   *
+   * The same DTO the offers screen decodes (`MobileSchemeDto`), so the home rail
+   * and that screen are reading one shape and cannot drift.
+   */
+  fun scheme(dto: MobileSchemeDto): HomeScheme = HomeScheme(
+    id = dto.id,
+    name = dto.name,
+    description = dto.description.orNullIfBlank(),
+    isFestival = dto.isFestival,
+    startsAt = dto.startsAt,
+    endsAt = dto.endsAt,
+  )
+
   fun home(dto: RetailerHomeDto): RetailerHome = RetailerHome(
     banners = dto.banners.map(::banner),
     categories = dto.categories.map(::category),
     brands = dto.brands.map(::brand),
     products = products(dto.products),
     nextCursor = dto.nextCursor.orNullIfBlank(),
+    schemes = dto.schemes.map(::scheme),
+    schemesUnavailable = dto.schemesUnavailable,
   )
+
+  /**
+   * One search-suggestion answer, flattened into the order the UI draws it:
+   * products first (what a shopper usually means), then categories, then brands.
+   *
+   * A row whose id or label came back blank is DROPPED rather than rendered as
+   * an unlabelled tap target — a suggestion the shopper cannot read is worse
+   * than one fewer suggestion.
+   */
+  fun searchSuggestions(dto: CatalogSearchDto): SearchSuggestions {
+    val products = dto.products.mapNotNull { row ->
+      val id = row.id.orNullIfBlank() ?: return@mapNotNull null
+      val label = row.name.orNullIfBlank() ?: return@mapNotNull null
+      SearchSuggestion.Product(
+        id = id,
+        label = label,
+        brandName = row.brandName.orNullIfBlank(),
+        packName = row.packName.orNullIfBlank(),
+        imageUrl = row.imageUrl.orNullIfBlank(),
+        matchedBarcode = row.matchKind.trim().lowercase() == "barcode",
+      )
+    }
+    val categories = dto.categories.mapNotNull { row ->
+      val id = row.id.orNullIfBlank() ?: return@mapNotNull null
+      val label = row.name.orNullIfBlank() ?: return@mapNotNull null
+      SearchSuggestion.Category(id = id, label = label, parentName = row.parentName.orNullIfBlank())
+    }
+    val brands = dto.brands.mapNotNull { row ->
+      val id = row.id.orNullIfBlank() ?: return@mapNotNull null
+      val label = row.name.orNullIfBlank() ?: return@mapNotNull null
+      SearchSuggestion.Brand(id = id, label = label, logoUrl = row.logoUrl.orNullIfBlank())
+    }
+    return SearchSuggestions(
+      query = dto.query.trim(),
+      searched = dto.searched,
+      suggestions = products + categories + brands,
+    )
+  }
 
   fun packDetail(dto: ProductPackDetailDto): ProductPackDetail = ProductPackDetail(
     packId = dto.packId,

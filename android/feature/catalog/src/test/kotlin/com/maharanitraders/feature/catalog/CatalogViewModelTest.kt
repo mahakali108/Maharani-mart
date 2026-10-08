@@ -3,6 +3,11 @@ package com.maharanitraders.feature.catalog
 import com.google.common.truth.Truth.assertThat
 import com.maharanitraders.core.model.CatalogQuery
 import com.maharanitraders.core.model.CatalogSort
+import com.maharanitraders.core.model.SearchSuggestion
+import com.maharanitraders.core.network.dto.CatalogSearchBrandDto
+import com.maharanitraders.core.network.dto.CatalogSearchCategoryDto
+import com.maharanitraders.core.network.dto.CatalogSearchDto
+import com.maharanitraders.core.network.dto.CatalogSearchProductDto
 import com.maharanitraders.core.network.dto.ApiEnvelope
 import com.maharanitraders.core.network.dto.CatalogBrandDto
 import com.maharanitraders.core.network.dto.CatalogBrandsDto
@@ -724,5 +729,442 @@ class CatalogViewModelTest {
 
     assertThat(CatalogViewModel.dedupeById(existing, incoming).map { it.id })
       .containsExactly("a", "b").inOrder()
+  }
+
+  // ---------------------------------------------------------------------------
+  // The filter sheet: every bound is the SERVER's, applied as one change
+  // ---------------------------------------------------------------------------
+
+  @Test
+  fun `applying the sheet sends every bound in ONE catalogue read`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    val requestsBefore = api.productRequests.size
+
+    viewModel.applyFilters(
+      CatalogFilterDraft(
+        minPriceText = "100",
+        maxPriceText = "500",
+        minDiscountPercent = 10,
+        maxMoq = 5,
+        offersOnly = true,
+        newOnly = true,
+        inStockOnly = true,
+      ),
+    )
+    advanceUntilIdle()
+
+    // One tap on Apply is one request. Six filters applied field by field would be
+    // six reads against the server's `read.catalog` budget (120/min), each one
+    // discarding the last, and a healthy session starts answering 429.
+    assertThat(api.productRequests.size - requestsBefore).isEqualTo(1)
+    val sent = api.productRequests.last()
+    assertThat(sent.minPrice).isEqualTo("100")
+    assertThat(sent.maxPrice).isEqualTo("500")
+    assertThat(sent.minDiscount).isEqualTo("10")
+    assertThat(sent.maxMoq).isEqualTo("5")
+    assertThat(sent.offersOnly).isEqualTo("1")
+    assertThat(sent.newOnly).isEqualTo("1")
+    assertThat(sent.inStock).isEqualTo("1")
+    // The sheet closes on success, and takes its error with it.
+    assertThat(viewModel.state.value.filtersOpen).isFalse()
+    assertThat(viewModel.state.value.filterError).isNull()
+  }
+
+  @Test
+  fun `a refused draft is reported and the list is deliberately NOT reloaded`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    viewModel.openFilters()
+    val requestsBefore = api.productRequests.size
+
+    viewModel.applyFilters(CatalogFilterDraft(minPriceText = "900", maxPriceText = "100"))
+    advanceUntilIdle()
+
+    assertThat(viewModel.state.value.filterError)
+      .isEqualTo(CatalogFilterDraft.PRICE_RANGE_MESSAGE)
+    // Sending a bound the server would drop is the failure this refuses to have:
+    // the shopper would see an unfiltered list behind a control that looks
+    // applied, and checkout would price something the list never showed.
+    assertThat(api.productRequests.size).isEqualTo(requestsBefore)
+    assertThat(viewModel.state.value.filtersOpen).isTrue()
+  }
+
+  @Test
+  fun `clear all keeps the search, the scope and the sort`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.applyInitialRequest(search = "rice", categoryId = "c1", brandId = "b1", brandLabel = "India Gate")
+    viewModel.applyFilters(CatalogFilterDraft(minPriceText = "100", offersOnly = true))
+    advanceUntilIdle()
+    viewModel.selectSort(CatalogSort.PRICE_LOW)
+    advanceUntilIdle()
+    val requestsBefore = api.productRequests.size
+
+    viewModel.clearAllFilters()
+    advanceUntilIdle()
+
+    val query = viewModel.state.value.query
+    assertThat(query.search).isEqualTo("rice")
+    assertThat(query.categoryId).isEqualTo("c1")
+    assertThat(query.brandId).isEqualTo("b1")
+    assertThat(query.sort).isEqualTo(CatalogSort.PRICE_LOW)
+    assertThat(query.hasAdvancedFilters).isFalse()
+    val sent = api.productRequests.last()
+    assertThat(sent.minPrice).isNull()
+    assertThat(sent.offersOnly).isNull()
+    assertThat(sent.search).isEqualTo("rice")
+    assertThat(sent.categoryId).isEqualTo("c1")
+    assertThat(sent.brandId).isEqualTo("b1")
+    assertThat(api.productRequests.size - requestsBefore).isEqualTo(1)
+  }
+
+  @Test
+  fun `clear all with nothing set does not re-read the list`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    val requestsBefore = api.productRequests.size
+
+    viewModel.clearAllFilters()
+    advanceUntilIdle()
+
+    assertThat(api.productRequests.size).isEqualTo(requestsBefore)
+  }
+
+  @Test
+  fun `applying what is already applied does not re-read the list`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    viewModel.applyFilters(CatalogFilterDraft(minPriceText = "100"))
+    advanceUntilIdle()
+    val requestsBefore = api.productRequests.size
+
+    // The shopper opened the sheet, looked at it and pressed Apply. That is not a
+    // new question and must not cost a request.
+    viewModel.applyFilters(CatalogFilterDraft.from(viewModel.state.value.query))
+    advanceUntilIdle()
+
+    assertThat(api.productRequests.size).isEqualTo(requestsBefore)
+    assertThat(viewModel.state.value.filtersOpen).isFalse()
+  }
+
+  @Test
+  fun `the sheet opens and closes without touching the result list`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+    val requestsBefore = api.productRequests.size
+
+    assertThat(viewModel.state.value.filtersOpen).isFalse()
+    viewModel.openFilters()
+    assertThat(viewModel.state.value.filtersOpen).isTrue()
+    viewModel.closeFilters()
+    assertThat(viewModel.state.value.filtersOpen).isFalse()
+
+    assertThat(api.productRequests.size).isEqualTo(requestsBefore)
+  }
+
+  @Test
+  fun `a deep link can open the catalogue already narrowed to offers`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.applyInitialRequest(offersOnly = true)
+    advanceUntilIdle()
+
+    assertThat(viewModel.state.value.query.offersOnly).isTrue()
+    assertThat(api.productRequests.last().offersOnly).isEqualTo("1")
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cross-entity suggestions: products, brands and categories for a typed term
+  // ---------------------------------------------------------------------------
+
+  private fun searchAnswer(
+    query: String,
+    product: String? = null,
+    brand: String? = null,
+    category: String? = null,
+  ) = ApiEnvelope(
+    CatalogSearchDto(
+      query = query,
+      searched = true,
+      products = listOfNotNull(
+        product?.let {
+          CatalogSearchProductDto(id = it, name = "Product $it", matchKind = "name")
+        },
+      ),
+      brands = listOfNotNull(
+        brand?.let { CatalogSearchBrandDto(id = it, name = "Brand $it") },
+      ),
+      categories = listOfNotNull(
+        category?.let { CatalogSearchCategoryDto(id = it, name = "Cat $it", parentName = "Rice") },
+      ),
+    ),
+  )
+
+  @Test
+  fun `typing a long enough term reads products, brands AND categories`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("ric", product = "p9", brand = "b9", category = "c9")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("ric")
+    advanceUntilIdle()
+
+    assertThat(api.searchRequests).containsExactly("ric")
+    val state = viewModel.state.value
+    assertThat(state.suggestionsVisible).isTrue()
+    assertThat(state.suggestionsLoading).isFalse()
+    assertThat(state.suggestionsError).isNull()
+    val suggestions = state.suggestions.suggestions
+    assertThat(suggestions).hasSize(3)
+    assertThat(suggestions.filterIsInstance<SearchSuggestion.Product>().map { it.id })
+      .containsExactly("p9")
+    assertThat(suggestions.filterIsInstance<SearchSuggestion.Brand>().map { it.id })
+      .containsExactly("b9")
+    assertThat(suggestions.filterIsInstance<SearchSuggestion.Category>().map { it.id })
+      .containsExactly("c9")
+  }
+
+  @Test
+  fun `a term below the floor never reaches the endpoint`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("r")
+    advanceUntilIdle()
+
+    // One character cannot be searched: the server's own floor is two. Calling it
+    // anyway would spend rate-limit budget on an answer that is always empty.
+    assertThat(api.searchCalls).isEqualTo(0)
+    assertThat(viewModel.state.value.suggestionsVisible).isFalse()
+    assertThat(viewModel.state.value.suggestions.isEmpty).isTrue()
+  }
+
+  @Test
+  fun `a failed suggestion read is never reported as no match`() = runTest(dispatcher) {
+    val api = api()
+    // Two batches: the one the screen's first load takes, and the one the typed
+    // term's own reload takes. Without the second, the reload would fall through
+    // to the fake's empty answer and this test would be asserting on a list that
+    // an unrelated code path emptied.
+    api.productPages.addLast(envelope(listOf("p1", "p2")))
+    api.productPages.addLast(envelope(listOf("p1", "p2")))
+    api.nextSearchFailure = IOException("suggestions down")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("rice")
+    advanceUntilIdle()
+
+    val state = viewModel.state.value
+    assertThat(state.suggestionsError).isNotNull()
+    // The product list is a DIFFERENT request and it worked: its rows stay on
+    // screen, and the panel says the read failed instead of claiming the shop has
+    // nothing matching "rice".
+    assertThat(state.products.map { it.id }).containsExactly("p1", "p2").inOrder()
+    assertThat(state.errorMessage).isNull()
+  }
+
+  @Test
+  fun `moving the term on cancels a suggestion read that is still pending`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("ri", product = "stale")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("ri")
+    // The term moves on before the answer can be applied. The pending read is
+    // cancelled rather than allowed to land: an answer for "ri" arriving next to a
+    // list of results for "rice" is two different answers to two different
+    // questions on one screen.
+    viewModel.applyInitialRequest(search = "rice")
+    advanceUntilIdle()
+
+    val state = viewModel.state.value
+    assertThat(state.suggestions.suggestions).isEmpty()
+    // A cancelled read must leave the panel at rest, not spinning forever.
+    assertThat(state.suggestionsLoading).isFalse()
+    assertThat(state.suggestionsVisible).isFalse()
+  }
+
+  @Test
+  fun `an answer the server sanitized still counts as current`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    // The shopper typed a comma; the server matched — and echoed — the sanitized
+    // form. Refusing this would hide the panel for every punctuated term.
+    api.searchResult = searchAnswer("rice 5kg", product = "p9")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("rice, 5kg")
+    advanceUntilIdle()
+
+    assertThat(viewModel.state.value.suggestionsLoading).isFalse()
+    assertThat(viewModel.state.value.suggestions.suggestions).hasSize(1)
+  }
+
+  @Test
+  fun `submitting the search commits it and closes the panel`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("rice", product = "p9")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("rice")
+    advanceUntilIdle()
+    assertThat(viewModel.state.value.suggestionsVisible).isTrue()
+
+    viewModel.submitSearch()
+    advanceUntilIdle()
+
+    // The list is now the answer; the typing aid goes away rather than competing
+    // with it (six products is not the result set).
+    assertThat(viewModel.state.value.suggestionsVisible).isFalse()
+  }
+
+  @Test
+  fun `taking a brand suggestion applies the brand and drops the typed term`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("fortu", brand = "b1")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("fortu")
+    advanceUntilIdle()
+    viewModel.selectSuggestedBrand("b1", "Fortune")
+    advanceUntilIdle()
+
+    val state = viewModel.state.value
+    // Keeping "fortu" as a product search AND as a brand filter would intersect
+    // two constraints the shopper only ever meant as one, and can legitimately
+    // return nothing.
+    assertThat(state.query.search).isEmpty()
+    assertThat(state.query.brandId).isEqualTo("b1")
+    assertThat(state.brandLabel).isEqualTo("Fortune")
+    assertThat(state.tab).isEqualTo(CatalogTab.PRODUCTS)
+    assertThat(state.suggestionsVisible).isFalse()
+    val sent = api.productRequests.last()
+    assertThat(sent.brandId).isEqualTo("b1")
+    assertThat(sent.search).isNull()
+  }
+
+  @Test
+  fun `taking a category suggestion applies the category and drops the typed term`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("ric", category = "c1")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("ric")
+    advanceUntilIdle()
+    viewModel.selectSuggestedCategory("c1")
+    advanceUntilIdle()
+
+    val state = viewModel.state.value
+    assertThat(state.query.search).isEmpty()
+    assertThat(state.query.categoryId).isEqualTo("c1")
+    assertThat(state.suggestionsVisible).isFalse()
+    assertThat(api.productRequests.last().categoryId).isEqualTo("c1")
+  }
+
+  @Test
+  fun `taking a product suggestion closes the panel and remembers the term`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("rice", product = "p9")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("rice")
+    advanceUntilIdle()
+    viewModel.selectSuggestedProduct("p9")
+    advanceUntilIdle()
+
+    // The screen opens the product; the ViewModel's job is to get out of the way
+    // and to bank the term, because the shopper clearly meant it.
+    assertThat(viewModel.state.value.suggestionsVisible).isFalse()
+    assertThat(viewModel.recentSearches.value).contains("rice")
+  }
+
+  @Test
+  fun `dismissing the panel keeps the term and the result list`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("rice", product = "p9")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("rice")
+    advanceUntilIdle()
+    val requestsBefore = api.productRequests.size
+    viewModel.dismissSuggestions()
+    advanceUntilIdle()
+
+    assertThat(viewModel.state.value.suggestionsVisible).isFalse()
+    assertThat(viewModel.state.value.query.search).isEqualTo("rice")
+    assertThat(api.productRequests.size).isEqualTo(requestsBefore)
+  }
+
+  @Test
+  fun `leaving the products pane hides a panel only products draws`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("rice", product = "p9")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    viewModel.onSearchChange("rice")
+    advanceUntilIdle()
+    viewModel.selectTab(CatalogTab.BRANDS)
+
+    assertThat(viewModel.state.value.suggestionsVisible).isFalse()
+    // And coming back does not resurrect a panel for a term nobody is looking at.
+    viewModel.selectTab(CatalogTab.PRODUCTS)
+    assertThat(viewModel.state.value.suggestionsVisible).isFalse()
+  }
+
+  @Test
+  fun `suggestions are debounced, so typing a word costs one read`() = runTest(dispatcher) {
+    val api = api()
+    api.productPages.addLast(envelope(listOf("p1")))
+    api.searchResult = searchAnswer("rice", product = "p9")
+    val viewModel = viewModel(api)
+    advanceUntilIdle()
+
+    "rice".forEachIndexed { index, _ ->
+      viewModel.onSearchChange("rice".substring(0, index + 1))
+      advanceTimeBy(50)
+    }
+    advanceUntilIdle()
+
+    // Four keystrokes inside one debounce window are one question, not four — and
+    // the one that is asked is the term the shopper finished typing.
+    assertThat(api.searchCalls).isEqualTo(1)
+    assertThat(api.searchRequests).containsExactly("rice")
   }
 }

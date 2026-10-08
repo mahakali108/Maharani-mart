@@ -3,15 +3,17 @@ package com.maharanitraders.feature.catalog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maharanitraders.core.common.AppResult
+import com.maharanitraders.core.common.SystemTimeSource
+import com.maharanitraders.core.common.TimeSource
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.CatalogQuery
 import com.maharanitraders.core.model.CatalogSort
+import com.maharanitraders.core.model.HomeScheme
 import com.maharanitraders.core.model.RetailerHome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +36,32 @@ data class HomeUiState(
   /** The "Recently added" rail: the catalogue's real newest-first batch. */
   val recent: List<CatalogProduct> = emptyList(),
   val recentLoading: Boolean = true,
+  /**
+   * The "Deals" rail: the catalogue's own `offers=1` batch — rows the SERVER
+   * marked as carrying an offer or a real MRP discount, priced for this
+   * retailer. It is an ordinary catalogue read, so a deal is a deal checkout
+   * would honour, not a card the home screen chose to decorate.
+   */
+  val deals: List<CatalogProduct> = emptyList(),
+  val dealsLoading: Boolean = true,
+  /**
+   * The admin's live offers, soonest-ending first, exactly as `GET /home`
+   * returned them. Empty means no offer is running.
+   */
+  val offers: List<HomeScheme> = emptyList(),
+  /**
+   * True when the offer read FAILED rather than returning nothing. The offers
+   * rail is not drawn in either case, but this is what stops the screen from
+   * claiming "no offers right now" during an outage.
+   */
+  val offersUnavailable: Boolean = false,
+  /**
+   * The live offers, ready to draw, derived from [offers] by [HomePromo] with one
+   * clock read. The ticker strip at the top of home and the "Today's offers" rail
+   * are both projections of this list, so they can never disagree about a
+   * deadline. Empty draws neither.
+   */
+  val promotions: List<HomePromo.OfferCard> = emptyList(),
   val errorMessage: String? = null,
   val offline: Boolean = false,
   val retryable: Boolean = true,
@@ -76,6 +104,12 @@ class HomeViewModel @Inject constructor(
    * tapped here is already correct on the product page and in the saved list.
    */
   private val favorites: FavoritesStore,
+  /**
+   * The clock the offer deadlines are counted against. Injectable so a test can
+   * pin "today" instead of racing midnight; defaults to the system clock so the
+   * shell needs no extra wiring.
+   */
+  private val timeSource: TimeSource = SystemTimeSource(),
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(HomeUiState())
@@ -114,21 +148,33 @@ class HomeViewModel @Inject constructor(
     }
 
     request = viewModelScope.launch {
-      val (homeResult, recentResult) = coroutineScope {
-        val home = async { repository.loadHome() }
-        val recent = async { repository.loadProducts(RECENT_QUERY, cursor = null) }
-        home.await() to recent.await()
-      }
+      // Three reads in parallel, all children of this launch: home (banners,
+      // taxonomy, the discovery batch AND the admin's live offers), the
+      // newest-first rail and the offers-filtered deals rail. One round trip
+      // each, and a slow rail cannot delay the shop underneath it.
+      val homeDeferred = async { repository.loadHome() }
+      val recentDeferred = async { repository.loadProducts(RECENT_QUERY, cursor = null) }
+      val dealsDeferred = async { repository.loadProducts(DEALS_QUERY, cursor = null) }
+      val homeResult = homeDeferred.await()
+      val recentResult = recentDeferred.await()
+      val dealsResult = dealsDeferred.await()
 
       when (homeResult) {
         is AppResult.Success -> {
           val home = homeResult.value
-          // The rail must not repeat what the discovery grid already shows: a
+          // The rails must not repeat what the discovery grid already shows: a
           // shopper seeing the same card twice on one screen reads as a bug.
           val seen = home.products.mapTo(HashSet()) { it.id }
           val recent = (recentResult as? AppResult.Success)?.value?.products
             ?.filterNot { it.id in seen }
             .orEmpty()
+          // A deal already on the discovery grid or the newest rail is not shown
+          // a third time either.
+          val recentSeen = recent.mapTo(HashSet()) { row -> row.id }
+          val deals = (dealsResult as? AppResult.Success)?.value?.products
+            ?.filterNot { it.id in seen || it.id in recentSeen }
+            .orEmpty()
+          val nowMillis = timeSource.nowEpochSeconds() * 1_000L
           _state.update {
             it.copy(
               loading = false,
@@ -136,6 +182,11 @@ class HomeViewModel @Inject constructor(
               home = home,
               recent = recent,
               recentLoading = false,
+              deals = deals,
+              dealsLoading = false,
+              offers = home.schemes,
+              offersUnavailable = home.schemesUnavailable,
+              promotions = HomePromo.cards(home.schemes, nowMillis),
               errorMessage = null,
               offline = false,
             )
@@ -147,6 +198,7 @@ class HomeViewModel @Inject constructor(
             loading = false,
             refreshing = false,
             recentLoading = false,
+            dealsLoading = false,
             errorMessage = homeResult.error.message,
             offline = homeResult.error.isOffline,
             retryable = homeResult.error.retryable,
@@ -159,5 +211,15 @@ class HomeViewModel @Inject constructor(
   companion object {
     /** The rail's own query: the server's newest-first ordering, no filters. */
     val RECENT_QUERY: CatalogQuery = CatalogQuery(sort = CatalogSort.NEWEST)
+
+    /**
+     * The deals rail's query: the server's own offer filter.
+     *
+     * `offers=1` keeps rows the pricing engine marked `hasOffer` OR whose printed
+     * MRP is above the resolved rate (`lib/retailer/catalog-batches.ts`), so a
+     * "deal" here is a discount the shopper will actually get — never a card the
+     * app decided to label.
+     */
+    val DEALS_QUERY: CatalogQuery = CatalogQuery(offersOnly = true)
   }
 }

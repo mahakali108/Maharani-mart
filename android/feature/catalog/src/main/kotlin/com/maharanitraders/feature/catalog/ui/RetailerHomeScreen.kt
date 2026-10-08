@@ -59,6 +59,7 @@ import com.maharanitraders.core.designsystem.components.HomeGlyph
 import com.maharanitraders.core.designsystem.components.HomeSkeleton
 import com.maharanitraders.core.designsystem.components.MetricTile
 import com.maharanitraders.core.designsystem.components.OfflineState
+import com.maharanitraders.core.designsystem.components.ProductRailSkeleton
 import com.maharanitraders.core.designsystem.components.OfferGlyph
 import com.maharanitraders.core.designsystem.components.OrdersGlyph
 import com.maharanitraders.core.designsystem.components.QuickActionTile
@@ -115,13 +116,20 @@ object HomeScreenTags {
 /**
  * The retailer home screen — the shop front.
  *
- * Top to bottom, the order the brief asks for: the admin's promotional banners
- * (or a branded, non-promotional welcome panel when no promotion is live), the
- * real category rail, the real brand rail, a "Recently added" rail fed by the
+ * Top to bottom, the order the brief asks for: the admin's ticker strip, the
+ * admin's promotional banners (or a branded, non-promotional welcome panel when
+ * no promotion is live), the shortcut grid, the real category rail, the real
+ * brand rail, the admin's "Today's offers" rail, a "Deals" rail fed by the
+ * catalogue's own `offers=1` filter, a "Recently added" rail fed by the
  * catalogue's own newest-first ordering, and the discovery grid — the first
- * batch of the real catalogue. A "Today's offers" rail is deliberately ABSENT:
- * PROMO-04 is blocked on a mobile schemes endpoint, and inventing one would be
- * fake data. This screen renders no section the server did not fill.
+ * batch of the real catalogue.
+ *
+ * Every promotional surface is driven by rows an admin published: the ticker and
+ * the offers rail by the `schemes` rows `GET /home` returns, the banners by the
+ * banner table, and the Deals rail by the server's own offer filter. Nothing here
+ * is hardcoded and nothing is invented — when the offer read fails the screen
+ * says so instead of quietly drawing a shop with no offers, and this screen
+ * renders no section the server did not fill.
  * Every value arrives from `GET /api/mobile/v1/home` plus one `sort=newest`
  * catalogue batch; the screen has no fallback content, so when the request
  * fails the shopper sees an honest error or offline state with a retry rather
@@ -156,6 +164,15 @@ fun RetailerHomeScreen(
    * tile is never a dead end.
    */
   onOpenDestination: (String) -> Unit = {},
+  /**
+   * Open the offers destination. The ticker strip and every offers-rail card go
+   * here, so a campaign the admin published is always one tap from its own
+   * screen rather than a dead end. The shell owns the route table, which keeps
+   * this feature module free of navigation constants.
+   */
+  onOpenOffers: () -> Unit = {},
+  /** Open the catalogue filtered to the server's own offers. */
+  onOpenDeals: () -> Unit = {},
   /** The shortcuts to draw. Empty (the default) draws no shortcut grid at all. */
   quickActions: List<HomeQuickAction> = emptyList(),
   /** The shop's own numbers: Coins, the last order, recently viewed products. */
@@ -193,6 +210,8 @@ fun RetailerHomeScreen(
     onOpenDirectory = onOpenDirectory,
     onOpenProduct = onOpenProduct,
     onOpenDestination = onOpenDestination,
+    onOpenOffers = onOpenOffers,
+    onOpenDeals = onOpenDeals,
     quickActions = quickActions,
     dashboard = dashboard,
     onRetryDashboard = onRetryDashboard,
@@ -227,6 +246,16 @@ fun HomeContent(
   onOpenDirectory: (CatalogTab) -> Unit,
   onOpenProduct: (String) -> Unit,
   onOpenDestination: (String) -> Unit = {},
+  /** Offers destination for the ticker strip and the offers rail. */
+  onOpenOffers: () -> Unit = {},
+  /**
+   * Open the catalogue on the server's own offer filter — the Deals rail's
+   * "Shop offers". Same filter the rail was built from, so the full list is the
+   * rail continued, never a different idea of what a deal is.
+   */
+  onOpenDeals: () -> Unit = {},
+  /** Pin the ticker on its first line — rendered tests pass false. */
+  tickerAutoAdvance: Boolean = true,
   quickActions: List<HomeQuickAction> = emptyList(),
   dashboard: HomeDashboard? = null,
   onRetryDashboard: () -> Unit = {},
@@ -299,6 +328,19 @@ fun HomeContent(
                 message = state.errorMessage.orEmpty(),
                 offline = state.offline,
                 onRetry = if (state.retryable) onRetry else null,
+              )
+            }
+          }
+
+          // The admin ticker sits ABOVE the hero: it is the one line that can
+          // change without an app release, so it gets the first thing the eye
+          // lands on. Drawn only from live `schemes` rows — no scheme, no strip.
+          if (state.promotions.isNotEmpty()) {
+            item(span = full) {
+              HomeOfferTicker(
+                promotions = state.promotions,
+                onOpenOffers = onOpenOffers,
+                autoAdvance = tickerAutoAdvance,
               )
             }
           }
@@ -406,6 +448,66 @@ fun HomeContent(
             }
           }
 
+          // "Today's offers": the admin's own campaigns, soonest-ending first,
+          // from the same `schemes` rows the offers screen reads. A FAILED offer
+          // read gets the one-line note instead of silence, because silence is
+          // how an outage gets reported as "no offers right now".
+          if (state.promotions.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Today's offers",
+                  subtitle = "Live campaigns on your account",
+                  actionLabel = "View all",
+                  onAction = onOpenOffers,
+                )
+                HomeOffersRail(
+                  promotions = state.promotions,
+                  onOpenOffers = onOpenOffers,
+                )
+              }
+            }
+          } else if (state.offersUnavailable) {
+            item(span = full) {
+              HomeOffersUnavailableNote()
+            }
+          }
+
+          // "Deals": the catalogue's own `offers=1` batch, so a deal here is a
+          // deal checkout will honour — a real per-retailer rate the pricing
+          // engine marked as carrying an offer or an MRP discount, not a card this
+          // screen decided to decorate. Loading shows a skeleton rail; a FAILED
+          // read draws nothing, because the discovery grid below is still usable
+          // and one optional rail must not be able to take the shop down.
+          if (state.deals.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Deals for your shop",
+                  subtitle = "Offered rates, priced for you — tap to see today's stock",
+                  actionLabel = "Shop offers",
+                  onAction = onOpenDeals,
+                )
+                HomeProductRail(
+                  products = state.deals,
+                  tag = HomeOfferTags.DEALS_ROW,
+                  onOpenProduct = onOpenProduct,
+                  isFavorite = isFavorite,
+                  isFavoritePending = isFavoritePending,
+                  onToggleFavorite = onToggleFavorite,
+                  onQuickAddToCart = onQuickAddToCart,
+                  quickAddPackId = quickAddPackId,
+                )
+              }
+            }
+          } else if (state.dealsLoading) {
+            // Still reading the offers batch: placeholders at the rail's own card
+            // width, so the section below does not jump when the rows arrive.
+            item(span = full) {
+              ProductRailSkeleton(modifier = Modifier.testTag(HomeOfferTags.DEALS_ROW))
+            }
+          }
+
           if (state.recent.isNotEmpty()) {
             item(span = full) {
               Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
@@ -413,7 +515,8 @@ fun HomeContent(
                   title = "Recently added",
                   subtitle = "Newest in your catalogue",
                 )
-                RecentRail(
+                HomeProductRail(
+                  tag = HomeScreenTags.RECENT_ROW,
                   products = state.recent,
                   onOpenProduct = onOpenProduct,
                   isFavorite = isFavorite,
@@ -558,8 +661,19 @@ private fun BrandRail(
 
 /** The "Recently added" rail: real cards at rail width. */
 @Composable
-private fun RecentRail(
+/**
+ * One horizontal rail of real catalogue products.
+ *
+ * Shared by "Recently added" and "Deals" so both rails are the SAME card at the
+ * SAME width with the SAME quick-add rules — the only difference is which server
+ * filter produced the rows, and [tag] is what a test asserts on to tell them
+ * apart. Two near-identical rails that drifted a pixel or a minimum apart would
+ * be the same bug in two places.
+ */
+@Composable
+private fun HomeProductRail(
   products: List<CatalogProduct>,
+  tag: String,
   onOpenProduct: (String) -> Unit,
   isFavorite: (CatalogProduct) -> Boolean,
   isFavoritePending: (CatalogProduct) -> Boolean,
@@ -571,7 +685,7 @@ private fun RecentRail(
   LazyRow(
     modifier = modifier
       .fillMaxWidth()
-      .testTag(HomeScreenTags.RECENT_ROW),
+      .testTag(tag),
     horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
   ) {
     items(products, key = { it.id }) { product ->

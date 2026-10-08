@@ -23,11 +23,16 @@ import { loadMobileHome } from '@/lib/mobile/catalog-service';
  * only ever yields a rooted app route or an http(s) URL. An empty `banners`
  * array is a normal answer — the app then shows its own fallback. No banner id,
  * title or image is hardcoded anywhere in the client.
+ * `schemes` are the admin's LIVE offers under the same rule the web home and the
+ * mobile `/schemes` endpoint already use (active + inside the start/end window,
+ * soonest-ending first), so the native offers rail and ticker read published
+ * merchandising rather than invented copy.
  *
  * DELIBERATELY NOT HERE: the Phase E cart, checkout and order history use
- * dedicated endpoints rather than duplicating commerce data in `/home`.
- * Reorder is not part of the native slice; a Coins wallet/history summary and
- * schemes remain later work. This endpoint stays a discovery-only payload.
+ * dedicated endpoints rather than duplicating commerce data in `/home`, and the
+ * Deals / Best-sellers / New-arrivals RAILS are ordinary `GET /catalog/products`
+ * batches (`offers=1`, `sort=frequent`, `sort=newest`) so they stay on the one
+ * priced, paginated list path. This endpoint stays a discovery-only payload.
  *
  * Contract: docs/NATIVE_ANDROID_API_CONTRACT.md §2.3.
  */
@@ -64,6 +69,11 @@ export async function GET(request: Request): Promise<Response> {
         brands: home.brands,
         products: home.products,
         nextCursor: home.nextCursor,
+        // The admin's live offers, in-window and active. Empty is a normal
+        // answer ("no offer is running"); `schemesUnavailable` says the read
+        // itself failed, so the app never reports an outage as "no offers".
+        schemes: home.schemes,
+        schemesUnavailable: home.schemesUnavailable,
       },
       { requestId }
     );
