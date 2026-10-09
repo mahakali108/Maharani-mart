@@ -206,15 +206,35 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
-                 --json number --jq '.[0].number' 2>/dev/null)
+          # On a pull_request event GITHUB_REF_NAME is "<pr>/merge", which matches
+          # no head branch — that is why evidence silently fell back to commit
+          # comments. Prefer the number from the event payload, then the head
+          # branch, and only then give up.
+          PR="${{ github.event.pull_request.number }}"
+          if [ -z "$PR" ]; then
+            PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                   --state open --json number --jq '.[0].number' 2>/dev/null)
+          fi
           if [ -z "$PR" ] || [ "$PR" = "null" ]; then
             gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
               -f body="$(head -c 55000 /tmp/production-health.md)" \
               || echo "::warning::could not post commit evidence"
             exit 0
           fi
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file /tmp/production-health.md \
+          # Replace this run's previous comment rather than stacking one per push:
+          # a launch gate gets re-run often and stale verdicts are worse than none.
+          MARKER="<!-- production-health-evidence -->"
+          { printf '%s\n' "$MARKER"; cat /tmp/production-health.md; } > /tmp/production-health-comment.md
+          OLD=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                  --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" 2>/dev/null | head -1)
+          if [ -n "$OLD" ] && [ "$OLD" != "null" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$OLD" \
+              -f body="$(cat /tmp/production-health-comment.md)" >/dev/null \
+              && echo "updated existing production-health evidence comment on #$PR" \
+              || echo "::warning::could not update comment $OLD"
+            exit 0
+          fi
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file /tmp/production-health-comment.md \
             || echo "::warning::could not post the pull-request comment"
 
       - name: Fail the gate when production is unhealthy

@@ -180,8 +180,10 @@ describe('3. the probe covers the launch-critical production gates', () => {
 
   it('asserts the health bodies actually say the database is reachable', () => {
     expect(PROBE).toMatch(/expect_body=\{"status": "ok", "database": "reachable"\}/);
-    // A 200 with a degraded database must not pass: the mismatch is reported per key.
-    expect(PROBE).toContain('body.{key} was');
+    // A 200 with a degraded database must not pass: the mismatch is reported per
+    // key, and the reported path names the envelope it was read from.
+    expect(PROBE).toContain('was {actual!r}, expected {wanted!r}');
+    expect(PROBE).toMatch(/f"\{target\.envelope\}\.\{key\}" if target\.envelope else f"body\.\{key\}"/);
     expect(PROBE).toContain('expect_body={"status": "ok"}');
   });
 
@@ -200,7 +202,83 @@ describe('3. the probe covers the launch-critical production gates', () => {
   });
 });
 
-describe('4. the probe cannot leak a secret into evidence', () => {
+describe('4. the probe reads this backend\'s two response envelopes correctly', () => {
+  // lib/mobile/http.ts: jsonOk -> { data, requestId }, jsonError -> { error, requestId }.
+  // The operational /api/health predates that contract and answers flat. Reading
+  // the wrong level is not cosmetic — it reported a HEALTHY production as broken
+  // on the probe's first real run.
+  /**
+   * Slice exactly one Target(...) call, cut at its own closing `),` — a fixed-width
+   * window would bleed into the neighbouring target and let one target's envelope
+   * satisfy another target's assertion.
+   */
+  const blockFor = (path: string) => {
+    const start = PROBE.indexOf(`"${path}",`);
+    expect(start, `${path} must be a probe target`).toBeGreaterThan(-1);
+    const end = PROBE.indexOf('\n        ),', start);
+    expect(end, `${path} target must be a closed Target(...) call`).toBeGreaterThan(start);
+    return PROBE.slice(start, end);
+  };
+
+  it('reads the mobile health endpoint through the data envelope', () => {
+    const block = blockFor('/api/mobile/v1/health');
+    expect(block).toContain('envelope="data"');
+    expect(block).toContain('"apiVersion"');
+  });
+
+  it('reads the operational health endpoint as a FLAT body, with no envelope', () => {
+    const block = blockFor('/api/health');
+    expect(block).not.toContain('envelope=');
+    expect(block).toContain('"latencyMs"');
+  });
+
+  it('reads every refusal through the error envelope and asserts the exact code', () => {
+    // Asserting the code is what distinguishes the application's own auth refusal
+    // from an unrelated 401 emitted by an edge or a proxy.
+    for (const path of [
+      '/api/mobile/v1/session',
+      '/api/mobile/v1/cart',
+      '/api/mobile/v1/catalog/products',
+      '/api/mobile/v1/orders',
+    ]) {
+      const block = blockFor(path);
+      expect(block, `${path} must unwrap the error envelope`).toContain('envelope="error"');
+      expect(block, `${path} must assert missing_token`).toContain('expect_body={"code": "missing_token"}');
+    }
+  });
+
+  it('asserts the method-guard code on the login route', () => {
+    const block = blockFor('/api/mobile/v1/auth/login');
+    expect(block).toContain('envelope="error"');
+    expect(block).toContain('expect_body={"code": "method_not_allowed"}');
+  });
+
+  it('treats a missing envelope object as a contract break, not an empty pass', () => {
+    expect(PROBE).toContain('mobile envelope shape mismatch');
+    expect(PROBE).toMatch(/if not isinstance\(inner, dict\):/);
+  });
+
+  it('lifts only the request id from beside the envelope, for incident correlation', () => {
+    expect(PROBE).toContain('ENVELOPE_SIBLING_KEYS: tuple[str, ...] = ("requestId",)');
+    // Nothing else may be lifted: the sibling list is the only place a top-level
+    // field can reach the report from outside the allowlisted envelope object.
+    expect(PROBE).toMatch(/for sibling in ENVELOPE_SIBLING_KEYS:/);
+    expect(PROBE).toContain('if sibling in target.allowed_body_keys and sibling not in projected');
+    expect(PROBE.match(/ENVELOPE_SIBLING_KEYS: tuple\[str, \.\.\.\] = \(([^)]*)\)/)?.[1] ?? '')
+      .toBe('"requestId",');
+  });
+
+  it('proves all of it in the offline self-test, including the negative cases', () => {
+    expect(PROBE).toContain('mobile health unwraps the data envelope');
+    expect(PROBE).toContain('operational health reads its FLAT body');
+    expect(PROBE).toContain('a 401 records the auth refusal code');
+    expect(PROBE).toContain('a missing data envelope FAILS the probe');
+    expect(PROBE).toContain('a 401 with an unexpected code FAILS the probe');
+    expect(PROBE).toContain('a 200 on a protected API FAILS the probe');
+  });
+});
+
+describe('5. the probe cannot leak a secret into evidence', () => {
   it('redacts JWTs, bearer tokens, connection strings and key-shaped values', () => {
     expect(PROBE).toContain('\\beyJ[A-Za-z0-9_\\-]{8,}');
     for (const needle of ['JWT', 'BEARER', 'CONNECTION_STRING', 'SUPABASE_KEY', 'LONG_TOKEN', 'CREDENTIAL_ASSIGNMENT']) {
@@ -226,7 +304,8 @@ describe('4. the probe cannot leak a secret into evidence', () => {
     // Nested containers are dropped rather than walked, so a new nested field can
     // never leak through an allowlisted parent key.
     expect(PROBE).toMatch(/if isinstance\(value, \(dict, list\)\):\s*\n\s*continue/);
-    expect(PROBE).toContain('result.body = redact_mapping(parsed, target.allowed_body_keys)');
+    expect(PROBE).toContain('projected = redact_mapping(container, target.allowed_body_keys)');
+    expect(PROBE).toContain('result.body = projected');
   });
 
   it('allowlists no secret-shaped field name', () => {
@@ -247,7 +326,7 @@ describe('4. the probe cannot leak a secret into evidence', () => {
   });
 });
 
-describe('5. the workflow publishes evidence and fails the gate honestly', () => {
+describe('6. the workflow publishes evidence and fails the gate honestly', () => {
   it('verifies the probe logic offline before pointing it at production', () => {
     expect(WORKFLOW).toContain('python3 scripts/production-health-probe.py --self-test');
   });
@@ -272,6 +351,19 @@ describe('5. the workflow publishes evidence and fails the gate honestly', () =>
     // Actions logs live in Azure blob storage, unreachable from some environments.
     expect(WORKFLOW).toContain('gh pr comment');
     expect(WORKFLOW).toContain('repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments');
+  });
+
+  it('resolves the pull request from the event payload, not from GITHUB_REF_NAME', () => {
+    // On a pull_request event GITHUB_REF_NAME is "<pr>/merge", which matches no
+    // head branch — that is exactly why the first real run posted no evidence
+    // comment at all.
+    expect(WORKFLOW).toContain('github.event.pull_request.number');
+    expect(WORKFLOW).toContain('GITHUB_HEAD_REF');
+  });
+
+  it('replaces its own previous evidence comment instead of stacking one per push', () => {
+    expect(WORKFLOW).toContain('<!-- production-health-evidence -->');
+    expect(WORKFLOW).toContain('-X PATCH');
   });
 
   it('references no secret other than the automatic GITHUB_TOKEN', () => {
@@ -300,7 +392,7 @@ describe('5. the workflow publishes evidence and fails the gate honestly', () =>
   });
 });
 
-describe('6. the probe behaviour is executed, not only read', () => {
+describe('7. the probe behaviour is executed, not only read', () => {
   const python = (() => {
     for (const candidate of ['python3', 'python']) {
       try {

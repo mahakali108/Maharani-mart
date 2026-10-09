@@ -124,6 +124,12 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 REDACTED = "[REDACTED]"
 
+#: Keys that sit BESIDE the `data`/`error` envelope object rather than inside it.
+#: Only a request id qualifies: it is a random correlation id the server already
+#: returns in a response header, it carries no business data, and without it a
+#: production failure cannot be matched to a server log line.
+ENVELOPE_SIBLING_KEYS: tuple[str, ...] = ("requestId",)
+
 
 def redact(text: str) -> str:
     """Scrub every secret-shaped substring out of *text*.
@@ -261,6 +267,18 @@ class Target:
     the redirect target's PATH for middleware checks. ``expect_body`` maps an
     allowlisted key to the value it must equal — the only body content the probe
     is permitted to read, and the only content it may echo.
+
+    ``envelope`` names the object those keys live in, because this backend has
+    two response shapes and they are NOT interchangeable
+    (docs/NATIVE_ANDROID_API_CONTRACT.md §1.3):
+
+        success  jsonOk(...)     -> {"data": {...},  "requestId": "..."}
+        failure  jsonError(...)  -> {"error": {"code", "message"}, "requestId": "..."}
+
+    The operational ``/api/health`` predates that contract and answers with a
+    FLAT body, so it takes ``envelope=None``. Reading the wrong level is not a
+    cosmetic mistake: it silently turned a healthy 200 into a reported failure on
+    the first real run of this probe.
     """
 
     def __init__(
@@ -273,6 +291,7 @@ class Target:
         expect_location: str | None = None,
         expect_body: dict[str, Any] | None = None,
         allowed_body_keys: Sequence[str] = (),
+        envelope: str | None = None,
         why: str = "",
     ) -> None:
         self.name = name
@@ -282,6 +301,7 @@ class Target:
         self.expect_location = expect_location
         self.expect_body = expect_body or {}
         self.allowed_body_keys = tuple(allowed_body_keys)
+        self.envelope = envelope
         self.why = why
 
 
@@ -320,8 +340,9 @@ def production_targets() -> list[Target]:
             "/api/mobile/v1/health",
             expect=[200],
             gate="Health endpoints respond",
-            allowed_body_keys=("status", "database", "apiVersion", "serverTime", "latencyMs"),
+            allowed_body_keys=("status", "database", "apiVersion", "serverTime", "latencyMs", "requestId"),
             expect_body={"status": "ok", "database": "reachable"},
+            envelope="data",
             why="The exact startup probe the Android app calls; also confirms the mobile envelope shape.",
         ),
         Target(
@@ -345,15 +366,23 @@ def production_targets() -> list[Target]:
             "/api/mobile/v1/session",
             expect=[401],
             gate="Authentication works",
-            allowed_body_keys=("code",),
-            why="A 200 here would expose a profile; a 500 would mean the auth path is broken.",
+            allowed_body_keys=("code", "requestId"),
+            expect_body={"code": "missing_token"},
+            envelope="error",
+            why=(
+                "A 200 here would expose a profile and a 500 would mean the auth path is broken. "
+                "Asserting the CODE as well proves this is the authentication refusal and not some "
+                "unrelated 401 from an edge or a proxy."
+            ),
         ),
         Target(
             "mobile cart API refuses anonymous caller",
             "/api/mobile/v1/cart",
             expect=[401],
             gate="Checkout authorization",
-            allowed_body_keys=("code",),
+            allowed_body_keys=("code", "requestId"),
+            expect_body={"code": "missing_token"},
+            envelope="error",
             why="Cart contents are retailer-private and priced per retailer; anonymity must be refused.",
         ),
         Target(
@@ -361,23 +390,32 @@ def production_targets() -> list[Target]:
             "/api/mobile/v1/catalog/products",
             expect=[401],
             gate="Retailer data isolation",
-            allowed_body_keys=("code",),
+            allowed_body_keys=("code", "requestId"),
+            expect_body={"code": "missing_token"},
+            envelope="error",
             why="Prices are per-retailer, so the catalogue is not a public endpoint.",
         ),
         Target(
             "mobile orders API refuses anonymous caller",
             "/api/mobile/v1/orders",
-            expect=[401, 405],
+            expect=[401],
             gate="Retailer data isolation",
-            allowed_body_keys=("code",),
-            why="Order history must never leak to an unauthenticated caller.",
+            allowed_body_keys=("code", "requestId"),
+            expect_body={"code": "missing_token"},
+            envelope="error",
+            why=(
+                "Order history must never leak to an unauthenticated caller. The route exports GET, "
+                "so 405 is not an acceptable answer here and is no longer tolerated."
+            ),
         ),
         Target(
             "login route is deployed and method-guarded",
             "/api/mobile/v1/auth/login",
             expect=[405],
             gate="Critical APIs work",
-            allowed_body_keys=("code",),
+            allowed_body_keys=("code", "requestId"),
+            expect_body={"code": "method_not_allowed"},
+            envelope="error",
             why=(
                 "GET on a POST-only route proves the handler is really deployed WITHOUT sending "
                 "credentials or touching the auth rate limiter."
@@ -516,11 +554,39 @@ def _evaluate(result: ProbeResult, status: int | None, headers: dict[str, str], 
                     result.reasons.append("response was not parseable JSON")
                 parsed = None
             if parsed is not None:
-                result.body = redact_mapping(parsed, target.allowed_body_keys)
-                for key, wanted in target.expect_body.items():
-                    actual = result.body.get(key)
-                    if actual != wanted:
-                        result.reasons.append(f"body.{key} was {actual!r}, expected {wanted!r}")
+                container: Any = parsed
+                if target.envelope is not None:
+                    inner = parsed.get(target.envelope) if isinstance(parsed, dict) else None
+                    if not isinstance(inner, dict):
+                        # A missing envelope object is a real contract break, not
+                        # an empty body: the Android client unwraps `data` and
+                        # `error` unconditionally, so report it as such.
+                        result.reasons.append(
+                            f"response carried no '{target.envelope}' object "
+                            "(mobile envelope shape mismatch)"
+                        )
+                        container = None
+                    else:
+                        container = inner
+                if container is not None:
+                    projected = redact_mapping(container, target.allowed_body_keys)
+                    if target.envelope is not None and isinstance(parsed, dict):
+                        # `requestId` is a SIBLING of `data`/`error` in this
+                        # contract, not a child of it (lib/mobile/http.ts builds
+                        # `{ data, requestId }` and `{ error: {...}, requestId }`).
+                        # Lifting it when allowlisted is what makes a production
+                        # failure correlatable with the server log.
+                        for sibling in ENVELOPE_SIBLING_KEYS:
+                            if sibling in target.allowed_body_keys and sibling not in projected:
+                                value = parsed.get(sibling)
+                                if isinstance(value, str):
+                                    projected[sibling] = redact(value)
+                    result.body = projected
+                    for key, wanted in target.expect_body.items():
+                        actual = result.body.get(key)
+                        if actual != wanted:
+                            where = f"{target.envelope}.{key}" if target.envelope else f"body.{key}"
+                            result.reasons.append(f"{where} was {actual!r}, expected {wanted!r}")
 
 
 def probe_target(
@@ -745,25 +811,46 @@ def self_test() -> int:
 
         return fetch
 
+    # Real response shapes, taken from lib/mobile/http.ts: jsonOk wraps in
+    # `data`, jsonError wraps in `error`, and the operational /api/health is
+    # flat because it predates the mobile contract.
     ok_health = json.dumps({"status": "ok", "database": "reachable", "latencyMs": 9}).encode()
+    ok_mobile_health = json.dumps(
+        {
+            "data": {
+                "status": "ok",
+                "database": "reachable",
+                "apiVersion": "v1",
+                "serverTime": "2026-10-09T00:00:00.000Z",
+                "latencyMs": 5,
+            },
+            "requestId": "req_synthetic",
+        }
+    ).encode()
+    missing_token = json.dumps(
+        {"error": {"code": "missing_token", "message": "Sign in to continue."}, "requestId": "req_synthetic"}
+    ).encode()
+    method_not_allowed = json.dumps(
+        {"error": {"code": "method_not_allowed", "message": "This method is not supported here."}, "requestId": "req_synthetic"}
+    ).encode()
+    json_headers = {"Content-Type": "application/json"}
+
     good = fake_fetcher(
         {
-            "/api/health": (200, {"Content-Type": "application/json"}, ok_health),
-            "/api/mobile/v1/health": (200, {"Content-Type": "application/json"}, ok_health),
+            "/api/health": (200, json_headers, ok_health),
+            "/api/mobile/v1/health": (200, json_headers, ok_mobile_health),
             "/retailer/home": (307, {"Location": "https://maharanitraders.vercel.app/login?redirect=%2Fretailer%2Fhome"}, b""),
             "/admin/dashboard": (307, {"Location": "https://maharanitraders.vercel.app/login?redirect=%2Fadmin%2Fdashboard"}, b""),
-            "/api/mobile/v1/session": (401, {"Content-Type": "application/json"}, b'{"code":"missing_token"}'),
-            "/api/mobile/v1/cart": (401, {"Content-Type": "application/json"}, b'{"code":"missing_token"}'),
-            "/api/mobile/v1/catalog/products": (401, {"Content-Type": "application/json"}, b'{"code":"missing_token"}'),
-            "/api/mobile/v1/orders": (401, {"Content-Type": "application/json"}, b'{"code":"missing_token"}'),
-            "/api/mobile/v1/auth/login": (405, {"Content-Type": "application/json"}, b'{"code":"method_not_allowed"}'),
+            "/api/mobile/v1/session": (401, json_headers, missing_token),
+            "/api/mobile/v1/cart": (401, json_headers, missing_token),
+            "/api/mobile/v1/catalog/products": (401, json_headers, missing_token),
+            "/api/mobile/v1/orders": (401, json_headers, missing_token),
+            "/api/mobile/v1/auth/login": (405, json_headers, method_not_allowed),
             "/login": (200, {"Content-Type": "text/html; charset=utf-8"}, b"<html>login</html>"),
         }
     )
 
-    healthy_targets = [
-        t for t in production_targets() if t.path != "/"
-    ]
+    healthy_targets = [t for t in production_targets() if t.path != "/"]
     _origin, results = probe_production(
         PRODUCTION_ORIGIN,
         targets=healthy_targets,
@@ -771,8 +858,8 @@ def self_test() -> int:
         fetcher=good,
         sleeper=lambda _s: None,
     )
-    # "/" is served by the real run; here the synthetic map has no entry for the
-    # bare origin, so only the non-root targets are asserted.
+    # "/" is served by the real run; the synthetic map has no entry for the bare
+    # origin, so only the non-root targets are asserted.
     for result in results:
         if result.target.path == "/":
             continue
@@ -782,8 +869,64 @@ def self_test() -> int:
             "; ".join(result.reasons) or result.error or "",
         )
 
+    # The envelopes must actually be UNWRAPPED, not merely tolerated: a probe that
+    # read the wrong level reported a healthy production as broken on its first
+    # real run, so the projected fields are asserted here.
+    by_path = {r.target.path: r for r in results}
+    check(
+        "mobile health unwraps the data envelope",
+        by_path["/api/mobile/v1/health"].body.get("status") == "ok"
+        and by_path["/api/mobile/v1/health"].body.get("database") == "reachable",
+        str(by_path["/api/mobile/v1/health"].body),
+    )
+    check(
+        "operational health reads its FLAT body",
+        by_path["/api/health"].body.get("status") == "ok",
+        str(by_path["/api/health"].body),
+    )
+    check(
+        "a 401 records the auth refusal code",
+        by_path["/api/mobile/v1/session"].body.get("code") == "missing_token",
+        str(by_path["/api/mobile/v1/session"].body),
+    )
+    check(
+        "the requestId survives projection so an incident can be correlated",
+        by_path["/api/mobile/v1/cart"].body.get("requestId") == "req_synthetic",
+        str(by_path["/api/mobile/v1/cart"].body),
+    )
+
+    # A 200 whose envelope is missing must FAIL, not be read as an empty pass.
+    flat_mobile_health = fake_fetcher({"/api/mobile/v1/health": (200, json_headers, ok_health)})
+    flat_result = probe_target(
+        PRODUCTION_ORIGIN,
+        next(t for t in production_targets() if t.path == "/api/mobile/v1/health"),
+        attempts=1,
+        fetcher=flat_mobile_health,
+        sleeper=lambda _s: None,
+    )
+    check("a missing data envelope FAILS the probe", not flat_result.passed, str(flat_result.reasons))
+    check(
+        "the envelope failure names the contract break",
+        any("mobile envelope shape mismatch" in reason for reason in flat_result.reasons),
+        str(flat_result.reasons),
+    )
+
+    # A 401 with the WRONG code must fail: an unrelated 401 from an edge or proxy
+    # is not evidence that the application's authorization ran.
+    wrong_code = fake_fetcher(
+        {"/api/mobile/v1/cart": (401, json_headers, json.dumps({"error": {"code": "forbidden"}}).encode())}
+    )
+    wrong_result = probe_target(
+        PRODUCTION_ORIGIN,
+        next(t for t in production_targets() if t.path == "/api/mobile/v1/cart"),
+        attempts=1,
+        fetcher=wrong_code,
+        sleeper=lambda _s: None,
+    )
+    check("a 401 with an unexpected code FAILS the probe", not wrong_result.passed, str(wrong_result.reasons))
+
     # A leaked cart (200 instead of 401) MUST fail — this is the security gate.
-    leaking = fake_fetcher({"/api/mobile/v1/cart": (200, {"Content-Type": "application/json"}, b'{"lines":[]}')})
+    leaking = fake_fetcher({"/api/mobile/v1/cart": (200, json_headers, json.dumps({"data": []}).encode())})
     leak_result = probe_target(
         PRODUCTION_ORIGIN,
         Target("cart leak", "/api/mobile/v1/cart", expect=[401], gate="Checkout authorization"),

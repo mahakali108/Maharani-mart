@@ -502,8 +502,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
-                 --json number --jq '.[0].number' 2>/dev/null)
+          # On a pull_request event GITHUB_REF_NAME is "<pr>/merge", which matches
+          # no head branch and made this silently fall back to commit comments.
+          PR="${{ github.event.pull_request.number }}"
+          if [ -z "$PR" ]; then
+            PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                   --state open --json number --jq '.[0].number' 2>/dev/null)
+          fi
           if [ -z "$PR" ] || [ "$PR" = "null" ]; then
             echo "no open pull request for $GITHUB_REF_NAME — size report stays in the job summary and artifact"
             exit 0
@@ -581,8 +586,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
-                 --json number --jq '.[0].number' 2>/dev/null)
+          # On a pull_request event GITHUB_REF_NAME is "<pr>/merge", which matches
+          # no head branch and made this silently fall back to commit comments.
+          PR="${{ github.event.pull_request.number }}"
+          if [ -z "$PR" ]; then
+            PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                   --state open --json number --jq '.[0].number' 2>/dev/null)
+          fi
           if [ -z "$PR" ] || [ "$PR" = "null" ]; then
             # Session branches may intentionally have no duplicate PR. Keep
             # diagnostics accessible via api.github.com, not blocked blob hosts.
