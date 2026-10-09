@@ -4,10 +4,6 @@ on:
   workflow_run:
     workflows: ['Native Android Debug APK']
     types: [completed]
-  push:
-    paths:
-      - '.github/workflows/android-evidence.yml'
-      - 'scripts/android-ci-evidence.py'
   workflow_dispatch:
     inputs:
       run_id:
@@ -25,7 +21,10 @@ permissions:
 
 jobs:
   evidence:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'arena/ff1279ad-maharani-mart' && github.event.workflow_run.conclusion == 'success')
+    # Only after a GREEN native build of a live session branch, or by hand.
+    # A push of this file must NOT publish evidence for whatever stale run id
+    # the defaults name — evidence for the wrong commit is worse than none.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'arena/e6c5711c-maharani-mart' || github.event.workflow_run.head_branch == 'arena/ff1279ad-maharani-mart'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
