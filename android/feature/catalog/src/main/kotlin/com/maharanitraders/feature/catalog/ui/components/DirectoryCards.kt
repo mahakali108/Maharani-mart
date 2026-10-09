@@ -138,7 +138,7 @@ fun CategoryCard(
       }
       TileCaption(
         title = category.name,
-        subtitle = category.productCount?.let { count -> countLabel(count) } ?: "Tap to browse",
+        subtitle = listOfNotNull(category.parentName?.takeIf { it.isNotBlank() }, category.productCount?.let { count -> countLabel(count) }).joinToString(" · ").ifEmpty { "Tap to browse" },
       )
     }
   }

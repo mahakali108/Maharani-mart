@@ -620,7 +620,11 @@ class SessionManagerTest {
 
   @Test
   fun `a second account cannot inherit the first account's cached state`() = runTest(dispatcher) {
-    val scoped = RecordingSessionScopedStore()
+    val privateData = mutableMapOf<String, String>()
+    val scoped = object : SessionScopedStore {
+      var clearCount = 0
+      override suspend fun onSessionEnded() { clearCount++; privateData.clear() }
+    }
     val api = FakeMaharaniApi().apply {
       nextResult = { ApiEnvelope(sessionDto(userId = "user-1")) }
       nextLoginResult = {
@@ -642,7 +646,10 @@ class SessionManagerTest {
     // Account A signs in and loads its own favourites/badges (the caches it
     // populated are represented by the store's count).
     assertTrue(session.restore() is SessionState.Authenticated)
+    val domains = listOf("orders", "cart", "favorites", "addresses", "Coins", "notifications", "saved carts")
+    domains.forEach { privateData[it] = "user-1 private $it" }
     session.signOut()
+    assertTrue(privateData.isEmpty())
 
     // Account B signs in on the SAME device.
     api.nextResult = { ApiEnvelope(sessionDto(userId = "user-2")) }
@@ -653,6 +660,9 @@ class SessionManagerTest {
     // Once for A's sign-out, once while accepting B — never zero, which is the
     // leak this test exists to prevent.
     assertTrue(scoped.clearCount >= 2)
+    assertTrue(privateData.isEmpty())
+    domains.forEach { privateData[it] = "user-2 private $it" }
+    assertTrue(privateData.values.none { it.contains("user-1") })
   }
 
   @Test

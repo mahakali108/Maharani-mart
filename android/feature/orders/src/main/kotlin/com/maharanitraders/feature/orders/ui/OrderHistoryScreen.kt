@@ -1,6 +1,7 @@
 package com.maharanitraders.feature.orders.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -90,7 +91,7 @@ fun OrderHistoryContent(
   ) {
     item {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
           Text("My orders", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
           Text("Status and values are the latest server records.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -147,6 +148,12 @@ private fun OrderCard(order: RetailerOrder, onOpen: () -> Unit) {
         Text(MoneyFormat.formatPaise(order.grandTotalPaise), style = MaterialTheme.typography.titleMedium)
       }
       Text("Placed (UTC): ${order.placedAt}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      order.items.take(3).forEach { item ->
+        Text("${item.productName ?: item.packName ?: "Item"} · ${item.reorderPieces} pieces", style = MaterialTheme.typography.bodySmall)
+      }
+      androidx.compose.material3.OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("order_reorder_${order.id}")) {
+        Text("View order & reorder")
+      }
       Text(
         "${order.items.size} item(s) · Tap for the full record, invoice and reorder",
         style = MaterialTheme.typography.labelMedium,

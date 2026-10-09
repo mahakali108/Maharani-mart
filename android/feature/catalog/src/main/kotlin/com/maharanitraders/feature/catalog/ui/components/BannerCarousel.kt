@@ -102,7 +102,8 @@ private fun BannerCard(
 ) {
   val tokens = MaharaniThemeTokens.colors
   val route = banner.linkUrl
-  val clickable = onOpenRoute != null && route != null && banner.isNavigable
+  val clickable = onOpenRoute != null && route != null &&
+    com.maharanitraders.feature.catalog.homeBannerTarget(route) != null
 
   Surface(
     shape = RoundedCornerShape(MaharaniDimens.radiusCard),

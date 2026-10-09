@@ -148,21 +148,14 @@ data class CatalogRequest(
   val tab: CatalogTab = CatalogTab.PRODUCTS,
 )
 
-/**
- * The five tabs of the shopping bottom bar, in drawer order.
- *
- * `CATALOG` (not `CATEGORIES`) is the second tab: the catalogue is the app's one
- * discovery surface and it contains the Categories and Brands panes, so the bar
- * does not need — and must not have — a second, competing directory tab. The
- * Categories drawer entry stays, and opens the same screen on its Categories
- * pane.
- */
+/** Five retail tabs in deliberate order. Account stays in header/drawer;
+ * Categories opens Shop's existing directory pane; Brands has its own tab. */
 private val BOTTOM_NAV_ROUTES = listOf(
   MaharaniRoutes.HOME,
   MaharaniRoutes.CATALOG,
-  MaharaniRoutes.CART,
+  MaharaniRoutes.BRANDS,
   MaharaniRoutes.ORDERS,
-  MaharaniRoutes.ACCOUNT,
+  MaharaniRoutes.CART,
 )
 
 /**
@@ -179,14 +172,23 @@ private val BOTTOM_NAV_ROUTES = listOf(
  * and the workspaces the server allowed. Nothing here decides a permission —
  * that stays with the server, and every protected API call is re-checked there.
  */
+/** Repository/UI injection seam for rendering tests; production passes null.
+ * Contains no fixture or default data. The same NavHost, bars and padding render. */
+internal interface ShellRenderSource {
+  val cartCount: Int?
+  val unreadCount: Int?
+  @Composable fun Content(route: String, request: CatalogRequest, navigate: (String) -> Unit)
+}
+
 @Composable
-fun AuthenticatedShell(
+internal fun AuthenticatedShell(
   snapshot: SessionSnapshot,
   onSignOut: () -> Unit,
+  renderSource: ShellRenderSource? = null,
 ) {
   when (val routing = remember(snapshot) { MaharaniRouter.resolveSession(snapshot) }) {
     is SessionRouting.Unsupported -> UnsupportedAccountScreen(routing.reason, onSignOut)
-    is SessionRouting.Ready -> RoutedShell(snapshot, routing, onSignOut)
+    is SessionRouting.Ready -> RoutedShell(snapshot, routing, onSignOut, renderSource)
   }
 }
 
@@ -196,22 +198,22 @@ private fun RoutedShell(
   snapshot: SessionSnapshot,
   routing: SessionRouting.Ready,
   onSignOut: () -> Unit,
+  renderSource: ShellRenderSource?,
 ) {
   val navController = rememberNavController()
   val drawerState = rememberDrawerState(DrawerValue.Closed)
   val scope = rememberCoroutineScope()
   // The two badges read the shared stores; the shell never counts anything
   // itself — see ShellBadgesViewModel.
-  val badges: ShellBadgesViewModel = hiltViewModel()
-  val cartLineCount by badges.cartLineCount.collectAsStateWithLifecycle()
-  val unreadCount by badges.unreadCount.collectAsStateWithLifecycle()
-
-  LaunchedEffect(Unit) { badges.refresh() }
+  val badges: ShellBadgesViewModel? = if (renderSource == null) hiltViewModel() else null
+  val cartLineCount = if (badges != null) badges.cartLineCount.collectAsStateWithLifecycle().value else renderSource?.cartCount
+  val unreadCount = if (badges != null) badges.unreadCount.collectAsStateWithLifecycle().value else renderSource?.unreadCount
+  LaunchedEffect(Unit) { badges?.refresh() }
 
   // Every sign-out in the shell goes through here, so the previous account's
   // badge counts are cleared before the session ends.
   val handleSignOut: () -> Unit = {
-    badges.onSignOut()
+    badges?.onSignOut()
     onSignOut()
   }
   val backStackEntry by navController.currentBackStackEntryAsState()
@@ -232,13 +234,13 @@ private fun RoutedShell(
   val canUseRetailerCommerce = snapshot.role == UserRole.RETAILER &&
     snapshot.navigation.can("orders.create") && snapshot.navigation.can("orders.view.own")
 
-  val bottomItems = routing.destinations.filter { it.route in BOTTOM_NAV_ROUTES }
+  val bottomItems = BOTTOM_NAV_ROUTES.mapNotNull { route -> routing.destinations.firstOrNull { it.route == route } }
   val drawerItems = routing.destinations.filter { it.route !in BOTTOM_NAV_ROUTES }
   // The drawer's "Categories" entry renders the SAME catalogue on its Categories
   // pane, so it counts as the Catalog tab: the bar stays visible and keeps its
   // selection instead of vanishing because a second route to one screen is open.
   val selectedTabRoute = if (
-    currentRoute == MaharaniRoutes.CATEGORIES || currentRoute == MaharaniRoutes.BRANDS
+    currentRoute == MaharaniRoutes.CATEGORIES
   ) {
     MaharaniRoutes.CATALOG
   } else {
@@ -264,6 +266,10 @@ private fun RoutedShell(
   }
 
   fun selectTab(destination: MaharaniDestination) {
+    // Categories is a Shop sub-route. Restoring Shop's saved stack here can
+    // restore Categories again and make tapping Shop appear to do nothing.
+    if (destination.route == MaharaniRoutes.CATALOG && currentRoute == MaharaniRoutes.CATEGORIES &&
+      navController.popBackStack(MaharaniRoutes.CATALOG, inclusive = false)) return
     if (destination.route == currentRoute) return
     navController.navigate(destination.route) {
       // One entry per destination, state preserved across switches.
@@ -305,7 +311,9 @@ private fun RoutedShell(
             // field's text, so submit reads the state it already holds.
             onSearchSubmit = { openCatalog(CatalogRequest(search = homeSearch.trim())) },
             onOpenDrawer = ::openDrawer,
-            onOpenAccount = { showAccount.value = true },
+            onOpenAccount = { navController.navigate(MaharaniRoutes.ACCOUNT) { launchSingleTop = true } },
+            onOpenCart = { navController.navigate(MaharaniRoutes.CART) { launchSingleTop = true } },
+            cartLineCount = cartLineCount,
             onOpenNotifications = {
               navController.navigate(MaharaniRoutes.NOTIFICATIONS) { launchSingleTop = true }
             },
@@ -321,6 +329,7 @@ private fun RoutedShell(
                 when (currentRoute) {
                   MaharaniRoutes.ORDER_INVOICE -> "Invoice"
                   MaharaniRoutes.ORDER_DELIVERY -> "Delivery record"
+                  MaharaniRoutes.PRODUCT_DETAIL -> "Product details"
                   else -> "Order details"
                 }
               )
@@ -385,7 +394,7 @@ private fun RoutedShell(
               }
               if (currentRoute != MaharaniRoutes.ACCOUNT) {
                 IconButton(
-                  onClick = { showAccount.value = true },
+                  onClick = { navController.navigate(MaharaniRoutes.ACCOUNT) { launchSingleTop = true } },
                   modifier = Modifier.testTag(ShellTags.OPEN_ACCOUNT),
                 ) {
                   AccountGlyph(modifier = Modifier.size(22.dp))
@@ -409,6 +418,7 @@ private fun RoutedShell(
           ) {
             bottomItems.forEach { destination ->
               NavigationBarItem(
+                modifier = Modifier.testTag("shell_tab_${destination.route}"),
                 selected = destination.route == selectedTabRoute,
                 onClick = { selectTab(destination) },
                 icon = {
@@ -456,6 +466,9 @@ private fun RoutedShell(
       ) {
         routing.destinations.forEach { destination ->
           composable(destination.route) {
+            if (renderSource != null) {
+              renderSource.Content(destination.route, catalogRequest) { navController.navigate(it) { launchSingleTop = true } }
+            } else {
             // A cart handle for the two surfaces that can quick-add: the home
             // dashboard's cards and the catalogue's cards.
             val quickAdd = quickAddCartHandle(
@@ -492,6 +505,7 @@ private fun RoutedShell(
               quickAddMessage = quickAdd?.message,
               onQuickAddMessageShown = { quickAdd?.onMessageShown?.invoke() },
             )
+            }
           }
         }
 
@@ -551,7 +565,9 @@ private fun RoutedShell(
             navArgument(ProductDetailViewModel.ARG_PRODUCT_ID) { type = NavType.StringType },
           ),
         ) {
-          if (canUseRetailerCommerce) {
+          if (renderSource != null) {
+            renderSource.Content(MaharaniRoutes.PRODUCT_DETAIL, catalogRequest) { navController.navigate(it) }
+          } else if (canUseRetailerCommerce) {
             val cartViewModel: CartCheckoutViewModel = hiltViewModel()
             val cartState by cartViewModel.state.collectAsStateWithLifecycle()
             ProductDetailScreen(
@@ -610,6 +626,8 @@ private fun RetailerHomeTopBar(
   onOpenDrawer: () -> Unit,
   onOpenAccount: () -> Unit,
   onOpenNotifications: () -> Unit,
+  onOpenCart: () -> Unit,
+  cartLineCount: Int?,
   unreadCount: Int?,
   modifier: Modifier = Modifier,
 ) {
@@ -650,20 +668,20 @@ private fun RetailerHomeTopBar(
           // shop is this" are both answered without a second row of chrome.
           val retailerName = snapshot.user.fullName?.takeIf { it.isNotBlank() }
           Text(
-            text = if (retailerName != null) "$greeting, $retailerName" else greeting,
+            text = "Maharani Traders",
             style = MaterialTheme.typography.titleMedium,
             color = tokens.onAppBar,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag(ShellTags.GREETING),
+            modifier = Modifier.testTag(ShellTags.BRAND),
           )
           Text(
-            text = snapshot.retailer?.shopName ?: "Maharani Traders",
+            text = snapshot.retailer?.shopName ?: retailerName?.let { "$greeting, $it" } ?: greeting,
             style = MaterialTheme.typography.labelSmall,
             color = tokens.onAppBarMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag(ShellTags.BRAND),
+            modifier = Modifier.testTag(ShellTags.GREETING),
           )
         }
 
@@ -683,6 +701,16 @@ private fun RetailerHomeTopBar(
             },
           ) {
             BellGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
+          }
+        }
+
+        IconButton(onClick = onOpenCart) {
+          BadgedBox(badge = {
+            if (cartLineCount != null && cartLineCount > 0) Badge {
+              Text(if (cartLineCount > 99) "99+" else cartLineCount.toString())
+            }
+          }) {
+            CartGlyph(modifier = Modifier.size(22.dp), tint = tokens.onAppBar)
           }
         }
 
@@ -904,6 +932,21 @@ private fun DestinationSurface(
         onOpenDirectory = { tab -> onOpenCatalog(CatalogRequest(tab = tab)) },
         onOpenDestination = onOpenDestination,
         quickActions = homeQuickActions(availableRoutes),
+        onOpenBanner = { raw ->
+          when (val target = com.maharanitraders.feature.catalog.homeBannerTarget(raw)) {
+            is com.maharanitraders.feature.catalog.HomeBannerTarget.Catalog ->
+              onOpenCatalog(CatalogRequest(target.search, target.categoryId, target.brandId))
+            is com.maharanitraders.feature.catalog.HomeBannerTarget.Product -> onOpenProduct(target.id)
+            com.maharanitraders.feature.catalog.HomeBannerTarget.Offers ->
+              if (MaharaniRoutes.SCHEMES in availableRoutes) onOpenDestination(MaharaniRoutes.SCHEMES)
+            com.maharanitraders.feature.catalog.HomeBannerTarget.Coupons ->
+              if (MaharaniRoutes.COUPONS in availableRoutes) onOpenDestination(MaharaniRoutes.COUPONS)
+            null -> Unit
+          }
+        },
+        onOpenOffers = if (MaharaniRoutes.SCHEMES in availableRoutes) {
+          { onOpenDestination(MaharaniRoutes.SCHEMES) }
+        } else null,
         dashboard = dashboard,
         onRetryDashboard = dashboardViewModel::load,
         cartLineCount = cartLineCount,

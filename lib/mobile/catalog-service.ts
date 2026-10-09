@@ -174,7 +174,7 @@ export async function loadMobileTaxonomy(
 
 /** Raw taxonomy for the shared filter scope (ids + parent links only). */
 async function loadTaxonomyRows(supabase: SupabaseClient): Promise<TaxonomyRow> {
-  const [{ data: categoryRows }, { data: brandRows }] = await Promise.all([
+  const [categoryResult, brandResult] = await Promise.all([
     supabase
       .from('categories')
       .select('id, name, parent_id')
@@ -188,7 +188,9 @@ async function loadTaxonomyRows(supabase: SupabaseClient): Promise<TaxonomyRow> 
       .order('name')
       .returns<{ id: string; name: string }[]>(),
   ]);
-  return { categories: categoryRows ?? [], brands: brandRows ?? [] };
+  if (categoryResult.error) throw categoryResult.error;
+  if (brandResult.error) throw brandResult.error;
+  return { categories: categoryResult.data ?? [], brands: brandResult.data ?? [] };
 }
 
 /** One catalogue batch through the SAME service the web catalogue uses. */

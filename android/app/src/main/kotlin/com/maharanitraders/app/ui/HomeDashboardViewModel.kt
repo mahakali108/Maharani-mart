@@ -15,6 +15,7 @@ import com.maharanitraders.feature.orders.buyAgainCandidates
 import com.maharanitraders.feature.orders.RetailerOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,10 +47,13 @@ class HomeDashboardViewModel @Inject constructor(
   private val wallet: EngagementRepository,
   private val orders: CommerceRepository,
   private val history: LocalHistoryStore,
+  private val promotions: com.maharanitraders.feature.engagement.RetailerUpgradeRepository,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(HomeDashboard())
   val state: StateFlow<HomeDashboard> = _state.asStateFlow()
+
+  private var request: Job? = null
 
   init {
     load()
@@ -57,16 +61,18 @@ class HomeDashboardViewModel @Inject constructor(
 
   /** Re-read everything. Safe to tap repeatedly: an in-flight read is reused. */
   fun load() {
+    if (request?.isActive == true) return
     _state.update { it.copy(loading = it.isEmpty, errorMessage = null) }
-    viewModelScope.launch {
+    request = viewModelScope.launch {
       // Recently viewed is local and instant; the two server reads run together.
       history.ensureLoaded()
       val viewed = history.recentlyViewed.value
 
-      val (walletResult, orderResult) = coroutineScope {
+      val (walletResult, orderResult, offersResult) = coroutineScope {
         val walletRead = async { wallet.loadWalletSummary() }
         val orderRead = async { orders.orderHistory(cursor = null) }
-        walletRead.await() to orderRead.await()
+        val offersRead = async { promotions.loadSchemes() }
+        Triple(walletRead.await(), orderRead.await(), offersRead.await())
       }
 
       val coins = (walletResult as? AppResult.Success)?.value?.let { summary ->
@@ -101,11 +107,15 @@ class HomeDashboardViewModel @Inject constructor(
       // went wrong" that hides which number is missing.
       val failure = (walletResult as? AppResult.Failure)?.error
         ?: (orderResult as? AppResult.Failure)?.error
+        ?: (offersResult as? AppResult.Failure)?.error
 
       _state.update {
         it.copy(
           loading = false,
           coins = coins,
+          offers = (offersResult as? AppResult.Success)?.value.orEmpty().take(6).map {
+            com.maharanitraders.feature.catalog.HomeOffer(it.id, it.name, it.description, it.endsAt)
+          },
           lastOrder = lastOrder,
           recentlyViewed = viewed,
           frequentlyOrdered = frequentlyOrdered,

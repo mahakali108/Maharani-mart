@@ -34,6 +34,7 @@ data class HomeUiState(
   /** The "Recently added" rail: the catalogue's real newest-first batch. */
   val recent: List<CatalogProduct> = emptyList(),
   val recentLoading: Boolean = true,
+  val recentError: String? = null,
   val errorMessage: String? = null,
   val offline: Boolean = false,
   val retryable: Boolean = true,
@@ -42,7 +43,7 @@ data class HomeUiState(
   val isEmpty: Boolean
     get() {
       val payload = home ?: return false
-      return payload.banners.isEmpty() && payload.categories.isEmpty() && payload.products.isEmpty()
+      return payload.banners.isEmpty() && payload.categories.isEmpty() && payload.brands.isEmpty() && payload.products.isEmpty()
     }
 
   val hasContent: Boolean get() = home != null
@@ -57,15 +58,14 @@ data class HomeUiState(
  * sort=newest` batch for the "Recently added" rail — the same endpoint and the
  * same server ordering the web catalogue uses, so the rail is a real view of
  * the catalogue, never a separately curated (and therefore separately stale)
- * list. The newest-first batch is OPTIONAL: if it fails, the rail is simply
- * not shown and the home screen still renders, because one extra rail must not
+ * list. The newest-first batch is OPTIONAL: if it fails, the rail reports a retryable error and the home screen still renders, because one extra rail must not
  * be able to take the shop down.
  *
  * This ViewModel holds no fallback content of its own — when the home request
  * fails the screen says so and offers a retry, because a home screen full of
  * plausible looking products that the warehouse does not have is worse than an
  * honest error. Cart and order history are separate Phase E destinations, not
- * part of the home response; a Coins wallet summary remains later work.
+ * part of the home response; the Coins dashboard is supplied separately by the shell.
  */
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -136,6 +136,7 @@ class HomeViewModel @Inject constructor(
               home = home,
               recent = recent,
               recentLoading = false,
+              recentError = (recentResult as? AppResult.Failure)?.error?.message,
               errorMessage = null,
               offline = false,
             )
