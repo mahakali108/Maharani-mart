@@ -199,10 +199,3 @@ dependencies {
   // set exists anywhere). Re-add them WITH the first instrumented test —
   // test-only artifacts never reach the APK either way.
 }
-
-// Rendered Compose regressions run only in the JVM test APK/environment.
-dependencies {
-  testImplementation("org.robolectric:robolectric:4.16.1")
-  testImplementation("androidx.compose.ui:ui-test-junit4:1.10.3")
-  debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.3")
-}
