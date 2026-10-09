@@ -65,12 +65,30 @@ val maharaniVersionText: String = providers
       "versionName and versionCode - restore it before building.",
   )
 
-val maharaniVersionProperties = java.util.Properties().apply {
-  load(maharaniVersionText.byteInputStream())
-}
+// Parsed with the Kotlin standard library ONLY - no java.util.Properties.
+//
+// That is not a style choice. In a Gradle Kotlin DSL script the simple name
+// `java` resolves to the project's `java` EXTENSION, which shadows the `java`
+// package root, so `java.util.Properties` fails to compile with
+// "Unresolved reference 'util'" (CI run 37957848482 proved it). An explicit
+// `import java.util.Properties` would work, but this parser needs nothing that
+// Properties provides: the file is KEY=VALUE lines with `#` comments, and having
+// no JDK type here keeps the script free of any name the build could shadow.
+//
+// The semantics match tests/android-release-versioning.test.ts, which parses the
+// same file the same way and asserts the values CI reads back out of the APK.
+val maharaniVersionValues: Map<String, String> = maharaniVersionText
+  .lineSequence()
+  .map { it.trim() }
+  .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("!") }
+  .filter { it.contains('=') }
+  .associate { line ->
+    val separator = line.indexOf('=')
+    line.substring(0, separator).trim() to line.substring(separator + 1).trim()
+  }
 
 fun maharaniVersionInt(key: String, minimum: Int): Int {
-  val raw = maharaniVersionProperties.getProperty(key)?.trim()
+  val raw = maharaniVersionValues[key]
     ?: throw GradleException("android/version.properties must define $key")
   val parsed = raw.toIntOrNull()
     ?: throw GradleException("android/version.properties: $key must be a plain integer, found '$raw'")

@@ -126,6 +126,40 @@ describe('2. the Gradle build derives the version instead of hardcoding it', () 
     expect(GRADLE).not.toMatch(/File\([^)]*version\.properties[^)]*\)\.readText\(\)/);
   });
 
+  it('parses the properties file with Kotlin stdlib only — never java.util.Properties', () => {
+    // PROVEN FAILURE, not a hypothetical: in a Gradle Kotlin DSL script the simple
+    // name `java` resolves to the project's `java` EXTENSION, shadowing the `java`
+    // package root, so `java.util.Properties` does not compile — CI run 37957848482
+    // failed with "Unresolved reference 'util'" at exactly that line. Comments may
+    // explain the trap; code must not repeat it.
+    const code = GRADLE.split('\n')
+      .filter((line) => !line.trimStart().startsWith('//'))
+      .join('\n');
+    expect(code).not.toContain('java.util.Properties');
+    expect(code).not.toMatch(/\bjava\.[a-z]/);
+    expect(GRADLE).toContain('lineSequence()');
+    expect(GRADLE).toContain('.associate {');
+    expect(GRADLE).toContain('toIntOrNull()');
+  });
+
+  it('parses version.properties the same way the Gradle script does', () => {
+    // The test and the build must not disagree about what the file means, or the
+    // green test would be describing a different version than the one shipped.
+    const values: Record<string, string> = {};
+    for (const rawLine of PROPS_TEXT.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#') || line.startsWith('!')) continue;
+      if (!line.includes('=')) continue;
+      const separator = line.indexOf('=');
+      values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+    }
+    const code = Number(values.VERSION_CODE);
+    const name = [values.VERSION_MAJOR, values.VERSION_MINOR, values.VERSION_PATCH].join('.');
+    expect(code).toBe(Number(PROPS.VERSION_CODE));
+    expect(name).toBe(`${PROPS.VERSION_MAJOR}.${PROPS.VERSION_MINOR}.${PROPS.VERSION_PATCH}`);
+    expect(name).toMatch(/^[0-9]+\.[0-9]+\.[0-9]+$/);
+  });
+
   it('fails the build on a missing or malformed version file instead of defaulting', () => {
     expect(GRADLE).toContain('android/version.properties is missing');
     expect(GRADLE).toMatch(/must define \$key/);
