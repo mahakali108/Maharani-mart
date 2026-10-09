@@ -998,18 +998,17 @@ private fun DestinationSurface(
             null -> Unit
           }
         },
-        onOpenOffers = if (MaharaniRoutes.SCHEMES in availableRoutes) {
-          { onOpenDestination(MaharaniRoutes.SCHEMES) }
-        } else null,
+        // The ticker strip and the offers rail both land on the offers screen;
+        // the Deals rail opens the catalogue on the server's own offer filter, so
+        // "Shop offers" is the rail continued rather than a different list. When
+        // the session may not open the offers destination, the tap does nothing
+        // rather than landing on a dead route.
+        onOpenOffers = { if (MaharaniRoutes.SCHEMES in availableRoutes) onOpenDestination(MaharaniRoutes.SCHEMES) },
+        onOpenDeals = { onOpenCatalog(CatalogRequest(offersOnly = true)) },
         dashboard = dashboard,
         onRetryDashboard = dashboardViewModel::load,
         cartLineCount = cartLineCount,
         onOpenCoins = { onOpenDestination(MaharaniRoutes.COINS) },
-        // The ticker strip and the offers rail both land on the offers screen;
-        // the Deals rail opens the catalogue on the server's own offer filter, so
-        // "Shop offers" is the rail continued rather than a different list.
-        onOpenOffers = { onOpenDestination(MaharaniRoutes.SCHEMES) },
-        onOpenDeals = { onOpenCatalog(CatalogRequest(offersOnly = true)) },
         onOpenOrder = onOpenOrder,
         onQuickAddToCart = onQuickAddToCart,
         quickAddPackId = quickAddPackId,
