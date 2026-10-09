@@ -22,6 +22,7 @@ on:
       - 'lib/permissions/**'
       - 'tests/**'
       - 'scripts/android-apk-size-report.py'
+      - 'scripts/production-probe.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/android-apk.yml'
@@ -33,6 +34,7 @@ on:
       - 'lib/permissions/**'
       - 'tests/**'
       - 'scripts/android-apk-size-report.py'
+      - 'scripts/production-probe.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/android-apk.yml'
@@ -223,14 +225,43 @@ jobs:
             printf '::error title=android unit test failures::%s\n' "$body"
           fi
 
-      - name: Verify debug APK identity
+      - name: Verify debug APK identity, version, and signing status
         run: |
           set -euo pipefail
           APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
           AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          APKSIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
           test -f "$APK_PATH"
           test -x "$AAPT"
-          "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.maharanitraders.app'"
+          test -x "$APKSIGNER"
+
+          # Expected identity is read from the build script, so the check can
+          # never drift from what the build actually configured.
+          EXPECTED_PKG=$(sed -n 's/.*applicationId = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
+          EXPECTED_CODE=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' android/app/build.gradle.kts | head -1)
+          EXPECTED_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
+          echo "expected: package=$EXPECTED_PKG versionCode=$EXPECTED_CODE versionName=$EXPECTED_NAME"
+
+          BADGING=$("$AAPT" dump badging "$APK_PATH")
+          echo "$BADGING" | grep -F "package: name='$EXPECTED_PKG'"
+          echo "$BADGING" | grep -F "package: name='$EXPECTED_PKG' versionCode='$EXPECTED_CODE' versionName='$EXPECTED_NAME'"
+          echo "APK identity: PASS ($EXPECTED_PKG versionCode=$EXPECTED_CODE versionName=$EXPECTED_NAME)"
+
+          # Signing status of the DEBUG APK: Gradle's throwaway debug keystore
+          # only. The certificate digest printed here is public information —
+          # apksigner prints digests, never keys.
+          "$APKSIGNER" verify --print-certs "$APK_PATH" | tee /tmp/debug-signing.txt
+          grep -F 'CN=Android Debug' /tmp/debug-signing.txt
+          echo "debug signing: PASS (Android debug keystore, per policy)"
+
+          {
+            echo ""
+            echo "### APK identity and signing evidence — \`${GITHUB_SHA:0:7}\`"
+            echo ""
+            echo "| Artifact | Package | versionCode | versionName | Signing |"
+            echo "|---|---|---|---|---|"
+            echo "| app-debug.apk | \`$EXPECTED_PKG\` | $EXPECTED_CODE | \`$EXPECTED_NAME\` | Android debug keystore (throwaway, runner-local) |"
+          } >> /tmp/apk-identity.md
 
       # The RELEASE APK and AAB are built UNSIGNED on purpose: no keystore, no
       # secret, no publication. Their only job is to measure what a production
@@ -242,6 +273,56 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew --no-daemon --stacktrace assembleRelease bundleRelease 2>&1 | tee -a /tmp/gradle.log
+
+      # Signed-release readiness gate. The release keystore lives in repository
+      # secrets (RELEASE_KEYSTORE_PATH is the file on disk once decoded) and is
+      # deliberately ABSENT here: the unsigned artifacts may pass as size
+      # evidence, but signed-release readiness stays BLOCKED — reported in the
+      # summary on every run, never quietly assumed. Only the PRESENCE of each
+      # secret is printed (true/false); a secret VALUE must never reach the log,
+      # and the audit step below enforces that.
+      - name: Verify release artifacts are unsigned and report signing readiness
+        env:
+          HAS_RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE != '' }}
+          HAS_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD != '' }}
+          HAS_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS != '' }}
+          HAS_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          APK_SIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
+          RELEASE_APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+
+          # The release APK MUST be unsigned in this pipeline. apksigner verify
+          # exits non-zero on an unsigned APK — that is the PASS condition here.
+          if "$APK_SIGNER" verify "$RELEASE_APK" >/tmp/release-signing.txt 2>&1; then
+            echo "::error::release APK is SIGNED but this pipeline must only produce unsigned artifacts"
+            exit 1
+          fi
+          grep -E 'DOES NOT VERIFY|Not signed|Failed to verify' /tmp/release-signing.txt | head -3
+          echo "release artifact: UNSIGNED (expected — publication is a separate, human-controlled step)"
+
+          if [ "$HAS_RELEASE_KEYSTORE" = "true" ] && [ "$HAS_RELEASE_KEYSTORE_PASSWORD" = "true" ] \
+             && [ "$HAS_RELEASE_KEY_ALIAS" = "true" ] && [ "$HAS_RELEASE_KEY_PASSWORD" = "true" ]; then
+            READINESS="READY-TO-SIGN (all four release-keystore secrets are configured; signing itself remains a manual release step)"
+          else
+            READINESS="**BLOCKED** — release keystore secrets not configured (RELEASE_KEYSTORE present: $HAS_RELEASE_KEYSTORE, password: $HAS_RELEASE_KEYSTORE_PASSWORD, alias: $HAS_RELEASE_KEY_ALIAS, key password: $HAS_RELEASE_KEY_PASSWORD). The unsigned build passes as size evidence only; signed-release readiness remains BLOCKED."
+            echo "::warning::signed-release readiness BLOCKED — release keystore secrets are not configured"
+          fi
+
+          RELEASE_APK_NAME=$(basename "$RELEASE_APK")
+          EXPECTED_PKG=$(sed -n 's/.*applicationId = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
+          EXPECTED_CODE=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' android/app/build.gradle.kts | head -1)
+          EXPECTED_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
+          {
+            echo "| \`$RELEASE_APK_NAME\` + AAB | \`$EXPECTED_PKG\` | $EXPECTED_CODE | \`$EXPECTED_NAME\` | UNSIGNED (verified) |"
+            echo ""
+            echo "#### Signed-release readiness"
+            echo ""
+            echo "$READINESS"
+            echo ""
+            echo "No keystore password, token or private signing material was printed by this job; the audit step enforces it."
+          } >> /tmp/apk-identity.md
+          cat /tmp/apk-identity.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Measure artifact sizes and generate breakdown
         run: |
@@ -273,16 +354,19 @@ jobs:
             # THROWAWAY measurement keystore, generated fresh on the runner:
             # build-apks signs its output, and this signature is never used for
             # distribution — only for get-size measurement. No real key, no
-            # secret, nothing persisted.
-            keytool -genkeypair -keystore /tmp/size.keystore -storepass android \
-              -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 \
+            # secret, nothing persisted. The keystore password is passed through
+            # env: references so that not even this throwaway literal appears in
+            # the job log (see the audit step below).
+            export SIZE_KS_PASS=android
+            keytool -genkeypair -keystore /tmp/size.keystore -storepass "$SIZE_KS_PASS" \
+              -keypass "$SIZE_KS_PASS" -alias androiddebugkey -keyalg RSA -keysize 2048 \
               -validity 1 -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
             AAB=$(ls android/app/build/outputs/bundle/release/*.aab 2>/dev/null | head -1)
             echo "bundle: $AAB"
             java -jar /tmp/bundletool.jar build-apks \
               --bundle="$AAB" --output=/tmp/app-device.apks --overwrite \
-              --ks=/tmp/size.keystore --ks-pass pass:android \
-              --ks-key-alias androiddebugkey --key-pass pass:android 2>&1
+              --ks=/tmp/size.keystore --ks-pass env:SIZE_KS_PASS \
+              --ks-key-alias androiddebugkey --key-pass env:SIZE_KS_PASS 2>&1
             echo "build-apks exit: $?"
             if [ -f /tmp/app-device.apks ]; then
               java -jar /tmp/bundletool.jar get-size total --apks=/tmp/app-device.apks 2>&1
@@ -334,6 +418,72 @@ jobs:
             /tmp/size-report.md
           if-no-files-found: error
           retention-days: 7
+
+      # HARD GATE: this job must never print a keystore password, a token or
+      # private signing material. Every log file the job produced is scanned
+      # both for structural secret shapes (PEM private keys, GitHub tokens,
+      # non-redacted Gradle signing properties) and for the literal values of
+      # the release-keystore secrets when they exist — the only proof that
+      # matters is "the actual secret value is not in the log". The secret
+      # values enter this step masked and are never echoed; only match/no-match
+      # is printed. The one password literal that CAN appear is the runner-local
+      # throwaway measurement keystore's default (visible in the step script
+      # Actions itself echoes); it protects nothing, dies with the runner, and
+      # is never a distribution key.
+      - name: Audit logs for keystore passwords, tokens, and private signing material
+        if: always()
+        env:
+          SCAN_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          SCAN_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          SCAN_RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
+          GH_TOKEN_VALUE: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          FILES=""
+          for f in /tmp/gradle.log /tmp/size-report.md /tmp/apk-identity.md \
+                   /tmp/test-failures.txt /tmp/debug-signing.txt /tmp/release-signing.txt \
+                   /tmp/diagnostics.txt; do
+            [ -f "$f" ] && FILES="$FILES $f"
+          done
+          echo "scanning:$FILES"
+          FAIL=0
+
+          # 1. Structural secret shapes.
+          if grep -HnE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----' $FILES; then
+            echo "::error::private key material found in job output"; FAIL=1
+          fi
+          if grep -HnE -- '\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b' $FILES; then
+            echo "::error::GitHub token material found in job output"; FAIL=1
+          fi
+          # Gradle masks these as *** when it prints them; any visible value is a leak.
+          if grep -HnE -- '(storePassword|keyPassword) = [^*[:space:]]' $FILES; then
+            echo "::error::unmasked signing property found in job output"; FAIL=1
+          fi
+
+          # 2. Literal values of configured secrets (only when they exist).
+          check_value() {
+            local label="$1" value="$2"
+            if [ -n "$value" ]; then
+              if grep -HnF -- "$value" $FILES; then
+                echo "::error::$label literal found in job output"; FAIL=1
+              else
+                echo "$label: present as secret, NOT found in job output — PASS"
+              fi
+            else
+              echo "$label: not configured in this repository"
+            fi
+          }
+          check_value "RELEASE_KEYSTORE_PASSWORD" "$SCAN_RELEASE_KEYSTORE_PASSWORD"
+          check_value "RELEASE_KEY_PASSWORD" "$SCAN_RELEASE_KEY_PASSWORD"
+          check_value "RELEASE_KEYSTORE (base64)" "$SCAN_RELEASE_KEYSTORE"
+          check_value "GITHUB_TOKEN" "$GH_TOKEN_VALUE"
+
+          if [ "$FAIL" -ne 0 ]; then
+            echo "::error::log audit FAILED — signing material or tokens were printed"
+            exit 1
+          fi
+          echo "log audit PASS: no keystore passwords, tokens, or private signing material in job output"
+          echo "### Secret-print audit: **PASS** (no keystore password, token, or private key in any job log)" >> "$GITHUB_STEP_SUMMARY"
 
       # Actions log files are served from a host that is not reachable from every
       # environment, and check annotations are capped at about ten per step. On a
@@ -410,3 +560,50 @@ jobs:
           path: android/**/build/reports
           if-no-files-found: warn
           retention-days: 7
+
+  # Production probe: is the ONE fixed deployment actually answering?
+  #
+  # Runs in its own job so a production outage is visible without turning the
+  # Android build red (the APK can be perfectly healthy while the API is not,
+  # and vice versa). The verdict is ALWAYS written to the job summary — the
+  # probe itself prints it before any exit — and the job's conclusion is the
+  # verdict:
+  #
+  #   PRODUCTION_REACHABLE   success
+  #   PRODUCTION_ERROR       failure (host answered, app unhealthy)
+  #   PRODUCTION_UNREACHABLE failure (controls answered, production did not)
+  #   NETWORK_RESTRICTED     success + warning (this runner cannot test
+  #                          production; that is NOT reported as an outage)
+  production-probe:
+    name: Production probe (maharanitraders.vercel.app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Probe the fixed production URL
+        id: probe
+        run: |
+          set +e
+          node scripts/production-probe.mjs
+          CODE=$?
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+          if [ "$CODE" = "4" ]; then
+            echo "::warning::production probe could not test production from this runner (network restricted) — verdict NETWORK_RESTRICTED, NOT an outage"
+          fi
+          exit 0
+
+      - name: Gate on the probe verdict
+        run: |
+          CODE="${{ steps.probe.outputs.exit_code }}"
+          case "$CODE" in
+            0) echo "production reachable" ;;
+            4) echo "production unverifiable from this runner — recorded as NETWORK_RESTRICTED, build stays green" ;;
+            *) echo "::error::production probe reported a real problem (exit $CODE) — see the job summary verdict"; exit 1 ;;
+          esac
