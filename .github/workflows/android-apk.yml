@@ -602,8 +602,23 @@ jobs:
           exit 0
 
       - name: Gate on the probe verdict
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           CODE="${{ steps.probe.outputs.exit_code }}"
+          # Re-run cheaply (idempotent) to capture the verdict text for an
+          # annotation and a commit comment: step summaries and logs are served
+          # from hosts that are not reachable from every environment, while
+          # check annotations and commit comments are served by api.github.com.
+          set +e
+          node scripts/production-probe.mjs > /tmp/probe-verdict.md
+          set -e
+          VERDICT=$(grep -oE '\*\*[A-Z_]+\*\*' /tmp/probe-verdict.md | head -1 | tr -d '*')
+          echo "::notice title=production probe verdict::${VERDICT:-UNKNOWN} (exit $CODE) — full verdict in the job summary and commit comment"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -f body="$(cat /tmp/probe-verdict.md)" >/dev/null \
+            || echo "::warning::could not post the probe verdict comment"
           case "$CODE" in
             0) echo "production reachable" ;;
             4) echo "production unverifiable from this runner — recorded as NETWORK_RESTRICTED, build stays green" ;;
