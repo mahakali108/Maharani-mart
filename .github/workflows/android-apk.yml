@@ -177,33 +177,6 @@ jobs:
           fi
           echo "::notice::Full Gradle log is in the failed step's output and in the Gradle test/lint reports artifact."
 
-      - name: Report Android unit test totals
-        if: always()
-        run: |
-          set -euo pipefail
-          python3 - > /tmp/test-totals.txt 2>&1 <<'PY'
-          import glob
-          import xml.etree.ElementTree as ET
-
-          tests = failures = errors = ignored = 0
-          suites = 0
-          for path in sorted(glob.glob('android/**/build/test-results/**/*.xml', recursive=True)):
-              try:
-                  root = ET.parse(path).getroot()
-              except Exception:
-                  continue
-              for suite in ([root] if root.tag == 'testsuite' else list(root.iter('testsuite'))):
-                  suites += 1
-                  tests += int(suite.get('tests') or 0)
-                  failures += int(suite.get('failures') or 0)
-                  errors += int(suite.get('errors') or 0)
-                  ignored += int((suite.get('skipped') or suite.get('ignored') or 0))
-          print(f'{tests} tests, {failures} failures, {errors} errors, {ignored} ignored across {suites} suites')
-          PY
-          cat /tmp/test-totals.txt
-          echo "::notice title=android unit test totals::$(cat /tmp/test-totals.txt)"
-          echo "### Android unit tests: $(cat /tmp/test-totals.txt)" >> "$GITHUB_STEP_SUMMARY"
-
       # A failing unit test is the one failure class the log cannot explain: Gradle
       # prints "There were failing tests" and a path to an HTML report, and that
       # report lives in an artifact served from a host that is not always
@@ -642,20 +615,10 @@ jobs:
           node scripts/production-probe.mjs > /tmp/probe-verdict.md
           set -e
           VERDICT=$(grep -oE '\*\*[A-Z_]+\*\*' /tmp/probe-verdict.md | head -1 | tr -d '*')
-          echo "::notice title=production probe verdict::${VERDICT:-UNKNOWN} (exit $CODE) — full verdict in the job summary and pull-request comment"
-          PR="${{ github.event.pull_request.number }}"
-          if [ -z "$PR" ] || [ "$PR" = "null" ]; then
-            PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
-                   --json number --jq '.[0].number' 2>/dev/null)
-          fi
-          if [ -n "$PR" ] && [ "$PR" != "null" ]; then
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$(cat /tmp/probe-verdict.md)" \
-              || echo "::warning::could not post the probe verdict comment"
-          else
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-              -f body="$(cat /tmp/probe-verdict.md)" >/dev/null \
-              || echo "::warning::could not post the probe verdict comment"
-          fi
+          echo "::notice title=production probe verdict::${VERDICT:-UNKNOWN} (exit $CODE) — full verdict in the job summary and commit comment"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -f body="$(cat /tmp/probe-verdict.md)" >/dev/null \
+            || echo "::warning::could not post the probe verdict comment"
           case "$CODE" in
             0) echo "production reachable" ;;
             4) echo "production unverifiable from this runner — recorded as NETWORK_RESTRICTED, build stays green" ;;
