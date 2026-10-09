@@ -236,8 +236,10 @@ jobs:
           test -x "$APKSIGNER"
 
           # Expected identity is read from the build script, so the check can
-          # never drift from what the build actually configured.
+          # never drift from what the build actually configured. The package id
+          # is ALSO pinned here: renaming it must fail loudly in two places.
           EXPECTED_PKG=$(sed -n 's/.*applicationId = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
+          test "$EXPECTED_PKG" = "com.maharanitraders.app"
           EXPECTED_CODE=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' android/app/build.gradle.kts | head -1)
           EXPECTED_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
           echo "expected: package=$EXPECTED_PKG versionCode=$EXPECTED_CODE versionName=$EXPECTED_NAME"
