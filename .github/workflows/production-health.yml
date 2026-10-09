@@ -1,0 +1,231 @@
+# Maharani Traders — LIVE production health gate.
+#
+# WHY THIS WORKFLOW EXISTS
+# The review sandbox that writes this code has no egress to the production host
+# (only github.com, the npm registry and PyPI are reachable), so it physically
+# cannot verify a deployment. A report written there can only say "assumed".
+# GitHub-hosted runners DO have egress, so the probe runs here and publishes
+# machine-checkable evidence — HTTP status, latency, UTC timestamp — instead of
+# a claim.
+#
+# WHAT IT IS NOT
+#   * not a preview check. On a pull_request event this probes the CURRENTLY
+#     DEPLOYED production (main), never the PR's own code. The summary says so
+#     explicitly, because silently implying otherwise would be misleading.
+#   * not a load test. Eleven unauthenticated GETs, bounded retries, short
+#     timeouts.
+#   * not an authenticated check. It sends NO credentials and never POSTs to
+#     /auth/login, so it cannot trip the real auth rate limiter or lock out a
+#     genuine retailer. Authorization is proven the safe way: a protected route
+#     must REFUSE an anonymous caller with 401.
+#
+# SAFETY
+#   * zero secrets are referenced — see the guard step below, which fails the job
+#     if anyone ever adds one;
+#   * the probe refuses to run against a local, private, plain-HTTP or retired
+#     host, so a mock answer can never be reported as production evidence;
+#   * only allowlisted response fields are printed, and every emitted string is
+#     passed through a redaction filter (JWT / bearer / connection string /
+#     key-shaped). No response body is ever printed whole.
+#
+# The probe's own logic is regression-tested offline by
+# tests/production-health-probe.test.ts and by `--self-test` below.
+
+name: Production health
+
+on:
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: 'Production origin to probe (must be public https; local/retired hosts are refused)'
+        required: false
+        default: 'https://maharanitraders.vercel.app'
+      attempts:
+        description: 'Bounded retries per target'
+        required: false
+        default: '3'
+      timeout:
+        description: 'Per-request timeout in seconds'
+        required: false
+        default: '10'
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/production-health.yml'
+      - 'scripts/production-health-probe.py'
+      - 'tests/production-health-probe.test.ts'
+      - 'app/api/health/route.ts'
+      - 'app/api/mobile/v1/health/route.ts'
+      - 'middleware.ts'
+  schedule:
+    # 02:30 UTC daily, i.e. 08:00 IST — before the shop opens in Bihar.
+    - cron: '30 2 * * *'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe the live production deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ORIGIN: ${{ github.event.inputs.origin || 'https://maharanitraders.vercel.app' }}
+      ATTEMPTS: ${{ github.event.inputs.attempts || '3' }}
+      TIMEOUT: ${{ github.event.inputs.timeout || '10' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      # A launch gate must not be quietly turned into something that reads
+      # credentials. This workflow needs none: every probe is an anonymous GET.
+      # The ONLY permitted secret is the automatic GITHUB_TOKEN that Actions
+      # injects to post the evidence comment back to the repository.
+      - name: Guard — this workflow must reference no credentials
+        run: |
+          set -euo pipefail
+          FILE=.github/workflows/production-health.yml
+          OFFENDERS=$(grep -o "secrets\.[A-Za-z0-9_]*" "$FILE" | sort -u | grep -v '^secrets\.GITHUB_TOKEN$' || true)
+          if [ -n "$OFFENDERS" ]; then
+            echo "::error title=credential referenced by the production health probe::\
+          $FILE must stay credential-free apart from the automatic GITHUB_TOKEN. Found: $OFFENDERS. \
+          Anonymous read-only probes need no secret, and adding one would put a token in the reach of \
+          a workflow that prints HTTP responses."
+            exit 1
+          fi
+          echo "OK: only the automatic GITHUB_TOKEN is referenced — every probe is anonymous and read-only."
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.0.0
+        with:
+          python-version: '3.11'
+
+      # Proves the probe's origin guard, redaction filter, expectation evaluator
+      # and retry policy are intact BEFORE it is pointed at production. Offline,
+      # deterministic, and explicitly not production evidence.
+      - name: Verify the probe logic offline
+        run: python3 scripts/production-health-probe.py --self-test
+
+      - name: Confirm the runner can actually reach production
+        run: |
+          set -euo pipefail
+          # If DNS or egress is unavailable on the runner, the probe would report
+          # eleven transport failures. Saying so up front is clearer than that.
+          HOST=$(printf '%s' "$ORIGIN" | sed -E 's#^https://##; s#/.*$##')
+          echo "resolving $HOST"
+          python3 - "$HOST" <<'PY'
+          import socket, sys
+          host = sys.argv[1]
+          try:
+              infos = socket.getaddrinfo(host, 443)
+          except socket.gaierror as error:
+              print(f"::error title=cannot resolve production host::{host}: {error}")
+              sys.exit(1)
+          print(f"resolved {host} -> {sorted({i[4][0] for i in infos})}")
+          PY
+
+      - name: Probe production
+        id: probe
+        run: |
+          # Pre-create both evidence files: an origin the probe refuses to accept
+          # exits before writing anything, and the artifact step below must still
+          # upload SOMETHING so the refusal itself is visible as evidence.
+          : > /tmp/production-health.md
+          : > /tmp/production-health.json
+          # The probe's exit status is captured rather than propagated, so the
+          # verdict output is ALWAYS recorded and the evidence steps below always
+          # run. The dedicated final step turns a FAIL into a red job — one place
+          # decides, and it can never be skipped by an early exit here.
+          set +e
+          python3 scripts/production-health-probe.py \
+            --origin "$ORIGIN" \
+            --attempts "$ATTEMPTS" \
+            --timeout "$TIMEOUT" \
+            --json /tmp/production-health.json \
+            2>&1 | tee -a /tmp/production-health.md
+          CODE=${PIPESTATUS[0]}
+          set -e
+          if [ "$CODE" -eq 0 ]; then
+            echo "verdict=PASS" >> "$GITHUB_OUTPUT"
+          else
+            echo "verdict=FAIL" >> "$GITHUB_OUTPUT"
+            echo "probe exit code $CODE — the gate step below fails this job"
+          fi
+          exit 0
+
+      - name: Record the event context in the evidence
+        if: always()
+        run: |
+          set +e
+          {
+            echo ""
+            echo "### Probe context"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Trigger | \`${{ github.event_name }}\` |"
+            echo "| Ref | \`${{ github.ref }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Runner UTC | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
+            echo "| Origin probed | \`$ORIGIN\` |"
+            echo "| Verdict | \`${{ steps.probe.outputs.verdict || 'UNKNOWN' }}\` |"
+            echo ""
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "> **This measured the currently DEPLOYED production build (main), not this"
+              echo "> pull request's code.** A PR does not reach production until it is merged"
+              echo "> and Vercel promotes it."
+              echo ">"
+              echo "> A FAIL here is a production incident — not necessarily a defect in this diff."
+              echo "> A PASS here is not approval of this diff either."
+            fi
+          } | tee -a /tmp/production-health.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the machine-readable evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: production-health-${{ github.run_id }}
+          path: |
+            /tmp/production-health.json
+            /tmp/production-health.md
+          if-no-files-found: error
+          retention-days: 14
+
+      # Actions logs live in Azure blob storage, which is unreachable from some
+      # environments; api.github.com is not. The same evidence is posted where the
+      # repo already posts its Android diagnostics. Non-fatal by design.
+      - name: Post the evidence to the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
+                 --json number --jq '.[0].number' 2>/dev/null)
+          if [ -z "$PR" ] || [ "$PR" = "null" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+              -f body="$(head -c 55000 /tmp/production-health.md)" \
+              || echo "::warning::could not post commit evidence"
+            exit 0
+          fi
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file /tmp/production-health.md \
+            || echo "::warning::could not post the pull-request comment"
+
+      - name: Fail the gate when production is unhealthy
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.probe.outputs.verdict }}" = "PASS" ]; then
+            echo "Production health gate: PASS"
+            exit 0
+          fi
+          echo "::error title=production health gate FAILED::\
+          One or more live production probes failed against $ORIGIN. \
+          See the evidence table above for the exact path, status and reason."
+          exit 1
