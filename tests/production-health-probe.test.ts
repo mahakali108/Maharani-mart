@@ -392,8 +392,56 @@ describe('6. the workflow publishes evidence and fails the gate honestly', () =>
   });
 });
 
-describe('7. the probe behaviour is executed, not only read', () => {
-  const python = (() => {
+describe('7. the launch-gate report the probe feeds actually exists', () => {
+  it('is present and records the production-health verdict', () => {
+    // The probe's module docstring names this file as the gate it feeds. A
+    // dangling reference in a launch document is how a report gets written and
+    // then quietly never read.
+    const doc = read('docs/LAUNCH_RELEASE_GATE_2026-10-11.md');
+    expect(doc).toContain('Production health');
+    expect(doc).toContain('maharanitraders.vercel.app');
+    expect(doc).toContain('/api/mobile/v1/health');
+    expect(doc).toContain('missing_token');
+  });
+
+  it('states the verdict for every gate the launch task asks for', () => {
+    const doc = read('docs/LAUNCH_RELEASE_GATE_2026-10-11.md');
+    for (const gate of [
+      'Reference-style Home',
+      'Catalog, Categories, Brands',
+      'Website functionality',
+      'Android functionality',
+      'Cart and checkout',
+      'Admin Category/Brand flow',
+      'Session persistence',
+      'Security',
+      'Responsive rendered UI',
+      'Web tests and production build',
+      'Android tests and release build',
+      'Actual CI status',
+      'Production health',
+      'Signed release artifact',
+      'Existing PR status',
+    ]) {
+      expect(doc, `gate "${gate}" must be reported`).toContain(gate);
+    }
+    // Every gate carries one of the three permitted verdicts.
+    expect(doc).toContain('PASS');
+    expect(doc).toContain('PARTIAL');
+    expect(doc).toContain('BLOCKED');
+  });
+
+  it('does not claim launch readiness while a gate is blocked', () => {
+    const doc = read('docs/LAUNCH_RELEASE_GATE_2026-10-11.md');
+    expect(doc).toContain('**NOT launch-ready.**');
+    // No affirmative readiness claim anywhere in the report.
+    expect(doc).not.toMatch(/(?:is|are|now|fully|officially)\s+launch[- ]ready/i);
+    expect(doc).not.toMatch(/ready (?:for|to) (?:public )?launch/i);
+    expect(doc).not.toContain('All gates PASS');
+  });
+});
+
+describe('8. the probe behaviour is executed, not only read', () => {  const python = (() => {
     for (const candidate of ['python3', 'python']) {
       try {
         execFileSync(candidate, ['--version'], { stdio: 'ignore' });

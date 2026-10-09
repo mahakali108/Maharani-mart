@@ -35,6 +35,24 @@ file, the CI workflow, `.gitignore` and this document stay in agreement.
 would be false. CI now says so explicitly in the job summary rather than leaving
 the artifact to be mistaken for a finished one.
 
+### Measured artifacts (CI run 37959400861, head `d6ec741`)
+
+Exact bytes, measured on the runner — not compressed ZIP sizes:
+
+| Artifact | Bytes | Decimal MB | ≤ 30 MB target | Signing |
+| --- | ---: | ---: | --- | --- |
+| `app-debug.apk` | 16,371,253 | 16.37 | PASS | Gradle debug key — never distributable |
+| `app-release-unsigned.apk` | 2,849,725 | 2.85 | PASS | **UNSIGNED — not distributable** |
+| `app-release.aab` | 6,409,691 | 6.41 | PASS | **UNSIGNED — not distributable** |
+
+The release APK shrank 12 bytes against the previously recorded 2,849,737, which
+is the `versionName` change from `1.0.0-phase-b` to `1.0.0`. No code, dependency,
+ABI or resource was removed to reach these numbers.
+
+`applicationId` is asserted as `com.maharanitraders.app` by `aapt dump badging`,
+and `versionName`/`versionCode` are now read back out of the artifact and
+compared with `android/version.properties` (§2).
+
 ---
 
 ## 2. Version policy
@@ -308,9 +326,15 @@ Technical, already satisfied and worth re-verifying on the signed artifact:
 - [ ] Android 16 behaviour changes exercised on a real device: edge-to-edge
       insets (apps targeting 36 can no longer opt out) and predictive back.
       **BLOCKED** — no device.
-- [ ] 16 KB page-size readiness if any native library is ever added. The app
-      currently ships **zero** `.so` files (`scripts/android-apk-size-report.py`
-      asserts the native-library inventory), so this does not apply today.
+- [ ] **16 KB page-size alignment — NOT VERIFIED, and it does apply.** Measured
+      from the actual CI artifact, the app ships **8 native libraries** across
+      four ABIs (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`), two each:
+      `libdatastore_shared_counter.so` (androidx.datastore) and
+      `libandroidx.graphics.path.so`. Devices running Android 15+ may use 16 KB
+      memory pages, and an unaligned `.so` fails to load there. Verify with
+      `zipalign -c -P 16 -v 4 app-release.apk`, or read the Play Console
+      pre-launch report, before distributing. Do not assume compliance because
+      the libraries come from AndroidX.
 
 ---
 
