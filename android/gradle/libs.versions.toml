@@ -65,6 +65,13 @@ coil = "3.4.0"
 junit = "4.13.2"
 turbine = "1.2.1"
 truth = "1.4.5"
+# Robolectric runs RENDERED Compose tests as ordinary JVM unit tests: a real
+# Android runtime, a real measure/layout/draw pass and a real semantics tree,
+# with no emulator and no instrumented-test scaffolding in the APK. 4.16.x is the
+# release line that supports SDK 36 (Baklava), which is this project's
+# compileSdk/targetSdk — 4.17 targets SDK 37 and would ask for a compileSdk AGP
+# 9.0.1 cannot provide.
+robolectric = "4.16.1"
 
 [libraries]
 # AndroidX core / lifecycle / navigation
@@ -117,6 +124,13 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 junit = { module = "junit:junit", version.ref = "junit" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+# ui-test / ui-test-junit4 / ui-test-manifest are pinned to the SAME `composeUi`
+# version as the runtime artifacts, so a rendered test can never be compiled
+# against a semantics tree that differs from the one the app draws.
+androidx-compose-ui-test = { module = "androidx.compose.ui:ui-test", version.ref = "composeUi" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "composeUi" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "composeUi" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

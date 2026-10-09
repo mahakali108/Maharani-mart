@@ -72,6 +72,7 @@ import com.maharanitraders.core.designsystem.IsoDateDisplay
 import com.maharanitraders.core.designsystem.components.AccountGlyph
 import com.maharanitraders.core.designsystem.components.BackGlyph
 import com.maharanitraders.core.designsystem.components.BellGlyph
+import com.maharanitraders.core.designsystem.components.BrandGlyph
 import com.maharanitraders.core.designsystem.components.CartGlyph
 import com.maharanitraders.core.designsystem.components.CategoryGlyph
 import com.maharanitraders.core.designsystem.components.CrownGlyph
@@ -146,10 +147,37 @@ data class CatalogRequest(
   val brandLabel: String? = null,
   /** Which pane to open on. A home rail's "View all" lands on the pane it summarises. */
   val tab: CatalogTab = CatalogTab.PRODUCTS,
+  /**
+   * Open already narrowed to the server's own offer filter — the home Deals
+   * rail's "Shop offers". Part of the request rather than a second route, so the
+   * full list is the rail continued and cannot drift from it.
+   */
+  val offersOnly: Boolean = false,
 )
 
-/** Five retail tabs in deliberate order. Account stays in header/drawer;
- * Categories opens Shop's existing directory pane; Brands has its own tab. */
+/**
+ * The five tabs of the shopping bottom bar, in the order they are drawn.
+ *
+ * THIS LIST IS THE ORDER. The destination table is grouped by workspace, not by
+ * how a shopper thinks, so the bar reads the order from here (`mapNotNull` below)
+ * rather than from wherever the routes happen to sit in that table.
+ *
+ * `Home | Catalog | Brands | Orders | Cart`:
+ *
+ * - `BRANDS` earns a tab because brand is how a shopkeeper restocks — "my
+ *   flour", "my oil" — and it opens the SAME catalogue on its Brands pane, so a
+ *   brand-filtered list cannot price or stock differently from a category-filtered
+ *   one. `CATEGORIES` stays a drawer entry: a category is one hop from the home
+ *   rail and from the catalogue's own tab strip, and six tabs do not fit 360dp.
+ * - `CART` moves last, where the thumb already is on a shopping bar, and keeps
+ *   its live line-count badge.
+ * - `ACCOUNT` leaves the bar but stays one tap away in the app bar on every
+ *   screen (and in the drawer). The account is visited, not shopped; the bar is
+ *   for shopping.
+ *
+ * A route the session may not open is dropped by `mapNotNull`, so the bar can
+ * never offer a tab that is a dead end for this role.
+ */
 private val BOTTOM_NAV_ROUTES = listOf(
   MaharaniRoutes.HOME,
   MaharaniRoutes.CATALOG,
@@ -234,21 +262,22 @@ private fun RoutedShell(
   val canUseRetailerCommerce = snapshot.role == UserRole.RETAILER &&
     snapshot.navigation.can("orders.create") && snapshot.navigation.can("orders.view.own")
 
-  val bottomItems = BOTTOM_NAV_ROUTES.mapNotNull { route -> routing.destinations.firstOrNull { it.route == route } }
+  // Ordered by BOTTOM_NAV_ROUTES, not by the destination table's own grouping.
+  val bottomItems = BOTTOM_NAV_ROUTES.mapNotNull { route ->
+    routing.destinations.firstOrNull { it.route == route }
+  }
   val drawerItems = routing.destinations.filter { it.route !in BOTTOM_NAV_ROUTES }
   // The drawer's "Categories" entry renders the SAME catalogue on its Categories
   // pane, so it counts as the Catalog tab: the bar stays visible and keeps its
   // selection instead of vanishing because a second route to one screen is open.
-  val selectedTabRoute = if (
-    currentRoute == MaharaniRoutes.CATEGORIES
-  ) {
+  // Brands is its own tab now, so it selects itself.
+  val selectedTabRoute = if (currentRoute == MaharaniRoutes.CATEGORIES) {
     MaharaniRoutes.CATALOG
   } else {
     currentRoute
   }
   val showBottomBar = currentRoute in BOTTOM_NAV_ROUTES ||
-    currentRoute == MaharaniRoutes.CATEGORIES ||
-    currentRoute == MaharaniRoutes.BRANDS
+    currentRoute == MaharaniRoutes.CATEGORIES
   val currentLabel = routing.destinations.firstOrNull { it.route == currentRoute }?.label
     ?: routing.start.label
 
@@ -471,9 +500,19 @@ private fun RoutedShell(
             } else {
             // A cart handle for the two surfaces that can quick-add: the home
             // dashboard's cards and the catalogue's cards.
+            // Every route that can show a product card gets the cart handle:
+            // home, and the catalogue on each of the three routes that open it.
+            // Missing one would leave cards on that pane without an add control —
+            // the same product, two different capabilities, decided by which tab
+            // the shopper happened to arrive from.
             val quickAdd = quickAddCartHandle(
               enabled = canUseRetailerCommerce &&
-                (destination.route == MaharaniRoutes.HOME || destination.route == MaharaniRoutes.CATALOG),
+                (
+                  destination.route == MaharaniRoutes.HOME ||
+                    destination.route == MaharaniRoutes.CATALOG ||
+                    destination.route == MaharaniRoutes.CATEGORIES ||
+                    destination.route == MaharaniRoutes.BRANDS
+                  ),
             )
 
             DestinationSurface(
@@ -734,15 +773,30 @@ private fun RetailerHomeTopBar(
 }
 
 @Composable
+/**
+ * The mark for one bottom tab.
+ *
+ * EVERY bottom route is listed, with no `else` fallback: an unlisted tab used to
+ * fall through to the home glyph, so the Catalog tab wore the same mark as Home
+ * and the bar read as two home buttons. A route with no mark of its own is now a
+ * compile-visible gap rather than a silent duplicate, and the `when` throws for a
+ * route that reaches the bar without one — which `BOTTOM_NAV_ROUTES` cannot
+ * produce, so the branch exists to fail loudly if the two lists ever drift.
+ */
 private fun BottomBarIcon(route: String, modifier: Modifier = Modifier) {
   val iconModifier = modifier.size(24.dp)
   when (route) {
     MaharaniRoutes.HOME -> HomeGlyph(modifier = iconModifier)
+    // Browse the aisles. Categories opens this same mark from the drawer, so the
+    // two entry points to one screen read as one thing.
+    MaharaniRoutes.CATALOG -> CategoryGlyph(modifier = iconModifier)
     MaharaniRoutes.CATEGORIES -> CategoryGlyph(modifier = iconModifier)
+    MaharaniRoutes.BRANDS -> BrandGlyph(modifier = iconModifier)
     MaharaniRoutes.CART -> CartGlyph(modifier = iconModifier)
     MaharaniRoutes.ORDERS -> OrdersGlyph(modifier = iconModifier)
+    // Still reachable from the app bar and the drawer on every screen.
     MaharaniRoutes.ACCOUNT -> AccountGlyph(modifier = iconModifier)
-    else -> HomeGlyph(modifier = iconModifier)
+    else -> error("No bottom-bar mark declared for route '$route'")
   }
 }
 
@@ -951,6 +1005,11 @@ private fun DestinationSurface(
         onRetryDashboard = dashboardViewModel::load,
         cartLineCount = cartLineCount,
         onOpenCoins = { onOpenDestination(MaharaniRoutes.COINS) },
+        // The ticker strip and the offers rail both land on the offers screen;
+        // the Deals rail opens the catalogue on the server's own offer filter, so
+        // "Shop offers" is the rail continued rather than a different list.
+        onOpenOffers = { onOpenDestination(MaharaniRoutes.SCHEMES) },
+        onOpenDeals = { onOpenCatalog(CatalogRequest(offersOnly = true)) },
         onOpenOrder = onOpenOrder,
         onQuickAddToCart = onQuickAddToCart,
         quickAddPackId = quickAddPackId,
@@ -965,6 +1024,7 @@ private fun DestinationSurface(
       initialBrandId = catalogRequest.brandId,
       initialBrandLabel = catalogRequest.brandLabel,
       initialTab = catalogRequest.tab,
+      initialOffersOnly = catalogRequest.offersOnly,
       onOpenProduct = onOpenProduct,
       onQuickAddToCart = onQuickAddToCart,
       quickAddPackId = quickAddPackId,

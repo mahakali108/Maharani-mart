@@ -8,6 +8,7 @@ import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.CatalogBrandsDto
 import com.maharanitraders.core.network.dto.CatalogCategoriesDto
 import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.CatalogSearchDto
 import com.maharanitraders.core.network.dto.HealthDto
 import com.maharanitraders.core.network.dto.LoginRequestDto
 import com.maharanitraders.core.network.dto.PageDto
@@ -95,6 +96,13 @@ class FakeCatalogApi : MaharaniApi {
    */
   var toggleGate: CompletableDeferred<Unit>? = null
 
+  /**
+   * One recorded product-list request, exactly as it left the repository.
+   *
+   * The derived filters default to `null` so an assertion written before they
+   * existed still compares equal for a query that did not set them — and so a
+   * test that means "no filter was sent" says so explicitly.
+   */
   data class ProductRequest(
     val search: String?,
     val categoryId: String?,
@@ -103,6 +111,12 @@ class FakeCatalogApi : MaharaniApi {
     val inStock: String?,
     val favoritesOnly: String?,
     val cursor: String?,
+    val minPrice: String? = null,
+    val maxPrice: String? = null,
+    val minDiscount: String? = null,
+    val maxMoq: String? = null,
+    val offersOnly: String? = null,
+    val newOnly: String? = null,
   )
 
   override suspend fun catalogProducts(
@@ -112,13 +126,47 @@ class FakeCatalogApi : MaharaniApi {
     sort: String?,
     inStock: String?,
     favoritesOnly: String?,
+    minPrice: String?,
+    maxPrice: String?,
+    minDiscount: String?,
+    maxMoq: String?,
+    offersOnly: String?,
+    newOnly: String?,
     cursor: String?,
   ): ApiEnvelope<List<CatalogProductDto>> {
     productRequests.add(
-      ProductRequest(search, categoryId, brandId, sort, inStock, favoritesOnly, cursor),
+      ProductRequest(
+        search = search,
+        categoryId = categoryId,
+        brandId = brandId,
+        sort = sort,
+        inStock = inStock,
+        favoritesOnly = favoritesOnly,
+        cursor = cursor,
+        minPrice = minPrice,
+        maxPrice = maxPrice,
+        minDiscount = minDiscount,
+        maxMoq = maxMoq,
+        offersOnly = offersOnly,
+        newOnly = newOnly,
+      ),
     )
     nextProductFailure?.let { throw it }
     return productPages.removeFirstOrNull() ?: ApiEnvelope(emptyList(), page = PageDto(hasMore = false))
+  }
+
+  /** Every suggestion term requested, in order — a stale-answer test reads this. */
+  val searchRequests: MutableList<String> = mutableListOf()
+  var searchResult: ApiEnvelope<CatalogSearchDto> = ApiEnvelope(CatalogSearchDto())
+  var nextSearchFailure: Throwable? = null
+  var searchCalls: Int = 0
+    private set
+
+  override suspend fun catalogSearch(search: String): ApiEnvelope<CatalogSearchDto> {
+    searchCalls += 1
+    searchRequests.add(search)
+    nextSearchFailure?.let { throw it }
+    return searchResult
   }
 
   override suspend fun catalogProduct(id: String): ApiEnvelope<ProductDetailDto> {

@@ -59,6 +59,7 @@ import com.maharanitraders.core.designsystem.components.HomeGlyph
 import com.maharanitraders.core.designsystem.components.HomeSkeleton
 import com.maharanitraders.core.designsystem.components.MetricTile
 import com.maharanitraders.core.designsystem.components.OfflineState
+import com.maharanitraders.core.designsystem.components.ProductRailSkeleton
 import com.maharanitraders.core.designsystem.components.OfferGlyph
 import com.maharanitraders.core.designsystem.components.OrdersGlyph
 import com.maharanitraders.core.designsystem.components.QuickActionTile
@@ -115,13 +116,20 @@ object HomeScreenTags {
 /**
  * The retailer home screen — the shop front.
  *
- * Top to bottom, the order the brief asks for: the admin's promotional banners
- * (or a branded, non-promotional welcome panel when no promotion is live), the
- * real category rail, the real brand rail, a "Recently added" rail fed by the
+ * Top to bottom, the order the brief asks for: the admin's ticker strip, the
+ * admin's promotional banners (or a branded, non-promotional welcome panel when
+ * no promotion is live), the shortcut grid, the real category rail, the real
+ * brand rail, the admin's "Today's offers" rail, a "Deals" rail fed by the
+ * catalogue's own `offers=1` filter, a "Recently added" rail fed by the
  * catalogue's own newest-first ordering, and the discovery grid — the first
- * batch of the real catalogue. A "Today's offers" rail is deliberately ABSENT:
- * PROMO-04 is blocked on a mobile schemes endpoint, and inventing one would be
- * fake data. This screen renders no section the server did not fill.
+ * batch of the real catalogue.
+ *
+ * Every promotional surface is driven by rows an admin published: the ticker and
+ * the offers rail by the `schemes` rows `GET /home` returns, the banners by the
+ * banner table, and the Deals rail by the server's own offer filter. Nothing here
+ * is hardcoded and nothing is invented — when the offer read fails the screen
+ * says so instead of quietly drawing a shop with no offers, and this screen
+ * renders no section the server did not fill.
  * Every value arrives from `GET /api/mobile/v1/home` plus one `sort=newest`
  * catalogue batch; the screen has no fallback content, so when the request
  * fails the shopper sees an honest error or offline state with a retry rather
@@ -156,10 +164,19 @@ fun RetailerHomeScreen(
    * tile is never a dead end.
    */
   onOpenDestination: (String) -> Unit = {},
+  /**
+   * Open the offers destination. The ticker strip and every offers-rail card go
+   * here, so a campaign the admin published is always one tap from its own
+   * screen rather than a dead end. The shell owns the route table, which keeps
+   * this feature module free of navigation constants.
+   */
+  onOpenOffers: () -> Unit = {},
+  /** Open the catalogue filtered to the server's own offers. */
+  onOpenDeals: () -> Unit = {},
   /** The shortcuts to draw. Empty (the default) draws no shortcut grid at all. */
   quickActions: List<HomeQuickAction> = emptyList(),
+  /** Resolve an admin banner link to a rooted app route — see [homeBannerTarget]. */
   onOpenBanner: ((String) -> Unit)? = null,
-  onOpenOffers: (() -> Unit)? = null,
   /** The shop's own numbers: Coins, the last order, recently viewed products. */
   dashboard: HomeDashboard? = null,
   onRetryDashboard: () -> Unit = {},
@@ -195,9 +212,10 @@ fun RetailerHomeScreen(
     onOpenDirectory = onOpenDirectory,
     onOpenProduct = onOpenProduct,
     onOpenDestination = onOpenDestination,
+    onOpenOffers = onOpenOffers,
+    onOpenDeals = onOpenDeals,
     quickActions = quickActions,
     onOpenBanner = onOpenBanner,
-    onOpenOffers = onOpenOffers,
     dashboard = dashboard,
     onRetryDashboard = onRetryDashboard,
     cartLineCount = cartLineCount,
@@ -231,9 +249,19 @@ fun HomeContent(
   onOpenDirectory: (CatalogTab) -> Unit,
   onOpenProduct: (String) -> Unit,
   onOpenDestination: (String) -> Unit = {},
+  /** Offers destination for the ticker strip and the offers rail. */
+  onOpenOffers: () -> Unit = {},
+  /**
+   * Open the catalogue on the server's own offer filter — the Deals rail's
+   * "Shop offers". Same filter the rail was built from, so the full list is the
+   * rail continued, never a different idea of what a deal is.
+   */
+  onOpenDeals: () -> Unit = {},
+  /** Pin the ticker on its first line — rendered tests pass false. */
+  tickerAutoAdvance: Boolean = true,
   quickActions: List<HomeQuickAction> = emptyList(),
+  /** Resolve an admin banner link to a rooted app route — see [homeBannerTarget]. */
   onOpenBanner: ((String) -> Unit)? = null,
-  onOpenOffers: (() -> Unit)? = null,
   dashboard: HomeDashboard? = null,
   onRetryDashboard: () -> Unit = {},
   cartLineCount: Int? = null,
@@ -309,23 +337,26 @@ fun HomeContent(
             }
           }
 
-          // Admin banner titles also form a compact information rail. No local
-          // campaign text, balances or inferred discounts are inserted here.
-          if (home.banners.isNotEmpty()) {
+          // The admin ticker sits ABOVE the hero: it is the one line that can
+          // change without an app release, so it gets the first thing the eye
+          // lands on. Drawn only from live `schemes` rows — no scheme, no strip.
+          if (state.promotions.isNotEmpty()) {
             item(span = full) {
-              LazyRow(horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                items(home.banners, key = { it.id }) { banner ->
-                  Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    shape = RoundedCornerShape(MaharaniDimens.radiusPill),
-                  ) {
-                    Text(banner.title, style = MaterialTheme.typography.labelMedium,
-                      maxLines = 1, overflow = TextOverflow.Ellipsis,
-                      modifier = Modifier.width(260.dp).padding(horizontal = 12.dp, vertical = 8.dp))
-                  }
-                }
-              }
+              HomeOfferTicker(
+                promotions = state.promotions,
+                onOpenOffers = onOpenOffers,
+                autoAdvance = tickerAutoAdvance,
+              )
+            }
+          }
+
+          item(span = full) {
+            if (home.banners.isNotEmpty()) {
+              // A banner is tappable only when the server resolved its link to a
+              // rooted app route ([homeBannerTarget]); unknown campaigns stay artwork.
+              BannerCarousel(banners = home.banners, onOpenRoute = onOpenBanner)
+            } else {
+              WelcomePanel()
             }
           }
 
@@ -340,117 +371,6 @@ fun HomeContent(
                 cartLineCount = cartLineCount,
               )
             }
-          }
-
-          item(span = full) {
-            if (home.banners.isNotEmpty()) {
-              BannerCarousel(banners = home.banners, onOpenRoute = onOpenBanner)
-            } else {
-              WelcomePanel()
-            }
-          }
-
-          if (home.categories.isNotEmpty()) {
-            item(span = full) {
-              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                SectionHeader(
-                  title = "Shop by category",
-                  subtitle = "Everything the shop stocks, by aisle",
-                  actionLabel = "View all",
-                  onAction = { onOpenDirectory(CatalogTab.CATEGORIES) },
-                )
-                CategoryRail(categories = home.categories, onSelect = onOpenCategory)
-              }
-            }
-          }
-
-          if (dashboard?.offers?.isNotEmpty() == true && onOpenOffers != null) {
-            item(span = full) {
-              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                SectionHeader(title = "Offers & campaigns", actionLabel = "View all", onAction = onOpenOffers)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap)) {
-                  items(dashboard.offers, key = { it.id }) { offer ->
-                    Surface(
-                      onClick = onOpenOffers,
-                      color = MaterialTheme.colorScheme.secondaryContainer,
-                      contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                      shape = RoundedCornerShape(MaharaniDimens.radiusCard),
-                      modifier = Modifier.width(240.dp).heightIn(min = MaharaniDimens.touchTarget),
-                    ) {
-                      Column(Modifier.padding(MaharaniDimens.spaceMd), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(offer.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        offer.description?.takeIf { it.isNotBlank() }?.let {
-                          Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                        com.maharanitraders.core.designsystem.IsoDateDisplay.formatDate(offer.endsAt)?.let {
-                          Text("Ends $it", style = MaterialTheme.typography.labelSmall)
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          if (home.brands.isNotEmpty()) {
-            item(span = full) {
-              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                SectionHeader(
-                  title = "Featured brands",
-                  subtitle = "The houses you stock",
-                  actionLabel = "View all",
-                  onAction = { onOpenDirectory(CatalogTab.BRANDS) },
-                )
-                BrandRail(brands = home.brands, onSelect = onOpenBrand)
-              }
-            }
-          }
-
-          state.recentError?.let { message ->
-            item(span = full) {
-              InlineErrorBanner(message = "Newest products: $message", offline = false, onRetry = onRetry)
-            }
-          }
-
-          if (state.recent.isNotEmpty()) {
-            item(span = full) {
-              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-                SectionHeader(
-                  title = "Recently added",
-                  subtitle = "Newest in your catalogue",
-                )
-                RecentRail(
-                  products = state.recent,
-                  onOpenProduct = onOpenProduct,
-                  isFavorite = isFavorite,
-                  isFavoritePending = isFavoritePending,
-                  onToggleFavorite = onToggleFavorite,
-                  onQuickAddToCart = onQuickAddToCart,
-                  quickAddPackId = quickAddPackId,
-                )
-              }
-            }
-          }
-
-          if (home.products.isNotEmpty()) {
-            item(span = full) {
-              SectionHeader(
-                title = "Browse products",
-                subtitle = "Wholesale rates priced for your shop",
-                actionLabel = "View all",
-                onAction = onOpenCatalog,
-              )
-            }
-            productCardItems(
-              products = home.products,
-              onOpenProduct = onOpenProduct,
-              isFavorite = isFavorite,
-              isFavoritePending = isFavoritePending,
-              onToggleFavorite = onToggleFavorite,
-              onQuickAddToCart = onQuickAddToCart,
-              quickAddPackId = quickAddPackId,
-            )
           }
 
           // The shop's own numbers. Each card renders only when the server
@@ -505,6 +425,148 @@ fun HomeContent(
                 }
               }
             }
+          }
+
+          if (home.categories.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Shop by category",
+                  subtitle = "Everything the shop stocks, by aisle",
+                  actionLabel = "View all",
+                  onAction = { onOpenDirectory(CatalogTab.CATEGORIES) },
+                )
+                CategoryRail(categories = home.categories, onSelect = onOpenCategory)
+              }
+            }
+          }
+
+          if (home.brands.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Featured brands",
+                  subtitle = "The houses you stock",
+                  actionLabel = "View all",
+                  onAction = { onOpenDirectory(CatalogTab.BRANDS) },
+                )
+                BrandRail(brands = home.brands, onSelect = onOpenBrand)
+              }
+            }
+          }
+
+          // "Today's offers": the admin's own campaigns, soonest-ending first,
+          // from the same `schemes` rows the offers screen reads. A FAILED offer
+          // read gets the one-line note instead of silence, because silence is
+          // how an outage gets reported as "no offers right now".
+          //
+          // This is the ONE campaigns surface: the shell's dashboard derives its
+          // `offers` list from the same `schemes` read, and rendering both rails
+          // would show every campaign twice.
+          if (state.promotions.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Today's offers",
+                  subtitle = "Live campaigns on your account",
+                  actionLabel = "View all",
+                  onAction = onOpenOffers,
+                )
+                HomeOffersRail(
+                  promotions = state.promotions,
+                  onOpenOffers = onOpenOffers,
+                )
+              }
+            }
+          } else if (state.offersUnavailable) {
+            item(span = full) {
+              HomeOffersUnavailableNote()
+            }
+          }
+
+          // "Deals": the catalogue's own `offers=1` batch, so a deal here is a
+          // deal checkout will honour — a real per-retailer rate the pricing
+          // engine marked as carrying an offer or an MRP discount, not a card this
+          // screen decided to decorate. Loading shows a skeleton rail; a FAILED
+          // read draws nothing, because the discovery grid below is still usable
+          // and one optional rail must not be able to take the shop down.
+          if (state.deals.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Deals for your shop",
+                  subtitle = "Offered rates, priced for you — tap to see today's stock",
+                  actionLabel = "Shop offers",
+                  onAction = onOpenDeals,
+                )
+                HomeProductRail(
+                  products = state.deals,
+                  tag = HomeOfferTags.DEALS_ROW,
+                  onOpenProduct = onOpenProduct,
+                  isFavorite = isFavorite,
+                  isFavoritePending = isFavoritePending,
+                  onToggleFavorite = onToggleFavorite,
+                  onQuickAddToCart = onQuickAddToCart,
+                  quickAddPackId = quickAddPackId,
+                )
+              }
+            }
+          } else if (state.dealsLoading) {
+            // Still reading the offers batch: placeholders at the rail's own card
+            // width, so the section below does not jump when the rows arrive.
+            item(span = full) {
+              ProductRailSkeleton(modifier = Modifier.testTag(HomeOfferTags.DEALS_ROW))
+            }
+          }
+
+          // The newest-first rail is OPTIONAL: when it fails while home itself
+          // succeeded, the failure is reported above the rail instead of being
+          // mistaken for "nothing new".
+          state.recentError?.let { message ->
+            item(span = full) {
+              InlineErrorBanner(message = "Newest products: $message", offline = false, onRetry = onRetry)
+            }
+          }
+
+          if (state.recent.isNotEmpty()) {
+            item(span = full) {
+              Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
+                SectionHeader(
+                  title = "Recently added",
+                  subtitle = "Newest in your catalogue",
+                )
+                HomeProductRail(
+                  tag = HomeScreenTags.RECENT_ROW,
+                  products = state.recent,
+                  onOpenProduct = onOpenProduct,
+                  isFavorite = isFavorite,
+                  isFavoritePending = isFavoritePending,
+                  onToggleFavorite = onToggleFavorite,
+                  onQuickAddToCart = onQuickAddToCart,
+                  quickAddPackId = quickAddPackId,
+                )
+              }
+            }
+          }
+
+          if (home.products.isNotEmpty()) {
+            item(span = full) {
+              SectionHeader(
+                title = "Browse products",
+                subtitle = "Wholesale rates priced for your shop",
+                actionLabel = "View all",
+                onAction = onOpenCatalog,
+              )
+            }
+            productCardItems(
+              products = home.products,
+              onOpenProduct = onOpenProduct,
+              isFavorite = isFavorite,
+              isFavoritePending = isFavoritePending,
+              onToggleFavorite = onToggleFavorite,
+              onQuickAddToCart = onQuickAddToCart,
+              quickAddPackId = quickAddPackId,
+            )
           }
 
           item(span = full) {
@@ -617,10 +679,19 @@ private fun BrandRail(
   }
 }
 
-/** The "Recently added" rail: real cards at rail width. */
+/**
+ * One horizontal rail of real catalogue products.
+ *
+ * Shared by "Recently added" and "Deals" so both rails are the SAME card at the
+ * SAME width with the SAME quick-add rules — the only difference is which server
+ * filter produced the rows, and [tag] is what a test asserts on to tell them
+ * apart. Two near-identical rails that drifted a pixel or a minimum apart would
+ * be the same bug in two places.
+ */
 @Composable
-private fun RecentRail(
+private fun HomeProductRail(
   products: List<CatalogProduct>,
+  tag: String,
   onOpenProduct: (String) -> Unit,
   isFavorite: (CatalogProduct) -> Boolean,
   isFavoritePending: (CatalogProduct) -> Boolean,
@@ -632,7 +703,7 @@ private fun RecentRail(
   LazyRow(
     modifier = modifier
       .fillMaxWidth()
-      .testTag(HomeScreenTags.RECENT_ROW),
+      .testTag(tag),
     horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.cardGap),
   ) {
     items(products, key = { it.id }) { product ->

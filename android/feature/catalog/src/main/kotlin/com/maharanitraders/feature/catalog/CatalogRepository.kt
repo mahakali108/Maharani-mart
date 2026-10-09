@@ -14,6 +14,7 @@ import com.maharanitraders.core.model.CatalogQuery
 import com.maharanitraders.core.model.CatalogProduct
 import com.maharanitraders.core.model.ProductDetail
 import com.maharanitraders.core.model.RetailerHome
+import com.maharanitraders.core.model.SearchSuggestions
 import com.maharanitraders.core.network.ApiCallExecutor
 import com.maharanitraders.core.network.MaharaniApi
 import javax.inject.Inject
@@ -51,6 +52,16 @@ interface CatalogRepository {
   suspend fun loadProducts(query: CatalogQuery, cursor: String?): AppResult<CatalogPage>
 
   suspend fun loadProduct(id: String): AppResult<ProductDetail>
+
+  /**
+   * Cross-entity suggestions for a typed term: products (name or barcode), pack
+   * barcodes folded onto their product, brands and categories.
+   *
+   * Navigation targets only — no price, no stock. A [AppResult.Failure] here
+   * means the read did not happen, which the UI must report as a failure with a
+   * retry rather than as "no match".
+   */
+  suspend fun loadSearchSuggestions(term: String): AppResult<SearchSuggestions>
 }
 
 @Singleton
@@ -80,6 +91,16 @@ class NetworkCatalogRepository @Inject constructor(
           sort = query.sortParam,
           inStock = query.inStockParam,
           favoritesOnly = query.favoritesParam,
+          // Derived filters. Every one is resolved by the SERVER against the
+          // price it computed for this retailer; the client sends the bound the
+          // shopper chose and nothing else. `null` means unbounded, and Retrofit
+          // drops nulls, so an unset filter is never sent as a zero.
+          minPrice = query.minPriceParam,
+          maxPrice = query.maxPriceParam,
+          minDiscount = query.discountParam,
+          maxMoq = query.maxMoqParam,
+          offersOnly = query.offersParam,
+          newOnly = query.newParam,
           // A blank cursor is the first batch. Retrofit drops nulls, so the
           // server never sees `cursor=` and never has to guess what it meant.
           cursor = cursor?.trim()?.ifEmpty { null },
@@ -100,6 +121,10 @@ class NetworkCatalogRepository @Inject constructor(
 
   override suspend fun loadProduct(id: String): AppResult<ProductDetail> =
     executor.execute { api.catalogProduct(id) }.map { CatalogMapper.detail(it.data) }
+
+  override suspend fun loadSearchSuggestions(term: String): AppResult<SearchSuggestions> =
+    executor.execute { api.catalogSearch(search = term) }
+      .map { CatalogMapper.searchSuggestions(it.data) }
 }
 
 /** True when the failure means "no connection", so the UI can say so plainly. */

@@ -396,3 +396,50 @@ export function toMobileBanners(
       linkUrl: resolveBannerTarget(banner.link_url, siteUrl)?.href ?? null,
     }));
 }
+
+// ---------------------------------------------------------------------------
+// Home offers (schemes)
+// ---------------------------------------------------------------------------
+
+/**
+ * The `schemes` row, narrowed to the columns the storefront's home shows.
+ *
+ * The mobile `/schemes` endpoint already answers these rows; the home payload
+ * carries the SAME shape so a retailer sees one offers list, not two that could
+ * disagree. `endsAt` is what makes an offer a deadline rather than a label.
+ */
+export interface MobileSchemeRow {
+  id: string;
+  name: string;
+  description: string | null;
+  is_festival: boolean;
+  starts_at: string;
+  ends_at: string;
+}
+
+export interface MobileHomeScheme {
+  id: string;
+  name: string;
+  description: string | null;
+  isFestival: boolean;
+  startsAt: string;
+  endsAt: string;
+}
+
+/**
+ * Active, in-window schemes in wire shape — the web home's own mapping.
+ *
+ * The window itself is applied by the QUERY (`is_active` + `starts_at <= now` +
+ * `ends_at >= now`), exactly as `lib/retailer/home-data.ts` and the mobile
+ * `/schemes` route do it, so there is one scheduler and not three.
+ */
+export function toMobileHomeSchemes(rows: MobileSchemeRow[]): MobileHomeScheme[] {
+  return rows.map((scheme) => ({
+    id: scheme.id,
+    name: scheme.name,
+    description: scheme.description ?? null,
+    isFestival: scheme.is_festival,
+    startsAt: scheme.starts_at,
+    endsAt: scheme.ends_at,
+  }));
+}
