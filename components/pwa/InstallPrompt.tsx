@@ -21,6 +21,20 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = 'mt-pwa-install-dismissed';
+
+/**
+ * True when the page is already running as an installed app (Android Chrome,
+ * desktop Chromium, iOS home-screen web app). Exported for unit tests.
+ */
+export function isRunningStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+  } catch {
+    /* matchMedia unavailable */
+  }
+  return (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
 const AUTH_PATHS = ['/login', '/register-retailer', '/forgot-password', '/reset-password'];
 
 export default function InstallPrompt() {
@@ -29,14 +43,30 @@ export default function InstallPrompt() {
   const pathname = usePathname();
 
   useEffect(() => {
+    // Already running as an installed app: never offer to install it again.
+    if (isRunningStandalone()) return;
+
     const handler = (e: Event) => {
       // Prevent the browser's default mini-infobar so we can show our own.
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
     };
+    // Once installed, drop the prompt and remember it, so it never reappears.
+    const installed = () => {
+      setDeferred(null);
+      setVisible(false);
+      try {
+        window.localStorage.setItem(DISMISS_KEY, '1');
+      } catch {
+        /* ignore */
+      }
+    };
     window.addEventListener('beforeinstallprompt', handler as EventListener);
-    return () =>
+    window.addEventListener('appinstalled', installed);
+    return () => {
       window.removeEventListener('beforeinstallprompt', handler as EventListener);
+      window.removeEventListener('appinstalled', installed);
+    };
   }, []);
 
   useEffect(() => {
