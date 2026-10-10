@@ -359,7 +359,7 @@ export async function resolveMobileAddress(
  * The column payload for one saved address.
  *
  * `state` defaults to Bihar exactly like the web form's writer: the shop is a
- * Khagaria-district wholesaler, so an address without a state would be
+ * wholesaler in the Saran district service area, so an address without a state would be
  * incomplete for delivery.
  */
 function addressColumns(

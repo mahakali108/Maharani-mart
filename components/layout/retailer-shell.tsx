@@ -108,7 +108,7 @@ export function RetailerShell({
   ];
 
   return (
-    <div className="retailer-theme min-h-screen min-w-0 w-full bg-[#fafafa] pb-24 text-slate-900 lg:pb-0">
+    <div className="retailer-theme min-h-screen min-w-0 w-full bg-ivory-100 pb-24 text-slate-900 lg:pb-0">
       <a href="#retailer-main" className="sr-only z-50 rounded-lg bg-white p-3 text-action-700 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 pt-[env(safe-area-inset-top)] text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-3 sm:px-5">

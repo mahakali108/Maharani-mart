@@ -60,7 +60,7 @@ export default async function NewSupportTicketPage({
         <span className="text-slate-800">New ticket</span>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 p-5 shadow-sm sm:p-7">
+      <section className="rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-sm sm:p-7">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Need a hand?</p>
         <h1 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Raise a support ticket</h1>
         <p className="mt-2 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm">

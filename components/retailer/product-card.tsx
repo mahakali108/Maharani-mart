@@ -144,7 +144,7 @@ export function ProductCard({
 
         <div className="mt-3 border-t border-slate-100 pt-2.5">
           <p className="text-[9px] font-medium text-slate-500 sm:text-[10px]">Piece price · GST inclusive</p>
-          <p className="mt-0.5 break-words text-lg font-bold tracking-tight text-slate-950 sm:text-xl">
+          <p className="mt-0.5 break-words text-lg font-bold tracking-tight text-primary-800 sm:text-xl">
             {piecePrice !== null && piecePrice > 0 ? <>{formatInr(piecePrice)}<span className="text-[10px] font-normal text-slate-500"> /pc</span></> : <span className="text-xs font-semibold text-slate-600">Price unavailable</span>}
           </p>
           {mrp != null && mrp > 0 ? <p className="mt-1 text-[10px] text-slate-500">MRP <span className={cn(piecePrice !== null && mrp > piecePrice && 'line-through')}>{formatInr(mrp)}</span></p> : null}

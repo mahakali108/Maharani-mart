@@ -21,7 +21,7 @@ export function WarehouseForm({ areas }: { areas: AreaOption[] }) {
     <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:items-end">
       <div>
         <Label htmlFor="name">Warehouse name</Label>
-        <Input id="name" name="name" placeholder="e.g. Khagaria Main Godown" required />
+        <Input id="name" name="name" placeholder="e.g. Main godown" required />
       </div>
       <div>
         <Label htmlFor="areaId">Area</Label>

@@ -135,7 +135,7 @@ export default function InstallPrompt() {
           appearance: 'none',
           border: 0,
           cursor: 'pointer',
-          background: '#c8102e',
+          background: '#8f1d40',
           color: '#fff',
           fontWeight: 600,
           fontSize: 14,

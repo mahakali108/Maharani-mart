@@ -33,7 +33,7 @@ export default function GlobalRootError({
               onClick={reset}
               style={{
                 marginTop: '1.5rem',
-                background: '#c8102e',
+                background: '#8f1d40',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '0.75rem',

@@ -133,10 +133,11 @@ describe('gallery controls', () => {
 // 4. B2B integrity — blue CTAs, MOQ, server re-validation
 // ---------------------------------------------------------------------------
 describe('B2B marketplace actions', () => {
-  it('defines the marketplace blue action palette', () => {
+  it('defines the action (CTA) palette', () => {
     const config = read('tailwind.config.ts');
     expect(config).toContain('action: {');
-    expect(config).toContain("#2874f0");
+    // Redesign (blush/ivory/wine/gold): action CTAs now use the wine brand core.
+    expect(config).toContain("600: '#8f1d40'");
   });
 
   it('primary buy actions use the blue action color', () => {

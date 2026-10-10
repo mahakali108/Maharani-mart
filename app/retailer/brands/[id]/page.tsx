@@ -74,7 +74,7 @@ export default async function RetailerBrandDetailPage({ params }: { params: { id
         <ChevronLeft className="h-4 w-4" aria-hidden="true" /> All brands
       </Link>
 
-      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:p-6">
+      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:p-6">
         <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm sm:h-20 sm:w-20">
           {data.brand.logo_url ? (
             <StoredImage

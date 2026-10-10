@@ -36,7 +36,7 @@ export const viewport: Viewport = {
   // bottom navigation can pad with env(safe-area-inset-*) on Android /
   // Capacitor (no visual change on web where the insets are 0).
   viewportFit: 'cover',
-  themeColor: '#c8102e',
+  themeColor: '#8f1d40',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

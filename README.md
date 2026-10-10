@@ -90,7 +90,7 @@ cp .env.local.example .env.local   # fill in your Supabase project values
 npm run dev
 ```
 
-Visit `http://localhost:3000`. You'll be redirected to `/login`. Retailers can self-register at `/register-retailer` — note the Area dropdown will be empty until an admin adds Areas (Phase 2 admin panel; can also be inserted directly via SQL Editor for now: `insert into areas (name) values ('Khagaria Town');`).
+Visit `http://localhost:3000`. You'll be redirected to `/login`. Retailers can self-register at `/register-retailer` — note the Area dropdown will be empty until an admin adds Areas (Phase 2 admin panel; the default district for new areas is **Saran, Bihar** (migration 0058). Areas are added in the Admin Panel (`/admin/areas`) using verified names; see `docs/SERVICE_AREA_SARAN.md`).
 
 ---
 

@@ -105,7 +105,7 @@ export default async function RetailerAlertsPage() {
         <span className="text-slate-800">Updates</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="flex items-start gap-4">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
             <BellRing className="h-5 w-5" aria-hidden="true" />

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
 
 export interface NavItem {
   label: string;
@@ -77,7 +78,7 @@ export function Sidebar({
         </nav>
 
         <div className="border-t border-white/10 px-5 py-4">
-          <p className="text-xs text-ink-500">Khagaria District FMCG Network</p>
+          <p className="text-xs text-ink-500">{SERVICE_AREA_LABEL} · FMCG Network</p>
         </div>
       </aside>
     </>
