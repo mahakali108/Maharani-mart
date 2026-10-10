@@ -5,31 +5,64 @@ uploaded or offered to any real shop. It is **not** a record of finished work. I
 only where a CI run or a test is cited; everything else is unstarted, and the release phase
 (Phase H) has not begun.
 
+> **Updated 9 October 2026** against CI run `37959400861` (head `d6ec741`, PR #100).
+> §0 and §1 previously described a much older build; both are corrected below with
+> measured evidence. The signing, device and Play gates are unchanged and still
+> open — see `docs/ANDROID_RELEASE_SIGNING.md` for the runbook and
+> `docs/LAUNCH_RELEASE_GATE_2026-10-11.md` for the full launch assessment.
+
 ## 0. Where the build actually stands
 
 | Fact | Status |
 | --- | --- |
-| Debug APK built by CI | **YES** — run `37003248313` (head `4b2fe64`), artifact `maharani-traders-debug-apk`, 13,710,210 bytes |
-| Package id asserted by the build | **YES** — `aapt dump badging` matched `package: name='com.maharanitraders.app'` in the same run |
-| Kotlin unit tests executing in CI | **YES** — `testDebugUnitTest` passes for every module |
-| Release AAB / signed bundle | **NO** — never built; there is no signing key in CI, deliberately |
-| Installed and used on a device | **NO** — never done |
+| Debug APK built by CI | **YES** — run `37959400861`, artifact `maharani-traders-debug-apk`, **16,371,253 bytes** |
+| Package id asserted from the built artifact | **YES** — `aapt dump badging` matched `package: name='com.maharanitraders.app'` |
+| Version asserted from the built artifact | **YES** — `versionName='1.0.0' versionCode='1'`, compared against `android/version.properties` and failed on mismatch |
+| Kotlin unit tests executing in CI | **YES** — `testDebugUnitTest` passes for every module (413 tests, 11 modules) |
+| Rendered Compose tests at 360/393/412 dp | **YES** — `RetailerRenderedLayoutTest.kt`, 33 assertions |
+| Lint as a hard gate | **YES** — `abortOnError = true`; `lintDebug` runs in the same invocation |
+| Release APK / AAB built by CI | **YES, but UNSIGNED** — 2,849,725 and 6,409,691 bytes, built for size measurement |
+| Signed release bundle | **NO — BLOCKED** — no upload key exists; CI reports `signed release BLOCKED` and names the four missing secrets |
+| Installed and used on a device | **NO — BLOCKED** — no device, emulator, JDK or Android SDK in the review environment |
+| Live production backend verified | **YES** — 11/11 unauthenticated probes against `https://maharanitraders.vercel.app`, run `37959400920` |
 | Play Console entry | **NO** — not started |
 
 ## 1. Build and toolchain gates
 
-- [ ] `versionName` / `versionCode` policy — the app currently reports `1.0.0-phase-b`, which must not ship.
-- [ ] `abortOnError = true` — lint is advisory today (Phase H decision), so it cannot fail a build yet.
-- [ ] Triage every lint warning and every Kotlin compiler warning currently waived.
-- [ ] Release build type verified: R8/minify rules, no reflective serializer or Hilt entry point stripped.
+- [x] `versionName` / `versionCode` policy — **DONE.** `android/version.properties` is the single
+      source of truth; the build derives `versionName = MAJOR.MINOR.PATCH` and `versionCode` from it,
+      so the `1.0.0-phase-b` marker can never return as a literal. CI reads the values back out of
+      the built APK and fails on mismatch. Policy and rationale: `docs/ANDROID_RELEASE_SIGNING.md` §2;
+      guarded by `tests/android-release-versioning.test.ts`.
+- [x] `abortOnError = true` — **DONE.** Set in `android/app/build.gradle.kts`; `lintDebug` runs in CI
+      and a lint error fails the build. (This line previously described lint as advisory.)
+- [ ] Triage every lint warning and every Kotlin compiler warning currently waived. 26 non-fatal
+      lint issues remain; `GradleDependency`, `AndroidGradlePluginVersion` and `NewerVersionAvailable`
+      are still disabled.
+- [ ] Release build type verified: R8/minify rules, no reflective serializer or Hilt entry point
+      stripped. R8 full mode and resource shrinking are on and the artifact builds, but nothing has
+      been *run* — an over-aggressive keep-rule failure only shows at runtime on a device.
+- [ ] **16 KB page-size alignment — NOT VERIFIED, and it applies.** The artifact ships 8 native
+      libraries across four ABIs. Check with `zipalign -c -P 16 -v 4 app-release.apk` or the Play
+      pre-launch report.
 - [ ] Reproducibility: the same commit produces the same artifact.
 
 ## 2. Signing and secrets
 
-- [ ] Upload key generated and stored outside the repository; `RELEASE_KEYSTORE_PATH`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` supplied only as CI secrets.
-- [ ] Play App Signing enrolled; the upload key is not the app-signing key.
-- [ ] Verified no secret ships in the APK — the only compiled-in configuration is the API base URL, which is not a secret.
-- [ ] Supabase service-role key and any provider credential remain server-side, reachable only through `/api/mobile/v1`.
+- [ ] **BLOCKED** — upload key generated and stored outside the repository; `RELEASE_KEYSTORE_PATH`,
+      `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` supplied only as CI
+      secrets. The build already reads all four, and CI already has the decode → build → `apksigner`
+      verify → destroy path; it is inert until the secrets exist. No key may be invented: a
+      CI-generated key would differ from any future real one and strand every device that installed it.
+      Steps: `docs/ANDROID_RELEASE_SIGNING.md` §3–§4.
+- [ ] **BLOCKED** — Play App Signing enrolled; the upload key is not the app-signing key.
+- [x] Verified no secret ships in the APK — the only compiled-in configuration is the API base URL,
+      which is not a secret. Asserted by `tests/mobile-api-foundation.test.ts` and
+      `tests/android-release-versioning.test.ts`; no keystore or key file exists under `android/` and
+      none is tracked by git.
+- [x] Supabase service-role key and any provider credential remain server-side, reachable only
+      through `/api/mobile/v1`. Live-verified: `/api/mobile/v1/{session,cart,catalog/products,orders}`
+      all return 401 `missing_token` to an anonymous caller in production.
 
 ## 3. Security gates
 

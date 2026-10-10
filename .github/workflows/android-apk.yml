@@ -232,6 +232,66 @@ jobs:
           test -x "$AAPT"
           "$AAPT" dump badging "$APK_PATH" | grep -F "package: name='com.maharanitraders.app'"
 
+      # The version is read back OUT OF THE BUILT ARTIFACT and compared with
+      # android/version.properties, rather than trusting the properties file: a
+      # stale configuration-cache entry or a second defaultConfig block would
+      # otherwise ship a version nobody intended. This is also the gate that
+      # proves the "1.0.0-phase-b" pre-release marker is really gone.
+      - name: Verify artifact version against the declared version policy
+        run: |
+          set -euo pipefail
+          AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          PROPS=android/version.properties
+
+          read_int() {
+            local key="$1" value
+            value=$(sed -n "s/^${key}=\([0-9][0-9]*\)$/\1/p" "$PROPS")
+            if [ -z "$value" ]; then
+              echo "::error title=version policy::$PROPS does not define $key as a plain integer"
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
+          MAJOR=$(read_int VERSION_MAJOR)
+          MINOR=$(read_int VERSION_MINOR)
+          PATCH=$(read_int VERSION_PATCH)
+          EXPECTED_CODE=$(read_int VERSION_CODE)
+          EXPECTED_NAME="${MAJOR}.${MINOR}.${PATCH}"
+          echo "declared: versionName=${EXPECTED_NAME} versionCode=${EXPECTED_CODE}"
+
+          # A public artifact must not carry a pre-release marker.
+          case "$EXPECTED_NAME" in
+            *-*|*_*) echo "::error title=version policy::versionName '${EXPECTED_NAME}' must be plain MAJOR.MINOR.PATCH" >&2; exit 1 ;;
+          esac
+
+          for APK in \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            android/app/build/outputs/apk/release/*.apk
+          do
+            [ -f "$APK" ] || continue
+            BADGING=$("$AAPT" dump badging "$APK")
+            printf '%s\n' "$BADGING" | grep -F "package: name='com.maharanitraders.app'" >/dev/null
+            ACTUAL=$(printf '%s\n' "$BADGING" | sed -n "s/^package: .*versionCode='\([^']*\)' versionName='\([^']*\)'.*/\1 \2/p")
+            echo "$(basename "$APK"): $ACTUAL"
+            if [ "$ACTUAL" != "${EXPECTED_CODE} ${EXPECTED_NAME}" ]; then
+              echo "::error title=version mismatch::$(basename "$APK") reports '${ACTUAL}', expected '${EXPECTED_CODE} ${EXPECTED_NAME}'"
+              exit 1
+            fi
+          done
+          echo "OK: every built artifact carries the declared version."
+          {
+            echo ""
+            echo "### Version policy"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| applicationId | \`com.maharanitraders.app\` |"
+            echo "| versionName | \`${EXPECTED_NAME}\` |"
+            echo "| versionCode | \`${EXPECTED_CODE}\` |"
+            echo "| Source | \`android/version.properties\` (verified against the built artifacts) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # The RELEASE APK and AAB are built UNSIGNED on purpose: no keystore, no
       # secret, no publication. Their only job is to measure what a production
       # artifact weighs (R8 + resource shrinking enabled) and how large the
@@ -252,6 +312,147 @@ jobs:
             android/app/build/outputs/bundle/release/*.aab \
             | tee /tmp/size-report.md
           cat /tmp/size-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # SIGNED RELEASE — inert until the keystore secrets exist.
+      # -------------------------------------------------------------------
+      # Every step below is gated on `steps.keystore.outputs.configured`, so
+      # with no secrets configured this job behaves EXACTLY as it did before:
+      # the unsigned measurement artifacts stay the only release output and the
+      # pipeline stays green. Nothing here can be triggered by a fork's PR,
+      # because GitHub does not pass secrets to pull_request events from forks.
+      #
+      # The keystore is decoded to /tmp, OUTSIDE the workspace, so it can never
+      # be committed, uploaded as an artifact, or left behind in the checkout.
+      # No secret VALUE is ever echoed: only whether it is present.
+      - name: Decode the release keystore when CI secrets provide one
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "$KEYSTORE_BASE64" ] || missing="$missing ANDROID_RELEASE_KEYSTORE_BASE64"
+          [ -n "$STORE_PASSWORD" ]  || missing="$missing ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ]       || missing="$missing ANDROID_RELEASE_KEY_ALIAS"
+          [ -n "$KEY_PASSWORD" ]    || missing="$missing ANDROID_RELEASE_KEY_PASSWORD"
+
+          if [ -n "$missing" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=signed release BLOCKED::No signing material is configured. Missing secret(s):$missing. \
+          The release artifact in this run is UNSIGNED and must NOT be given to a retailer or uploaded to Play. \
+          Setup steps: docs/ANDROID_RELEASE_SIGNING.md"
+            {
+              echo ""
+              echo "### Signed release"
+              echo ""
+              echo "**BLOCKED** — no signing material is configured."
+              echo ""
+              echo "Missing secret(s):$(printf '%s\n' "$missing" | sed 's/^/ `/' | sed 's/$/`/')"
+              echo ""
+              echo "The release artifact produced by this run is **UNSIGNED** and must not be"
+              echo "distributed. See \`docs/ANDROID_RELEASE_SIGNING.md\` for the exact setup."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          mkdir -p /tmp/maharani-signing
+          chmod 700 /tmp/maharani-signing
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > /tmp/maharani-signing/release.keystore
+          chmod 600 /tmp/maharani-signing/release.keystore
+          BYTES=$(stat -c%s /tmp/maharani-signing/release.keystore)
+          if [ "$BYTES" -lt 100 ]; then
+            echo "::error title=keystore decode failed::the decoded keystore is only $BYTES bytes — the base64 secret is malformed"
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "keystore decoded to a runner-local path outside the workspace ($BYTES bytes)"
+
+      - name: Build the SIGNED release APK and AAB
+        if: steps.keystore.outputs.configured == 'true'
+        working-directory: android
+        env:
+          RELEASE_KEYSTORE_PATH: /tmp/maharani-signing/release.keystore
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace assembleRelease bundleRelease 2>&1 | tee -a /tmp/gradle.log
+
+      - name: Verify the signed artifact with apksigner
+        if: steps.keystore.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          APKSIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
+          test -x "$APKSIGNER"
+          APK=$(ls android/app/build/outputs/apk/release/app-release.apk)
+          AAB=$(ls android/app/build/outputs/bundle/release/app-release.aab)
+          test -f "$APK"; test -f "$AAB"
+
+          # A signed build is named app-release.apk; an unsigned one is named
+          # app-release-unsigned.apk. Asserting the SIGNED filename exists is
+          # what stops an unsigned artifact from being described as a release.
+          if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            echo "::warning::an unsigned release APK is also present from the earlier measurement step — \
+          only app-release.apk is distributable"
+          fi
+
+          "$APKSIGNER" verify --verbose --print-certs "$APK" > /tmp/apksigner.txt 2>&1 || {
+            cat /tmp/apksigner.txt
+            echo "::error title=apksigner rejected the release APK::see the output above"
+            exit 1
+          }
+          # Only the verdict, the signing schemes and the certificate digests are
+          # published. Those are public by construction — every installed APK
+          # exposes them — but the alias and passwords are never printed.
+          grep -E '^(Verifies|Verified using|Number of signers|Signer #1 certificate SHA-256 digest)' /tmp/apksigner.txt \
+            | tee /tmp/apksigner-summary.txt
+          grep -qE '^Verifies$' /tmp/apksigner.txt
+          grep -qE '^Verified using v2 scheme \(APK Signature Scheme v2\): true$' /tmp/apksigner.txt
+
+          {
+            echo ""
+            echo "### Signed release"
+            echo ""
+            echo "**VERIFIED** — \`apksigner\` accepts the signed release APK."
+            echo ""
+            echo '```'
+            cat /tmp/apksigner-summary.txt
+            echo '```'
+            echo ""
+            echo "| Artifact | Bytes |"
+            echo "|---|---:|"
+            echo "| \`app-release.apk\` (signed) | $(stat -c%s "$APK") |"
+            echo "| \`app-release.aab\` (signed) | $(stat -c%s "$AAB") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Measure the signed artifact sizes
+        if: steps.keystore.outputs.configured == 'true'
+        run: |
+          set -o pipefail
+          {
+            echo ""
+            echo "### Signed release sizes"
+            echo ""
+          } >> /tmp/size-report.md
+          python3 scripts/android-apk-size-report.py \
+            android/app/build/outputs/apk/release/app-release.apk \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            | tee -a /tmp/size-report.md
+
+      - name: Destroy the decoded keystore
+        if: always()
+        run: |
+          set +e
+          # Belt and braces: later steps upload artifacts by path, and /tmp is
+          # outside every one of those paths, but the runner is not ours to leave
+          # key material on.
+          rm -rf /tmp/maharani-signing
+          echo "runner-local signing directory removed"
 
       # Best effort only: proves what a device would actually download from
       # Play (bundletool splits the AAB per ABI/density/language). Every code
@@ -301,8 +502,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
-                 --json number --jq '.[0].number' 2>/dev/null)
+          # On a pull_request event GITHUB_REF_NAME is "<pr>/merge", which matches
+          # no head branch and made this silently fall back to commit comments.
+          PR="${{ github.event.pull_request.number }}"
+          if [ -z "$PR" ]; then
+            PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                   --state open --json number --jq '.[0].number' 2>/dev/null)
+          fi
           if [ -z "$PR" ] || [ "$PR" = "null" ]; then
             echo "no open pull request for $GITHUB_REF_NAME — size report stays in the job summary and artifact"
             exit 0
@@ -380,10 +586,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$GITHUB_REF_NAME" --state open \
-                 --json number --jq '.[0].number' 2>/dev/null)
+          # On a pull_request event GITHUB_REF_NAME is "<pr>/merge", which matches
+          # no head branch and made this silently fall back to commit comments.
+          PR="${{ github.event.pull_request.number }}"
+          if [ -z "$PR" ]; then
+            PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                   --state open --json number --jq '.[0].number' 2>/dev/null)
+          fi
           if [ -z "$PR" ] || [ "$PR" = "null" ]; then
-            echo "no open pull request for $GITHUB_REF_NAME — nothing to post"
+            # Session branches may intentionally have no duplicate PR. Keep
+            # diagnostics accessible via api.github.com, not blocked blob hosts.
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+              -f body="$(printf '### Android CI diagnostics\n\n```\n'; head -c 55000 /tmp/diagnostics.txt; printf '\n```\n')" \
+              || echo "::warning::could not post commit diagnostics"
             exit 0
           fi
           {

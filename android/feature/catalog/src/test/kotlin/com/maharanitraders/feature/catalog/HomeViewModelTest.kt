@@ -48,6 +48,30 @@ class HomeViewModelTest {
   )
 
   @Test
+  fun `optional newest failure is visible without blanking home`() = runTest(dispatcher) {
+    val api = FakeCatalogApi().apply {
+      homeResult = home()
+      nextProductFailure = IOException("newest unavailable")
+    }
+    val viewModel = HomeViewModel(catalogRepository(api, dispatcher), favoritesStore(api, dispatcher))
+    advanceUntilIdle()
+    assertThat(viewModel.state.value.home).isNotNull()
+    assertThat(viewModel.state.value.recentError).isNotNull()
+    assertThat(viewModel.state.value.errorMessage).isNull()
+    api.nextProductFailure = null
+    viewModel.load()
+    advanceUntilIdle()
+    assertThat(viewModel.state.value.recentError).isNull()
+  }
+
+  @Test
+  fun `category mapping preserves published parent identity`() {
+    val category = CatalogMapper.category(CatalogCategoryDto(id = "child", name = "Child", parentName = "Parent"))
+    assertThat(category.parentName).isEqualTo("Parent")
+    assertThat(category.productCount).isNull()
+  }
+
+  @Test
   fun `loads the payload on start`() = runTest(dispatcher) {
     val api = FakeCatalogApi().apply { homeResult = home() }
 

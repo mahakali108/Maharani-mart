@@ -573,6 +573,20 @@ describe('GET /api/mobile/v1/catalog/products', () => {
     for (const card of cards) expect(card.pack.availability).toBe('unknown');
   });
 
+  it.each(['brands', 'categories', 'product_packs', 'products'])('reports a %s search read failure instead of no results', async (table) => {
+    install(threeProductTables(), { tableErrors: { [table]: 'search read failed' } });
+    const response = await listProducts(request('/api/mobile/v1/catalog/products?q=rice'));
+    expect(response.status).toBe(503);
+    expect((await body(response)).error.code).toBe('database_unavailable');
+  });
+
+  it.each(['recommended', 'price-low'])('reports a failed product read for %s instead of an empty grid', async (sort) => {
+    install(threeProductTables(), { tableErrors: { products: 'product read failed' } });
+    const response = await listProducts(request(`/api/mobile/v1/catalog/products?sort=${sort}`));
+    expect(response.status).toBe(503);
+    expect((await body(response)).error.code).toBe('database_unavailable');
+  });
+
   it('sorts new launches first, then by name (the existing recommended order)', async () => {
     install(threeProductTables());
     const payload = await body(await listProducts(request('/api/mobile/v1/catalog/products')));

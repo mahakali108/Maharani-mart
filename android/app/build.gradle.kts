@@ -28,6 +28,84 @@ val releaseSigningConfigured: Boolean =
   listOf(releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
     .all { !it.isNullOrBlank() }
 
+if (!releaseSigningConfigured) {
+  // Said out loud on every build so an unsigned artifact can never be mistaken
+  // for a distributable one. The message names the variables, never a value.
+  logger.lifecycle(
+    "Maharani release signing is NOT configured - set RELEASE_KEYSTORE_PATH, " +
+      "RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD. " +
+      "The release artifact will stay UNSIGNED and must not be given to a retailer. " +
+      "See docs/ANDROID_RELEASE_SIGNING.md.",
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Release version - android/version.properties is the single source of truth.
+// ---------------------------------------------------------------------------
+//
+// versionName and versionCode are DERIVED from that file so they can never
+// disagree, and there is deliberately no way to hand-write a versionName here:
+// the literal this block replaced still read "1.0.0-phase-b" long after Phase B
+// ended, and a pre-release marker on a shopkeeper's phone is how a test build
+// gets mistaken for a launch build (docs/ANDROID_RELEASE_CHECKLIST.md §1).
+//
+// The file is read through the provider API so the configuration cache tracks it
+// as a real build input; a bare File.readText() would be an untracked implicit
+// dependency and could serve a stale version from cache.
+//
+// A missing or malformed file FAILS THE BUILD with the reason, rather than
+// falling back to a default - silently shipping versionCode 1 twice would make
+// every installed device refuse the update.
+val maharaniVersionText: String = providers
+  .fileContents(rootProject.layout.projectDirectory.file("version.properties"))
+  .asText
+  .orNull
+  ?: throw GradleException(
+    "android/version.properties is missing. It is the single source of truth for " +
+      "versionName and versionCode - restore it before building.",
+  )
+
+// Parsed with the Kotlin standard library ONLY - no java.util.Properties.
+//
+// That is not a style choice. In a Gradle Kotlin DSL script the simple name
+// `java` resolves to the project's `java` EXTENSION, which shadows the `java`
+// package root, so `java.util.Properties` fails to compile with
+// "Unresolved reference 'util'" (CI run 37957848482 proved it). An explicit
+// `import java.util.Properties` would work, but this parser needs nothing that
+// Properties provides: the file is KEY=VALUE lines with `#` comments, and having
+// no JDK type here keeps the script free of any name the build could shadow.
+//
+// The semantics match tests/android-release-versioning.test.ts, which parses the
+// same file the same way and asserts the values CI reads back out of the APK.
+val maharaniVersionValues: Map<String, String> = maharaniVersionText
+  .lineSequence()
+  .map { it.trim() }
+  .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("!") }
+  .filter { it.contains('=') }
+  .associate { line ->
+    val separator = line.indexOf('=')
+    line.substring(0, separator).trim() to line.substring(separator + 1).trim()
+  }
+
+fun maharaniVersionInt(key: String, minimum: Int): Int {
+  val raw = maharaniVersionValues[key]
+    ?: throw GradleException("android/version.properties must define $key")
+  val parsed = raw.toIntOrNull()
+    ?: throw GradleException("android/version.properties: $key must be a plain integer, found '$raw'")
+  if (parsed < minimum) {
+    throw GradleException("android/version.properties: $key must be >= $minimum, found $parsed")
+  }
+  return parsed
+}
+
+val maharaniVersionCode: Int = maharaniVersionInt("VERSION_CODE", 1)
+val maharaniVersionName: String =
+  listOf(
+    maharaniVersionInt("VERSION_MAJOR", 0),
+    maharaniVersionInt("VERSION_MINOR", 0),
+    maharaniVersionInt("VERSION_PATCH", 0),
+  ).joinToString(".")
+
 android {
   namespace = "com.maharanitraders.app"
   // AGP 9 expresses the SDK level as a spec; `compileSdk = 36` also works.
@@ -41,9 +119,10 @@ android {
     applicationId = "com.maharanitraders.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    // Phase B foundation build — not a store release. See docs/NATIVE_ANDROID_MIGRATION_PLAN.md §9.
-    versionName = "1.0.0-phase-b"
+    versionCode = maharaniVersionCode
+    // Derived from android/version.properties as MAJOR.MINOR.PATCH - never a
+    // hand-written literal, and never carrying a pre-release suffix.
+    versionName = maharaniVersionName
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables { useSupportLibrary = true }
   }
@@ -119,10 +198,8 @@ android {
   }
 
   lint {
-    // Phase B: lint RUNS in CI and reports, but does not fail the build while the
-    // shell is still being built out. Flipped to abortOnError = true in Phase H
-    // (docs/NATIVE_ANDROID_MIGRATION_PLAN.md §5).
-    abortOnError = false
+    // Acceptance gate: actual lint errors must fail CI.
+    abortOnError = true
     warningsAsErrors = false
     disable += listOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
   }
@@ -190,4 +267,11 @@ dependencies {
   // androidx.test.ext:junit / espresso-core scaffolding (no androidTest source
   // set exists anywhere). Re-add them WITH the first instrumented test —
   // test-only artifacts never reach the APK either way.
+}
+
+// Rendered Compose regressions run only in the JVM test APK/environment.
+dependencies {
+  testImplementation("org.robolectric:robolectric:4.16.1")
+  testImplementation("androidx.compose.ui:ui-test-junit4:1.10.3")
+  debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.3")
 }
