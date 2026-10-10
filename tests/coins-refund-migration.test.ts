@@ -27,7 +27,9 @@ describe('0053 is a new, additive migration', () => {
   it('keeps 0053 unique and places the additive 0054 migration after it', () => {
     const files = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql'));
     const numbered = files.map((f) => Number(f.slice(0, 4))).filter((n) => Number.isFinite(n));
-    expect(Math.max(...numbered)).toBe(56);
+    // Highest migration is 0057 (SECURITY DEFINER hardening). Keep this in step
+    // with each new migration; the 0053 uniqueness and ordering checks below are the point.
+    expect(Math.max(...numbered)).toBe(57);
     expect(files.filter((f) => f.startsWith('0053'))).toHaveLength(1);
     expect(files.filter((f) => f.startsWith('0054'))).toHaveLength(1);
     expect(files.filter((f) => f.startsWith('0056'))).toHaveLength(1);

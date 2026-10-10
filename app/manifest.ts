@@ -13,6 +13,9 @@ import type { MetadataRoute } from 'next';
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    // Stable identity for the installed app (Chromium uses it to match an
+    // existing install across updates). Equal to start_url, so no reinstall.
+    id: '/',
     name: 'Maharani Traders',
     short_name: 'Maharani Traders',
     description:

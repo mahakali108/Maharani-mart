@@ -24,7 +24,7 @@ export default function ServiceWorkerRegister() {
     const w = window as Window & { Capacitor?: unknown };
     if (w.Capacitor) return;
 
-    const onLoad = () => {
+    const register = () => {
       navigator.serviceWorker
         .register('/sw.js', { scope: '/' })
         .catch((err) => {
@@ -34,8 +34,17 @@ export default function ServiceWorkerRegister() {
         });
     };
 
-    window.addEventListener('load', onLoad);
-    return () => window.removeEventListener('load', onLoad);
+    // The Next.js app-router scripts are async and hydrate AFTER the window
+    // `load` event in practice. Waiting only for `load` therefore meant the
+    // service worker was never registered, which in turn stopped the offline
+    // page and the browser's install prompt. If the document has already
+    // finished loading, register now.
+    if (document.readyState === 'complete') {
+      register();
+      return;
+    }
+    window.addEventListener('load', register);
+    return () => window.removeEventListener('load', register);
   }, []);
 
   return null;
