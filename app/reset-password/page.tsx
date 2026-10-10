@@ -24,7 +24,7 @@ export default async function ResetPasswordPage({
   return (
     <div className="flex min-h-screen">
       <div className="relative hidden w-1/2 flex-col justify-between bg-ink-950 p-12 text-white lg:flex">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-700/30 via-transparent to-transparent" />
+        <div className="absolute inset-0 " />
         <div className="relative">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-600 text-lg font-bold">MT</div>

@@ -39,7 +39,7 @@ export function CoinsBalanceCard({
       aria-label={title}
       className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
     >
-      <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-amber-50 to-white px-4 py-3.5">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-gold-50 px-4 py-3.5">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700" aria-hidden="true">
             <Coins className="h-4.5 w-4.5" />

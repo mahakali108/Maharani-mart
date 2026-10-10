@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AreaForm } from '@/components/admin/area-form';
 import { AreaRowActions } from '@/components/admin/area-row-actions';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
 
 interface AreaRow {
   id: string;
@@ -23,7 +24,7 @@ export default async function AreasPage() {
       <div>
         <h1 className="text-2xl font-semibold text-ink-950">Areas</h1>
         <p className="mt-1 text-sm text-ink-500">
-          Delivery areas within Khagaria district. Retailers select their area at registration.
+          Delivery areas within {SERVICE_AREA_LABEL}. Retailers select their area at registration.
         </p>
       </div>
 

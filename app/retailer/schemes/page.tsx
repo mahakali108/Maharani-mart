@@ -46,7 +46,7 @@ export default async function RetailerSchemesPage() {
         <span className="text-slate-800">Schemes &amp; offers</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="relative max-w-2xl">
           <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Save more on every restock

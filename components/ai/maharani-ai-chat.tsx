@@ -120,7 +120,7 @@ export function MaharaniAIChat({ surface, title, subtitle, quickActions }: { sur
 
   return (
     <div className="mx-auto max-w-5xl overflow-hidden rounded-[1.5rem] border border-blue-100 bg-white shadow-[0_24px_70px_rgba(30,64,175,0.12)]">
-      <header className="bg-gradient-to-br from-blue-700 via-blue-800 to-slate-950 px-4 py-5 text-white sm:px-6 sm:py-6">
+      <header className="bg-primary-800 px-4 py-5 text-white sm:px-6 sm:py-6">
         <div className="flex items-start justify-between gap-4"><div className="flex gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20"><Sparkles className="h-5 w-5" /></span><div><h1 className="text-xl font-bold sm:text-2xl">{title}</h1><p className="mt-1 max-w-2xl text-xs leading-5 text-blue-100">{subtitle}</p></div></div><button type="button" onClick={() => void resetMemory()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3 text-[10px] font-bold text-blue-50 hover:bg-white/15" title="Reset safe business memory"><RotateCcw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Reset memory</span></button></div>
         <div className="mt-4 flex items-center gap-2 text-[9px] text-blue-100"><ShieldCheck className="h-3.5 w-3.5 text-emerald-300" /> RLS-protected tools · Confirmed cart writes · No automatic orders</div>
       </header>

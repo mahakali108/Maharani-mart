@@ -126,7 +126,7 @@ export default async function RetailerAccountPage() {
         <span className="text-slate-800">Account</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/60 p-5 shadow-sm sm:p-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-sm sm:p-7">
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary-600 text-xl font-black text-white shadow-sm sm:h-20 sm:w-20 sm:text-2xl">

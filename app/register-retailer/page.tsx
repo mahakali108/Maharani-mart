@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { RegisterRetailerForm } from '@/components/auth/register-retailer-form';
+import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
 
 export const metadata: Metadata = { title: 'Register your shop — Maharani Traders' };
 
@@ -29,7 +30,7 @@ export default async function RegisterRetailerPage() {
           <h1 className="text-2xl font-semibold text-ink-950">Register your shop</h1>
           <p className="mt-1.5 mb-8 text-sm text-ink-500">
             Create your retailer account. An admin will review and approve it before you can
-            place orders.
+            place orders. Service area: <span className="font-medium text-ink-700">{SERVICE_AREA_LABEL}</span>.
           </p>
 
           <RegisterRetailerForm areas={areas ?? []} />

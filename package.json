@@ -2,7 +2,7 @@
   "name": "maharani-traders",
   "version": "0.1.0",
   "private": true,
-  "description": "Maharani Traders — B2B Wholesale & Distribution App, Khagaria District",
+  "description": "Maharani Traders — B2B Wholesale & Distribution App, Saran District, Bihar",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

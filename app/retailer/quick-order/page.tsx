@@ -131,7 +131,7 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
         <span className="text-slate-800">Quick Order</span>
       </div>
 
-      <section className="marketplace-grid relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-800 via-primary-700 to-slate-950 p-5 text-white shadow-lg sm:p-8">
+      <section className="marketplace-grid relative overflow-hidden rounded-2xl bg-primary-800 p-5 text-white shadow-lg sm:p-8">
         <Zap className="absolute -bottom-8 -right-4 h-40 w-40 rotate-12 fill-white/5 text-white/5 sm:h-56 sm:w-56" />
         <div className="relative max-w-3xl">
           <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300"><Sparkles className="h-3.5 w-3.5" /> Fast restocking</p>

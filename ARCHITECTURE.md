@@ -1,6 +1,6 @@
 # Maa Kali B2B Ultra Platform — Enterprise Architecture
 
-**Domain:** FMCG B2B Wholesale Distribution — Khagaria District
+**Domain:** FMCG B2B Wholesale Distribution — Saran District, Bihar
 **Stack:** Next.js 14 (App Router) + Tailwind CSS + Supabase (Postgres, Auth, Storage, Edge Functions, Realtime) + Vercel
 **State:** Production-ready, zero seed/demo data. Database boots empty. All content entered via Admin Panel.
 
@@ -281,7 +281,7 @@ app/
     └── cron/ai-insights/          # Vercel Cron → triggers Edge Function
 ```
 
-- **Mobile-first**: Tailwind breakpoints designed bottom-up; retailer app is the primary mobile surface (Khagaria field usage, often on mid-range Android).
+- **Mobile-first**: Tailwind breakpoints designed bottom-up; retailer app is the primary mobile surface (Saran field usage, often on mid-range Android).
 - **Theme**: Premium Red (`#C8102E` primary), White (`#FFFFFF`), Black (`#0B0B0B`) — tokens defined in `tailwind.config.ts`, no inline hex scattered in components.
 - **Charts**: Recharts for dashboard analytics (sales trend, top products, area performance).
 - **Empty states are first-class UI**, not an afterthought — every list component ships with a designed "No products yet — add your first product" / "No orders yet" state.
@@ -308,4 +308,4 @@ app/
 7. **Reports + AI Dashboard** — only meaningful once real order data exists.
 8. **Notifications** — WhatsApp/SMS integration.
 
-I'd recommend we build this phase-by-phase in code (starting with Phase 1) rather than all at once — that keeps every piece testable against your real Khagaria product/retailer data as it's entered, with nothing fake in between.
+I'd recommend we build this phase-by-phase in code (starting with Phase 1) rather than all at once — that keeps every piece testable against your real Saran product/retailer data as it's entered, with nothing fake in between.

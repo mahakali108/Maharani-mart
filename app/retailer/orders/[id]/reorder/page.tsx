@@ -143,7 +143,7 @@ export default async function ReorderPage({ params }: { params: { id: string } }
     <div className="space-y-5 sm:space-y-6">
       <nav className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs"><Link href="/retailer/orders" className="hover:text-primary-600">My orders</Link><ChevronRight className="h-3 w-3" /><Link href={`/retailer/orders/${order.id}`} className="font-mono hover:text-primary-600">{order.order_number}</Link><ChevronRight className="h-3 w-3" /><span className="text-slate-800">Reorder</span></nav>
 
-      <section className="marketplace-grid relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-800 via-primary-700 to-slate-950 p-5 text-white shadow-lg sm:p-8">
+      <section className="marketplace-grid relative overflow-hidden rounded-2xl bg-primary-800 p-5 text-white shadow-lg sm:p-8">
         <RotateCcw className="absolute -bottom-8 -right-4 h-40 w-40 rotate-[-15deg] text-white/5 sm:h-52 sm:w-52" />
         <div className="relative"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Buy again</p><h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-4xl">Review your reorder</h1><p className="mt-2 text-xs text-primary-100 sm:text-sm">From <span className="font-mono font-semibold text-white">{order.order_number}</span> · {formatIndiaDateTime(order.placed_at)}</p><Link href={`/retailer/orders/${order.id}`} className="mt-4 inline-flex items-center gap-1 text-[10px] font-bold text-white/80 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back to order details</Link></div>
       </section>

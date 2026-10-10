@@ -162,7 +162,7 @@ export default async function RetailerCatalogPage({
         ) : null}
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <section className="overflow-hidden rounded-2xl border border-blush-200 bg-blush-100 shadow-card">
         <div className="flex flex-col gap-4 p-4 sm:p-6">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
@@ -300,6 +300,45 @@ export default async function RetailerCatalogPage({
           })}
         </div>
       </section>
+
+      {brands.length > 0 ? (
+        <section aria-label="Shop by brand" className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-5">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold-700">Brands</p>
+              <h2 className="mt-0.5 text-sm font-bold text-slate-900 sm:text-base">Shop by brand</h2>
+            </div>
+            <Link
+              href="/retailer/brands"
+              className="flex items-center gap-1 text-[10px] font-bold text-primary-600 sm:text-[11px]"
+            >
+              All brands <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </div>
+          <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {brands.map((brand) => {
+              const active = selectedBrand?.id === brand.id;
+              const monogram = brand.name.split(/\s+/).map((word) => word[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+              return (
+                <Link
+                  key={brand.id}
+                  href={catalogHref({ ...filterValues, brand: active ? undefined : brand.id })}
+                  aria-current={active ? 'true' : undefined}
+                  className={cn(
+                    'flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                    active
+                      ? 'border-primary-600 bg-primary-600 text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-800 hover:border-primary-200 hover:bg-primary-50'
+                  )}
+                >
+                  <span aria-hidden="true" className={cn('flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black', active ? 'bg-white/20 text-white' : 'bg-blush-100 text-primary-700')}>{monogram || 'B'}</span>
+                  <span className="whitespace-nowrap">{brand.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <CatalogFilters values={filterValues} categories={categories} brands={brands} resultCount={resultCount} />
 

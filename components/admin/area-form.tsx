@@ -5,6 +5,7 @@ import { createAreaAction, type MasterDataFormState } from '@/lib/admin/master-d
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { SERVICE_DISTRICT } from '@/lib/config/service-area';
 
 const initialState: MasterDataFormState = null;
 
@@ -15,11 +16,11 @@ export function AreaForm() {
     <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
       <div className="flex-1">
         <Label htmlFor="name">Area name</Label>
-        <Input id="name" name="name" placeholder="e.g. Khagaria Town" required />
+        <Input id="name" name="name" placeholder="e.g. town or market name" required />
       </div>
       <div className="flex-1">
         <Label htmlFor="district">District</Label>
-        <Input id="district" name="district" defaultValue="Khagaria" required />
+        <Input id="district" name="district" defaultValue={SERVICE_DISTRICT} required />
       </div>
       <SubmitButton pendingLabel="Adding…" className="w-full sm:w-auto">
         Add area

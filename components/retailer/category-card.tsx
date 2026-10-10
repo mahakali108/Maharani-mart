@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { StoredImage } from '@/components/media/stored-image';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
-import { cn } from '@/lib/utils/cn';
 
 export interface CategoryCardData {
   id: string;
@@ -10,6 +9,12 @@ export interface CategoryCardData {
   productCount?: number;
 }
 
+/**
+ * Category tile.
+ *  - compact: circular "aisle" tile (Super Store style) — soft blush frame,
+ *    centred label, no heavy border. Used in shortcut rows.
+ *  - full: premium card with a 4:3 image, count and chevron. Used in directories.
+ */
 export function CategoryCard({
   category,
   compact = false,
@@ -20,27 +25,49 @@ export function CategoryCard({
   /** Optional destination override (e.g. a category detail page). */
   href?: string;
 }) {
+  const target = href ?? `/retailer/catalog?category=${category.id}`;
+
+  if (compact) {
+    return (
+      <Link
+        href={target}
+        aria-label={`Browse ${category.name}`}
+        className="group flex h-full min-w-0 flex-col items-center gap-2 rounded-xl px-1 pb-1 pt-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2"
+      >
+        <span className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-blush-200 bg-blush-100 shadow-[0_1px_2px_rgba(79,20,36,0.06)] transition duration-200 group-hover:-translate-y-0.5 group-hover:border-primary-300 group-hover:shadow-md sm:h-20 sm:w-20">
+          {category.image_url ? (
+            <StoredImage
+              src={category.image_url}
+              alt=""
+              fill
+              sizes="80px"
+              fallback={<LayoutGrid className="h-6 w-6 text-primary-600" aria-hidden="true" />}
+              className="object-cover transition duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <LayoutGrid className="h-6 w-6 text-primary-600" aria-hidden="true" />
+          )}
+        </span>
+        <span className="line-clamp-2 min-h-[2.25rem] w-full break-words text-[11px] font-semibold leading-4 text-slate-800 sm:text-xs">
+          {category.name}
+        </span>
+      </Link>
+    );
+  }
+
   return (
     <Link
-      href={href ?? `/retailer/catalog?category=${category.id}`}
-      className={cn(
-        'group block h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
-        compact && 'rounded-xl'
-      )}
+      href={target}
+      className="group block h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-premium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2"
     >
-      <div
-        className={cn(
-          'relative overflow-hidden bg-slate-50',
-          compact ? 'aspect-square' : 'aspect-[4/3]'
-        )}
-      >
+      <div className="relative aspect-[4/3] overflow-hidden bg-blush-100">
         {category.image_url ? (
           <StoredImage
             src={category.image_url}
             alt={category.name}
             fill
-            sizes={compact ? '(max-width: 640px) 108px, 16vw' : '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px'}
-            fallback={<div className="flex h-full items-center justify-center text-action-600"><LayoutGrid className="h-6 w-6" aria-hidden="true" /></div>}
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
+            fallback={<div className="flex h-full items-center justify-center text-primary-600"><LayoutGrid className="h-6 w-6" aria-hidden="true" /></div>}
             className="object-cover transition duration-300 group-hover:scale-105"
           />
         ) : (
@@ -51,29 +78,21 @@ export function CategoryCard({
           </div>
         )}
       </div>
-      <div className={cn('flex items-center gap-2', compact ? 'min-h-[3.25rem] p-2' : 'p-3.5')}>
+      <div className="flex items-center gap-2 p-3.5">
         <div className="min-w-0 flex-1">
-          <h3
-            className={cn(
-              'truncate font-bold text-slate-900',
-              compact ? 'text-[11px]' : 'text-sm'
-            )}
-          >
-            {category.name}
-          </h3>
+          <h3 className="truncate text-sm font-semibold text-slate-900">{category.name}</h3>
           {category.productCount != null ? (
-            <p className="mt-0.5 text-[10px] text-slate-500">
+            <p className="mt-0.5 text-[11px] text-slate-500">
               {category.productCount} product{category.productCount === 1 ? '' : 's'}
             </p>
           ) : null}
         </div>
-        {!compact ? (
-          <ChevronRight
-            className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-primary-600"
-            aria-hidden="true"
-          />
-        ) : null}
+        <ChevronRight
+          className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-primary-600"
+          aria-hidden="true"
+        />
       </div>
     </Link>
   );
 }
+

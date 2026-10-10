@@ -243,7 +243,7 @@ export default async function OrdersPage({
         <span className="text-slate-800">My orders</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-primary-50 via-white to-rose-50/50 px-4 py-5 shadow-sm sm:px-7 sm:py-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 px-4 py-5 shadow-sm sm:px-7 sm:py-7">
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Purchase history</p>
