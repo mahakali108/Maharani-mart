@@ -43,6 +43,7 @@ fun MaharaniApp(
           retryable = sessionState.retryable,
           onRetry = onRetrySession,
           onSignOut = onSignOut,
+          storageFailure = sessionState.storageFailure,
         )
 
         is SessionState.SignedOut -> when (sessionState.reason) {

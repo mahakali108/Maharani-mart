@@ -91,10 +91,14 @@ class AuthRepository @Inject constructor(
    *
    * A failure here is terminal for the session: the caller signs the user out
    * rather than retrying a token the server has already rejected.
+   *
+   * Never replays on a token failure: the caller holds the session layer's
+   * refresh lock, and a replay would re-enter that lock.
    */
   suspend fun refresh(refreshToken: String): AppResult<SessionTokens> =
-    executor.executeEnvelope { api.refresh(RefreshRequestDto(refreshToken = refreshToken)) }
-      .map { dto -> tokensOf(dto.accessToken, dto.refreshToken, dto.expiresAt) }
+    executor.executeEnvelope(replayOnTokenFailure = false) {
+      api.refresh(RefreshRequestDto(refreshToken = refreshToken))
+    }.map { dto -> tokensOf(dto.accessToken, dto.refreshToken, dto.expiresAt) }
 
   /**
    * Server-side revocation of the caller's refresh token.

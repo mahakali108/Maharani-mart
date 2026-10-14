@@ -40,6 +40,8 @@ class KeystoreTokenStore @Inject constructor(
 
   private val file: File get() = File(context.filesDir, FILE_NAME)
 
+  private val atomicWriter = AtomicFileWriter()
+
   override suspend fun read(): SessionTokens? = withContext(ioDispatcher) {
     if (!file.exists()) return@withContext null
     try {
@@ -61,16 +63,22 @@ class KeystoreTokenStore @Inject constructor(
     }
   }
 
+  /**
+   * Encrypt and replace the session file atomically. Throws on any failure and
+   * leaves the previous session file intact; the caller decides what a failed
+   * write means (see `SessionManager`). Plaintext tokens never reach the disk.
+   */
   override suspend fun write(tokens: SessionTokens) = withContext(ioDispatcher) {
     val cipher = Cipher.getInstance(TRANSFORMATION)
     cipher.init(Cipher.ENCRYPT_MODE, secretKey())
     val encrypted = cipher.doFinal(TokenPayloadCodec.serialize(tokens).toByteArray(Charsets.UTF_8))
-    file.writeBytes(cipher.iv + encrypted)
+    atomicWriter.replace(file, cipher.iv + encrypted)
     Unit
   }
 
   override suspend fun clear() = withContext(ioDispatcher) {
     if (file.exists()) file.delete()
+    atomicWriter.delete(file)
     Unit
   }
 

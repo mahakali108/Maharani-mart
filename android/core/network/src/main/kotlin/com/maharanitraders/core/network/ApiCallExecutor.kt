@@ -52,9 +52,19 @@ class ApiCallExecutor @Inject constructor(
   private val tokenRefreshCoordinator: TokenRefreshCoordinator = TokenRefreshCoordinator(),
 ) {
 
-  suspend fun <T> execute(block: suspend () -> T): AppResult<T> = withContext(ioDispatcher) {
+  /**
+   * [replayOnTokenFailure] is `false` for the refresh exchange itself. A refresh
+   * request that replays through [TokenRefreshCoordinator] can re-enter the
+   * session layer's refresh while that refresh still holds its lock, which
+   * deadlocks. The refresh endpoint answers its own failures; it never needs a
+   * token replay.
+   */
+  suspend fun <T> execute(
+    replayOnTokenFailure: Boolean = true,
+    block: suspend () -> T,
+  ): AppResult<T> = withContext(ioDispatcher) {
     val first = attempt(block)
-    if (first is AppResult.Failure && isExpiredToken(first.error)) {
+    if (replayOnTokenFailure && first is AppResult.Failure && isExpiredToken(first.error)) {
       val stale = tokenProvider.accessToken()
       val fresh = tokenRefreshCoordinator.refresh(stale)
       // Retry with whatever the holder now carries. A fresh token that is
@@ -66,8 +76,10 @@ class ApiCallExecutor @Inject constructor(
   }
 
   /** Convenience for endpoints that answer with the standard `{ data }` envelope. */
-  suspend fun <T> executeEnvelope(block: suspend () -> ApiEnvelope<T>): AppResult<T> =
-    execute { block().data }
+  suspend fun <T> executeEnvelope(
+    replayOnTokenFailure: Boolean = true,
+    block: suspend () -> ApiEnvelope<T>,
+  ): AppResult<T> = execute(replayOnTokenFailure) { block().data }
 
   private suspend fun <T> attempt(block: suspend () -> T): AppResult<T> = try {
     AppResult.Success(block())
