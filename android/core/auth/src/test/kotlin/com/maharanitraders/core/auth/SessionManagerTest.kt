@@ -18,6 +18,7 @@ import com.maharanitraders.core.network.dto.AuthSessionDto
 import com.maharanitraders.core.network.dto.CatalogBrandsDto
 import com.maharanitraders.core.network.dto.CatalogCategoriesDto
 import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.CatalogSearchDto
 import com.maharanitraders.core.network.dto.CartLineRequestDto
 import com.maharanitraders.core.network.dto.CartQuantityRequestDto
 import com.maharanitraders.core.network.dto.CheckoutQuoteDto
@@ -881,8 +882,17 @@ class FakeMaharaniApi(
     sort: String?,
     inStock: String?,
     favoritesOnly: String?,
+    minPrice: String?,
+    maxPrice: String?,
+    minDiscount: String?,
+    maxMoq: String?,
+    offersOnly: String?,
+    newOnly: String?,
     cursor: String?,
   ): ApiEnvelope<List<CatalogProductDto>> = unsupported("catalogProducts")
+
+  override suspend fun catalogSearch(search: String): ApiEnvelope<CatalogSearchDto> =
+    unsupported("catalogSearch")
 
   override suspend fun catalogProduct(id: String): ApiEnvelope<ProductDetailDto> =
     unsupported("catalogProduct")

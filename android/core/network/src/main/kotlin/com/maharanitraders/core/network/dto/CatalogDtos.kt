@@ -95,6 +95,68 @@ data class RetailerHomeDto(
   val brands: List<CatalogBrandDto> = emptyList(),
   val products: List<CatalogProductDto> = emptyList(),
   val nextCursor: String? = null,
+  /**
+   * The admin's LIVE offers, soonest-ending first.
+   *
+   * The same rows `GET /schemes` answers ([MobileSchemeDto]), so the home offers
+   * rail and the offers screen cannot disagree. Empty is a normal answer: no
+   * offer is running right now.
+   */
+  val schemes: List<MobileSchemeDto> = emptyList(),
+  /**
+   * True when the offer read itself FAILED, as opposed to returning nothing.
+   *
+   * The two must stay apart: an empty list means "no offer is live" (the rail is
+   * simply not drawn), while a failed read must never let the app announce that
+   * the shop has no offers. Defaults to false so a server that predates the
+   * field still decodes.
+   */
+  val schemesUnavailable: Boolean = false,
+)
+
+/**
+ * One cross-entity search suggestion (`GET /catalog/search`).
+ *
+ * NAVIGATION TARGETS ONLY: an id and a display name. There is deliberately no
+ * price, stock or MOQ field here, so a suggestion cannot quote a number that
+ * checkout would reject — opening one loads the priced catalogue row instead.
+ */
+@Serializable
+data class CatalogSearchProductDto(
+  val id: String,
+  val name: String,
+  val brandName: String? = null,
+  /** The variant/pack name, when a PACK (not the product) matched the term. */
+  val packName: String? = null,
+  val imageUrl: String? = null,
+  /** `name`, `barcode` or `pack` — why this row matched, so the UI can say so. */
+  val matchKind: String = "name",
+)
+
+@Serializable
+data class CatalogSearchBrandDto(
+  val id: String,
+  val name: String,
+  val logoUrl: String? = null,
+)
+
+@Serializable
+data class CatalogSearchCategoryDto(
+  val id: String,
+  val name: String,
+  /** The parent category's real name, or null for a parent / an unresolved link. */
+  val parentName: String? = null,
+)
+
+@Serializable
+data class CatalogSearchDto(
+  /** The sanitized term actually matched; the client drops an answer for a stale term. */
+  val query: String = "",
+  /** False when the term was below the server's floor and nothing was read. */
+  val searched: Boolean = false,
+  val products: List<CatalogSearchProductDto> = emptyList(),
+  val brands: List<CatalogSearchBrandDto> = emptyList(),
+  val categories: List<CatalogSearchCategoryDto> = emptyList(),
 )
 
 @Serializable

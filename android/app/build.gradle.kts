@@ -256,6 +256,16 @@ dependencies {
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.turbine)
   testImplementation(libs.truth)
+  // RENDERED Compose tests. Robolectric gives a JVM unit test a real Android
+  // runtime, so `createComposeRule()` measures, lays out and draws the actual
+  // composables and the assertions run against a real semantics tree at a real
+  // window size — the only way to prove a screen fits 360dp without an emulator.
+  // ui-test-manifest supplies the ComponentActivity the rule hosts; it is a
+  // debugImplementation, so it never reaches a release artifact.
+  testImplementation(libs.robolectric)
+  testImplementation(libs.androidx.compose.ui.test)
+  testImplementation(libs.androidx.compose.ui.test.junit4)
+  debugImplementation(libs.androidx.compose.ui.test.manifest)
   // The base-URL test resolves endpoints with OkHttp's own URL parser — the
   // same implementation Retrofit uses — so the test cannot disagree with the
   // runtime about how a path is joined.
@@ -267,11 +277,4 @@ dependencies {
   // androidx.test.ext:junit / espresso-core scaffolding (no androidTest source
   // set exists anywhere). Re-add them WITH the first instrumented test —
   // test-only artifacts never reach the APK either way.
-}
-
-// Rendered Compose regressions run only in the JVM test APK/environment.
-dependencies {
-  testImplementation("org.robolectric:robolectric:4.16.1")
-  testImplementation("androidx.compose.ui:ui-test-junit4:1.10.3")
-  debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.3")
 }

@@ -73,6 +73,7 @@ import com.maharanitraders.feature.catalog.ui.components.DirectoryAllCard
 import com.maharanitraders.feature.catalog.ui.components.DirectoryScopeLabel
 import com.maharanitraders.feature.catalog.ui.components.ProductGrid
 import com.maharanitraders.feature.catalog.ui.components.ProductImage
+import com.maharanitraders.feature.catalog.CatalogFilterDraft
 import com.maharanitraders.feature.catalog.ui.components.QuantitySelectorSheet
 
 /** Test tags for the catalogue list surface. */
@@ -95,6 +96,10 @@ object CatalogScreenTags {
   const val LOADING_MORE = "catalog_loading_more"
   const val END_OF_LIST = "catalog_end_of_list"
   const val CLEAR_FILTERS = "catalog_clear_filters"
+
+  /** The derived filters currently being sent, restated as removable chips. */
+  const val APPLIED_FILTERS = "catalog_applied_filters"
+  const val APPLIED_FILTER_CHIP = "catalog_applied_filter_chip"
 
   /** Recent search chips: remembered terms, tappable and clearable. */
   const val RECENT_SEARCHES = "catalog_recent_searches"
@@ -138,6 +143,12 @@ fun CatalogScreen(
   initialBrandLabel: String? = null,
   /** Opened on this pane. The Categories/Brands deep links land on their own tab. */
   initialTab: CatalogTab = CatalogTab.PRODUCTS,
+  /**
+   * Open already narrowed to the server's own offer filter. The home Deals rail's
+   * "Shop offers" passes this, so the full list is the rail continued — the same
+   * `offers=1` read, not a second idea of what a deal is.
+   */
+  initialOffersOnly: Boolean = false,
   onOpenProduct: (productId: String) -> Unit,
   /**
    * Quick add to the cart from a card, `(packId, quantity)`. The shell passes
@@ -172,7 +183,8 @@ fun CatalogScreen(
   // ViewModel call, so a deep link costs one catalogue read instead of one per
   // field (see `applyInitialRequest`).
   var appliedInitial by rememberSaveable { mutableStateOf<String?>(null) }
-  val requestKey = "$initialSearch|$initialCategoryId|$initialBrandId|${initialTab.name}"
+  val requestKey =
+    "$initialSearch|$initialCategoryId|$initialBrandId|${initialTab.name}|$initialOffersOnly"
   LaunchedEffect(requestKey) {
     if (appliedInitial == requestKey) return@LaunchedEffect
     appliedInitial = requestKey
@@ -182,6 +194,7 @@ fun CatalogScreen(
       brandId = initialBrandId,
       brandLabel = initialBrandLabel,
       tab = initialTab,
+      offersOnly = initialOffersOnly,
     )
   }
 
@@ -227,6 +240,18 @@ fun CatalogScreen(
       onToggleInStock = viewModel::toggleInStockOnly,
       onClearBrand = { viewModel.selectBrand(null) },
       onClearFilters = viewModel::clearFilters,
+      onOpenFilters = viewModel::openFilters,
+      onCloseFilters = viewModel::closeFilters,
+      onApplyFilters = viewModel::applyFilters,
+      onClearAllFilters = viewModel::clearAllFilters,
+      onSelectSuggestedProduct = { productId ->
+        viewModel.selectSuggestedProduct(productId)
+        onOpenProduct(productId)
+      },
+      onSelectSuggestedBrand = viewModel::selectSuggestedBrand,
+      onSelectSuggestedCategory = viewModel::selectSuggestedCategory,
+      onDismissSuggestions = viewModel::dismissSuggestions,
+      onRetrySuggestions = { viewModel.loadSuggestions(state.query.search) },
       onRetry = viewModel::retry,
       onLoadMore = viewModel::loadMore,
       onOpenProduct = onOpenProduct,
@@ -262,6 +287,18 @@ fun CatalogContent(
   onToggleInStock: () -> Unit,
   onClearBrand: () -> Unit,
   onClearFilters: () -> Unit,
+  /** Open the bottom-sheet filters on the filters that are ALREADY applied. */
+  onOpenFilters: () -> Unit = {},
+  onCloseFilters: () -> Unit = {},
+  onApplyFilters: (CatalogFilterDraft) -> Unit = {},
+  /** The sheet's own "Clear all": filters go, search/scope/sort stay. */
+  onClearAllFilters: () -> Unit = {},
+  /** Cross-entity suggestions for the typed term. */
+  onSelectSuggestedProduct: (String) -> Unit = {},
+  onSelectSuggestedBrand: (String, String) -> Unit = { _, _ -> },
+  onSelectSuggestedCategory: (String) -> Unit = {},
+  onDismissSuggestions: () -> Unit = {},
+  onRetrySuggestions: () -> Unit = {},
   onRetry: () -> Unit,
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
@@ -296,6 +333,11 @@ fun CatalogContent(
       recentSearches = recentSearches,
       onUseRecentSearch = onUseRecentSearch,
       onClearRecentSearches = onClearRecentSearches,
+      onSelectSuggestedProduct = onSelectSuggestedProduct,
+      onSelectSuggestedBrand = onSelectSuggestedBrand,
+      onSelectSuggestedCategory = onSelectSuggestedCategory,
+      onDismissSuggestions = onDismissSuggestions,
+      onRetrySuggestions = onRetrySuggestions,
     )
 
     when (state.tab) {
@@ -309,6 +351,7 @@ fun CatalogContent(
         onToggleInStock = onToggleInStock,
         onClearBrand = onClearBrand,
         onClearFilters = onClearFilters,
+        onOpenFilters = onOpenFilters,
         onRetry = onRetry,
         onLoadMore = onLoadMore,
         onOpenProduct = onOpenProduct,
@@ -373,6 +416,20 @@ fun CatalogContent(
         submittingPackId = quickAddPackId,
         onDismiss = { quantityProduct = null },
         onConfirm = addToCart,
+      )
+    }
+
+    // The filter sheet opens on the filters that are ALREADY applied, read from
+    // the same query the list was fetched with — so what the shopper sees in the
+    // panel is what produced the list behind it, never a blank form that lies
+    // about the current result set.
+    if (state.filtersOpen) {
+      CatalogFilterSheet(
+        initialDraft = CatalogFilterDraft.from(state.query),
+        error = state.filterError,
+        onDismiss = onCloseFilters,
+        onClearAll = onClearAllFilters,
+        onApply = onApplyFilters,
       )
     }
   }
@@ -465,6 +522,11 @@ private fun CatalogHeader(
   recentSearches: List<String> = emptyList(),
   onUseRecentSearch: (String) -> Unit = {},
   onClearRecentSearches: () -> Unit = {},
+  onSelectSuggestedProduct: (String) -> Unit = {},
+  onSelectSuggestedBrand: (String, String) -> Unit = { _, _ -> },
+  onSelectSuggestedCategory: (String) -> Unit = {},
+  onDismissSuggestions: () -> Unit = {},
+  onRetrySuggestions: () -> Unit = {},
 ) {
   Surface(
     color = MaterialTheme.colorScheme.surface,
@@ -498,6 +560,24 @@ private fun CatalogHeader(
               terms = recentSearches,
               onSelect = onUseRecentSearch,
               onClear = onClearRecentSearches,
+            )
+          }
+          // Cross-entity suggestions while a term is being typed: products (by
+          // name or barcode), pack barcodes folded onto their product, brands and
+          // categories. A failed read says so and offers a retry — it is never
+          // allowed to render as "no match", because the product list below is a
+          // separate request that may well have results.
+          if (state.suggestionsVisible && state.query.search.isNotBlank()) {
+            SearchSuggestionPanel(
+              suggestions = state.suggestions,
+              loading = state.suggestionsLoading,
+              error = state.suggestionsError,
+              term = state.query.search,
+              onRetry = onRetrySuggestions,
+              onSelectProduct = onSelectSuggestedProduct,
+              onSelectBrand = onSelectSuggestedBrand,
+              onSelectCategory = onSelectSuggestedCategory,
+              onDismiss = onDismissSuggestions,
             )
           }
         } else {
@@ -600,6 +680,7 @@ private fun CatalogProductsPane(
   onToggleInStock: () -> Unit,
   onClearBrand: () -> Unit,
   onClearFilters: () -> Unit,
+  onOpenFilters: () -> Unit = {},
   onRetry: () -> Unit,
   onLoadMore: () -> Unit,
   onOpenProduct: (String) -> Unit,
@@ -645,6 +726,7 @@ private fun CatalogProductsPane(
         onClearBrand = onClearBrand,
         onSelectSort = onSelectSort,
         onToggleInStock = onToggleInStock,
+        onOpenFilters = onOpenFilters,
       )
       ResultSummary(
         state = state,
@@ -745,6 +827,7 @@ private fun CatalogScopeBar(
   onClearBrand: () -> Unit,
   onSelectSort: (CatalogSort) -> Unit,
   onToggleInStock: () -> Unit,
+  onOpenFilters: () -> Unit = {},
 ) {
   Column(
     modifier = Modifier
@@ -815,8 +898,9 @@ private fun CatalogScopeBar(
       }
     }
 
-    // Sort and stock are backed by real mobile-catalog query parameters; no
-    // price, offer or MOQ control is shown unless the endpoint can filter it.
+    // Sort, stock and the filter sheet are all backed by real mobile-catalog
+    // query parameters, resolved by the SERVER against this retailer's own rate
+    // (`lib/mobile/catalog.ts`). Nothing here filters a page on the device.
     Row(
       modifier = Modifier.fillMaxWidth(),
       verticalAlignment = Alignment.CenterVertically,
@@ -827,6 +911,10 @@ private fun CatalogScopeBar(
         onSelect = onSelectSort,
         modifier = Modifier.weight(1f, fill = false),
       )
+      CatalogFilterButton(
+        activeCount = CatalogFilterDraft.from(state.query).activeCount,
+        onClick = onOpenFilters,
+      )
       FilterChip(
         selected = state.query.inStockOnly,
         onClick = onToggleInStock,
@@ -835,6 +923,11 @@ private fun CatalogScopeBar(
         colors = catalogChipColors(),
       )
     }
+
+    // The applied derived filters, named. A short result set with no visible
+    // reason reads as a broken catalogue, so every bound the server is filtering
+    // on is restated here as a chip — and the row only exists when one is set.
+    AppliedFilterChips(state = state, onOpenFilters = onOpenFilters)
   }
 }
 
@@ -1356,6 +1449,62 @@ private fun ContinuationFooter(
           modifier = Modifier.testTag(CatalogScreenTags.END_OF_LIST),
         )
       }
+    }
+  }
+}
+
+/**
+ * The derived filters the server is currently applying, restated as chips.
+ *
+ * WHY THIS EXISTS
+ * A price band, a discount floor or an MOQ ceiling changes what the list shows
+ * without changing anything visible on it — the shopper who set "₹200 – ₹500"
+ * yesterday and opens the catalogue today sees a short list and no reason. So
+ * every bound that is actually being sent is named here, in the words the sheet
+ * used, and the row is drawn only when at least one is set.
+ *
+ * Tapping any chip reopens the sheet on the applied values. Nothing here is
+ * editable in place: the filters belong to one query and are applied together, so
+ * a chip that silently re-read the list on its own would fire one request per
+ * tap — the burst `applyInitialRequest` exists to prevent.
+ */
+@Composable
+private fun AppliedFilterChips(
+  state: CatalogUiState,
+  onOpenFilters: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val query = state.query
+  val labels = buildList {
+    val min = query.minPriceRupees
+    val max = query.maxPriceRupees
+    when {
+      min != null && max != null -> add("\u20B9$min \u2013 \u20B9$max")
+      min != null -> add("From \u20B9$min")
+      max != null -> add("Up to \u20B9$max")
+    }
+    query.minDiscountPercent?.let { add("$it%+ off MRP") }
+    query.maxMoq?.let { add("MOQ \u2264 $it pcs") }
+    if (query.offersOnly) add("Offers")
+    if (query.newOnly) add("New arrivals")
+  }
+  if (labels.isEmpty()) return
+
+  LazyRow(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag(CatalogScreenTags.APPLIED_FILTERS),
+    horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    items(labels.size, key = { index -> "applied-filter-$index-${labels[index]}" }) { index ->
+      FilterChip(
+        selected = true,
+        onClick = onOpenFilters,
+        label = { Text(labels[index], maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        modifier = Modifier.testTag(CatalogScreenTags.APPLIED_FILTER_CHIP),
+        colors = catalogChipColors(),
+      )
     }
   }
 }

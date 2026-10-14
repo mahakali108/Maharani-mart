@@ -273,8 +273,9 @@ account's role comes from the database trigger (`handle_new_user`).
 
 ### 2.3 IMPLEMENTED — Phase D (catalog, search, product detail)
 
-All five routes live under `app/api/mobile/v1/` and are covered by
-`tests/mobile-catalog-api.test.ts`. Every one of them runs the same gate as the
+All six routes live under `app/api/mobile/v1/` and are covered by
+`tests/mobile-catalog-api.test.ts` and `tests/mobile-catalog-search.test.ts`.
+Every one of them runs the same gate as the
 rest of the API: `newRequestId()` → `enforceRateLimit` → `requireMobileSession`
 → `requireMobileRole(session, ['retailer'])`, rate group `read.catalog`
 (120/60s), `503 database_unavailable` when Supabase is unreachable and
@@ -286,7 +287,8 @@ rest of the API: `newRequestId()` → `enforceRateLimit` → `requireMobileSessi
 | GET | `/catalog/products/{id}` | retailer | product **or** pack id. `loadProductsByIds` + `priceCatalogPack` + `loadPackTiers` + gallery (`product_pack_images`, `product_packs.image_url`, `product_images`). A pack id marks that pack `selected: true`. |
 | GET | `/catalog/categories` | retailer | `loadMobileTaxonomy` → `loadTaxonomyScope` (`lib/mobile/catalog-service.ts`); active rows by `sort_order`, plain columns, caller's RLS token |
 | GET | `/catalog/brands` | retailer | the same read; active rows by `name` |
-| GET | `/home` | retailer | `loadRetailerHome` — banners (`isBannerVisible` + `resolveBannerTarget`), categories, brands, and a discovery rail that is **the first batch of the real catalogue**, not a separately curated list |
+| GET | `/catalog/search?q=` | retailer | `loadCatalogSuggestions` (`lib/mobile/search-service.ts`) - the same four reads the storefront's own suggestion loader (`lib/retailer/search-actions.ts`) runs, under the caller's RLS token |
+| GET | `/home` | retailer | `loadRetailerHome` — banners (`isBannerVisible` + `resolveBannerTarget`), categories, brands, and a discovery rail that is **the first batch of the real catalogue** (not a separately curated list), and the admin's live `schemes` rows (`toMobileHomeSchemes`) with `schemesUnavailable` |
 
 **Query semantics.** `inStock`, `new`, `offers` and `fav` are explicit `=1`
 flags and default off. `minPrice`/`maxPrice` are rupees; a negative value,
@@ -294,6 +296,40 @@ flags and default off. `minPrice`/`maxPrice` are rupees; a negative value,
 `cursor` is `400 invalid_request` with the offending field named. An unknown
 `sort` falls back to `recommended` instead of erroring, so an older app asking
 for a sort a newer server dropped still gets a catalogue.
+
+**Search contract (`/catalog/search?q=`).** The answer is
+`{ query, searched, products[], brands[], categories[] }`, where `query` is the
+**sanitized** term the server actually matched (`sanitizeSearchTerm`: it replaces
+`% _ * , . ( ) " ' \` with spaces, collapses whitespace and caps the length at
+80) and `searched` is `false` when the term was below `MOBILE_SEARCH_MIN_TERM`
+(2 sanitized characters) - in which case all three arrays are empty and nothing
+was read. `products[]` is `{ id, name, brandName, packName, imageUrl, matchKind }`
+with `matchKind` one of `name` / `barcode` / `pack`, so a hit on a PACK barcode
+says so and folds onto its parent product instead of listing a pack as though it
+were one; limits are 6 products, 4 brands and 4 categories.
+
+**The search route returns no price, no stock and no MOQ - ever.** That is a
+contract, not an omission, and `tests/mobile-catalog-search.test.ts` asserts it:
+a suggestion is a shortcut to the priced row, and a type-ahead that carried a
+number would be a second copy of it that checkout could contradict. Anything
+orderable is read from `/catalog/products` or `/catalog/products/{id}`.
+
+A term of 2+ sanitized characters that matches nothing is `200` with
+`searched: true` and three empty arrays - which the app must render as "no
+match", distinctly from a `503 database_unavailable`, which it must render as a
+failure with a Retry and never as an empty result.
+
+**Home schemes (`/home`).** `schemes[]` is
+`{ id, name, description, isFestival, startsAt, endsAt }`: the active rows inside
+their own window, ordered by `ends_at` and capped at `MOBILE_HOME_SCHEME_LIMIT`
+(6) - the same rows `GET /schemes` answers, so the home rail and the offers
+screen cannot disagree. A scheme carries **no discount value**: in this backend a
+scheme is a published campaign window whose pricing effect is already inside the
+per-retailer rate the catalogue resolves, so a client that printed a percentage
+here would be inventing one. `schemesUnavailable: true` means the schemes read
+FAILED while the rest of `/home` succeeded; the two must stay apart, because an
+empty list means "no offer is live" and a failed read must never be allowed to
+say that.
 
 **Taxonomy contract (`/catalog/categories`, `/catalog/brands`).**
 `categories` is `{ id, name, imageUrl, parentName, productCount }` and `brands` is
@@ -312,14 +348,16 @@ on what is orderable.
 for a different size would silently break the cursor. `page.limit` in the
 response is the server reporting what it used.
 
+The type-ahead endpoint the original Phase D list called
+`/catalog/search/suggestions` **is now shipped**, as `GET /catalog/search` above.
+
 **Still PLANNED from the original Phase D list** (deliberately not shipped):
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/catalog/search/suggestions?q=` | Search itself is server-side via `?q=` on `/catalog/products`. The type-ahead suggestion endpoint is not implemented; the app does not fake it locally. |
 | POST | `/catalog/products/by-ids` | Not implemented. Phase E cart and order APIs resolve their own current product/pack snapshots; this batch endpoint would be needed for a future reorder flow. |
 | PUT/DELETE | `/favorites/{productId}` | `isFavorite` is **read** (`loadFavoriteIds`) and rendered, but cannot be written yet. |
-| — | `/home` extras | Phase E cart and recent orders have dedicated endpoints but are not added to `/home`; Coins home/history and schemes remain later work. `/home` returns only `{ banners, categories, brands, products, nextCursor }`. |
+| — | `/home` extras | Cart and recent orders keep their own dedicated endpoints rather than being folded into `/home`. `/home` returns `{ banners, categories, brands, products, nextCursor, schemes, schemesUnavailable }`; Coins home/history stay on `/wallet`. |
 
 Contract details that matter:
 

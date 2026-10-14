@@ -11,6 +11,7 @@ import com.maharanitraders.core.network.dto.CartQuantityRequestDto
 import com.maharanitraders.core.network.dto.CatalogBrandsDto
 import com.maharanitraders.core.network.dto.CatalogCategoriesDto
 import com.maharanitraders.core.network.dto.CatalogProductDto
+import com.maharanitraders.core.network.dto.CatalogSearchDto
 import com.maharanitraders.core.network.dto.CheckoutQuoteDto
 import com.maharanitraders.core.network.dto.CheckoutQuoteRequestDto
 import com.maharanitraders.core.network.dto.CouponRemovedDto
@@ -144,8 +145,17 @@ class FakeAuthApi : MaharaniApi {
     sort: String?,
     inStock: String?,
     favoritesOnly: String?,
+    minPrice: String?,
+    maxPrice: String?,
+    minDiscount: String?,
+    maxMoq: String?,
+    offersOnly: String?,
+    newOnly: String?,
     cursor: String?,
   ): ApiEnvelope<List<CatalogProductDto>> = unexpected("catalogProducts")
+
+  override suspend fun catalogSearch(search: String): ApiEnvelope<CatalogSearchDto> =
+    unexpected("catalogSearch")
 
   override suspend fun catalogProduct(id: String): ApiEnvelope<ProductDetailDto> =
     unexpected("catalogProduct")
