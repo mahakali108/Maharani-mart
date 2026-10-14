@@ -1,3 +1,4 @@
+import { CommerceSteps } from '@/components/retailer/commerce-steps';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -109,7 +110,7 @@ export default async function CartPage() {
           <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-50 text-primary-600">
             <ShoppingCart className="h-9 w-9" aria-hidden="true" />
           </span>
-          <h1 className="mt-5 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Your cart is empty</h1>
+          <h1 className="shop-heading mt-5 font-semibold tracking-tight text-slate-950">Your cart is empty</h1>
           <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">
             Browse the catalog and add the products your shop needs today.
           </p>
@@ -228,12 +229,13 @@ export default async function CartPage() {
 
   return (
     <div className="space-y-5 pb-24 sm:space-y-6 lg:pb-0">
+      <CommerceSteps current={1} />
       <Breadcrumb />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Review your order</p>
-          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Your cart</h1>
+        <div className="shop-intro">
+          <p className="shop-eyebrow">Review your order</p>
+          <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Your cart</h1>
           <p className="mt-1 text-xs text-slate-500">
             {items.length} line{items.length === 1 ? '' : 's'} · {totalQuantity} pc{totalQuantity === 1 ? '' : 's'} in total
           </p>

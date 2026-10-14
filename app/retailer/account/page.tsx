@@ -126,17 +126,17 @@ export default async function RetailerAccountPage() {
         <span className="text-slate-800">Account</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-sm sm:p-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-lavender-50 p-5 shadow-sm sm:p-7">
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary-600 text-xl font-black text-white shadow-sm sm:h-20 sm:w-20 sm:text-2xl">
               {initials || 'MT'}
             </span>
             <div>
-              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+              <p className="flex items-center gap-1.5 shop-eyebrow">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Your account
               </p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{shopName}</h1>
+              <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">{shopName}</h1>
               <p className="mt-1 text-xs text-slate-600 sm:text-sm">
                 Manage your shop profile, coins and order shortcuts.
               </p>

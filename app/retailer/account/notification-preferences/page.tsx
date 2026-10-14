@@ -41,9 +41,9 @@ export default async function NotificationPreferencesPage() {
         <span className="truncate text-slate-800">Notification settings</span>
       </nav>
 
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Notifications</p>
-        <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Notification settings</h1>
+      <div className="shop-intro">
+          <p className="shop-eyebrow">Notifications</p>
+        <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Notification settings</h1>
         <p className="mt-1 text-xs text-slate-500">Choose which in-app updates you want to hear about.</p>
       </div>
 

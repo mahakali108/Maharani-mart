@@ -493,7 +493,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
         {/* Left Column: Large Product Gallery — full mobile width, contain-fit, no crop */}
         <div className="min-w-0 space-y-4 lg:sticky lg:top-36">
-          <section aria-label="Product gallery" className="min-w-0 w-full">
+          <section aria-label="Product gallery" className="min-w-0 w-full rounded-2xl border border-slate-200 bg-white p-3 sm:p-5 lg:sticky lg:top-36">
             <ProductGallery
               name={galleryAlt}
               images={images}
@@ -565,7 +565,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         {/* Right Column: Mobile order per spec */}
         <div className="min-w-0 space-y-4 sm:space-y-5">
           {/* Purchase card: brand + availability, name, honest price, facts, size */}
-          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-4">
+          <section className="min-w-0 rounded-2xl border border-blush-200 bg-white p-4 shadow-card sm:p-6">
             {/* Brand and availability */}
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               {product.brands?.name ? (
@@ -585,7 +585,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             </div>
 
             {/* Complete real product name — universal, brand + product + variant */}
-            <h1 className="mt-2 min-w-0 break-words text-lg font-extrabold leading-snug tracking-tight text-slate-950 sm:text-xl">
+            <h1 className="shop-heading mt-2 min-w-0 break-words text-lg font-extrabold leading-snug tracking-tight text-slate-950">
               {canonicalProductName}
             </h1>
 

@@ -37,11 +37,11 @@ export function CoinsBalanceCard({
   return (
     <section
       aria-label={title}
-      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className="overflow-hidden rounded-2xl border border-peach-200 bg-white shadow-card"
     >
-      <div className="flex items-center justify-between border-b border-slate-100 bg-gold-50 px-4 py-3.5">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-peach-100 px-4 py-3.5">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700" aria-hidden="true">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-peach-700" aria-hidden="true">
             <Coins className="h-4.5 w-4.5" />
           </span>
           <div>
@@ -53,10 +53,10 @@ export function CoinsBalanceCard({
       </div>
 
       <div className="p-4">
-        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+        <p className="shop-eyebrow">
           {COIN_SYMBOL} Coins available
         </p>
-        <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{formatInr(paiseToRupees(balancePaise))}</p>
+        <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{formatInr(paiseToRupees(balancePaise))}</p>
 
         {payment ? (
           <dl className="mt-4 space-y-2 rounded-xl bg-slate-50 p-3 text-xs">

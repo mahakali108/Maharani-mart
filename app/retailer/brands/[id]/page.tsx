@@ -74,7 +74,7 @@ export default async function RetailerBrandDetailPage({ params }: { params: { id
         <ChevronLeft className="h-4 w-4" aria-hidden="true" /> All brands
       </Link>
 
-      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:p-6">
+      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-lavender-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:p-6">
         <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm sm:h-20 sm:w-20">
           {data.brand.logo_url ? (
             <StoredImage
@@ -90,8 +90,8 @@ export default async function RetailerBrandDetailPage({ params }: { params: { id
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Brand</p>
-          <h1 className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-950">{data.brand.name}</h1>
+          <p className="shop-eyebrow">Brand</p>
+          <h1 className="shop-heading mt-1 break-words font-semibold tracking-tight text-slate-950">{data.brand.name}</h1>
           {data.productCount != null ? (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
               <Package className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
@@ -129,7 +129,7 @@ export default async function RetailerBrandDetailPage({ params }: { params: { id
         <section aria-label={`${data.brand.name} products`} className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">What&apos;s available</p>
+              <p className="shop-eyebrow">What&apos;s available</p>
               <h2 className="mt-0.5 text-lg font-bold text-slate-900 sm:text-xl">{data.brand.name} products</h2>
             </div>
           </div>

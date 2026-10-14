@@ -1,5 +1,6 @@
 'use server';
 
+import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
@@ -66,7 +67,7 @@ export async function reactivateRetailerAction(retailerId: string) {
   revalidatePath('/admin/retailers');
 }
 
-export type RetailerFormState = { error?: string } | null;
+export type RetailerFormState = { error?: string; success?: string } | null;
 
 export async function assignSalesmanToRetailerAction(
   retailerId: string,
@@ -112,19 +113,26 @@ export async function reassignRetailerAreaAction(
 ): Promise<RetailerFormState> {
   await requirePermission('retailers.approve');
 
-  const areaId = formData.get('areaId');
-  if (typeof areaId !== 'string' || areaId.length === 0) {
-    return { error: 'Select an area.' };
-  }
+  const parsed = z.object({ areaId: z.string().uuid(), retailerId: z.string().uuid() })
+    .safeParse({ areaId: formData.get('areaId'), retailerId });
+  if (!parsed.success) return { error: 'Select a valid area and retailer.' };
 
   const supabase = createClient();
-  const payload: RetailerUpdate = { area_id: areaId };
-  const { error } = await supabase.from('retailers').update(payload as unknown as never).eq('id', retailerId);
+  const { data: area, error: areaError } = await supabase.from('areas')
+    .select('id').eq('id', parsed.data.areaId).eq('is_active', true).maybeSingle<{ id: string }>();
+  if (areaError) return { error: 'Service areas could not be verified. Please retry.' };
+  if (!area) return { error: 'Choose an active service area.' };
+  const payload: RetailerUpdate = { area_id: area.id };
+  const { data: retailer, error } = await supabase.from('retailers').update(payload as unknown as never)
+    .eq('id', retailerId).select('id').maybeSingle<{ id: string }>();
   if (error) return { error: error.message };
+  if (!retailer) return { error: 'Retailer not found or not permitted.' };
 
   revalidatePath('/admin/retailers');
   revalidatePath(`/admin/retailers/${retailerId}`);
-  return null;
+  revalidatePath('/retailer', 'layout');
+  revalidatePath('/salesman/retailers', 'layout');
+  return { success: 'Service area and district saved.' };
 }
 
 type RetailerDocumentInsert = Database['public']['Tables']['retailer_documents']['Insert'];

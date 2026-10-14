@@ -116,9 +116,9 @@ export default async function RetailerCouponsPage() {
 
   return (
     <div className="space-y-6 pb-24 sm:space-y-7 lg:pb-0">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Saves &amp; offers</p>
-        <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Coupons &amp; offers</h1>
+      <div className="shop-intro">
+          <p className="shop-eyebrow">Saves &amp; offers</p>
+        <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Coupons &amp; offers</h1>
         <p className="mt-1 text-xs text-slate-500">
           Codes you can use on your next order. Every code is checked on our servers before it is applied.
         </p>

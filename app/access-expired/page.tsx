@@ -32,13 +32,13 @@ export default async function AccessExpiredPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-50 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-8 text-center shadow-card">
+    <div className="flex min-h-screen items-center justify-center auth-surface px-4 py-8">
+      <div className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-6 sm:p-10 text-center shadow-card">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
           <ShieldAlert className="h-8 w-8 text-red-600" />
         </div>
 
-        <h1 className="text-xl font-semibold text-ink-950">Access Expired</h1>
+        <h1 className="shop-heading">Access Expired</h1>
 
         <p className="mt-2 text-sm text-ink-600">
           Your access period to Maharani Traders has expired.
@@ -46,7 +46,7 @@ export default async function AccessExpiredPage() {
         </p>
 
         {expiresAt ? (
-          <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-ink-50 px-4 py-3">
+          <div className="mt-4 flex items-center justify-center gap-2 rounded-lg auth-surface px-4 py-8 py-3">
             <Clock className="h-4 w-4 text-ink-500" />
             <span className="text-sm text-ink-700">
               Expired on {formatIndiaDate(expiresAt)}
@@ -62,15 +62,13 @@ export default async function AccessExpiredPage() {
             </span>
           </div>
 
-          <p className="text-xs text-ink-400">
-            Support: support@maharanitraders.com
-          </p>
+
         </div>
 
         <div className="mt-6">
           <Link
             href="/login"
-            className="inline-flex h-11 items-center justify-center rounded-xl bg-ink-950 px-6 text-sm font-medium text-white transition-colors hover:bg-ink-900"
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-primary-600 px-6 text-sm font-medium text-white transition-colors hover:bg-primary-700"
           >
             Back to Login
           </Link>

@@ -1,3 +1,5 @@
+import { districtOptions, areasInDistrict, serviceAreaLabel } from '@/lib/areas/district';
+import { Select } from '@/components/ui/select';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Users, Search } from 'lucide-react';
@@ -30,7 +32,7 @@ interface RetailerRow {
   address: string | null;
   status: 'pending_approval' | 'active' | 'suspended';
   created_at: string;
-  areas: { name: string } | null;
+  areas: { name: string; district: string } | null;
   profiles: { full_name: string; phone: string } | null;
   assignedSalesmanName: string | null;
 }
@@ -103,7 +105,7 @@ function sanitizeTerm(raw: string): string {
  */
 async function loadRetailerBatch(
   supabase: SupabaseClient,
-  options: { q: string; pendingOnly: boolean },
+  options: { q: string; pendingOnly: boolean; areaIds?: string[] },
   cursor: ListCursor | null
 ): Promise<{ items: RetailerRow[]; nextCursor: string | null }> {
   let query = supabase
@@ -111,6 +113,11 @@ async function loadRetailerBatch(
     .select('id, shop_name, address, status, created_at, area_id, assigned_salesman_id');
 
   query = options.pendingOnly ? query.eq('status', 'pending_approval') : query.neq('status', 'pending_approval');
+
+  if (options.areaIds) {
+    if (!options.areaIds.length) return { items: [], nextCursor: null };
+    query = query.in('area_id', options.areaIds);
+  }
 
   const term = sanitizeTerm(options.q);
   if (term) {
@@ -145,14 +152,14 @@ async function loadRetailerBatch(
       ? supabase.from('profiles').select('id, full_name, phone').in('id', profileIds)
       : Promise.resolve({ data: [] as unknown[] }),
     areaIds.length > 0
-      ? supabase.from('areas').select('id, name').in('id', areaIds)
+      ? supabase.from('areas').select('id, name, district').in('id', areaIds)
       : Promise.resolve({ data: [] as unknown[] }),
   ]);
 
   const profileById = new Map(
     ((profileRows ?? []) as unknown as { id: string; full_name: string; phone: string }[]).map((p) => [p.id, p])
   );
-  const areaById = new Map(((areaRows ?? []) as unknown as { id: string; name: string }[]).map((a) => [a.id, a]));
+  const areaById = new Map(((areaRows ?? []) as unknown as { id: string; name: string; district: string }[]).map((a) => [a.id, a]));
 
   const batch = toListBatch(baseRows, BATCH_SIZE, (row) => keysetCursorFor(row, ORDER));
   return {
@@ -162,7 +169,7 @@ async function loadRetailerBatch(
       address: r.address,
       status: r.status,
       created_at: r.created_at,
-      areas: areaById.get(r.area_id) ? { name: areaById.get(r.area_id)!.name } : null,
+      areas: areaById.get(r.area_id) ?? null,
       profiles: profileById.get(r.id)
         ? { full_name: profileById.get(r.id)!.full_name, phone: profileById.get(r.id)!.phone }
         : null,
@@ -187,7 +194,7 @@ function renderRetailerRows(retailers: RetailerRow[]) {
         {r.profiles?.full_name ?? '—'}
         {r.profiles?.phone ? <p className="text-xs text-ink-400">{r.profiles.phone}</p> : null}
       </td>
-      <td className="px-5 py-3 text-ink-600">{r.areas?.name ?? '—'}</td>
+      <td className="px-5 py-3 text-ink-600">{r.areas ? serviceAreaLabel(r.areas) : '—'}</td>
       <td className="px-5 py-3 text-ink-600">{r.assignedSalesmanName ?? 'Unassigned'}</td>
       <td className="px-5 py-3">
         <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[r.status]}`}>
@@ -209,7 +216,7 @@ function RetailerTableShell({ children }: { children: ReactNode }) {
           <tr>
             <th className="px-5 py-3 font-medium">Shop</th>
             <th className="px-5 py-3 font-medium">Owner</th>
-            <th className="px-5 py-3 font-medium">Area</th>
+            <th className="px-5 py-3 font-medium">Area / district</th>
             <th className="px-5 py-3 font-medium">Salesman</th>
             <th className="px-5 py-3 font-medium">Status</th>
             <th className="px-5 py-3 font-medium" />
@@ -223,13 +230,19 @@ function RetailerTableShell({ children }: { children: ReactNode }) {
   );
 }
 
-export default async function RetailersPage({ searchParams }: { searchParams: { q?: string } }) {
+export default async function RetailersPage({ searchParams }: { searchParams: { q?: string; district?: string } }) {
   const supabase = createClient();
   const q = searchParams.q?.trim() ?? '';
+  const district = searchParams.district ?? '';
+  const { data: directory, error: directoryError } = await supabase.from('areas').select('id, district').order('district').returns<{ id: string; district: string }[]>();
+  if (directoryError) throw new Error('Service district directory could not be loaded.');
+  const districts = districtOptions(directory ?? []);
+  const areaIds = district ? areasInDistrict(directory ?? [], district).map((area) => area.id) : undefined;
+
 
   const [pending, others, { count: pendingCount }] = await Promise.all([
-    loadRetailerBatch(supabase, { q, pendingOnly: true }, null),
-    loadRetailerBatch(supabase, { q, pendingOnly: false }, null),
+    loadRetailerBatch(supabase, { q, areaIds, pendingOnly: true }, null),
+    loadRetailerBatch(supabase, { q, areaIds, pendingOnly: false }, null),
     supabase
       .from('retailers')
       .select('id', { count: 'exact', head: true })
@@ -243,14 +256,14 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
    */
   async function loadMorePending(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadRetailerBatch(createClient(), { q, pendingOnly: true }, readCursor(cursor));
+    const batch = await loadRetailerBatch(createClient(), { q, areaIds, pendingOnly: true }, readCursor(cursor));
     return { rows: renderRetailerRows(batch.items), nextCursor: batch.nextCursor };
   }
 
   /** Server Action for the "All Retailers" batches after the first. */
   async function loadMoreOthers(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadRetailerBatch(createClient(), { q, pendingOnly: false }, readCursor(cursor));
+    const batch = await loadRetailerBatch(createClient(), { q, areaIds, pendingOnly: false }, readCursor(cursor));
     return { rows: renderRetailerRows(batch.items), nextCursor: batch.nextCursor };
   }
 
@@ -265,11 +278,20 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
         </p>
       </div>
 
-      <form method="get" className="flex gap-2">
+      <form method="get" className="flex flex-wrap items-end gap-3 rounded-2xl border border-ink-100 bg-white p-4">
         <div className="relative flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-          <Input name="q" defaultValue={q} placeholder="Search shop, owner, or phone…" className="pl-9" />
+          <Input aria-label="Search retailers" name="q" defaultValue={q} placeholder="Search shop, owner, or phone…" className="pl-9" />
         </div>
+        <label className="min-w-0 flex-1 text-xs font-medium text-ink-600 sm:max-w-xs">
+          Service district
+          <Select name="district" defaultValue={district} className="mt-1">
+            <option value="">All districts</option>
+            {district && !districts.includes(district) ? <option value={district}>{district} (not configured)</option> : null}
+            {districts.map((name) => <option key={name} value={name}>{name}</option>)}
+          </Select>
+        </label>
+        <Link href="/admin/retailers" className="inline-flex min-h-11 items-center text-sm text-ink-600 underline">Clear filters</Link>
         <Button type="submit" variant="outline" size="sm">
           Search
         </Button>
@@ -278,9 +300,9 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
       {isEmpty ? (
         <AdminEmptyState
           icon={Users}
-          title={q ? 'No retailers match your search' : 'No retailer registrations yet'}
+          title={q || district ? 'No retailers match your search' : 'No retailer registrations yet'}
           body={
-            q
+            q || district
               ? 'Try a different name or phone number, or clear the search box above.'
               : "Once retailers sign up at /register-retailer, they'll appear here awaiting your approval."
           }
@@ -292,11 +314,11 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
               loader={loadMorePending}
               initialCursor={pending.nextCursor}
               initialHasMore={Boolean(pending.nextCursor)}
-              resetKey={`pending|${q}`}
+              resetKey={`pending|${q}|${district}`}
             >
               <div>
                 <h2 className="mb-3 text-sm font-semibold text-ink-800">
-                  Pending Approval <span className="text-primary-600">({pendingCount ?? pending.items.length})</span>
+                  Pending Approval <span className="text-primary-600">{q || district ? '— filtered results' : `(${pendingCount ?? pending.items.length})`}</span>
                 </h2>
                 <RetailerTableShell>{renderRetailerRows(pending.items)}</RetailerTableShell>
               </div>
@@ -309,7 +331,7 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
               loader={loadMoreOthers}
               initialCursor={others.nextCursor}
               initialHasMore={Boolean(others.nextCursor)}
-              resetKey={`others|${q}`}
+              resetKey={`others|${q}|${district}`}
             >
               <div>
                 <h2 className="mb-3 mt-8 text-sm font-semibold text-ink-800">All Retailers</h2>

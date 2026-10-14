@@ -100,12 +100,12 @@ export function ProductCard({
 
   return (
     <article className={cn(
-      'group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-action-200 hover:shadow-md sm:rounded-2xl',
+      'group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition hover:border-action-200 hover:shadow-premium sm:rounded-2xl',
       compact && 'min-w-[10.5rem]'
     )}>
       <div className="relative p-2 pb-0 sm:p-3 sm:pb-0">
         <Link href={detailsHref} aria-label={`View ${name}`} className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500">
-          <div className="relative aspect-square overflow-hidden rounded-lg bg-slate-50 sm:rounded-xl">
+          <div className="relative aspect-square overflow-hidden rounded-lg bg-ivory-50 sm:rounded-xl">
             <StoredImage
               src={imageUrl} alt={name} fill size="card"
               sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 280px"
@@ -113,9 +113,9 @@ export function ProductCard({
               fallback={<div className="flex h-full flex-col items-center justify-center gap-1.5 px-2 text-center text-slate-500"><ImageOff className="h-7 w-7" aria-hidden="true" /><span className="text-[10px]">Image unavailable</span></div>}
             />
             <div className="absolute left-1.5 top-1.5 flex max-w-[65%] flex-col items-start gap-1">
-              {discount > 0 ? <span className="rounded-md bg-emerald-700 px-1.5 py-1 text-[10px] font-bold text-white">{discount}% off</span> : null}
+              {discount > 0 ? <span className="rounded-md bg-mint-100 px-1.5 py-1 text-[10px] font-bold text-mint-700">{discount}% off</span> : null}
               {hasOffer ? <span className="rounded-md bg-amber-100 px-1.5 py-1 text-[10px] font-semibold text-amber-900">Offer</span> : null}
-              {isNewLaunch ? <span className="rounded-md bg-action-600 px-1.5 py-1 text-[10px] font-semibold text-white">New</span> : null}
+              {isNewLaunch ? <span className="rounded-md bg-lavender-100 px-1.5 py-1 text-[10px] font-semibold text-lavender-700">New</span> : null}
             </div>
           </div>
         </Link>
@@ -142,9 +142,9 @@ export function ProductCard({
           </span>
         ) : null}
 
-        <div className="mt-3 border-t border-slate-100 pt-2.5">
+        <div className="mt-3 rounded-xl bg-ivory-50 p-2.5">
           <p className="text-[9px] font-medium text-slate-500 sm:text-[10px]">Piece price · GST inclusive</p>
-          <p className="mt-0.5 break-words text-lg font-bold tracking-tight text-primary-800 sm:text-xl">
+          <p className="mt-0.5 break-words text-lg font-bold tracking-tight text-primary-600 sm:text-xl">
             {piecePrice !== null && piecePrice > 0 ? <>{formatInr(piecePrice)}<span className="text-[10px] font-normal text-slate-500"> /pc</span></> : <span className="text-xs font-semibold text-slate-600">Price unavailable</span>}
           </p>
           {mrp != null && mrp > 0 ? <p className="mt-1 text-[10px] text-slate-500">MRP <span className={cn(piecePrice !== null && mrp > piecePrice && 'line-through')}>{formatInr(mrp)}</span></p> : null}
@@ -159,7 +159,7 @@ export function ProductCard({
               onChange={(next) => { setQuantity(next); setAdded(false); setError(null); }} label={`${name} quantity in pieces`} />
             <button type="button" onClick={handleQuickAdd} disabled={isPending || pricing?.orderable === false}
               aria-label={`Add ${quantity} ${name} pieces to cart`}
-              className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-action-600 px-1 text-[11px] font-semibold text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs">
+              className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-action-600 px-1 text-[11px] font-semibold text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs">
               {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : added ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />}
               {isPending ? 'Adding…' : added ? 'Add again' : 'Add to Cart'}
             </button>

@@ -33,9 +33,9 @@ export default async function FavoritesPage() {
         <ChevronRight className="h-3 w-3" />
         <span className="text-slate-800">Favourites</span>
       </div>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Saved for later</p>
-        <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-3xl">Your favourites</h1>
+      <div className="shop-intro">
+          <p className="shop-eyebrow">Saved for later</p>
+        <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Your favourites</h1>
         <p className="mt-1 text-xs text-slate-500">{cards.length} saved product{cards.length === 1 ? '' : 's'}</p>
       </div>
 

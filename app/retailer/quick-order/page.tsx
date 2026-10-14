@@ -131,23 +131,24 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
         <span className="text-slate-800">Quick Order</span>
       </div>
 
-      <section className="marketplace-grid relative overflow-hidden rounded-2xl bg-primary-800 p-5 text-white shadow-lg sm:p-8">
-        <Zap className="absolute -bottom-8 -right-4 h-40 w-40 rotate-12 fill-white/5 text-white/5 sm:h-56 sm:w-56" />
+      <section className="relative overflow-hidden rounded-2xl border border-mint-200 bg-mint-50 p-5 text-slate-900 shadow-card sm:p-8">
+        <Zap className="absolute -bottom-8 -right-4 h-40 w-40 rotate-12 fill-mint-100 text-mint-200 sm:h-56 sm:w-56" />
         <div className="relative max-w-3xl">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300"><Sparkles className="h-3.5 w-3.5" /> Fast restocking</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-4xl">Quick Order</h1>
-          <p className="mt-2 max-w-xl text-xs leading-5 text-primary-100 sm:text-sm">Know what you need? Find products by name, choose a pack and add quantities without leaving this page.</p>
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-mint-700"><Sparkles className="h-3.5 w-3.5" /> Fast restocking</p>
+          <h1 className="shop-heading mt-2 font-semibold tracking-tight">Quick Order</h1>
+          <p className="mt-2 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm">Know what you need? Find products by name, choose a pack and add quantities without leaving this page.</p>
 
           <form method="get" className="relative mt-5 max-w-2xl">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               name="q"
+              aria-label="Search products for quick order"
               defaultValue={q}
               placeholder="Try “rice”, “oil” or a brand name"
               autoFocus
               className="h-12 w-full rounded-xl border-0 bg-white pl-11 pr-24 text-sm text-slate-900 shadow-md outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-amber-300"
             />
-            <button type="submit" className="absolute right-1.5 top-1.5 h-9 rounded-lg bg-slate-950 px-5 text-xs font-bold text-white transition hover:bg-slate-800">Search</button>
+            <button type="submit" className="absolute right-1.5 top-1.5 h-9 rounded-lg bg-primary-600 px-5 text-xs font-bold text-white transition hover:bg-primary-700">Search</button>
           </form>
         </div>
       </section>
@@ -193,7 +194,7 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
       ) : (
         <section className="space-y-3">
           <div className="flex items-end justify-between gap-3">
-            <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Search results</p><h2 className="mt-0.5 text-base font-bold text-slate-900 sm:text-xl">{cards.length} product{cards.length === 1 ? '' : 's'} found</h2></div>
+            <div><p className="shop-eyebrow">Search results</p><h2 className="mt-0.5 text-base font-bold text-slate-900 sm:text-xl">{cards.length} product{cards.length === 1 ? '' : 's'} found</h2></div>
             <Link href="/retailer/cart" className="flex h-9 items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 text-[10px] font-bold text-primary-700"><ShoppingCart className="h-3.5 w-3.5" /> Review cart</Link>
           </div>
 

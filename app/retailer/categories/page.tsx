@@ -1,3 +1,4 @@
+import { CatalogueNav } from '@/components/retailer/catalogue-nav';
 import Link from 'next/link';
 import { BadgeCheck, ChevronRight, LayoutGrid } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -78,6 +79,7 @@ export default async function CategoriesPage() {
 
   return (
     <div className="space-y-5 sm:space-y-7">
+      <CatalogueNav active="categories" />
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
         <Link href="/retailer/home" className="hover:text-primary-600">
           Home
@@ -86,14 +88,14 @@ export default async function CategoriesPage() {
         <span className="text-slate-800">Categories</span>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
+      <section className="rounded-2xl border border-slate-200 bg-lavender-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="flex items-start gap-4">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
             <LayoutGrid className="h-5 w-5" aria-hidden="true" />
           </span>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Browse the catalog</p>
-            <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Shop by category</h1>
+          <div className="min-w-0">
+          <p className="shop-eyebrow">Browse the catalog</p>
+            <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Shop by category</h1>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 sm:text-sm">
               Explore product aisles and open the catalog with your category already selected.
             </p>
@@ -104,7 +106,7 @@ export default async function CategoriesPage() {
       <section aria-labelledby="categories-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Catalog directory</p>
+            <p className="shop-eyebrow">Catalog directory</p>
             <h2 id="categories-heading" className="mt-0.5 text-lg font-bold tracking-tight text-slate-950 sm:text-xl">Categories</h2>
           </div>
         </div>
@@ -123,7 +125,7 @@ export default async function CategoriesPage() {
 
       <section aria-labelledby="brands-heading" className="space-y-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Catalog directory</p>
+          <p className="shop-eyebrow">Catalog directory</p>
           <h2 id="brands-heading" className="mt-0.5 flex items-center gap-2 text-lg font-bold tracking-tight text-slate-950 sm:text-xl">
             <BadgeCheck className="h-5 w-5 text-primary-600" aria-hidden="true" />
             Brands

@@ -74,9 +74,9 @@ export default async function SavedCartsPage() {
         <span className="truncate text-slate-800">Saved carts</span>
       </nav>
 
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Your lists</p>
-        <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Saved carts</h1>
+      <div className="shop-intro">
+          <p className="shop-eyebrow">Your lists</p>
+        <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Saved carts</h1>
         <p className="mt-1 text-xs text-slate-500">
           Keep your regular order lists ready — restore one into the cart whenever you want to order it.
         </p>

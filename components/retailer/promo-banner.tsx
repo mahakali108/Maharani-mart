@@ -41,7 +41,7 @@ export function PromoBanner({
     'mt-3 inline-flex min-h-11 max-w-full items-center justify-center gap-2 self-start rounded-xl bg-action-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2';
 
   return (
-    <article className="flex h-full min-w-0 flex-col bg-white">
+    <article className="flex h-full min-w-0 flex-col bg-peach-50">
       {/* 3:1 artwork box — object-cover crops, never distorts. */}
       <div className="relative w-full overflow-hidden bg-slate-100 aspect-[3/1]">
         <StoredImage
@@ -54,8 +54,8 @@ export function PromoBanner({
           className="object-cover"
         />
       </div>
-      <div className="min-w-0 p-4 sm:p-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-action-700">Maharani Traders</p>
+      <div className="min-w-0 border-t border-peach-200 p-4 sm:p-5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-peach-700">From your distributor</p>
         <h2 className="mt-1 break-words text-lg font-bold leading-tight tracking-tight text-slate-950 sm:text-xl">
           {title}
         </h2>

@@ -47,27 +47,38 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
 
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
-      <section aria-labelledby="home-welcome" className="relative overflow-hidden rounded-2xl border border-primary-800/30 bg-primary-700 p-4 text-white shadow-premium sm:p-6">
-        <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-gold-300 via-gold-200 to-gold-400" />
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-          <div className="min-w-0 flex-1 basis-60">
-            <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gold-200"><Store className="h-3.5 w-3.5" aria-hidden="true" /> Your wholesale store</p>
-            <h1 id="home-welcome" className="mt-2 break-words text-xl font-semibold leading-snug tracking-tight text-white sm:text-3xl">{name ? `Welcome, ${name}` : 'Welcome to Maharani Traders'}</h1>
-            <p className="mt-2 max-w-xl text-xs leading-5 text-blush-100 sm:text-sm sm:leading-6">Wholesale pricing. Easy restocking for your business.</p>
-            <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-gold-300/60 bg-gold-50 px-3 py-1 text-[11px] font-semibold text-gold-700" data-testid="service-area-selector"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />Serving {SERVICE_AREA_LABEL}</p>
+      <section aria-labelledby="home-welcome" className="relative overflow-hidden rounded-[1.75rem] border border-blush-200 bg-blush-50 shadow-card">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full border-[40px] border-peach-100/70 sm:h-96 sm:w-96" />
+        <div className="relative grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.4fr_1fr] lg:gap-10 lg:p-10">
+          <div className="min-w-0">
+            <p className="shop-eyebrow flex items-center gap-2"><Store className="h-4 w-4" aria-hidden="true" /> The retailer&apos;s everyday store</p>
+            <h1 id="home-welcome" className="mt-4 max-w-xl text-3xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">Your next restock,<br /><span className="text-primary-600">beautifully simple.</span></h1>
+            <p className="mt-4 text-sm font-medium text-slate-800">{name ? `Welcome, ${name}` : 'Welcome to Maharani Traders'}</p>
+            <p className="mt-1 max-w-md text-xs leading-6 text-slate-600 sm:text-sm">Discover products for your shelves, compare pack sizes and order at your wholesale piece price.</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link href="/retailer/catalog" className="inline-flex min-h-12 items-center gap-3 rounded-xl bg-primary-600 px-5 text-sm font-semibold text-white hover:bg-primary-700">Explore catalogue <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+              <Link href="/retailer/orders" className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-mint-50"><RotateCcw className="h-4 w-4" aria-hidden="true" /> Buy again</Link>
+            </div>
           </div>
-          {shop || location ? <div className="min-w-0 max-w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 sm:max-w-xs sm:py-2.5">
-            {shop ? <p className="break-words text-xs font-semibold text-white">{shop}</p> : null}
-            {location ? <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-blush-100"><MapPin className="mt-1 h-3.5 w-3.5 shrink-0 text-gold-200" aria-hidden="true" /><span className="min-w-0 break-words"><span className="sr-only text-[9px] font-medium uppercase tracking-wide text-blush-200 sm:not-sr-only sm:block">{areaName ? 'Delivery area' : 'Shop location'}</span>{location}</span></p> : null}
-          </div> : null}
+          <div className="flex min-w-0 flex-col justify-center gap-3">
+            <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-card sm:p-5">
+              <p className="shop-eyebrow">Your business, connected</p>
+              {shop ? <p className="mt-2 break-words text-lg font-semibold text-slate-900">{shop}</p> : null}
+              {location ? <p className="mt-2 flex gap-2 text-xs leading-5 text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words"><span className="block text-[10px] font-semibold uppercase tracking-wide">{areaName ? 'Delivery area' : 'Shop location'}</span>{location}</span></p> : null}
+              <Link href="/retailer/account/addresses" className="mt-3 inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4">Manage delivery addresses <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Link href="/retailer/schemes" className="rounded-2xl border border-mint-200 bg-mint-100 p-4 text-mint-700"><Tag className="mb-3 h-5 w-5" aria-hidden="true" /><span className="block text-sm font-semibold">Shop offers</span><span className="mt-1 block text-[11px]">Eligible schemes</span></Link>
+              <Link href="/retailer/quick-order" className="rounded-2xl border border-lavender-200 bg-lavender-100 p-4 text-lavender-700"><ShoppingBag className="mb-3 h-5 w-5" aria-hidden="true" /><span className="block text-sm font-semibold">Quick order</span><span className="mt-1 block text-[11px]">Know what you need?</span></Link>
+            </div>
+          </div>
         </div>
-        <div className="mt-4 border-t border-white/15 pt-4 sm:mt-5 sm:pt-5"><HomeQuickActions /></div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
-          <span className="hidden text-blush-200 sm:inline">Know what you need?</span>
-          <Link href="/retailer/quick-order" className="inline-flex min-h-10 items-center gap-1.5 rounded font-semibold text-gold-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"><ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" /> Quick order</Link>
-          <Link href="/retailer/reports" className="inline-flex min-h-10 items-center gap-1.5 rounded font-semibold text-gold-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Purchase reports</Link>
+        <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-blush-200 bg-white/60 px-5 py-3 text-[11px] text-slate-600 sm:px-8" data-testid="service-area-selector">
+          <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{areaName ? `Your service area: ${areaName}` : `Based in ${SERVICE_AREA_LABEL}`}</span>
+          <Link href="/retailer/reports" className="inline-flex min-h-9 items-center gap-1.5 font-medium underline underline-offset-4"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Purchase reports</Link>
         </div>
       </section>
+      <HomeQuickActions />
 
       {hasError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
         <p className="min-w-0 flex-1 basis-48 text-xs leading-5 text-amber-900">Some shop details could not be loaded. Available sections are still ready to browse; missing information is not estimated.</p><HomeRefreshButton />
@@ -78,7 +89,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
       <section aria-label="Shop by category" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <SectionHeading eyebrow="Find your aisle" title="Shop by category" href="/retailer/categories" linkLabel="View all categories" />
         {data.categories.length ? <ul className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 lg:grid-cols-10">
-          {data.categories.map((category) => <li className="min-w-0" key={category.id}><CategoryCard category={category} compact /></li>)}
+          {data.categories.map((category) => <li className="discovery-tile min-w-0" key={category.id}><CategoryCard category={category} compact /></li>)}
         </ul> : <HomeEmptyState icon={LayoutGrid} title={data.errors.categories ? 'Categories are temporarily unavailable' : 'No categories available yet'} body="You can still open the catalog to look for products." href="/retailer/catalog" linkLabel="Browse catalog" />}
       </section>
 

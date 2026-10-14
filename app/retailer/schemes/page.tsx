@@ -46,12 +46,12 @@ export default async function RetailerSchemesPage() {
         <span className="text-slate-800">Schemes &amp; offers</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-lavender-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="relative max-w-2xl">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+          <p className="flex items-center gap-1.5 shop-eyebrow">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Save more on every restock
           </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Schemes &amp; offers</h1>
+          <h1 className="shop-heading mt-2 font-semibold tracking-tight text-slate-950">Schemes &amp; offers</h1>
           <p className="mt-2 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm">
             Explore the latest retailer schemes and festival offers available while you shop the Maharani Traders catalog.
           </p>
@@ -101,7 +101,7 @@ export default async function RetailerSchemesPage() {
         <section className="space-y-4">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">What&rsquo;s live now</p>
+              <p className="shop-eyebrow">What&rsquo;s live now</p>
               <h2 className="mt-0.5 text-lg font-bold text-slate-900 sm:text-2xl">Offers for your shop</h2>
             </div>
             <Link

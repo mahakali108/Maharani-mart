@@ -182,11 +182,11 @@ export default async function RetailerSupportPage({
         <span className="text-slate-800">Support</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 px-4 py-5 shadow-sm sm:px-7 sm:py-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-sky-50 px-4 py-5 shadow-sm sm:px-7 sm:py-7">
         <div className="relative flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Help centre</p>
-            <h1 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Support tickets</h1>
+          <div className="shop-intro">
+          <p className="shop-eyebrow">Help centre</p>
+            <h1 className="shop-heading mt-2 font-semibold tracking-tight text-slate-950">Support tickets</h1>
             <p className="mt-2 text-xs text-slate-600 sm:text-sm">
               Raise an issue, link an order, and follow every update in one place.
             </p>

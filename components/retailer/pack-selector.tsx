@@ -408,10 +408,10 @@ export function PackSelector({
   return (
     <section
       aria-label="Piece price and quantity"
-      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_4px_24px_rgba(15,23,42,0.06)]"
+      className="overflow-hidden rounded-2xl border border-mint-200 bg-white shadow-card"
     >
       {/* Section Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-mint-50 px-4 py-3">
         <div>
           <h2 className="text-sm font-bold tracking-tight text-slate-900">
             Quantity
@@ -424,7 +424,7 @@ export function PackSelector({
       </div>
 
       {/* Selected purchase card + slim rows for the other sizes */}
-      <div className="space-y-2.5 p-3 sm:p-4">
+      <div className="space-y-3 p-3 sm:p-5">
         {packs.map((pack) => {
           const qty = quantities[pack.id] ?? 0;
           const inCart = inCartMap[pack.id];

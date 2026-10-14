@@ -24,6 +24,7 @@ import { SearchField } from '@/components/retailer/search-field';
 
 const DESKTOP_NAV = [
   { label: 'Home', href: '/retailer/home' },
+  { label: 'Catalogue', href: '/retailer/catalog' },
   { label: 'Categories', href: '/retailer/categories' },
   { label: 'Brands', href: '/retailer/brands' },
   { label: 'Cart', href: '/retailer/cart' },
@@ -101,7 +102,7 @@ export function RetailerShell({
   // Primary shopping routes. Brands remain in desktop navigation and on home.
   const mobileNav: NavItem[] = [
     { label: 'Home', href: '/retailer/home', icon: Home },
-    { label: 'Categories', href: '/retailer/categories', icon: LayoutGrid },
+    { label: 'Catalogue', href: '/retailer/catalog', icon: LayoutGrid },
     { label: 'Cart', href: '/retailer/cart', icon: ShoppingCart, badge: cartCount },
     { label: 'Orders', href: '/retailer/orders', icon: ClipboardList },
     { label: 'Account', href: '/retailer/account', icon: UserRound },
@@ -110,6 +111,7 @@ export function RetailerShell({
   return (
     <div className="retailer-theme min-h-screen min-w-0 w-full bg-ivory-100 pb-24 text-slate-900 lg:pb-0">
       <a href="#retailer-main" className="sr-only z-50 rounded-lg bg-white p-3 text-action-700 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
+      <div className="hidden border-b border-mint-200 bg-mint-100 px-5 py-2 text-center text-[11px] font-medium text-mint-700 lg:block">Made for your everyday business · Wholesale piece pricing · Packs &amp; MOQ clearly shown</div>
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 pt-[env(safe-area-inset-top)] text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-3 sm:px-5">
           <div className="flex h-14 items-center gap-1.5 lg:h-16 lg:gap-5">
@@ -128,7 +130,7 @@ export function RetailerShell({
               className="group flex min-w-0 shrink items-center gap-1.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 lg:gap-2.5"
               aria-label="Maharani Traders home"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-sm font-black text-white shadow-sm lg:h-10 lg:w-10 lg:text-base">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blush-100 text-sm font-black text-primary-600 shadow-sm lg:h-11 lg:w-11 lg:text-lg">
                 M
               </span>
               <span className="min-w-0 leading-none">
@@ -255,7 +257,8 @@ export function RetailerShell({
         </div>
       </header>
 
-      <main id="retailer-main" tabIndex={-1} className="mx-auto min-w-0 w-full scroll-mt-20 lg:scroll-mt-32 max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-7">{children}</main>
+      <main id="retailer-main" tabIndex={-1} className="mx-auto min-w-0 w-full scroll-mt-20 lg:scroll-mt-32 max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-8">{children}</main>
+      <footer className="mx-auto hidden max-w-7xl items-center justify-between border-t border-slate-200 px-5 py-6 text-xs text-slate-500 lg:flex"><span>Maharani Traders · For your everyday business</span><div className="flex gap-5"><Link href="/retailer/help" className="hover:text-primary-600">Help centre</Link><Link href="/retailer/account/addresses" className="hover:text-primary-600">Delivery addresses</Link></div></footer>
       <MobileBottomNav navItems={mobileNav} marketplace />
     </div>
   );

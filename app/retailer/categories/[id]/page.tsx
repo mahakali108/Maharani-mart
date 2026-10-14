@@ -61,7 +61,7 @@ export default async function RetailerCategoryDetailPage({ params }: { params: {
         <div className="space-y-4 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="break-words text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">{data.category.name}</h1>
+              <h1 className="shop-heading break-words font-semibold tracking-tight text-slate-950">{data.category.name}</h1>
               {data.productCount != null ? (
                 <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
                   <Package className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />

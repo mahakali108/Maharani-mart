@@ -1,3 +1,4 @@
+import { districtOptions } from '@/lib/areas/district';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PackageSearch, Warehouse } from 'lucide-react';
@@ -44,6 +45,8 @@ export default async function EditAreaPage({ params }: { params: { id: string } 
     .single<AreaDetail>();
 
   if (!area) notFound();
+  const { data: districtRows, error: districtError } = await supabase.from('areas').select('district');
+  if (districtError) throw new Error('District options could not be loaded.');
 
   // Area stock comes from the inventory_area_totals view (migration 0041):
   // stock across the area's ACTIVE warehouses, computed with the caller's
@@ -73,13 +76,14 @@ export default async function EditAreaPage({ params }: { params: { id: string } 
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-ink-950">Edit area</h1>
-        <p className="mt-1 text-sm text-ink-500">{area.name}</p>
+        <p className="mt-1 text-sm text-ink-500">{area.name} · {area.district}</p>
       </div>
       <Card>
         <CardHeader>
           <CardTitle>Area details</CardTitle>
+          <p className="mt-2 text-sm text-ink-500">Editing a district affects every retailer assigned to this area. Confirm the geography before saving; historical addresses are preserved.</p>
         </CardHeader>
-        <AreaEditForm areaId={area.id} name={area.name} district={area.district} />
+        <AreaEditForm areaId={area.id} name={area.name} district={area.district} districts={districtOptions(districtRows ?? [])} />
       </Card>
 
       <Card>

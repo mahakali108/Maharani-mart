@@ -38,7 +38,8 @@ export function MobileBottomNav({
             candidate.href.startsWith(item.href + '/') &&
             (pathname === candidate.href || pathname.startsWith(candidate.href + '/'))
         );
-        const active = !hasMoreSpecificMatch && (pathname === item.href || pathname.startsWith(item.href + '/'));
+        const catalogueChild = marketplace && item.href === '/retailer/catalog' && /^\/retailer\/(categories|brands)(\/|$)/.test(pathname);
+        const active = catalogueChild || (!hasMoreSpecificMatch && (pathname === item.href || pathname.startsWith(item.href + '/')));
         const Icon = item.icon;
 
         return (
@@ -59,7 +60,7 @@ export function MobileBottomNav({
             <span
               className={cn(
                 'relative flex items-center justify-center transition-transform group-active:scale-90',
-                marketplace && active ? 'h-8 w-11 rounded-2xl bg-primary-50' : 'h-8 w-9'
+                marketplace && active ? 'h-8 w-11 rounded-2xl bg-blush-100' : 'h-8 w-9'
               )}
             >
               <Icon aria-hidden="true" className={cn('h-5 w-5', active && marketplace && 'stroke-[2.5]')} />

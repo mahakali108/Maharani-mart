@@ -8,7 +8,7 @@ import { SubmitButton } from '@/components/ui/submit-button';
 
 const initialState: MasterDataFormState = null;
 
-export function AreaEditForm({ areaId, name, district }: { areaId: string; name: string; district: string }) {
+export function AreaEditForm({ areaId, name, district, districts = [] }: { areaId: string; name: string; district: string; districts?: string[] }) {
   const boundAction = updateAreaAction.bind(null, areaId);
   const [state, formAction] = useFormState(boundAction, initialState);
 
@@ -21,11 +21,13 @@ export function AreaEditForm({ areaId, name, district }: { areaId: string; name:
       ) : null}
       <div>
         <Label htmlFor="name">Area name</Label>
-        <Input id="name" name="name" defaultValue={name} required />
+        <Input id="name" name="name" maxLength={120} defaultValue={name} required />
       </div>
       <div>
         <Label htmlFor="district">District</Label>
-        <Input id="district" name="district" defaultValue={district} required />
+        <p className="mb-2 text-xs text-ink-500">Use the official district name. Other districts remain supported; this does not change retailer addresses.</p>
+        <Input id="district" name="district" list="configured-districts" maxLength={120} defaultValue={district} required />
+        <datalist id="configured-districts">{districts.map((value) => <option key={value} value={value} />)}</datalist>
       </div>
       <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
     </form>

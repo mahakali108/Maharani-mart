@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useId, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Loader2, MapPinPlus, Star, Trash2 } from 'lucide-react';
 import {
@@ -42,6 +42,7 @@ export function AddressForm({
   address?: SavedAddress;
   onDone?: () => void;
 }) {
+  const formId = useId();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -51,7 +52,9 @@ export function AddressForm({
     setError(null);
     setSuccess(null);
     startTransition(async () => {
-      const result = await saveAddressAction(formData);
+      let result;
+      try { result = await saveAddressAction(formData); }
+      catch { setError('The address could not be saved. Check your connection and retry.'); return; }
       if ('error' in result && result.error) {
         setError(result.error);
         return;
@@ -63,48 +66,49 @@ export function AddressForm({
   }
 
   return (
-    <form action={handleSubmit} className="space-y-3.5">
+    <form action={handleSubmit} className="space-y-5 rounded-xl bg-ivory-50 p-3 sm:p-4">
       {address ? <input type="hidden" name="addressId" value={address.id} /> : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor="addr-label" className={labelClass}>Label</label>
-          <input id="addr-label" name="label" defaultValue={address?.label ?? 'Shop'} maxLength={40} required className={inputClass} placeholder="Shop, Godown…" />
+          <label htmlFor={`${formId}-label`} className={labelClass}>Label</label>
+          <input id={`${formId}-label`} name="label" defaultValue={address?.label ?? 'Shop'} maxLength={40} required className={inputClass} placeholder="Shop, Godown…" />
         </div>
         <div>
-          <label htmlFor="addr-receiver" className={labelClass}>Receiver name</label>
-          <input id="addr-receiver" name="receiverName" defaultValue={address?.receiver_name ?? ''} maxLength={120} required className={inputClass} />
+          <label htmlFor={`${formId}-receiver`} className={labelClass}>Receiver name</label>
+          <input id={`${formId}-receiver`} name="receiverName" defaultValue={address?.receiver_name ?? ''} maxLength={120} required className={inputClass} />
         </div>
         <div>
-          <label htmlFor="addr-phone" className={labelClass}>Phone</label>
-          <input id="addr-phone" name="phone" type="tel" inputMode="tel" defaultValue={address?.phone ?? ''} required className={inputClass} />
+          <label htmlFor={`${formId}-phone`} className={labelClass}>Phone</label>
+          <input id={`${formId}-phone`} name="phone" type="tel" inputMode="tel" defaultValue={address?.phone ?? ''} required className={inputClass} />
         </div>
         <div>
-          <label htmlFor="addr-pincode" className={labelClass}>PIN code</label>
-          <input id="addr-pincode" name="pincode" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} defaultValue={address?.pincode ?? ''} required className={inputClass} />
+          <label htmlFor={`${formId}-pincode`} className={labelClass}>PIN code</label>
+          <input id={`${formId}-pincode`} name="pincode" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} defaultValue={address?.pincode ?? ''} required className={inputClass} />
         </div>
         <div className="sm:col-span-2">
-          <label htmlFor="addr-line1" className={labelClass}>Address (shop no., street)</label>
-          <input id="addr-line1" name="line1" defaultValue={address?.line1 ?? ''} maxLength={200} required className={inputClass} />
+          <label htmlFor={`${formId}-line1`} className={labelClass}>Address (shop no., street)</label>
+          <input id={`${formId}-line1`} name="line1" defaultValue={address?.line1 ?? ''} maxLength={200} required className={inputClass} />
         </div>
         <div className="sm:col-span-2">
-          <label htmlFor="addr-line2" className={labelClass}>Area / locality (optional)</label>
-          <input id="addr-line2" name="line2" defaultValue={address?.line2 ?? ''} maxLength={200} className={inputClass} />
+          <label htmlFor={`${formId}-line2`} className={labelClass}>Area / locality (optional)</label>
+          <input id={`${formId}-line2`} name="line2" defaultValue={address?.line2 ?? ''} maxLength={200} className={inputClass} />
         </div>
         <div>
-          <label htmlFor="addr-landmark" className={labelClass}>Landmark (optional)</label>
-          <input id="addr-landmark" name="landmark" defaultValue={address?.landmark ?? ''} maxLength={120} className={inputClass} />
+          <label htmlFor={`${formId}-landmark`} className={labelClass}>Landmark (optional)</label>
+          <input id={`${formId}-landmark`} name="landmark" defaultValue={address?.landmark ?? ''} maxLength={120} className={inputClass} />
         </div>
         <div>
-          <label htmlFor="addr-city" className={labelClass}>City / town</label>
-          <input id="addr-city" name="city" defaultValue={address?.city ?? ''} maxLength={120} required className={inputClass} />
+          <label htmlFor={`${formId}-city`} className={labelClass}>City / town</label>
+          <input id={`${formId}-city`} name="city" defaultValue={address?.city ?? ''} maxLength={120} required className={inputClass} />
         </div>
         <div>
-          <label htmlFor="addr-district" className={labelClass}>District (optional)</label>
-          <input id="addr-district" name="district" defaultValue={address?.district ?? ''} maxLength={120} className={inputClass} />
+          <label htmlFor={`${formId}-district`} className={labelClass}>District (optional)</label>
+          <input id={`${formId}-district`} name="district" defaultValue={address?.district ?? ''} maxLength={120} autoComplete="address-level2" className={inputClass} />
+          <p className="mt-1.5 text-[11px] leading-5 text-slate-500">Enter the actual district. This delivery address does not change your verified service area.</p>
         </div>
         <div>
-          <label htmlFor="addr-state" className={labelClass}>State</label>
-          <input id="addr-state" name="state" defaultValue={address?.state ?? 'Bihar'} maxLength={120} className={inputClass} />
+          <label htmlFor={`${formId}-state`} className={labelClass}>State</label>
+          <input id={`${formId}-state`} name="state" defaultValue={address?.state ?? 'Bihar'} maxLength={120} className={inputClass} />
         </div>
       </div>
       <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
@@ -180,7 +184,7 @@ export function AddressCardActions({ addressId, isDefault }: { addressId: string
           aria-label="Set as default address"
           title="Set as default"
           onClick={() => run(() => setDefaultAddressAction(addressId))}
-          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
         >
           <Star className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -210,7 +214,7 @@ export function AddressCardActions({ addressId, isDefault }: { addressId: string
           aria-label="Delete address"
           title="Delete address"
           onClick={() => setConfirming(true)}
-          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" />
         </button>

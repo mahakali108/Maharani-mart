@@ -46,11 +46,11 @@ export function ChangePasswordForm() {
   const [state, formAction] = useFormState(changePasswordAction, initialState);
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5">
+      <div className="flex items-center gap-2 border-b border-lavender-200 bg-lavender-50 px-4 py-3.5">
         <KeyRound className="h-4 w-4 text-primary-600" aria-hidden="true" />
         <h2 className="text-sm font-bold text-slate-900">Change password</h2>
       </div>
-      <form action={formAction} className="space-y-4 p-4">
+      <form action={formAction} className="space-y-5 p-4 sm:p-6">
         <div>
           <label htmlFor="currentPassword" className={labelClass}>Current password</label>
           <input id="currentPassword" name="currentPassword" type="password" autoComplete="current-password" required className={inputClass} />

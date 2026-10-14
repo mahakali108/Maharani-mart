@@ -1,3 +1,4 @@
+import { AuthFrame } from '@/components/auth/auth-frame';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
@@ -10,31 +11,22 @@ export default async function RegisterRetailerPage() {
   const supabase = createClient();
   // Areas are entered by the admin via the Admin Panel (Phase 2). This
   // reads whatever real areas currently exist — empty until configured.
-  const { data: areas } = await supabase
+  const { data: areas, error: areasError } = await supabase
     .from('areas')
-    .select('id, name')
+    .select('id, name, district')
     .eq('is_active', true)
     .order('name');
 
   return (
-    <div className="min-h-screen bg-ink-50 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-2xl animate-fade-in">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white font-bold">
-            MT
-          </div>
-          <span className="text-lg font-semibold text-ink-900">Maharani Traders</span>
-        </div>
-
-        <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-premium sm:p-10">
-          <h1 className="text-2xl font-semibold text-ink-950">Register your shop</h1>
+    <AuthFrame wide>
+          <h1 className="shop-heading">Register your shop</h1>
           <p className="mt-1.5 mb-8 text-sm text-ink-500">
             Create your retailer account. An admin will review and approve it before you can
-            place orders. Service area: <span className="font-medium text-ink-700">{SERVICE_AREA_LABEL}</span>.
+            place orders. Default service district: <span className="font-medium text-ink-700">{SERVICE_AREA_LABEL}</span>. Choose from the currently configured districts below.
           </p>
 
-          <RegisterRetailerForm areas={areas ?? []} />
-        </div>
+          {areasError ? <p role="alert" className="mb-4 rounded-xl bg-peach-50 p-3 text-sm text-peach-700">The service-area directory could not be loaded. Refresh to try again before registering.</p> : null}
+          <RegisterRetailerForm areasUnavailable={!!areasError} areas={areas ?? []} />
 
         <p className="mt-6 text-center text-sm text-ink-400">
           Distribution staff or salesman?{' '}
@@ -42,7 +34,6 @@ export default async function RegisterRetailerPage() {
             Your account is created by an admin — sign in here.
           </Link>
         </p>
-      </div>
-    </div>
+    </AuthFrame>
   );
 }

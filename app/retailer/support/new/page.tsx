@@ -60,9 +60,9 @@ export default async function NewSupportTicketPage({
         <span className="text-slate-800">New ticket</span>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-sm sm:p-7">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Need a hand?</p>
-        <h1 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Raise a support ticket</h1>
+      <section className="rounded-2xl border border-slate-200 bg-lavender-50 p-5 shadow-sm sm:p-7">
+        <p className="shop-eyebrow">Need a hand?</p>
+        <h1 className="shop-heading mt-2 font-semibold tracking-tight text-slate-950">Raise a support ticket</h1>
         <p className="mt-2 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm">
           Tell us what&rsquo;s wrong. Your distributor gets a notification and replies here —
           the full conversation is kept on the ticket.

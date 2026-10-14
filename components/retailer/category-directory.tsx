@@ -42,7 +42,7 @@ export function CategoryDirectory({ categories }: { categories: DirectoryCategor
               ? category.children.filter((child) => child.name.toLocaleLowerCase().includes(normalizedQuery))
               : category.children;
             return (
-              <article key={category.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <article key={category.id} className="discovery-tile overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <CategoryCard category={category} href={`/retailer/categories/${category.id}`} />
                 {matchingChildren.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5 border-t border-slate-100 px-3 py-3">
@@ -50,7 +50,7 @@ export function CategoryDirectory({ categories }: { categories: DirectoryCategor
                       <Link
                         key={child.id}
                         href={`/retailer/categories/${child.id}`}
-                        className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-primary-50 hover:text-primary-700"
+                        className="inline-flex min-h-10 items-center rounded-full bg-ivory-50 px-3 py-2 text-[10px] font-semibold text-slate-600 transition hover:bg-primary-50 hover:text-primary-700"
                       >
                         {child.name}
                         {child.productCount ? ` · ${child.productCount}` : ''}
