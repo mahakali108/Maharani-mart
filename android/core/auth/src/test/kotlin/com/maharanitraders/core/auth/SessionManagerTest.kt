@@ -47,12 +47,17 @@ import com.maharanitraders.core.network.dto.RetailerDto
 import com.maharanitraders.core.network.dto.SessionDto
 import com.maharanitraders.core.network.dto.SessionUserDto
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -711,6 +716,464 @@ class SessionManagerTest {
     session.restore()
     assertTrue(session.state.value is SessionState.Authenticated)
   }
+
+  // ---------------------------------------------------------------------------
+  // Persistence: failed saves, refresh-token rotation recovery, concurrent
+  // refresh and sign-out cleanup. Each of these was silently wrong before the
+  // save outcome became explicit.
+  // ---------------------------------------------------------------------------
+
+  private fun loginSucceeds(api: FakeMaharaniApi) {
+    api.nextLoginResult = {
+      ApiEnvelope(
+        AuthSessionDto(accessToken = "new-access-token", refreshToken = "new-refresh-token", expiresAt = 2_000_000),
+      )
+    }
+  }
+
+  /** A server that rotates `refresh-token-1` into `refresh-token-2` on the first refresh. */
+  private fun rotatesOnRefresh(api: FakeMaharaniApi) {
+    api.nextRefreshResult = {
+      ApiEnvelope(
+        RefreshSessionDto(accessToken = "access-token-2", refreshToken = "refresh-token-2", expiresAt = 2_000_000),
+      )
+    }
+  }
+
+  @Test
+  fun `a sign-in whose credentials cannot be saved is not authenticated and keeps nothing`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      loginSucceeds(this)
+      nextResult = { ApiEnvelope(sessionDto()) }
+    }
+    val store = FakeTokenStore().apply { failWrites = true }
+    val session = manager(api, store, holder = holder)
+
+    val state = session.signIn("gupta@example.com", "password")
+
+    assertTrue(state is SessionState.Unavailable && state.retryable)
+    assertEquals(SESSION_NOT_SAVED_MESSAGE, (state as SessionState.Unavailable).message)
+    // Nothing authenticated may run on credentials the device could not keep.
+    assertEquals(0, api.sessionCalls)
+    assertNull(holder.accessToken())
+    assertNull(store.stored)
+  }
+
+  @Test
+  fun `a save that reads back different credentials counts as a failed save`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      loginSucceeds(this)
+      nextResult = { ApiEnvelope(sessionDto()) }
+    }
+    val store = FakeTokenStore().apply { corruptWrites = true }
+    val session = manager(api, store, holder = holder)
+
+    val state = session.signIn("gupta@example.com", "password")
+
+    assertTrue(state is SessionState.Unavailable && state.retryable)
+    assertEquals(0, api.sessionCalls)
+    assertNull(holder.accessToken())
+    assertNull(store.stored)
+  }
+
+  @Test
+  fun `a rotated pair that cannot be saved is withheld, then saved on retry without reusing the old refresh token`() =
+    runTest(dispatcher) {
+      val holder = ActiveTokenHolder()
+      val api = FakeMaharaniApi(holder).apply {
+        rotatesOnRefresh(this)
+        nextResult = { ApiEnvelope(sessionDto()) }
+      }
+      val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000)).apply { failWrites = true }
+      val session = manager(api, store, holder = holder)
+
+      val first = session.restore()
+
+      assertTrue(first is SessionState.Unavailable && first.retryable)
+      // Access is withheld: the rotated token is not handed to the interceptor and
+      // no verification request runs with it.
+      assertNull(holder.accessToken())
+      assertEquals(0, api.sessionCalls)
+      // The disk still holds the pre-rotation pair. The server has invalidated it.
+      assertEquals("refresh-token-1", store.stored?.refreshToken)
+
+      store.failWrites = false
+      val second = session.restore()
+
+      assertTrue(second is SessionState.Authenticated)
+      // The retry saved the pending pair and did not refresh again. The only
+      // refresh the server ever saw used the original token.
+      assertEquals(1, api.refreshCalls)
+      assertEquals(listOf("refresh-token-1"), api.refreshTokensUsed)
+      assertEquals("refresh-token-2", store.stored?.refreshToken)
+      assertEquals("access-token-2", api.tokenDuringSessionCall)
+    }
+
+  @Test
+  fun `a runtime rotation that cannot be saved is kept in memory and reused without another server call`() =
+    runTest(dispatcher) {
+      val holder = ActiveTokenHolder()
+      val api = FakeMaharaniApi(holder).apply {
+        nextResult = { ApiEnvelope(sessionDto()) }
+        rotatesOnRefresh(this)
+      }
+      val store = FakeTokenStore(initial = validTokens())
+      val session = manager(api, store, holder = holder)
+      assertTrue(session.restore() is SessionState.Authenticated)
+
+      store.failWrites = true
+      assertNull(session.refreshAccessToken())
+      assertNull(holder.accessToken())
+
+      store.failWrites = false
+      assertEquals("access-token-2", session.refreshAccessToken())
+
+      assertEquals(1, api.refreshCalls)
+      assertEquals("access-token-2", holder.accessToken())
+      assertEquals("refresh-token-2", store.stored?.refreshToken)
+    }
+
+  @Test
+  fun `signing out discards a pending rotated pair so it is never written back`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      rotatesOnRefresh(this)
+      nextResult = { ApiEnvelope(sessionDto()) }
+    }
+    val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000)).apply { failWrites = true }
+    val session = manager(api, store, holder = holder)
+    assertTrue(session.restore() is SessionState.Unavailable)
+
+    session.signOut()
+    store.failWrites = false
+    val state = session.restore()
+
+    // The pending pair belonged to the session that just ended. It must not come
+    // back to disk on the next restore.
+    assertEquals(SessionState.SignedOut(SignOutReason.NEVER_SIGNED_IN), state)
+    assertNull(store.stored)
+    assertNull(holder.accessToken())
+    assertEquals(1, api.refreshCalls)
+  }
+
+  @Test
+  fun `concurrent 401s during one refresh cost one server refresh and one durable save`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      nextResult = { ApiEnvelope(sessionDto()) }
+      rotatesOnRefresh(this)
+    }
+    val store = FakeTokenStore(initial = validTokens())
+    val session = manager(api, store, holder = holder)
+    assertTrue(session.restore() is SessionState.Authenticated)
+    val writesBefore = store.writeCount
+
+    // Eight requests all fail with the same stale access token at once.
+    val results = coroutineScope {
+      List(8) { async { refreshCoordinator.refresh("access-token-1") } }.awaitAll()
+    }
+
+    assertEquals(1, api.refreshCalls)
+    assertEquals(writesBefore + 1, store.writeCount)
+    assertTrue(results.any { it == "access-token-2" })
+    assertTrue(results.filterNotNull().all { it == "access-token-2" })
+    assertEquals("refresh-token-2", store.stored?.refreshToken)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Concurrency regressions. Every ordering below is forced with a Gate, so the
+  // interleaving is the same on every run. None of them depends on timing.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  fun `sign-out during session verification is not overwritten by a late Authenticated`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      loginSucceeds(this)
+      nextResult = { ApiEnvelope(sessionDto()) }
+      sessionGate = Gate()
+    }
+    val store = FakeTokenStore()
+    val session = manager(api, store, holder = holder)
+
+    val signingIn = async { session.signIn("gupta@example.com", "password") }
+    api.sessionGate!!.entered.await()
+    // The shopper signs out while the server is still verifying the new account.
+    session.signOut()
+    api.sessionGate!!.release.complete(Unit)
+    signingIn.await()
+
+    assertEquals(SessionState.SignedOut(SignOutReason.SIGNED_OUT), session.state.value)
+    assertNull(holder.accessToken())
+    assertNull(store.stored)
+  }
+
+  @Test
+  fun `a refresh refused for account A after account B signs in cannot clear account B`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      nextResult = { ApiEnvelope(sessionDto(userId = "account-a")) }
+      loginSucceeds(this)
+    }
+    val store = FakeTokenStore(initial = validTokens())
+    val session = manager(api, store, holder = holder)
+    assertTrue(session.restore() is SessionState.Authenticated)
+
+    api.refreshGate = Gate()
+    api.nextRefreshResult = { throw httpError(401, "invalid_token", "Your session has expired. Please sign in again.") }
+    val refreshingA = async { session.refreshAccessToken() }
+    api.refreshGate!!.entered.await()
+
+    // Account A is signed out and account B signs in while A's refresh is in flight.
+    session.signOut()
+    api.nextResult = { ApiEnvelope(sessionDto(userId = "account-b")) }
+    assertTrue(session.signIn("b@example.com", "password") is SessionState.Authenticated)
+
+    api.refreshGate!!.release.complete(Unit)
+    assertNull(refreshingA.await())
+
+    val current = session.state.value
+    assertTrue("account B must survive A's late refusal", current is SessionState.Authenticated)
+    assertEquals("account-b", (current as SessionState.Authenticated).snapshot.user.id)
+    assertEquals("new-access-token", holder.accessToken())
+    assertEquals("new-refresh-token", store.stored?.refreshToken)
+  }
+
+  @Test
+  fun `a newer pending pair is not wiped when the superseded token is rejected during restore`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      rotatesOnRefresh(this)
+      nextResult = { throw httpError(401, "invalid_token", "Please sign in again.") }
+      sessionGate = Gate()
+    }
+    val store = FakeTokenStore(initial = validTokens())
+    val session = manager(api, store, holder = holder)
+
+    val restoring = async { session.restore() }
+    // Restore has selected access-token-1 and is verifying it.
+    api.sessionGate!!.entered.await()
+    // A runtime rotation lands meanwhile, but its encrypted write fails, so the new
+    // pair is pending in memory while the disk still holds the superseded pair.
+    store.failWrites = true
+    assertNull(session.refreshAccessToken())
+    // The verification now answers with the rejection of the superseded token.
+    api.sessionGate!!.release.complete(Unit)
+    val first = restoring.await()
+
+    assertTrue(first is SessionState.Unavailable && first.retryable)
+    assertNull(holder.accessToken())
+    // The rejection must not clear storage or the pending pair.
+    assertEquals("refresh-token-1", store.stored?.refreshToken)
+
+    store.failWrites = false
+    api.nextResult = { ApiEnvelope(sessionDto()) }
+    val second = session.restore()
+
+    assertTrue(second is SessionState.Authenticated)
+    assertEquals(1, api.refreshCalls)
+    assertEquals("refresh-token-2", store.stored?.refreshToken)
+    assertEquals("access-token-2", api.tokenDuringSessionCall)
+  }
+
+  @Test
+  fun `two concurrent restores spend the starting refresh token exactly once`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      rotatesOnRefresh(this)
+      nextResult = { ApiEnvelope(sessionDto()) }
+      refreshGate = Gate()
+    }
+    val store = FakeTokenStore(initial = validTokens(expiresAt = 999_000))
+    val session = manager(api, store, holder = holder)
+
+    val first = async { session.restore() }
+    api.refreshGate!!.entered.await()
+    val second = async { session.restore() }
+    api.refreshGate!!.release.complete(Unit)
+
+    assertTrue(first.await() is SessionState.Authenticated)
+    assertTrue(second.await() is SessionState.Authenticated)
+    // Both restores started from refresh-token-1. Only one exchange may spend it;
+    // the second restore must use the pair the first one saved.
+    assertEquals(1, api.refreshCalls)
+    assertEquals(listOf("refresh-token-1"), api.refreshTokensUsed)
+    assertEquals("refresh-token-2", store.stored?.refreshToken)
+  }
+
+  @Test
+  fun `a rotation that returns after sign-out is discarded and never written back`() = runTest(dispatcher) {
+    val holder = ActiveTokenHolder()
+    val api = FakeMaharaniApi(holder).apply {
+      nextResult = { ApiEnvelope(sessionDto()) }
+      rotatesOnRefresh(this)
+      refreshGate = Gate()
+    }
+    val store = FakeTokenStore(initial = validTokens())
+    val session = manager(api, store, holder = holder)
+    assertTrue(session.restore() is SessionState.Authenticated)
+    val writesBefore = store.writeCount
+
+    val refreshing = async { session.refreshAccessToken() }
+    api.refreshGate!!.entered.await()
+    session.signOut()
+    api.refreshGate!!.release.complete(Unit)
+
+    assertNull(refreshing.await())
+    // The rotated pair belonged to the session that just ended.
+    assertEquals(writesBefore, store.writeCount)
+    assertNull(store.stored)
+    assertNull(holder.accessToken())
+    assertEquals(SessionState.SignedOut(SignOutReason.SIGNED_OUT), session.state.value)
+
+    assertEquals(SessionState.SignedOut(SignOutReason.NEVER_SIGNED_IN), session.restore())
+    assertEquals(1, api.refreshCalls)
+  }
+
+  @Test
+  fun `a sign-in that cannot be saved leaves the login screen with a storage message and no secrets`() =
+    runTest(dispatcher) {
+      val holder = ActiveTokenHolder()
+      val api = FakeMaharaniApi(holder).apply {
+        loginSucceeds(this)
+        nextResult = { ApiEnvelope(sessionDto()) }
+      }
+      val store = FakeTokenStore().apply { failWrites = true }
+      val session = manager(api, store, holder = holder)
+
+      val returned = session.signIn("gupta@example.com", "password")
+
+      assertEquals(
+        SessionState.Unavailable(SESSION_NOT_SAVED_MESSAGE, retryable = true, storageFailure = true),
+        returned,
+      )
+      // The shell stays on the sign-in screen. Nothing was authenticated or kept.
+      assertEquals(SessionState.SignedOut(SignOutReason.NEVER_SIGNED_IN), session.state.value)
+      assertEquals(0, api.sessionCalls)
+      assertNull(holder.accessToken())
+      assertNull(store.stored)
+      // The message must not carry any credential.
+      val message = (returned as SessionState.Unavailable).message
+      assertFalse(message.contains("new-access-token"))
+      assertFalse(message.contains("new-refresh-token"))
+    }
+
+  @Test
+  fun `a wrong password is a form message and does not replace the shell state`() = runTest(dispatcher) {
+    val api = FakeMaharaniApi().apply {
+      nextLoginResult = { throw httpError(401, "invalid_credentials", "Invalid email or password. Please try again.") }
+    }
+    val session = manager(api, FakeTokenStore())
+
+    val returned = session.signIn("gupta@example.com", "wrong")
+
+    assertTrue(returned is SessionState.Unavailable)
+    assertEquals("Invalid email or password. Please try again.", (returned as SessionState.Unavailable).message)
+    assertFalse((returned as SessionState.Unavailable).storageFailure)
+    assertEquals(SessionState.SignedOut(SignOutReason.NEVER_SIGNED_IN), session.state.value)
+  }
+
+  @Test
+  fun `restore distinguishes a storage failure from being offline`() = runTest(dispatcher) {
+    // Storage: the refresh succeeds but the rotated pair cannot be written.
+    val storageApi = FakeMaharaniApi().apply { rotatesOnRefresh(this) }
+    val storage = FakeTokenStore(initial = validTokens(expiresAt = 999_000)).apply { failWrites = true }
+    val storageState = manager(storageApi, storage).restore()
+    assertEquals(
+      SessionState.Unavailable(SESSION_NOT_SAVED_MESSAGE, retryable = true, storageFailure = true),
+      storageState,
+    )
+
+    // Connectivity: the refresh cannot reach the server.
+    val offlineApi = FakeMaharaniApi().apply { nextRefreshResult = { throw IOException("offline") } }
+    val offlineState = manager(offlineApi, FakeTokenStore(initial = validTokens(expiresAt = 999_000))).restore()
+    assertTrue(offlineState is SessionState.Unavailable && !offlineState.storageFailure)
+  }
+  // ---------------------------------------------------------------------------
+  // Registration generation guard (M1).
+  // ---------------------------------------------------------------------------
+
+  private fun registration() = RegistrationRequest(
+    fullName = "Gupta Kirana",
+    shopName = "Gupta Kirana Store",
+    phone = "9876543210",
+    email = "gupta@example.com",
+    areaId = "area-1",
+    address = "Main Road",
+    password = "password",
+  )
+
+  @Test
+  fun `a registration that returns a session stores it and shows pending approval without granting access`() =
+    runTest(dispatcher) {
+      val holder = ActiveTokenHolder()
+      val api = FakeMaharaniApi(holder).apply {
+        nextRegisterResult = {
+          ApiEnvelope(
+            RegisterRetailerResponseDto(
+              ok = true,
+              session = RefreshSessionDto(
+                accessToken = "reg-access",
+                refreshToken = "reg-refresh",
+                expiresAt = 2_000_000,
+              ),
+            ),
+          )
+        }
+      }
+      val store = FakeTokenStore()
+      val session = manager(api, store, holder = holder)
+
+      val result = session.registerRetailer(registration())
+
+      assertEquals(RegistrationResult.Registered(false), result)
+      assertEquals(SessionState.SignedOut(SignOutReason.PENDING_APPROVAL), session.state.value)
+      assertEquals("reg-refresh", store.stored?.refreshToken)
+      // Registration never grants workspace access.
+      assertNull(holder.accessToken())
+      assertEquals(0, api.sessionCalls)
+    }
+
+  @Test
+  fun `a registration answered after sign-out cannot store its session or overwrite the signed-out state`() =
+    runTest(dispatcher) {
+      val holder = ActiveTokenHolder()
+      val api = FakeMaharaniApi(holder).apply {
+        nextResult = { ApiEnvelope(sessionDto()) }
+        registerGate = Gate()
+        nextRegisterResult = {
+          ApiEnvelope(
+            RegisterRetailerResponseDto(
+              ok = true,
+              session = RefreshSessionDto(
+                accessToken = "reg-access",
+                refreshToken = "reg-refresh",
+                expiresAt = 2_000_000,
+              ),
+            ),
+          )
+        }
+      }
+      val store = FakeTokenStore(initial = validTokens())
+      val session = manager(api, store, holder = holder)
+      assertTrue(session.restore() is SessionState.Authenticated)
+
+      val registering = async { session.registerRetailer(registration()) }
+      api.registerGate!!.entered.await()
+      // The shopper signs out while the registration request is in flight.
+      session.signOut()
+      api.registerGate!!.release.complete(Unit)
+
+      // The account still exists on the server, so the caller still gets Registered.
+      assertEquals(RegistrationResult.Registered(false), registering.await())
+      // The stale registration must not store its session, change the state, or
+      // leave a token in memory.
+      assertNull(store.stored)
+      assertNull(holder.accessToken())
+      assertEquals(SessionState.SignedOut(SignOutReason.SIGNED_OUT), session.state.value)
+    }
 }
 
 class SessionMapperTest {
@@ -781,15 +1244,37 @@ class FakeTokenStore(initial: SessionTokens? = null) : TokenStore {
   var writeCount: Int = 0
     private set
 
+  /** When true every write throws, as a full disk or an unusable Keystore key would. */
+  var failWrites: Boolean = false
+
+  /** When true the write reports success but stores a different pair: the read-back must catch it. */
+  var corruptWrites: Boolean = false
+
   override suspend fun read(): SessionTokens? = stored
 
   override suspend fun write(tokens: SessionTokens) {
-    stored = tokens
+    if (failWrites) throw IOException("simulated write failure")
+    stored = if (corruptWrites) tokens.copy(accessToken = tokens.accessToken + "-corrupt") else tokens
     writeCount += 1
   }
 
   override suspend fun clear() {
     stored = null
+  }
+}
+
+/**
+ * A deterministic pause point for a fake endpoint. The test awaits [entered] to
+ * know the code under test is inside the call, does what it needs to, then
+ * completes [release] to let the call finish. Nothing depends on timing.
+ */
+class Gate {
+  val entered = CompletableDeferred<Unit>()
+  val release = CompletableDeferred<Unit>()
+
+  suspend fun pass() {
+    entered.complete(Unit)
+    release.await()
   }
 }
 
@@ -834,9 +1319,13 @@ class FakeMaharaniApi(
   override suspend fun health(): ApiEnvelope<HealthDto> =
     throw UnsupportedOperationException("health is not used by the session layer")
 
+  /** When set, `session()` announces it has started and then waits for [Gate.release]. */
+  var sessionGate: Gate? = null
+
   override suspend fun session(): ApiEnvelope<SessionDto> {
     sessionCalls += 1
     tokenDuringSessionCall = tokenHolder?.accessToken()
+    sessionGate?.pass()
     return nextResult()
   }
 
@@ -851,10 +1340,24 @@ class FakeMaharaniApi(
   // from the code under test; the rest exist because an interface implementation
   // has to name every member, and they throw rather than return a fabricated
   // envelope so that a test which accidentally depends on one fails loudly.
-  override suspend fun login(body: LoginRequestDto): ApiEnvelope<AuthSessionDto> = nextLoginResult()
+  /** When set, `login()` announces it has started and then waits for [Gate.release]. */
+  var loginGate: Gate? = null
+
+  override suspend fun login(body: LoginRequestDto): ApiEnvelope<AuthSessionDto> {
+    loginGate?.pass()
+    return nextLoginResult()
+  }
+
+  /** The refresh tokens the server was asked to exchange, in order. Tests only. */
+  val refreshTokensUsed: MutableList<String> = mutableListOf()
+
+  /** When set, the refresh exchange announces it has started and then waits for [Gate.release]. */
+  var refreshGate: Gate? = null
 
   override suspend fun refresh(body: RefreshRequestDto): ApiEnvelope<RefreshSessionDto> {
     refreshCalls += 1
+    refreshTokensUsed += body.refreshToken
+    refreshGate?.pass()
     return nextRefreshResult()
   }
 
@@ -868,9 +1371,17 @@ class FakeMaharaniApi(
 
   override suspend fun areas(): ApiEnvelope<AreasDto> = unsupported("areas")
 
+  /** When set, `registerRetailer()` announces it has started and then waits for [Gate.release]. */
+  var registerGate: Gate? = null
+
+  var nextRegisterResult: () -> ApiEnvelope<RegisterRetailerResponseDto> = { unsupported("registerRetailer") }
+
   override suspend fun registerRetailer(
     body: RegisterRetailerRequestDto,
-  ): ApiEnvelope<RegisterRetailerResponseDto> = unsupported("registerRetailer")
+  ): ApiEnvelope<RegisterRetailerResponseDto> {
+    registerGate?.pass()
+    return nextRegisterResult()
+  }
 
   // Phase D added the catalogue endpoints. Same rule as above: the session layer
   // cannot reach them, so they throw instead of returning a fabricated envelope.

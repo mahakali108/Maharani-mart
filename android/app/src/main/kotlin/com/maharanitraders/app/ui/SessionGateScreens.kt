@@ -130,13 +130,19 @@ fun UnsupportedAccountScreen(reason: String, onSignOut: () -> Unit) {
   }
 }
 
-/** The session exists but could not be verified (offline, outage, timeout). */
+/**
+ * The session exists but could not be verified (offline, outage, timeout), or
+ * the device could not keep its credentials ([storageFailure]). The two causes
+ * are titled differently so that a storage fault is never presented as a
+ * connectivity problem. Neither shows credentials or internal detail.
+ */
 @Composable
 fun ConnectionProblemScreen(
   message: String,
   retryable: Boolean,
   onRetry: () -> Unit,
   onSignOut: () -> Unit,
+  storageFailure: Boolean = false,
 ) {
   Column(
     modifier = Modifier
@@ -146,7 +152,7 @@ fun ConnectionProblemScreen(
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Text(
-      text = "Can't reach Maharani Traders",
+      text = if (storageFailure) "Can't save your session on this device" else "Can't reach Maharani Traders",
       style = MaterialTheme.typography.titleLarge,
       textAlign = TextAlign.Center,
       modifier = Modifier.testTag(GateTags.GATE_TITLE),
@@ -161,7 +167,11 @@ fun ConnectionProblemScreen(
         .testTag(GateTags.GATE_MESSAGE),
     )
     Text(
-      text = "Prices, stock and orders always need a live connection — the app will not guess them.",
+      text = if (storageFailure) {
+        "Your connection is not the problem. Try again, or sign out and sign in again."
+      } else {
+        "Prices, stock and orders always need a live connection — the app will not guess them."
+      },
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,

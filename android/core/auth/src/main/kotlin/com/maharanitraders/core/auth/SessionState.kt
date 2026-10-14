@@ -53,6 +53,13 @@ sealed interface SessionState {
    * Stored tokens exist but the session could not be verified right now
    * (offline, server error). Tokens are KEPT and the app offers retry — it
    * never shows a cached identity as if it were freshly verified.
+   *
+   * [storageFailure] is true when the cause is on-device credential storage, not
+   * the network. The UI must not present it as a connectivity problem.
    */
-  data class Unavailable(val message: String, val retryable: Boolean) : SessionState
+  data class Unavailable(
+    val message: String,
+    val retryable: Boolean,
+    val storageFailure: Boolean = false,
+  ) : SessionState
 }
