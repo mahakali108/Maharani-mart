@@ -1,3 +1,4 @@
+import { CommerceSteps } from '@/components/retailer/commerce-steps';
 import Link from 'next/link';
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
@@ -212,6 +213,7 @@ export default async function CheckoutPage() {
   return (
     <CheckoutAddressProvider defaultAddressId={defaultAddress?.id ?? null}>
     <div className="space-y-5 sm:space-y-6">
+      <CommerceSteps current={2} />
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
         <Link href="/retailer/cart" className="flex items-center gap-1 hover:text-primary-600">
           <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Cart
@@ -221,9 +223,9 @@ export default async function CheckoutPage() {
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Final review</p>
-          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Checkout</h1>
+        <div className="shop-intro">
+          <p className="shop-eyebrow">Final review</p>
+          <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Checkout</h1>
           <p className="mt-1 text-xs text-slate-500">
             Review the items, address and your coin balance before placing the order.
           </p>

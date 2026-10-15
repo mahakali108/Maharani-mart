@@ -1,6 +1,6 @@
 # Maa Kali B2B Ultra Platform — Phase 1
 
-FMCG B2B distribution platform for the Khagaria district retail network.
+FMCG B2B distribution platform based in Saran District, Bihar, with configurable service areas across districts.
 **Phase 1 scope:** project foundation — Supabase schema, authentication,
 role-based routing, and layout shells for all five roles. No demo data,
 no placeholder products. The app is fully functional but intentionally

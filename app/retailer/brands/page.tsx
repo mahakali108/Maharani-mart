@@ -1,3 +1,4 @@
+import { CatalogueNav } from '@/components/retailer/catalogue-nav';
 import Link from 'next/link';
 import { BadgeCheck, ChevronRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -26,6 +27,7 @@ export default async function RetailerBrandsPage({
 
   return (
     <div className="space-y-5 sm:space-y-7">
+      <CatalogueNav active="brands" />
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
         <Link href="/retailer/home" className="hover:text-primary-600">
           Home
@@ -34,14 +36,14 @@ export default async function RetailerBrandsPage({
         <span className="text-slate-800">Brands</span>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
+      <section className="rounded-2xl border border-slate-200 bg-lavender-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="flex items-start gap-4">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
             <BadgeCheck className="h-5 w-5" aria-hidden="true" />
           </span>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Trusted brands</p>
-            <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Shop by brand</h1>
+          <div className="min-w-0">
+          <p className="shop-eyebrow">Trusted brands</p>
+            <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Shop by brand</h1>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 sm:text-sm">
               Pick a brand to see every active product at your retailer pricing.
             </p>

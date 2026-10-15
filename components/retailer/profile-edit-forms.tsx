@@ -36,11 +36,11 @@ export function ContactDetailsForm({ fullName, phone }: { fullName: string; phon
   const [state, formAction] = useFormState(updateContactDetailsAction, initialState);
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5">
+      <div className="flex items-center gap-2 border-b border-lavender-200 bg-lavender-50 px-4 py-3.5">
         <UserRound className="h-4 w-4 text-primary-600" aria-hidden="true" />
         <h2 className="text-sm font-bold text-slate-900">Owner contact details</h2>
       </div>
-      <form action={formAction} className="space-y-4 p-4">
+      <form action={formAction} className="space-y-5 p-4 sm:p-6">
         <div>
           <label htmlFor="fullName" className={labelClass}>Full name</label>
           <input id="fullName" name="fullName" defaultValue={fullName} required maxLength={120} className={inputClass} />
@@ -68,11 +68,11 @@ export function ShopProfileForm({ shopName, address, editable }: { shopName: str
   const [state, formAction] = useFormState(updateShopProfileAction, initialState);
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3.5">
+      <div className="flex items-center gap-2 border-b border-lavender-200 bg-lavender-50 px-4 py-3.5">
         <Store className="h-4 w-4 text-primary-600" aria-hidden="true" />
         <h2 className="text-sm font-bold text-slate-900">Business profile</h2>
       </div>
-      <form action={formAction} className="space-y-4 p-4">
+      <form action={formAction} className="space-y-5 p-4 sm:p-6">
         <div>
           <label htmlFor="shopName" className={labelClass}>Shop / firm name</label>
           <input id="shopName" name="shopName" defaultValue={shopName} required maxLength={120} className={inputClass} />

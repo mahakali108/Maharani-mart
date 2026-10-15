@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,8 +24,8 @@ export default function GlobalError({
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-50 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-8 text-center shadow-premium">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary-50">
+      <div className="w-full max-w-md rounded-2xl border border-ink-100 bg-ivory-50 p-6 sm:p-10 text-center shadow-premium">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-peach-100">
           <AlertTriangle className="h-7 w-7 text-primary-600" />
         </div>
         <h1 className="text-xl font-semibold text-ink-950">Something went wrong</h1>
@@ -38,6 +39,7 @@ export default function GlobalError({
         <Button onClick={reset} className="mt-6 w-full">
           Try again
         </Button>
+        <Link href="/retailer/home" className="mt-3 inline-flex min-h-11 items-center justify-center text-sm text-ink-600 underline underline-offset-4">Return to store</Link>
       </div>
     </div>
   );

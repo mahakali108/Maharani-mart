@@ -105,14 +105,14 @@ export default async function RetailerAlertsPage() {
         <span className="text-slate-800">Updates</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-lavender-50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-7">
         <div className="flex items-start gap-4">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
             <BellRing className="h-5 w-5" aria-hidden="true" />
           </span>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Stay informed</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Updates &amp; alerts</h1>
+          <div className="shop-intro">
+          <p className="shop-eyebrow">Stay informed</p>
+            <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Updates &amp; alerts</h1>
             <p className="mt-1 text-xs leading-5 text-slate-600 sm:text-sm">
               Order activity, account messages and marketplace news.
             </p>

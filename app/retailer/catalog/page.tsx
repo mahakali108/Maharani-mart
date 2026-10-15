@@ -1,3 +1,4 @@
+import { CatalogueNav } from '@/components/retailer/catalogue-nav';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Boxes, ChevronRight, Coffee, Cookie, Milk, Package, Soup, Sparkles } from 'lucide-react';
@@ -146,6 +147,7 @@ export default async function RetailerCatalogPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      <CatalogueNav active="products" />
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-500">
         <Link href="/retailer/home" className="hover:text-primary-600">
           Home
@@ -169,10 +171,10 @@ export default async function RetailerCatalogPage({
               <Sparkles className="h-5 w-5" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+              <p className="shop-eyebrow">
                 Maharani Traders
               </p>
-              <h1 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
+              <h1 className="shop-heading mt-0.5 text-lg font-semibold tracking-tight text-slate-900">
                 {selectedCategory?.name ?? selectedBrand?.name ?? (filters.q ? `Results for “${filters.q}”` : 'All products')}
               </h1>
               <p className="mt-0.5 text-[11px] leading-5 text-slate-600 sm:text-sm">

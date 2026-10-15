@@ -30,7 +30,7 @@ export function QtyStepper({
     <div
       className={cn(
         'flex min-w-0 items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm',
-        compact ? 'h-9' : 'h-11'
+        'h-11'
       )}
     >
       <button
@@ -41,7 +41,7 @@ export function QtyStepper({
           'flex shrink-0 items-center justify-center text-slate-600 transition hover:bg-slate-50 active:bg-slate-100',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
           'disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent',
-          compact ? 'h-full w-9' : 'h-full w-11'
+          'h-full w-11'
         )}
         aria-label={`Decrease ${label}`}
         title={`Decrease ${label}`}
@@ -74,7 +74,7 @@ export function QtyStepper({
           'flex shrink-0 items-center justify-center text-slate-600 transition hover:bg-slate-50 active:bg-slate-100',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
           'disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent',
-          compact ? 'h-full w-9' : 'h-full w-11'
+          'h-full w-11'
         )}
         aria-label={`Increase ${label}`}
         title={`Increase ${label}`}

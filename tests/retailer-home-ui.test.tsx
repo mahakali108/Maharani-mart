@@ -59,7 +59,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstub
 describe('homepage navigation and profile', () => {
   it('hides missing profile/banner/brand data and renders useful empty states', () => {
     render(<HomeContent data={emptyHome()} wallet={null} services={[]} />);
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome to Maharani Traders');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Your next restock,beautifully simple.');
     expect(screen.queryByText('Delivery area')).toBeNull();
     expect(screen.queryByText('Shop location')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Maharani Traders promotions' })).toBeNull();
@@ -70,7 +70,7 @@ describe('homepage navigation and profile', () => {
   });
   it('uses supplied retailer name, shop and area without a fabricated location', () => {
     render(<HomeContent data={emptyHome()} retailerName="Fixture owner" shopName="Fixture shop" areaName="Configured area" address="Different address" wallet={null} services={[]} />);
-    expect(screen.getByRole('heading', { name: 'Welcome, Fixture owner' })).toBeTruthy();
+    expect(screen.getByText('Welcome, Fixture owner')).toBeTruthy();
     expect(screen.getByText('Fixture shop')).toBeTruthy();
     expect(screen.getByText('Configured area')).toBeTruthy();
     expect(screen.queryByText('Different address')).toBeNull();
@@ -154,10 +154,10 @@ describe('sticky header and bottom navigation', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
     expect(document.activeElement).toBe(document.querySelector('#retailer-mobile-search input'));
   });
-  it('has exactly Home, Categories, Cart, Orders, Account and marks Home active', () => {
+  it('has exactly Home, Catalogue, Cart, Orders, Account and marks Home active', () => {
     render(<RetailerShell fullName="Fixture owner" role="retailer" cartCount={2}><p>Content</p></RetailerShell>);
     const nav = within(screen.getByRole('navigation', { name: 'Primary navigation' }));
-    expect(nav.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/retailer/home', '/retailer/categories', '/retailer/cart', '/retailer/orders', '/retailer/account']);
+    expect(nav.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/retailer/home', '/retailer/catalog', '/retailer/cart', '/retailer/orders', '/retailer/account']);
     expect(nav.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
     expect(nav.getByRole('link', { name: 'Orders' }).getAttribute('aria-current')).toBeNull();
   });

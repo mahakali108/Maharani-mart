@@ -40,7 +40,7 @@ export default async function RetailerDeliveryPage({ params }: { params: { id: s
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="min-w-0">
-          <h1 className="font-mono text-xl font-semibold text-ink-950">{order.order_number}</h1>
+          <h1 className="shop-heading font-mono font-semibold text-ink-950">{order.order_number}</h1>
           <p className="text-sm text-ink-500">Delivery record</p>
         </div>
         <DeliveryStatusBadge status={delivery.delivery_status} />

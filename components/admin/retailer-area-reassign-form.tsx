@@ -2,13 +2,9 @@
 
 import { useFormState } from 'react-dom';
 import { reassignRetailerAreaAction, type RetailerFormState } from '@/lib/admin/retailers-actions';
-import { Select } from '@/components/ui/select';
+import { ServiceAreaSelect } from '@/components/areas/service-area-select';
+import type { ServiceAreaOption } from '@/lib/areas/district';
 import { SubmitButton } from '@/components/ui/submit-button';
-
-interface AreaOption {
-  id: string;
-  name: string;
-}
 
 const initialState: RetailerFormState = null;
 
@@ -19,22 +15,16 @@ export function RetailerAreaReassignForm({
 }: {
   retailerId: string;
   currentAreaId: string;
-  areas: AreaOption[];
+  areas: ServiceAreaOption[];
 }) {
   const boundAction = reassignRetailerAreaAction.bind(null, retailerId);
   const [state, formAction] = useFormState(boundAction, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <div className="flex-1">
-        <Select id="areaId" name="areaId" defaultValue={currentAreaId}>
-          {areas.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name}
-            </option>
-          ))}
-        </Select>
-        {state?.error ? <p className="mt-1.5 text-xs text-primary-600">{state.error}</p> : null}
+      <div className="min-w-0 flex-1">
+        <ServiceAreaSelect areas={areas} currentAreaId={currentAreaId} error={state?.error} />
+        {state?.success ? <p role="status" className="mt-2 text-sm text-mint-700">{state.success}</p> : null}
       </div>
       <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">
         Reassign area

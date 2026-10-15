@@ -243,11 +243,11 @@ export default async function OrdersPage({
         <span className="text-slate-800">My orders</span>
       </div>
 
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-blush-50 px-4 py-5 shadow-sm sm:px-7 sm:py-7">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-sky-50 px-4 py-5 shadow-sm sm:px-7 sm:py-7">
         <div className="relative flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Purchase history</p>
-            <h1 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">My orders</h1>
+          <div className="shop-intro">
+          <p className="shop-eyebrow">Purchase history</p>
+            <h1 className="shop-heading mt-2 font-semibold tracking-tight text-slate-950">My orders</h1>
             <p className="mt-2 text-xs text-slate-600 sm:text-sm">
               Track deliveries, view invoices and reorder essentials.
             </p>
@@ -336,7 +336,7 @@ export default async function OrdersPage({
 
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+          <p className="shop-eyebrow">
             {status ? STATUS_META[status as OrderStatus].label : 'All activity'}
           </p>
           <h2 className="mt-0.5 text-base font-bold text-slate-900 sm:text-lg">

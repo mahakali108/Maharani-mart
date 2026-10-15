@@ -5,15 +5,16 @@ import Link from 'next/link';
 import { registerRetailerAction, type FormState } from '@/lib/auth/actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
+import { ServiceAreaSelect } from '@/components/areas/service-area-select';
+import type { ServiceAreaOption } from '@/lib/areas/district';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { ResendConfirmationForm } from '@/components/auth/resend-confirmation-form';
 
 const initialState: FormState = null;
 
-type Area = { id: string; name: string };
+type Area = ServiceAreaOption;
 
-export function RegisterRetailerForm({ areas }: { areas: Area[] }) {
+export function RegisterRetailerForm({ areas, areasUnavailable = false }: { areas: Area[]; areasUnavailable?: boolean }) {
   const [state, formAction] = useFormState(registerRetailerAction, initialState);
 
   return (
@@ -66,22 +67,9 @@ export function RegisterRetailerForm({ areas }: { areas: Area[] }) {
           ) : null}
         </div>
 
-        <div>
-          <Label htmlFor="areaId">Area</Label>
-          <Select id="areaId" name="areaId" required defaultValue="">
-            <option value="" disabled>
-              {areas.length ? 'Select your area' : 'No areas configured yet'}
-            </option>
-            {areas.map((area) => (
-              <option key={area.id} value={area.id}>
-                {area.name}
-              </option>
-            ))}
-          </Select>
-          {state?.fieldErrors?.areaId ? (
-            <p className="mt-1 text-xs text-primary-600">{state.fieldErrors.areaId}</p>
-          ) : null}
-          {areas.length === 0 ? (
+        <div className="sm:col-span-2">
+          <ServiceAreaSelect unavailable={areasUnavailable} areas={areas} error={state?.fieldErrors?.areaId} />
+          {areas.length === 0 && !areasUnavailable ? (
             <p className="mt-1 text-xs text-ink-500">
               Areas haven&apos;t been set up yet — contact the distributor to have your area added before registering.
             </p>
@@ -105,7 +93,7 @@ export function RegisterRetailerForm({ areas }: { areas: Area[] }) {
         ) : null}
       </div>
 
-      <SubmitButton pendingLabel="Creating account…" className="mt-2">
+      <SubmitButton pendingLabel="Creating account…" disabled={areasUnavailable || areas.length === 0} className="mt-2">
         Register shop
       </SubmitButton>
 

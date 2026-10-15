@@ -1,3 +1,4 @@
+import { serviceAreaLabel } from '@/lib/areas/district';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
@@ -24,7 +25,7 @@ interface RetailerBaseDetail {
 }
 
 interface RetailerDetail extends RetailerBaseDetail {
-  areas: { name: string } | null;
+  areas: { name: string; district: string } | null;
   profiles: { full_name: string; phone: string } | null;
 }
 
@@ -51,7 +52,7 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
       )
       .eq('id', params.id)
       .single<RetailerBaseDetail>(),
-    supabase.from('areas').select('id, name').eq('is_active', true).order('name'),
+    supabase.from('areas').select('id, name, district, is_active').order('name'),
     supabase
       .from('retailer_documents')
       .select('id, doc_type, file_url, file_name, created_at')
@@ -74,13 +75,13 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
       full_name: string;
       phone: string;
     }>(),
-    supabase.from('areas').select('name').eq('id', retailerBase.area_id).maybeSingle<{ name: string }>(),
+    supabase.from('areas').select('name, district').eq('id', retailerBase.area_id).maybeSingle<{ name: string; district: string }>(),
   ]);
 
   const r: RetailerDetail = {
     ...retailerBase,
     profiles: profileRow ? { full_name: profileRow.full_name, phone: profileRow.phone } : null,
-    areas: areaRow ? { name: areaRow.name } : null,
+    areas: areaRow,
   };
 
   const documents: RetailerDocument[] = await Promise.all(
@@ -119,7 +120,7 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
         <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-ink-400">Area</dt>
-            <dd className="mt-0.5 font-medium text-ink-900">{r.areas?.name ?? '—'}</dd>
+            <dd className="mt-0.5 font-medium text-ink-900">{r.areas ? serviceAreaLabel(r.areas) : '—'}</dd>
           </div>
           <div>
             <dt className="text-ink-400">GSTIN</dt>
@@ -173,9 +174,10 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
 
       <Card>
         <CardHeader>
-          <CardTitle>Reassign area</CardTitle>
+          <CardTitle>Service district &amp; area</CardTitle>
         </CardHeader>
-        <RetailerAreaReassignForm retailerId={r.id} currentAreaId={r.area_id} areas={areaData ?? []} />
+        <p className="mb-4 text-sm text-ink-500">Changing the service area also changes its district and may affect area pricing. Delivery addresses and historical orders are not rewritten.</p>
+        <RetailerAreaReassignForm key={`${r.id}:${r.area_id}`} retailerId={r.id} currentAreaId={r.area_id} areas={(areaData ?? []).filter((area: { id: string; is_active: boolean }) => area.is_active || area.id === r.area_id)} />
       </Card>
 
       <Card>

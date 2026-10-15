@@ -19,7 +19,7 @@ function BrandMonogram({ name }: { name: string }) {
     .join('')
     .toUpperCase();
 
-  return <span className="text-sm font-black tracking-tight text-primary-700">{monogram || 'B'}</span>;
+  return <span className="text-sm font-black tracking-tight text-lavender-700">{monogram || 'B'}</span>;
 }
 
 export function BrandCard({
@@ -33,13 +33,13 @@ export function BrandCard({
     <Link
       href={`/retailer/brands/${brand.id}`}
       className={cn(
-        'group flex h-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+        'group flex h-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-200 motion-safe:hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
         compact && 'min-h-[4.5rem] rounded-xl p-2.5'
       )}
     >
       <span
         className={cn(
-          'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50',
+          'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-lavender-200 bg-lavender-50',
           compact ? 'h-11 w-11' : 'h-16 w-16'
         )}
       >
@@ -59,7 +59,7 @@ export function BrandCard({
       <span className="min-w-0 flex-1">
         <span
           className={cn(
-            'block truncate font-bold text-slate-900',
+            'block line-clamp-2 font-semibold text-slate-900',
             compact ? 'text-[11px]' : 'text-sm'
           )}
         >

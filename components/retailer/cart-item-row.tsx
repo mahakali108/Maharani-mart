@@ -169,7 +169,7 @@ export function CartItemRow({
       <div className="flex min-w-0 gap-3 sm:gap-4">
         <div
           className={cn(
-            'relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-50 ring-1 ring-slate-100 sm:h-24 sm:w-24',
+            'relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-ivory-50 ring-1 ring-slate-100 sm:h-24 sm:w-24',
             isUnavailable && 'opacity-70'
           )}
         >
@@ -225,7 +225,7 @@ export function CartItemRow({
 
           {/* Desktop price block */}
           <div className="mt-2.5 hidden flex-wrap items-baseline gap-x-2 gap-y-1 md:flex">
-            <p className="text-base font-bold tracking-tight text-slate-950">
+            <p className="text-lg font-semibold tracking-tight text-primary-600">
               {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-400">/pc</span>
             </p>
             {mrp != null && mrp > displayPiecePrice ? (
@@ -240,7 +240,7 @@ export function CartItemRow({
 
       {/* Cell B — mobile price row */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 md:hidden">
-        <p className="text-sm font-bold tracking-tight text-slate-950">
+        <p className="text-base font-semibold tracking-tight text-primary-600">
           {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-400">/pc</span>
         </p>
         {discountPercent > 0 ? (
@@ -300,7 +300,7 @@ export function CartItemRow({
         </div>
         <div className="text-right">
           <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Line total (incl. GST)</p>
-          <p className="mt-0.5 text-base font-bold tracking-tight text-slate-950 sm:text-lg">{formatInr(displayTotal)}</p>
+          <p className="mt-0.5 text-lg font-semibold tracking-tight text-primary-600 sm:text-lg">{formatInr(displayTotal)}</p>
           <p className="text-[9px] text-slate-400">
             {pricing.quantity} pc{pricing.quantity === 1 ? '' : 's'} × {formatInr(displayPiecePrice)} · GST {gstPercent}% included
           </p>

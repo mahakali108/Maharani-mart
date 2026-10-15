@@ -134,7 +134,7 @@ export default async function SupportTicketDetailPage({ params }: { params: { id
             </span>
             <span className="font-mono text-[10px] font-bold text-slate-400">{ticket.ticket_number}</span>
           </div>
-          <h1 className="mt-3 break-words text-lg font-bold tracking-tight text-slate-950 sm:text-xl">{ticket.subject}</h1>
+          <h1 className="shop-heading mt-3 break-words text-lg font-semibold tracking-tight text-slate-950">{ticket.subject}</h1>
           <p className="mt-1.5 text-[10px] text-slate-500">
             Opened {formatIndiaRelativeDateTime(ticket.created_at)} · Updated {formatIndiaRelativeDateTime(ticket.updated_at)}
           </p>

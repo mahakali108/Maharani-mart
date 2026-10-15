@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import Link from 'next/link';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { catalogHref, type CatalogQuery } from '@/lib/retailer/catalog-params';
@@ -17,6 +17,7 @@ export function CatalogFilters({
   brands: { id: string; name: string }[];
   resultCount: number;
 }) {
+  const filtersId = useId();
   const [open, setOpen] = useState(false);
   const activeChips: { label: string; href: string }[] = [];
   if (values.q) activeChips.push({ label: `“${values.q}”`, href: catalogHref({ ...values, q: undefined }) });
@@ -48,8 +49,10 @@ export function CatalogFilters({
         </p>
         <button
           type="button"
+          aria-expanded={open}
+          aria-controls={filtersId}
           onClick={() => setOpen((current) => !current)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm lg:hidden"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm lg:hidden"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
         </button>
@@ -61,7 +64,7 @@ export function CatalogFilters({
             <Link
               key={chip.label}
               href={chip.href}
-              className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-[10px] font-bold text-primary-700"
+              className="inline-flex items-center gap-1 min-h-9 rounded-full bg-lavender-100 px-3 py-2 text-[10px] font-bold text-lavender-700"
             >
               {chip.label} <X className="h-3 w-3" />
             </Link>
@@ -73,6 +76,7 @@ export function CatalogFilters({
       ) : null}
 
       <form
+        id={filtersId}
         method="get"
         className={cn(
           'grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6',

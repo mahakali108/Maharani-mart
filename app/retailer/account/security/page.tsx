@@ -48,9 +48,9 @@ export default async function SecurityPage() {
         <span className="truncate text-slate-800">Security</span>
       </nav>
 
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Account security</p>
-        <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Password &amp; sessions</h1>
+      <div className="shop-intro">
+          <p className="shop-eyebrow">Account security</p>
+        <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Password &amp; sessions</h1>
         <p className="mt-1 text-xs text-slate-500">Signed in as {user.email ?? 'your account'}.</p>
       </div>
 

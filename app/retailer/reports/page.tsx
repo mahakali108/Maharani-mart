@@ -71,9 +71,9 @@ export default async function ReportsPage() {
       </nav>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Business insights</p>
-          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Purchase reports</h1>
+        <div className="shop-intro">
+          <p className="shop-eyebrow">Business insights</p>
+          <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Purchase reports</h1>
           <p className="mt-1 text-xs text-slate-500">Your purchases, GST and savings — computed from your own orders.</p>
         </div>
         <div className="flex w-full gap-2 sm:w-auto">

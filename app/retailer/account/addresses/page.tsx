@@ -11,7 +11,7 @@ export default async function AddressesPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const { data: rows } = await supabase
+  const { data: rows, error: addressError } = await supabase
     .from('retailer_addresses')
     .select(
       'id, label, receiver_name, phone, line1, line2, landmark, city, district, state, pincode, is_default'
@@ -19,6 +19,8 @@ export default async function AddressesPage() {
     .eq('retailer_id', user.id)
     .order('is_default', { ascending: false })
     .order('created_at', { ascending: true });
+
+  if (addressError) throw new Error('Your saved addresses could not be loaded. Please retry.');
 
   const addresses = ((rows ?? []) as unknown as SavedAddress[]).filter((row) => row.id);
 
@@ -32,9 +34,9 @@ export default async function AddressesPage() {
         <span className="truncate text-slate-800">Address book</span>
       </nav>
 
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Delivery</p>
-        <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">Address book</h1>
+      <div className="shop-intro">
+          <p className="shop-eyebrow">Delivery</p>
+        <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Address book</h1>
         <p className="mt-1 text-xs text-slate-500">
           Save shop, godown or site addresses once — pick them in one tap at checkout.
         </p>

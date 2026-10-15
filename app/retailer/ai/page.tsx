@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/auth/session';
 
 export default async function RetailerAIPage() {
   await requireUser();
-  return <MaharaniAIChat surface="retailer" title="✨ Ask Maharani AI" subtitle="Your wholesale copilot for verified products, pricing, schemes, coins, orders and smart restocking." quickActions={[
+  return <MaharaniAIChat surface="retailer" title="Ask Maharani" subtitle="Your shopping assistant. Ask about products, pricing, orders and coins. Verify the details before placing your order." quickActions={[
     { label: 'Search Products', prompt: 'Mujhe products search karne hain.' },
     { label: 'Best Deals', prompt: 'Mere liye current eligible best deals dikhao.' },
     { label: 'My Reorder', prompt: 'Mere purchase history se reorder suggestions do.' },

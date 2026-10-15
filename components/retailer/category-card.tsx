@@ -34,7 +34,7 @@ export function CategoryCard({
         aria-label={`Browse ${category.name}`}
         className="group flex h-full min-w-0 flex-col items-center gap-2 rounded-xl px-1 pb-1 pt-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2"
       >
-        <span className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-blush-200 bg-blush-100 shadow-[0_1px_2px_rgba(79,20,36,0.06)] transition duration-200 group-hover:-translate-y-0.5 group-hover:border-primary-300 group-hover:shadow-md sm:h-20 sm:w-20">
+        <span className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white bg-[var(--aisle-color,#fbeff1)] shadow-[0_1px_2px_rgba(79,20,36,0.06)] transition duration-200 group-hover:-translate-y-0.5 group-hover:border-primary-300 group-hover:shadow-md sm:h-20 sm:w-20">
           {category.image_url ? (
             <StoredImage
               src={category.image_url}
@@ -60,7 +60,7 @@ export function CategoryCard({
       href={target}
       className="group block h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-premium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2"
     >
-      <div className="relative aspect-[4/3] overflow-hidden bg-blush-100">
+      <div className="relative aspect-[3/2] overflow-hidden bg-[var(--aisle-color,#fbeff1)]">
         {category.image_url ? (
           <StoredImage
             src={category.image_url}
@@ -80,7 +80,7 @@ export function CategoryCard({
       </div>
       <div className="flex items-center gap-2 p-3.5">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-slate-900">{category.name}</h3>
+          <h3 className="line-clamp-2 text-sm font-semibold text-slate-900">{category.name}</h3>
           {category.productCount != null ? (
             <p className="mt-0.5 text-[11px] text-slate-500">
               {category.productCount} product{category.productCount === 1 ? '' : 's'}

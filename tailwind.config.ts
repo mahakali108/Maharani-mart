@@ -9,9 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Maharani wine — primary brand colour (muted wine-red, replaces the
-        // former bright red). 600 is the brand core used for the logo mark,
-        // theme colour and primary surfaces.
+        // Maharani red is reserved for actions, prices and key highlights.
         primary: {
           50: '#fbf4f6',
           100: '#f7e7ec',
@@ -19,15 +17,13 @@ const config: Config = {
           300: '#e4a5b7',
           400: '#d4758f',
           500: '#b5476a',
-          600: '#8f1d40',
-          700: '#7a1936',
+          600: '#C8102E',
+          700: '#A60D27',
           800: '#65172d',
           900: '#4f1424',
           950: '#2c0a14',
         },
-        // Primary ACTION colour (Add to cart, checkout, primary buttons). The
-        // marketplace blue has been retired: CTAs now use the wine family so the
-        // whole app reads as one premium identity. Class names are unchanged.
+        // Shared action scale: no retailer-specific blue overrides.
         action: {
           50: '#fbf4f6',
           100: '#f7e7ec',
@@ -35,11 +31,15 @@ const config: Config = {
           300: '#e4a5b7',
           400: '#c9617f',
           500: '#a4325a',
-          600: '#8f1d40',
-          700: '#771a37',
+          600: '#C8102E',
+          700: '#A60D27',
           800: '#60152d',
           900: '#4d1325',
         },
+        mint: { 50: '#f1faf5', 100: '#def2e8', 200: '#bce4cf', 700: '#28614c' },
+        lavender: { 50: '#f7f4fc', 100: '#eee6f8', 200: '#dbcbef', 700: '#664681' },
+        peach: { 50: '#fff8f2', 100: '#fbe9da', 200: '#f5d2b8', 700: '#8b4c26' },
+        sky: { 50: '#f1f8fc', 100: '#e0eff8', 200: '#bedceb', 700: '#32637e' },
         // Restrained gold — premium accents, badges, offer highlights (never
         // used for body text on white below 700).
         gold: {

@@ -1,5 +1,7 @@
 'use server';
 
+import { areaSchema } from '@/lib/areas/district';
+
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -62,10 +64,6 @@ const optionalMediaRefSchema = z
 // Areas
 // ----------------------------------------------------------------------------
 
-const areaSchema = z.object({
-  name: z.string().min(2, 'Enter an area name.'),
-  district: z.string().min(2, 'Enter a district.'),
-});
 
 type AreaInsert = Database['public']['Tables']['areas']['Insert'];
 
@@ -89,7 +87,10 @@ export async function createAreaAction(
   if (error) return { error: error.message.includes('duplicate') ? 'An area with this name already exists.' : error.message };
 
   revalidatePath('/admin/areas');
-  return null;
+  revalidatePath('/register-retailer');
+  revalidatePath('/admin/retailers', 'layout');
+  revalidatePath('/retailer', 'layout');
+  return { success: 'Area added. Retailers can now select it in its district.' };
 }
 
 export async function toggleAreaActiveAction(areaId: string, isActive: boolean) {
@@ -98,6 +99,9 @@ export async function toggleAreaActiveAction(areaId: string, isActive: boolean) 
   const { error } = await supabase.from('areas').update({ is_active: isActive } as unknown as never).eq('id', areaId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/areas');
+  revalidatePath('/register-retailer');
+  revalidatePath('/admin/retailers', 'layout');
+  revalidatePath('/retailer', 'layout');
 }
 
 export async function updateAreaAction(
@@ -106,6 +110,7 @@ export async function updateAreaAction(
   formData: FormData
 ): Promise<MasterDataFormState> {
   await requirePermission('master_data.manage');
+  if (!z.string().uuid().safeParse(areaId).success) return { error: 'Invalid area.' };
 
   const parsed = areaSchema.safeParse({
     name: formData.get('name'),
@@ -117,12 +122,16 @@ export async function updateAreaAction(
 
   const supabase = createClient();
   const payload: Partial<AreaInsert> = { name: parsed.data.name, district: parsed.data.district };
-  const { error } = await supabase.from('areas').update(payload as unknown as never).eq('id', areaId);
+  const { data: updated, error } = await supabase.from('areas').update(payload as unknown as never).eq('id', areaId).select('id').maybeSingle<{ id: string }>();
   if (error) {
     return { error: error.message.includes('duplicate') ? 'An area with this name already exists.' : error.message };
   }
 
+  if (!updated) return { error: 'Area not found or not permitted.' };
   revalidatePath('/admin/areas');
+  revalidatePath('/register-retailer');
+  revalidatePath('/admin/retailers', 'layout');
+  revalidatePath('/retailer', 'layout');
   redirect('/admin/areas');
 }
 
@@ -137,6 +146,9 @@ export async function deleteAreaAction(areaId: string) {
     throw new Error(error.message);
   }
   revalidatePath('/admin/areas');
+  revalidatePath('/register-retailer');
+  revalidatePath('/admin/retailers', 'layout');
+  revalidatePath('/retailer', 'layout');
 }
 
 // ----------------------------------------------------------------------------

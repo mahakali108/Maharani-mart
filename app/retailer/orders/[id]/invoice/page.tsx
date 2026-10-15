@@ -87,19 +87,23 @@ export default async function InvoicePage({ params }: { params: { id: string } }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 print:max-w-none">
-      <div className="flex justify-end gap-2 print:hidden">
+      <div className="shop-intro flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <div className="shop-intro">
+          <p className="shop-eyebrow">Order documents</p><h1 className="shop-heading mt-1">Tax invoice</h1><Link href={`/retailer/orders/${order.id}`} className="mt-2 inline-flex min-h-10 items-center text-xs underline underline-offset-4">Back to order</Link></div>
+        <div className="flex gap-2">
         <Link
           href={`/retailer/orders/${order.id}/invoice/download`}
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-ink-700 transition hover:border-primary-300 hover:text-primary-700"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-ink-700 transition hover:border-primary-300 hover:text-primary-700"
         >
           <Download className="h-4 w-4" />
           Download
         </Link>
         <PrintButton />
+        </div>
       </div>
 
       <div className="rounded-2xl border border-ink-100 bg-white p-6 print:rounded-none print:border-0 print:p-0 sm:p-8">
-        <div className="flex min-w-0 items-start justify-between gap-3 border-b border-ink-100 pb-4">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-ink-100 pb-4">
           <div className="min-w-0 flex-1">
             <p className="break-words text-lg font-semibold text-ink-950">{company.name}</p>
             <p className="break-words text-xs text-ink-500">{company.address}</p>

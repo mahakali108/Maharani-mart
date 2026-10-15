@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { districtSchema } from '@/lib/areas/district';
 
 /**
  * Pure address helpers shared by the server actions (lib/retailer/
@@ -44,7 +45,7 @@ export const addressSchema = z.object({
   line2: z.string().trim().max(200).optional(),
   landmark: z.string().trim().max(120).optional(),
   city: z.string().trim().min(2, 'Enter the city or town.').max(120),
-  district: z.string().trim().max(120).optional(),
+  district: districtSchema.optional(),
   state: z.string().trim().max(120).optional(),
   pincode: z.string().trim().regex(/^[0-9]{6}$/, 'PIN code must be exactly 6 digits.'),
   isDefault: z.boolean().optional(),

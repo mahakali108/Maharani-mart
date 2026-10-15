@@ -82,8 +82,8 @@ export default async function RetailerCoinHistoryPage() {
       </nav>
 
       <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">Your coins</p>
-        <h1 className="mt-1 break-words text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
+        <p className="shop-eyebrow">Your coins</p>
+        <h1 className="shop-heading mt-1 break-words font-semibold tracking-tight text-slate-950">
           {COIN_SYMBOL} Coins
         </h1>
         <p className="mt-1 break-words text-xs text-slate-500">

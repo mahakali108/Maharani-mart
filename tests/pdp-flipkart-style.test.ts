@@ -137,7 +137,7 @@ describe('B2B marketplace actions', () => {
     const config = read('tailwind.config.ts');
     expect(config).toContain('action: {');
     // Redesign (blush/ivory/wine/gold): action CTAs now use the wine brand core.
-    expect(config).toContain("600: '#8f1d40'");
+    expect(config).toContain("600: '#C8102E'");
   });
 
   it('primary buy actions use the blue action color', () => {

@@ -1,3 +1,4 @@
+import { CommerceSteps } from '@/components/retailer/commerce-steps';
 import Link from 'next/link';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
@@ -165,8 +166,9 @@ export default async function OrderDetailPage({
 
   return (
     <div className="space-y-5 sm:space-y-6">
+      {searchParams.placed === '1' ? <CommerceSteps current={3} /> : null}
       {searchParams.placed === '1' ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div className="flex items-start gap-3 rounded-2xl border border-mint-200 bg-mint-50 px-5 py-5 text-sm text-emerald-800">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
             <p className="font-bold">Order placed successfully</p>
@@ -186,7 +188,7 @@ export default async function OrderDetailPage({
             <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ring-1 ring-inset sm:h-14 sm:w-14 ${meta.style}`}><StatusIcon className="h-5 w-5 sm:h-6 sm:w-6" /></span>
             <div className="min-w-0">
               <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Order details</p>
-              <h1 className="mt-1 truncate font-mono text-base font-bold text-slate-950 sm:text-2xl">{order.order_number}</h1>
+              <h1 className="shop-heading mt-1 truncate font-mono text-base font-semibold text-slate-950">{order.order_number}</h1>
               <p className="mt-1 text-[10px] text-slate-500">Placed {formatIndiaRelativeDateTime(order.placed_at)}</p>
             </div>
           </div>
@@ -195,7 +197,7 @@ export default async function OrderDetailPage({
             <Link href={`/retailer/orders/${order.id}/invoice`} className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600"><FileText className="h-4 w-4" /> Invoice</Link>
           </div>
         </div>
-        <div className="grid grid-cols-3 border-t border-slate-100 bg-slate-50/70">
+        <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-3 sm:divide-y-0 border-t border-slate-100 bg-slate-50/70">
           <div className="min-w-0 border-r border-slate-100 px-2 py-3 text-center sm:px-4"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Products</p><p className="mt-1 break-words text-xs font-bold text-slate-800">{items.length} line{items.length === 1 ? '' : 's'}</p></div>
           <div className="min-w-0 border-r border-slate-100 px-2 py-3 text-center sm:px-4"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Quantity</p><p className="mt-1 break-words text-xs font-bold text-slate-800">{totalQuantity} pc{totalQuantity === 1 ? '' : 's'}</p></div>
           <div className="min-w-0 px-2 py-3 text-center sm:px-4"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Order value</p><p className="mt-1 break-words text-xs font-bold text-slate-800">₹{order.grand_total.toFixed(2)}</p></div>
