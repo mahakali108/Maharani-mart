@@ -837,7 +837,3 @@ jobs:
             4) echo "production unverifiable from this runner — recorded as NETWORK_RESTRICTED, build stays green" ;;
             *) echo "::error::production probe reported a real problem (exit $CODE) — see the job summary verdict"; exit 1 ;;
           esac
-t"; exit 1 ;;
-          esac
-ry verdict"; exit 1 ;;
-          esac
