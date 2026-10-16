@@ -45,10 +45,10 @@ export function NotificationPrefsForm({ initial }: { initial: NotificationPrefsV
       ))}
 
       {state.error ? (
-        <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700">{state.error}</p>
+        <p role="alert" className="rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700">{state.error}</p>
       ) : null}
       {state.successMessage ? (
-        <p role="status" className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
+        <p role="status" className="flex items-center gap-1.5 rounded-xl bg-mint-50 px-3 py-2 text-[11px] font-semibold text-mint-700">
           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {state.successMessage}
         </p>
       ) : null}

@@ -43,11 +43,11 @@ export function CreditSection({ credit }: { credit: CreditOverview }) {
               <p className="mt-1.5 text-base font-bold text-ink-950">{inr(credit.totalOutstanding)}</p>
               <p className="text-[10px] text-ink-400">across all retailers</p>
             </Card>
-            <Card className={`p-4 ${credit.overLimitCount > 0 ? 'border-red-200 bg-red-50/40' : ''}`}>
+            <Card className={`p-4 ${credit.overLimitCount > 0 ? 'border-error-200 bg-error-50/40' : ''}`}>
               <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                <ShieldAlert className={`h-3.5 w-3.5 ${credit.overLimitCount > 0 ? 'text-red-500' : ''}`} /> Over limit
+                <ShieldAlert className={`h-3.5 w-3.5 ${credit.overLimitCount > 0 ? 'text-error-500' : ''}`} /> Over limit
               </div>
-              <p className={`mt-1.5 text-base font-bold ${credit.overLimitCount > 0 ? 'text-red-600' : 'text-ink-950'}`}>
+              <p className={`mt-1.5 text-base font-bold ${credit.overLimitCount > 0 ? 'text-error-600' : 'text-ink-950'}`}>
                 {credit.overLimitCount} retailer(s)
               </p>
               <p className="text-[10px] text-ink-400">{credit.overLimitAmount > 0 ? `${inr(credit.overLimitAmount)} above configured limits` : 'no excess'}</p>

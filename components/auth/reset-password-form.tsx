@@ -24,7 +24,7 @@ export function ResetPasswordForm() {
         </div>
       ) : null}
       {state?.success ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-700">
           {state.success}
         </div>
       ) : null}

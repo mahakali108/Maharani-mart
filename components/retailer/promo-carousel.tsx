@@ -99,8 +99,8 @@ export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
           <div className="flex min-w-0 flex-wrap items-center justify-center">
             {banners.map((banner, slideIndex) => <button key={banner.id} type="button"
               aria-label={`Show promotion ${slideIndex + 1}`} aria-current={slideIndex === activeIndex ? 'true' : undefined}
-              onClick={() => show(slideIndex)} className="flex h-11 w-6 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:w-8">
-              <span className={cn('h-1.5 rounded-full', slideIndex === activeIndex ? 'w-4 bg-action-600' : 'w-1.5 bg-slate-300')} />
+              onClick={() => show(slideIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500">
+              <span className={cn('h-1.5 rounded-full', slideIndex === activeIndex ? 'w-4 bg-action-600' : 'w-1.5 bg-slate-500')} />
             </button>)}
           </div>
           <div className="flex shrink-0">

@@ -152,13 +152,13 @@ export function QuickOrderRow({
             <p className="text-[9px] text-slate-400">
               {quantity} pc{quantity === 1 ? '' : 's'} × ₹{pricing.unitPrice.toFixed(2)} = ₹{pricing.lineTotal.toFixed(2)} · {gstPercent}% GST incl
             </p>
-            {discount > 0 ? <p className="mt-0.5 text-[9px] font-bold text-emerald-700">Save {discount}%</p> : null}
+            {discount > 0 ? <p className="mt-0.5 text-[9px] font-bold text-mint-700">Save {discount}%</p> : null}
           </div>
           <button
             type="button"
             onClick={handleAdd}
             disabled={isPending || !pricing.orderable}
-            className={`mt-2 flex h-9 min-w-[112px] items-center justify-center gap-1.5 rounded-lg px-3 text-[10px] font-bold text-white transition sm:ml-auto ${added ? 'bg-emerald-600' : 'bg-primary-600 hover:bg-primary-700'} disabled:opacity-60`}
+            className={`mt-2 flex h-9 min-w-[112px] items-center justify-center gap-1.5 rounded-lg px-3 text-[10px] font-bold text-white transition sm:ml-auto ${added ? 'bg-mint-600' : 'bg-primary-600 hover:bg-primary-700'} disabled:opacity-60`}
           >
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : added ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
             {isPending ? 'Adding…' : added ? 'Added' : `Add · ₹${landedPrice.toFixed(0)}`}
@@ -172,7 +172,7 @@ export function QuickOrderRow({
         </p>
       ) : null}
       {error ? <p role="alert" className="border-t border-primary-100 bg-primary-50 px-4 py-2 text-[10px] font-medium text-primary-700">{error}</p> : null}
-      {added ? <Link href="/retailer/cart" className="flex items-center justify-center gap-1 border-t border-emerald-100 bg-emerald-50 px-4 py-2 text-[10px] font-bold text-emerald-700">Review cart <ChevronRight className="h-3 w-3" /></Link> : null}
+      {added ? <Link href="/retailer/cart" className="flex items-center justify-center gap-1 border-t border-mint-100 bg-mint-50 px-4 py-2 text-[10px] font-bold text-mint-700">Review cart <ChevronRight className="h-3 w-3" /></Link> : null}
     </article>
   );
 }

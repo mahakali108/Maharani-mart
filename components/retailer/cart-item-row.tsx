@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import {
   BookmarkPlus,
   Boxes,
@@ -23,6 +22,7 @@ import { suggestedQuantities, type PricingTier } from '@/lib/retailer/case-prici
 import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { RetailerLineBreakdown } from '@/components/retailer/pricing-schedule';
 import { QtyStepper } from '@/components/retailer/qty-stepper';
+import { StoredImage } from '@/components/media/stored-image';
 import { cn } from '@/lib/utils/cn';
 import { buildCanonicalProductName } from '@/lib/retailer/product-name';
 
@@ -173,21 +173,26 @@ export function CartItemRow({
             isUnavailable && 'opacity-70'
           )}
         >
-          {imageUrl ? (
-            <Image
-              src={imageUrl}
-              alt={canonicalName}
-              fill
-              sizes="(max-width: 640px) 80px, 96px"
-              className="object-contain p-1.5"
-              unoptimized
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-slate-300">
-              <ImageOff className="h-6 w-6" aria-hidden="true" />
-              <span className="sr-only">No product image available</span>
-            </div>
-          )}
+          <StoredImage
+            src={imageUrl}
+            alt={canonicalName}
+            fill
+            size="thumb"
+            sizes="(max-width: 640px) 80px, 96px"
+            className="object-contain p-1.5"
+            unoptimized
+            fallback={(
+              <div
+                role="img"
+                aria-label={`${canonicalName} image unavailable`}
+                className="absolute inset-0 flex h-full w-full flex-col items-center justify-center gap-1 bg-ivory-50 text-slate-600"
+              >
+                <ImageOff className="h-6 w-6" aria-hidden="true" />
+                <span className="text-center text-[8px] font-semibold leading-3">Image unavailable</span>
+                <span className="sr-only">No product image available</span>
+              </div>
+            )}
+          />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -197,14 +202,14 @@ export function CartItemRow({
 
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] font-medium text-slate-500 sm:text-[11px]">
             {brandName ? (
-              <span className="font-semibold uppercase tracking-wide text-slate-400">{brandName}</span>
+              <span className="font-semibold uppercase tracking-wide text-slate-600">{brandName}</span>
             ) : null}
             {brandName && packName ? <span aria-hidden="true">·</span> : null}
             {packName ? <span className="truncate">{packName}</span> : null}
           </p>
 
           <p className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-slate-500">
-            <Boxes className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
+            <Boxes className="h-3 w-3 shrink-0 text-slate-600" aria-hidden="true" />
             Sold by piece · min {moq} pc{moq === 1 ? '' : 's'}
           </p>
 
@@ -217,8 +222,8 @@ export function CartItemRow({
                 <CircleAlert className="h-3 w-3" aria-hidden="true" /> Unavailable
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" /> Available
+              <span className="inline-flex items-center gap-1 rounded-md bg-mint-50 px-1.5 py-0.5 text-[9px] font-bold text-mint-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-mint-500" aria-hidden="true" /> Available
               </span>
             )}
           </div>
@@ -226,13 +231,13 @@ export function CartItemRow({
           {/* Desktop price block */}
           <div className="mt-2.5 hidden flex-wrap items-baseline gap-x-2 gap-y-1 md:flex">
             <p className="text-lg font-semibold tracking-tight text-primary-600">
-              {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-400">/pc</span>
+              {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-600">/pc</span>
             </p>
             {mrp != null && mrp > displayPiecePrice ? (
-              <p className="text-[11px] text-slate-400 line-through">MRP {formatInr(mrp)}</p>
+              <p className="text-[11px] text-slate-600 line-through">MRP {formatInr(mrp)}</p>
             ) : null}
             {lineSavings > 0 ? (
-              <p className="text-[11px] font-semibold text-emerald-700">Save {formatInr(lineSavings)}</p>
+              <p className="text-[11px] font-semibold text-mint-700">Save {formatInr(lineSavings)}</p>
             ) : null}
           </div>
         </div>
@@ -241,25 +246,25 @@ export function CartItemRow({
       {/* Cell B — mobile price row */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 md:hidden">
         <p className="text-base font-semibold tracking-tight text-primary-600">
-          {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-400">/pc</span>
+          {formatInr(displayPiecePrice)} <span className="text-[10px] font-medium text-slate-600">/pc</span>
         </p>
         {discountPercent > 0 ? (
-          <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
+          <span className="rounded-md bg-mint-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
             {discountPercent}% off
           </span>
         ) : null}
         {mrp != null && mrp > displayPiecePrice ? (
-          <p className="text-[10px] text-slate-400 line-through">MRP {formatInr(mrp)}</p>
+          <p className="text-[10px] text-slate-600 line-through">MRP {formatInr(mrp)}</p>
         ) : null}
         {lineSavings > 0 ? (
-          <p className="text-[10px] font-semibold text-emerald-700">You save {formatInr(lineSavings)}</p>
+          <p className="text-[10px] font-semibold text-mint-700">You save {formatInr(lineSavings)}</p>
         ) : null}
       </div>
 
       {/* Cell C — quantity in pieces + line total */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 md:flex-col md:items-end md:gap-3 md:border-0 md:pt-0">
         <div>
-          <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Quantity (pcs)</p>
+          <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">Quantity (pcs)</p>
           <div className="flex flex-wrap items-center gap-1.5">
             <QtyStepper
               value={localQty}
@@ -278,10 +283,10 @@ export function CartItemRow({
                     onClick={() => commitQuantity(value)}
                     aria-pressed={localQty === value}
                     className={cn(
-                      'h-7 rounded-lg border px-1.5 text-[10px] font-bold transition disabled:opacity-50',
+                      'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border px-2 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:opacity-50',
                       localQty === value
                         ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-primary-300 hover:text-primary-700'
+                        : 'border-slate-400 bg-white text-slate-600 hover:border-primary-500 hover:text-primary-700'
                     )}
                   >
                     {value} pc{value === 1 ? '' : 's'}
@@ -291,7 +296,7 @@ export function CartItemRow({
             ) : null}
           </div>
           {isDirty ? (
-            <p className="mt-1 text-[9px] font-semibold text-slate-400">
+            <p className="mt-1 text-[9px] font-semibold text-slate-600">
               {pricing.orderable
                 ? `Updating to ${localQty} pcs · ${formatInr(displayTotal)}`
                 : 'Not available yet'}
@@ -299,9 +304,9 @@ export function CartItemRow({
           ) : null}
         </div>
         <div className="text-right">
-          <p className="text-[9px] font-medium uppercase tracking-wider text-slate-400">Line total (incl. GST)</p>
+          <p className="text-[9px] font-medium uppercase tracking-wider text-slate-600">Line total (incl. GST)</p>
           <p className="mt-0.5 text-lg font-semibold tracking-tight text-primary-600 sm:text-lg">{formatInr(displayTotal)}</p>
-          <p className="text-[9px] text-slate-400">
+          <p className="text-[9px] text-slate-600">
             {pricing.quantity} pc{pricing.quantity === 1 ? '' : 's'} × {formatInr(displayPiecePrice)} · GST {gstPercent}% included
           </p>
         </div>
@@ -318,7 +323,7 @@ export function CartItemRow({
           type="button"
           onClick={handleSaveLineForLater}
           disabled={isPending}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 disabled:opacity-50"
+          className="inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-xl px-3 text-[11px] font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:opacity-50"
           aria-label={`Save ${productName} for later`}
         >
           <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
@@ -328,7 +333,7 @@ export function CartItemRow({
           type="button"
           onClick={handleRemove}
           disabled={isPending}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition hover:bg-primary-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 disabled:opacity-50"
+          className="inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-xl px-3 text-[11px] font-bold text-slate-500 transition hover:bg-primary-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:opacity-50"
           aria-label={`Remove ${productName} from cart`}
         >
           {isPending ? (
@@ -344,8 +349,8 @@ export function CartItemRow({
             onClick={handleSaveForLater}
             disabled={isPending}
             className={cn(
-              'inline-flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-bold transition',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+              'inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-xl px-3 text-[11px] font-bold transition',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600',
               favorite ? 'text-primary-600' : 'text-slate-500 hover:bg-primary-50 hover:text-primary-600',
               'disabled:opacity-50'
             )}

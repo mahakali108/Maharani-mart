@@ -171,7 +171,7 @@ export function InventorySection({ intel }: { intel: InventoryIntel }) {
             {/* Fast / slow movers */}
             <Card className="p-4">
               <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-ink-700">
-                <TrendingUp className="h-3.5 w-3.5 text-emerald-600" /> Fast movers (units sold, 30d)
+                <TrendingUp className="h-3.5 w-3.5 text-mint-600" /> Fast movers (units sold, 30d)
               </div>
               {intel.fastMoving.length === 0 ? (
                 <p className="py-4 text-center text-xs text-ink-400">No sales recorded in the last 30 days.</p>

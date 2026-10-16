@@ -75,16 +75,16 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
           </span>
           {pricing.mrp !== null && pricing.discountPercent > 0 ? (
             <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold leading-none">
-              <span className={cn('line-through', variant.isSelected ? 'text-primary-300' : 'text-slate-400')}>
+              <span className={cn('line-through', variant.isSelected ? 'text-primary-600' : 'text-slate-600')}>
                 {formatInr(pricing.mrp)}
               </span>
-              <span className="text-emerald-700">{pricing.discountPercent}% off</span>
+              <span className="text-mint-700">{pricing.discountPercent}% off</span>
             </span>
           ) : null}
           <span
             className={cn(
               'mt-1 block truncate text-[10px] font-medium leading-none',
-              variant.isSelected ? 'text-primary-600/80' : 'text-slate-400'
+              variant.isSelected ? 'text-primary-600' : 'text-slate-600'
             )}
           >
             {pricing.tierSummary ? `Slabs ${pricing.tierSummary}` : 'Single rate per piece'}
@@ -95,7 +95,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
       {variant.availability !== 'unknown' ? (
         <span className={cn(
           'mt-1.5 block text-[10px] font-bold leading-none',
-          variant.availability === 'in_stock' ? 'text-emerald-700' : 'text-rose-700'
+          variant.availability === 'in_stock' ? 'text-mint-800' : 'text-slate-700'
         )}>
           {variant.availability === 'in_stock' ? 'In Stock' : 'Out of Stock'}
         </span>
@@ -107,7 +107,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
             <span
               className={cn(
                 'rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
-                variant.isSelected ? 'bg-primary-100 text-primary-700' : 'bg-emerald-50 text-emerald-700'
+                variant.isSelected ? 'bg-primary-100 text-primary-700' : 'bg-mint-50 text-mint-700'
               )}
             >
               Best value
@@ -133,7 +133,7 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
       <span
         aria-disabled="true"
         title="This size is currently unavailable"
-        className="flex w-[7.75rem] shrink-0 cursor-not-allowed snap-start flex-col rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-2 text-slate-400 sm:w-auto"
+        className="flex w-[7.75rem] shrink-0 cursor-not-allowed snap-start flex-col rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-2 text-slate-600 sm:w-auto"
       >
         <span className="flex items-center justify-between gap-1">
           <span className="text-sm font-extrabold leading-none">{variant.label}</span>
@@ -150,10 +150,10 @@ function VariantCard({ variant }: { variant: VariantSwitcherItem }) {
       href={variant.href}
       aria-current={variant.isSelected ? 'true' : undefined}
       className={cn(
-        'flex w-[7.75rem] shrink-0 snap-start flex-col rounded-2xl border p-2 transition sm:w-auto',
+        'flex min-h-11 w-[7.75rem] shrink-0 snap-start flex-col rounded-2xl border p-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 sm:w-auto',
         variant.isSelected
           ? 'border-primary-600 bg-primary-50/60 shadow-sm ring-2 ring-primary-100'
-          : 'border-slate-200 bg-white hover:border-primary-300 hover:bg-primary-50/40'
+          : 'border-slate-400 bg-white hover:border-primary-600 hover:bg-primary-50/40'
       )}
     >
       {body}
@@ -177,7 +177,7 @@ export function VariantSwitcher({
     if (!only) return null;
     return (
       <div className="mt-3 border-t border-slate-100 pt-3">
-        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Pack</p>
+        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600">Pack</p>
         {only.isAvailable ? (
           <p className="mt-1 text-sm font-extrabold text-slate-900">{only.label}</p>
         ) : (
@@ -195,13 +195,13 @@ export function VariantSwitcher({
   return (
     <div className="mt-3 border-t border-slate-100 pt-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600">
           Choose size
-          <span className="ml-1.5 font-medium normal-case tracking-normal text-slate-400">
+          <span className="ml-1.5 font-medium normal-case tracking-normal text-slate-600">
             — prices include GST
           </span>
         </p>
-        <p className="text-[10px] font-semibold text-slate-400">
+        <p className="text-[10px] font-semibold text-slate-600">
           {model.variants.length} size{model.variants.length === 1 ? '' : 's'}
         </p>
       </div>
@@ -218,7 +218,7 @@ export function VariantSwitcher({
 
       {overflow.length > 0 ? (
         <details className="group mt-2">
-          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 transition hover:border-primary-300 hover:text-primary-700">
+          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-xl border border-slate-400 px-3 py-2 text-[11px] font-bold text-slate-600 transition hover:border-primary-600 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600">
             <span className="group-open:hidden">View all {model.variants.length} sizes</span>
             <span className="hidden group-open:inline">Show fewer sizes</span>
           </summary>

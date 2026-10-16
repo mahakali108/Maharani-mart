@@ -91,7 +91,7 @@ export function WalletLedgerList({
                       <div className="flex min-w-0 items-start gap-2.5">
                         <span
                           className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                            isDebit ? 'bg-primary-50 text-primary-600' : 'bg-emerald-50 text-emerald-600'
+                            isDebit ? 'bg-primary-50 text-primary-600' : 'bg-mint-50 text-mint-600'
                           }`}
                         >
                           {isDebit ? <ArrowUpCircle className="h-4 w-4" /> : <ArrowDownCircle className="h-4 w-4" />}
@@ -113,7 +113,7 @@ export function WalletLedgerList({
                       </div>
                       <p
                         className={`shrink-0 break-words text-sm font-bold ${
-                          isDebit ? 'text-primary-700' : 'text-emerald-700'
+                          isDebit ? 'text-primary-700' : 'text-mint-700'
                         }`}
                       >
                         {isDebit ? '-' : '+'}
@@ -162,7 +162,7 @@ export function WalletLedgerList({
                       <td className="px-5 py-3">
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            isDebit ? 'bg-primary-50 text-primary-700' : 'bg-emerald-50 text-emerald-700'
+                            isDebit ? 'bg-primary-50 text-primary-700' : 'bg-mint-50 text-mint-700'
                           }`}
                         >
                           {isDebit ? <ArrowUpCircle className="h-3 w-3" /> : <ArrowDownCircle className="h-3 w-3" />}
@@ -172,7 +172,7 @@ export function WalletLedgerList({
                       <td className="max-w-[260px] truncate px-5 py-3 text-slate-700">{entry.description}</td>
                       <td
                         className={`px-5 py-3 text-right font-bold ${
-                          isDebit ? 'text-primary-700' : 'text-emerald-700'
+                          isDebit ? 'text-primary-700' : 'text-mint-700'
                         }`}
                       >
                         {isDebit ? '-' : '+'}

@@ -61,7 +61,7 @@ export default function HelpPage({
       </section>
 
       {orderNumber ? (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-800">
           Support request for order <span className="font-mono font-bold">{orderNumber}</span>. Share this number when you contact your distributor.
         </div>
       ) : null}

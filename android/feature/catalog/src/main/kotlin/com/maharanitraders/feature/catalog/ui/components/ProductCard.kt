@@ -96,7 +96,7 @@ fun canQuickAdd(pack: CatalogPack?): Boolean =
  *   5. the PRICE, bold, with the printed MRP struck through beside it when the
  *      server published one;
  *   6. MOQ under the price ("Min order 4 pcs");
- *   7. the stock state as a chip, green in stock / rose unavailable.
+ *   7. the stock state as a chip, mint in stock / neutral slate unavailable.
  *
  * Every field is server-supplied: the image URL the media resolver produced,
  * the pack size, units per case and MOQ from the pack row, the GST-inclusive

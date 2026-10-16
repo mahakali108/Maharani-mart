@@ -157,9 +157,9 @@ export function DashboardView({
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-ink-800">System alerts</h2>
           {data.alerts.length === 0 ? (
-            <Card className="border-emerald-200 bg-emerald-50/40">
-              <p className="text-sm font-medium text-emerald-800">No operational alerts</p>
-              <p className="mt-0.5 text-xs text-emerald-700">
+            <Card className="border-mint-200 bg-mint-50/40">
+              <p className="text-sm font-medium text-mint-800">No operational alerts</p>
+              <p className="mt-0.5 text-xs text-mint-700">
                 Alerts appear from real queues: approvals, credit over-limit, stock, expiry, tickets, and failed notifications.
               </p>
             </Card>
@@ -565,9 +565,9 @@ export function DashboardView({
                   <p className="text-lg font-semibold text-amber-800">{data.support.open}</p>
                   <p className="text-[10px] text-amber-700">Open</p>
                 </div>
-                <div className="rounded-xl bg-blue-50 px-2 py-2">
-                  <p className="text-lg font-semibold text-blue-800">{data.support.inProgress}</p>
-                  <p className="text-[10px] text-blue-700">In progress</p>
+                <div className="rounded-xl bg-sky-50 px-2 py-2">
+                  <p className="text-lg font-semibold text-sky-800">{data.support.inProgress}</p>
+                  <p className="text-[10px] text-sky-700">In progress</p>
                 </div>
                 <div className="rounded-xl bg-primary-50 px-2 py-2">
                   <p className="text-lg font-semibold text-primary-700">{data.support.urgentOpen}</p>

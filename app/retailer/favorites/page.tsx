@@ -59,7 +59,7 @@ export default async function FavoritesPage() {
                     <span className="mt-0.5 block text-[10px] font-semibold text-amber-700">Out of stock</span>
                   </Link>
                   {alertPackId ? subscribedPackIds.has(alertPackId) ? (
-                    <span className="shrink-0 rounded-xl border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-700">
+                    <span className="shrink-0 rounded-xl border-2 border-mint-500 bg-mint-50 px-3 py-2 text-[10px] font-bold text-mint-700">
                       Notify on
                     </span>
                   ) : (

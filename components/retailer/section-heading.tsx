@@ -21,7 +21,7 @@ export function SectionHeading({
         <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">{title}</h2>
       </div>
       {href ? (
-        <Link href={href} className="flex min-h-11 max-w-full items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] font-semibold text-action-700 hover:text-action-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:text-xs">
+        <Link href={href} className="flex min-h-11 max-w-full items-center gap-1 rounded-full border border-slate-400 bg-white px-3 text-[11px] font-semibold text-action-700 hover:text-action-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:text-xs">
           {linkLabel}
           <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
         </Link>

@@ -187,10 +187,10 @@ export function computeAccessStatus(expiresAt: string | null): AccessStatus {
 
 export function statusBadgeColor(status: AccessStatus): string {
   switch (status) {
-    case 'active': return 'bg-emerald-100 text-emerald-800';
+    case 'active': return 'bg-mint-100 text-mint-800';
     case 'expiring_soon': return 'bg-amber-100 text-amber-800';
-    case 'expired': return 'bg-red-100 text-red-800';
-    case 'suspended': return 'bg-gray-100 text-gray-800';
-    case 'unlimited': return 'bg-blue-100 text-blue-800';
+    case 'expired': return 'bg-error-100 text-error-800';
+    case 'suspended': return 'bg-slate-100 text-slate-800';
+    case 'unlimited': return 'bg-sky-100 text-sky-800';
   }
 }

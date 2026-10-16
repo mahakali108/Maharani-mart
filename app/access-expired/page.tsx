@@ -34,8 +34,8 @@ export default async function AccessExpiredPage() {
   return (
     <div className="flex min-h-screen items-center justify-center auth-surface px-4 py-8">
       <div className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-6 sm:p-10 text-center shadow-card">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
-          <ShieldAlert className="h-8 w-8 text-red-600" />
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-error-100">
+          <ShieldAlert className="h-8 w-8 text-error-600" />
         </div>
 
         <h1 className="shop-heading">Access Expired</h1>
@@ -55,9 +55,9 @@ export default async function AccessExpiredPage() {
         ) : null}
 
         <div className="mt-6 space-y-3">
-          <div className="flex items-center justify-center gap-2 rounded-lg bg-blue-50 px-4 py-3">
-            <Mail className="h-4 w-4 text-blue-600" />
-            <span className="text-sm text-blue-800">
+          <div className="flex items-center justify-center gap-2 rounded-lg bg-sky-50 px-4 py-3">
+            <Mail className="h-4 w-4 text-sky-600" />
+            <span className="text-sm text-sky-800">
               Contact your administrator to extend your access.
             </span>
           </div>

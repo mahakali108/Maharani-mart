@@ -104,9 +104,9 @@ export default async function RetailerCoinHistoryPage() {
           <p className="mt-1 break-words text-xl font-bold tracking-tight text-slate-950">{formatPaise(spentPaise)}</p>
           <p className="mt-1 text-[10px] text-slate-500">Sum of your order deductions</p>
         </div>
-        <div className="min-w-0 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Coins added</p>
-          <p className="mt-1 break-words text-xl font-bold tracking-tight text-emerald-700">{formatPaise(addedPaise)}</p>
+        <div className="min-w-0 rounded-2xl border border-mint-200 bg-mint-50/60 p-4 shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-mint-700">Coins added</p>
+          <p className="mt-1 break-words text-xl font-bold tracking-tight text-mint-700">{formatPaise(addedPaise)}</p>
           <p className="mt-1 text-[10px] text-slate-500">Top-ups, refunds and coin funding</p>
         </div>
       </div>

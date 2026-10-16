@@ -18,7 +18,7 @@ export function ActionCenterList({ actions, limit = 12 }: { actions: CommandCent
       {visible.map((action, index) => (
         <Card
           key={action.id}
-          className={`p-4 ${action.severity === 'urgent' ? 'border-red-200' : action.severity === 'high' ? 'border-amber-200' : ''}`}
+          className={`p-4 ${action.severity === 'urgent' ? 'border-error-200' : action.severity === 'high' ? 'border-amber-200' : ''}`}
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">

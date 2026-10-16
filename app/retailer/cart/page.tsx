@@ -68,7 +68,7 @@ function Breadcrumb() {
       aria-label="Breadcrumb"
       className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs"
     >
-      <Link href="/retailer/home" className="hover:text-primary-600">
+      <Link href="/retailer/home" className="flex min-h-11 min-w-11 items-center justify-center rounded hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600">
         Home
       </Link>
       <span aria-hidden="true">/</span>
@@ -245,7 +245,7 @@ export default async function CartPage() {
           <ClearCartButton itemCount={items.length} />
           <Link
             href="/retailer/catalog"
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+            className="flex h-11 items-center gap-1.5 rounded-lg border border-slate-400 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm transition hover:border-primary-500 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
           >
             <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Continue shopping
           </Link>
@@ -285,11 +285,11 @@ export default async function CartPage() {
       ) : null}
 
       {savings > 0 ? (
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm">
+        <div className="flex items-center gap-3 rounded-2xl border border-mint-200 bg-mint-50/70 px-4 py-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-mint-600 text-white shadow-sm">
             <BadgePercent className="h-5 w-5" aria-hidden="true" />
           </span>
-          <p className="min-w-0 text-xs leading-5 text-emerald-900 sm:text-sm">
+          <p className="min-w-0 text-xs leading-5 text-mint-900 sm:text-sm">
             <span className="font-bold">You save {formatInr(savings)}</span> on this order compared to MRP.
           </p>
         </div>

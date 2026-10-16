@@ -1,3 +1,5 @@
+@import './design-tokens.generated.css';
+
 /* Self-hosted Poppins (via @fontsource) — identical weights to the previous
    next/font/google setup, but bundled from node_modules so builds work in
    network-restricted environments and never depend on fonts.googleapis.com
@@ -43,7 +45,7 @@
     }
   }
   body {
-    @apply bg-ink-50 text-ink-900 antialiased;
+    @apply bg-ivory-100 text-ink-900 antialiased;
     /* No sideways rubber-banding; vertical pull behavior stays native. */
     overscroll-behavior-x: none;
   }
@@ -168,12 +170,13 @@
   .shop-panel { @apply rounded-2xl border border-slate-200 bg-white shadow-card; }
   .shop-intro { @apply rounded-2xl border border-slate-200 bg-lavender-50 p-5 sm:p-7; }
   .shop-eyebrow { @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600; }
-  .auth-surface { background: radial-gradient(ellipse at top left, #fbeff1, transparent 55%), #fdfbf7; }
-  .discovery-tile:nth-child(5n+1) { --aisle-color: #fbeff1; }
-  .discovery-tile:nth-child(5n+2) { --aisle-color: #def2e8; }
-  .discovery-tile:nth-child(5n+3) { --aisle-color: #eee6f8; }
-  .discovery-tile:nth-child(5n+4) { --aisle-color: #fbe9da; }
-  .discovery-tile:nth-child(5n+5) { --aisle-color: #e0eff8; }
+  .auth-surface { background: radial-gradient(ellipse at top left, var(--palette-lavender-100), transparent 55%), var(--palette-ivory-50); }
+  /* A calm five-colour rotation; the first four mobile shortcuts are distinct. */
+  .discovery-tile:nth-child(5n+1) { --aisle-color: var(--palette-pastel-pink-100); }
+  .discovery-tile:nth-child(5n+2) { --aisle-color: var(--palette-mint-100); }
+  .discovery-tile:nth-child(5n+3) { --aisle-color: var(--palette-lavender-100); }
+  .discovery-tile:nth-child(5n+4) { --aisle-color: var(--palette-peach-100); }
+  .discovery-tile:nth-child(5n+5) { --aisle-color: var(--palette-sky-100); }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -182,4 +185,10 @@
 @media print {
   .retailer-theme > header, .retailer-theme > nav, .retailer-theme > footer { display: none !important; }
   .retailer-theme, #retailer-main { padding: 0 !important; background: white !important; }
+}
+
+/* Unlayered baseline wins over utility resets, keeping keyboard focus visible. */
+:focus-visible {
+  outline: 3px solid var(--color-focus-outline);
+  outline-offset: 3px;
 }

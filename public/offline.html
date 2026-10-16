@@ -23,6 +23,13 @@
     <style>
       :root {
         color-scheme: light;
+        --ivory: #FFFBF4;
+        --white: #FFFFFF;
+        --violet: #5142B8;
+        --violet-deep: #403398;
+        --navy: #17233F;
+        --secondary: #596579;
+        --border: #E8E5F0;
       }
       * {
         margin: 0;
@@ -31,8 +38,8 @@
       }
       body {
         font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-        background: #fdfbf7;
-        color: #1a1a1a;
+        background: var(--ivory);
+        color: var(--navy);
         min-height: 100vh;
         display: flex;
         align-items: center;
@@ -43,18 +50,18 @@
       .wrap {
         max-width: 420px;
         padding: 32px 24px;
-        border: 1px solid #e8dedd;
+        border: 1px solid var(--border);
         border-radius: 28px;
-        background: white;
-        box-shadow: 0 12px 40px -20px #66468140;
+        background: var(--white);
+        box-shadow: 0 12px 40px -20px rgba(81, 66, 184, 0.22);
       }
       .mark {
         width: 72px;
         height: 72px;
         margin: 0 auto 20px;
         border-radius: 22px;
-        background: #C8102E;
-        color: #ffffff;
+        background: var(--violet);
+        color: var(--white);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -70,35 +77,39 @@
       p.brand {
         font-size: 13px;
         font-weight: 600;
-        color: #C8102E;
+        color: var(--violet);
         margin-bottom: 24px;
         letter-spacing: 0.3px;
       }
       p.msg {
         font-size: 14.5px;
         line-height: 1.55;
-        color: #6d6d6d;
+        color: var(--secondary);
         margin-bottom: 28px;
       }
       button {
         appearance: none;
         border: 0;
         cursor: pointer;
-        background: #C8102E;
-        color: #fff;
+        background: var(--violet);
+        color: var(--white);
         font-size: 15px;
         font-weight: 600;
         padding: 13px 40px;
         border-radius: 12px;
         width: 100%;
       }
+      button:focus-visible {
+        outline: 3px solid #9988F2;
+        outline-offset: 3px;
+      }
       button:active {
-        background: #a80c26;
+        background: var(--violet-deep);
       }
       .status {
         margin-top: 14px;
         font-size: 12.5px;
-        color: #666666;
+        color: var(--secondary);
         min-height: 18px;
       }
     </style>

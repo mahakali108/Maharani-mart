@@ -69,7 +69,7 @@ export function TransferForm({ warehouses, batches }: { warehouses: WarehouseOpt
         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{state.error}</div>
       ) : null}
       {state?.success && state.transferId ? (
-        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-700">
           Transfer created as PENDING — execute it from the transfers list when the stock physically moves.
         </div>
       ) : null}

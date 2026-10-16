@@ -51,9 +51,9 @@ function CouponState({ coupon, now }: { coupon: CouponRow; now: number }) {
     return <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-500">Expired</span>;
   }
   if (new Date(coupon.starts_at).getTime() > now) {
-    return <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">Scheduled</span>;
+    return <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">Scheduled</span>;
   }
-  return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Running</span>;
+  return <span className="rounded-full bg-mint-50 px-2 py-0.5 text-xs font-medium text-mint-700">Running</span>;
 }
 
 export default async function AdminCouponsPage() {

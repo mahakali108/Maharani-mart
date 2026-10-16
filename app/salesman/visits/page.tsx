@@ -22,8 +22,8 @@ import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
 const STATUS_STYLES: Record<string, string> = {
   planned: 'bg-ink-100 text-ink-600',
-  checked_in: 'bg-blue-50 text-blue-700',
-  checked_out: 'bg-green-50 text-green-700',
+  checked_in: 'bg-sky-50 text-sky-700',
+  checked_out: 'bg-mint-50 text-mint-700',
   skipped: 'bg-amber-50 text-amber-700',
 };
 

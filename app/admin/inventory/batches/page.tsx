@@ -40,11 +40,11 @@ function expiryBadge(expiry: string | null): { label: string; cls: string } {
   if (!expiry) return { label: 'No expiry', cls: 'bg-ink-100 text-ink-500' };
   // Compare India calendar days (expiry_date is a date-only value).
   const diff = indiaDiffDays(indiaTodayDateKey(), expiry);
-  if (diff === null) return { label: expiry, cls: 'bg-green-50 text-green-700' };
+  if (diff === null) return { label: expiry, cls: 'bg-mint-50 text-mint-700' };
   if (diff < 0) return { label: `Expired ${-diff}d ago`, cls: 'bg-primary-50 text-primary-700' };
-  if (diff <= 7) return { label: `${diff}d left`, cls: 'bg-orange-50 text-orange-700' };
+  if (diff <= 7) return { label: `${diff}d left`, cls: 'bg-amber-50 text-amber-700' };
   if (diff <= 30) return { label: `${diff}d left`, cls: 'bg-amber-50 text-amber-700' };
-  return { label: expiry, cls: 'bg-green-50 text-green-700' };
+  return { label: expiry, cls: 'bg-mint-50 text-mint-700' };
 }
 
 interface BatchFilters {

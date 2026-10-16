@@ -91,12 +91,12 @@ export function BulkOrderPanel() {
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-slate-900 outline-none placeholder:text-slate-400 focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
             />
             {added !== null ? (
-              <p role="status" className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
+              <p role="status" className="flex items-center gap-1.5 rounded-xl bg-mint-50 px-3 py-2 text-[11px] font-semibold text-mint-700">
                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {added} line{added === 1 ? '' : 's'} added to your cart.
               </p>
             ) : null}
             {error ? (
-              <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700">{error}</p>
+              <p role="alert" className="rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700">{error}</p>
             ) : null}
             <button
               type="button"
@@ -124,7 +124,7 @@ export function BulkOrderPanel() {
                         <p className="truncate text-[10px] text-slate-400">“{match.line}”</p>
                       </div>
                       {match.error ? (
-                        <span className="shrink-0 rounded-full bg-rose-50 px-2 py-1 text-[9px] font-bold text-rose-700">{match.error}</span>
+                        <span className="shrink-0 rounded-full bg-error-50 px-2 py-1 text-[9px] font-bold text-error-700">{match.error}</span>
                       ) : null}
                     </div>
                     {match.matches.length > 0 && choice ? (
@@ -180,7 +180,7 @@ export function BulkOrderPanel() {
               })}
             </ul>
             {error ? (
-              <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700">{error}</p>
+              <p role="alert" className="rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700">{error}</p>
             ) : null}
             <div className="flex gap-2">
               <button

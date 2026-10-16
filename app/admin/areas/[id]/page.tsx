@@ -101,7 +101,7 @@ export default async function EditAreaPage({ params }: { params: { id: string } 
                 <Link href={`/admin/warehouses/${w.id}`} className="font-medium text-primary-600 hover:text-primary-700">
                   {w.name}
                 </Link>
-                <span className={`text-xs ${w.is_active ? 'text-emerald-600' : 'text-ink-400'}`}>
+                <span className={`text-xs ${w.is_active ? 'text-mint-600' : 'text-ink-400'}`}>
                   {w.is_active ? 'Active' : 'Inactive'}
                 </span>
               </li>

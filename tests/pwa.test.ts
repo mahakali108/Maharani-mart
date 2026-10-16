@@ -19,8 +19,8 @@ describe('PWA manifest (app/manifest.ts)', () => {
     expect(m.start_url).toBe('/');
     expect(m.scope).toBe('/');
     expect(m.orientation).toBe('portrait');
-    expect(m.theme_color).toBe('#C8102E');
-    expect(m.background_color).toBe('#ffffff');
+    expect(m.theme_color).toBe('#5142B8');
+    expect(m.background_color).toBe('#FFFBF4');
     expect(Array.isArray(m.categories)).toBe(true);
     expect(m.categories).toContain('business');
   });

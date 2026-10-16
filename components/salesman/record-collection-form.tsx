@@ -87,7 +87,7 @@ export function RecordCollectionForm({
         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{error}</div>
       ) : null}
       {notice ? (
-        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{notice}</div>
+        <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-700">{notice}</div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -154,7 +154,7 @@ export function RecordCollectionForm({
           <Upload className="h-3.5 w-3.5" /> Photo proof (optional — cheque, receipt, UPI screenshot)
         </p>
         {proofUrl ? (
-          <div className="flex items-center justify-between gap-2 text-xs text-green-700">
+          <div className="flex items-center justify-between gap-2 text-xs text-mint-700">
             <span>Proof attached</span>
             <button type="button" onClick={() => setProofUrl(null)} className="text-primary-600 hover:underline">
               Remove

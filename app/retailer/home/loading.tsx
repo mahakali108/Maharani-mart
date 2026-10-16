@@ -3,7 +3,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 /** Mirrors the welcome, search, categories and two-column mobile product grid. */
 export default function Loading() {
   return <div aria-busy="true" aria-label="Loading your wholesale store" className="min-w-0 space-y-6">
-    <div className="space-y-5 rounded-[1.75rem] border border-blush-200 bg-blush-50 p-5 sm:p-10">
+    <div className="space-y-5 rounded-[1.75rem] border border-lavender-200 bg-lavender-50 p-5 sm:p-10">
       <Skeleton className="h-3 w-32" /><Skeleton className="h-20 w-3/4 max-w-lg" /><Skeleton className="h-4 w-full max-w-md" />
       <Skeleton className="h-14 w-full rounded-xl" />
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}</div>

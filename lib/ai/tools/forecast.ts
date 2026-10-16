@@ -37,17 +37,17 @@ const forecastJson = {
 };
 
 function riskTone(risk: string): string {
-  if (risk === 'critical') return 'bg-red-600 text-white';
-  if (risk === 'high') return 'bg-red-100 text-red-700';
+  if (risk === 'critical') return 'bg-error-600 text-white';
+  if (risk === 'high') return 'bg-error-100 text-error-700';
   if (risk === 'medium') return 'bg-amber-100 text-amber-700';
-  if (risk === 'low') return 'bg-blue-100 text-blue-700';
-  return 'bg-emerald-100 text-emerald-700';
+  if (risk === 'low') return 'bg-sky-100 text-sky-800';
+  return 'bg-mint-100 text-mint-700';
 }
 
 function confidenceTone(confidence: string): string {
-  if (confidence === 'High') return 'bg-emerald-100 text-emerald-700';
+  if (confidence === 'High') return 'bg-mint-100 text-mint-700';
   if (confidence === 'Medium') return 'bg-amber-100 text-amber-700';
-  if (confidence === 'Low') return 'bg-orange-100 text-orange-700';
+  if (confidence === 'Low') return 'bg-amber-100 text-amber-700';
   return 'bg-slate-100 text-slate-600';
 }
 
@@ -217,7 +217,7 @@ async function inventoryRisk(context: AIToolContext): Promise<AIToolResult> {
 
     const cards: AICard[] = [];
     if (stockout.length > 0) {
-      cards.push({ type: 'notice', title: '🔴 Stock-out risk', subtitle: `${stockout.length} product(s) may run out within the forecast horizon.`, quality: 'estimate', source: 'Authorized demand forecast + inventory view' });
+      cards.push({ type: 'notice', title: 'Critical stock-out risk', subtitle: `${stockout.length} product(s) may run out within the forecast horizon.`, quality: 'estimate', source: 'Authorized demand forecast + inventory view' });
       for (const forecast of stockout.slice(0, 6)) {
         cards.push(forecastCard({ ...forecast, stockOutRisk: 'critical' }));
       }

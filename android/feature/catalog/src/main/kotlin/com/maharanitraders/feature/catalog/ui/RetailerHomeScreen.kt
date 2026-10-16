@@ -890,7 +890,7 @@ private fun LastOrderCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceMd),
       ) {
-        AccentIcon(tone = AccentTone.BLUE, size = 40.dp) { tint ->
+        AccentIcon(tone = AccentTone.SKY, size = 40.dp) { tint ->
           OrdersGlyph(modifier = Modifier.size(22.dp), tint = tint)
         }
         Column(

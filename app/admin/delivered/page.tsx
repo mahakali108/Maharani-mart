@@ -107,7 +107,7 @@ function renderDeliveredRows(rows: DeliveredRow[]) {
         <td className="px-5 py-3 text-ink-600">{row.assigned_name?.full_name ?? '—'}</td>
         <td className="px-5 py-3">
           {row.otp_verified_at ? (
-            <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Verified</span>
+            <span className="rounded-full bg-mint-50 px-2 py-0.5 text-xs font-medium text-mint-700">Verified</span>
           ) : (
             <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Not verified</span>
           )}
@@ -118,7 +118,7 @@ function renderDeliveredRows(rows: DeliveredRow[]) {
               <ShieldAlert className="h-3 w-3" /> None
             </span>
           ) : (
-            <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+            <span className="rounded-full bg-mint-50 px-2 py-0.5 text-xs font-medium text-mint-700">
               Attached
             </span>
           )}

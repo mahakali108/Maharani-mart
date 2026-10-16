@@ -29,7 +29,7 @@ export default async function UserManagementPage({ params }: { params: { id: str
         <div>
           <h1 className="text-xl font-semibold text-ink-950">{userView.fullName}</h1>
           <p className="flex items-center gap-1.5 text-xs text-ink-500">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            <ShieldCheck className="h-3.5 w-3.5 text-mint-600" />
             User Management · Super Admin only
           </p>
         </div>

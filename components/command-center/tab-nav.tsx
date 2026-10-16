@@ -37,7 +37,7 @@ export function CommandCenterTabNav({ active, urgentCount }: { active: CommandCe
                 <span
                   className={cn(
                     'flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold',
-                    isActive ? 'bg-red-500 text-white' : 'bg-red-600 text-white'
+                    isActive ? 'bg-error-500 text-white' : 'bg-error-600 text-white'
                   )}
                   aria-label={`${urgentCount} urgent action(s)`}
                 >

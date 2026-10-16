@@ -61,12 +61,12 @@ export function CategoryForm({ categories }: { categories: CategoryOption[] }) {
 
       <div aria-live="polite">
         {state?.error ? (
-          <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <p className="rounded-xl border border-error-200 bg-error-50 px-3 py-2 text-sm text-error-700">
             {state.error}
           </p>
         ) : null}
         {state?.success ? (
-          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <p className="rounded-xl border border-mint-200 bg-mint-50 px-3 py-2 text-sm text-mint-800">
             {state.success} It is already live in the retailer catalog.
           </p>
         ) : null}

@@ -66,7 +66,7 @@ export default async function CommandCenterPage({ searchParams }: { searchParams
             <h1 className="text-xl font-semibold text-ink-950 sm:text-2xl">Super Admin Command Center</h1>
           </div>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-500">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            <ShieldCheck className="h-3.5 w-3.5 text-mint-600" />
             Real data only · Super Admin authorization enforced at route, permission and RLS layers
           </p>
         </div>

@@ -97,7 +97,7 @@ export default async function AdminDeliveredDetailPage({ params }: { params: { o
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-ink-500">OTP verification</dt>
-              <dd className={`text-right font-medium ${delivery.otp_verified_at ? 'text-green-700' : 'text-amber-700'}`}>
+              <dd className={`text-right font-medium ${delivery.otp_verified_at ? 'text-mint-700' : 'text-amber-700'}`}>
                 {delivery.otp_verified_at ? 'Verified' : `Not verified (${delivery.otp_attempts} wrong attempts)`}
               </dd>
             </div>
@@ -119,7 +119,7 @@ export default async function AdminDeliveredDetailPage({ params }: { params: { o
             ) : null}
             <div className="border-t border-ink-100 pt-2">
               {delivery.return_deadline ? (
-                <p className={`text-sm font-medium ${windowOpen ? 'text-green-700' : 'text-primary-700'}`}>
+                <p className={`text-sm font-medium ${windowOpen ? 'text-mint-700' : 'text-primary-700'}`}>
                   {windowOpen
                     ? `Return window open until ${formatIndiaDate(delivery.return_deadline)} (inclusive)`
                     : `Return window closed on ${formatIndiaDate(delivery.return_deadline)}`}

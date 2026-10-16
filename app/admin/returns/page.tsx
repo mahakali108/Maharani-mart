@@ -17,7 +17,7 @@ interface ReturnRequestRow {
 
 const STATUS_STYLES: Record<ReturnRequestRow['status'], string> = {
   requested: 'bg-amber-50 text-amber-700',
-  approved: 'bg-green-50 text-green-700',
+  approved: 'bg-mint-50 text-mint-700',
   rejected: 'bg-primary-50 text-primary-700',
   completed: 'bg-ink-100 text-ink-600',
 };

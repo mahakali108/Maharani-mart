@@ -54,7 +54,7 @@ export function CartOrderSummary({
         </div>
 
         {coupon ? (
-          <div className="flex items-baseline justify-between gap-3 text-xs font-semibold text-emerald-700">
+          <div className="flex items-baseline justify-between gap-3 text-xs font-semibold text-mint-700">
             <span className="flex items-center gap-1.5">
               <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" />
               Coupon · {coupon.code}
@@ -74,7 +74,7 @@ export function CartOrderSummary({
         ))}
 
         {savings > 0 ? (
-          <div className="flex items-baseline justify-between gap-3 text-xs font-semibold text-emerald-700">
+          <div className="flex items-baseline justify-between gap-3 text-xs font-semibold text-mint-700">
             <span>Savings vs MRP</span>
             <span className="text-right">−{formatInr(savings)}</span>
           </div>
@@ -90,7 +90,7 @@ export function CartOrderSummary({
         {orderableCount > 0 ? (
           <Link
             href="/retailer/checkout"
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
           >
             Proceed to checkout <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
@@ -100,8 +100,8 @@ export function CartOrderSummary({
           </span>
         )}
 
-        <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+        <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-600">
+          <ShieldCheck className="h-3.5 w-3.5 text-mint-600" aria-hidden="true" />
           Secure server-side validation
         </div>
       </div>

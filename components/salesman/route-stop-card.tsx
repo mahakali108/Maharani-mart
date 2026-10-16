@@ -151,7 +151,7 @@ export function RouteStopCard({
           </Button>
         </div>
       ) : (
-        <p className="flex items-center gap-1.5 text-xs text-green-700">
+        <p className="flex items-center gap-1.5 text-xs text-mint-700">
           <CheckCircle2 className="h-3.5 w-3.5" />
           {status === 'skipped' ? 'Skipped' : 'Visit complete'}
         </p>

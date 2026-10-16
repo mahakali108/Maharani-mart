@@ -187,7 +187,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                     className={`mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                       pricing.unitPrice > line.previousPiecePrice
                         ? 'bg-amber-50 text-amber-700'
-                        : 'bg-emerald-50 text-emerald-700'
+                        : 'bg-mint-50 text-mint-700'
                     }`}
                   >
                     {pricing.unitPrice > line.previousPiecePrice ? (

@@ -11,7 +11,7 @@ export function CatalogueNav({ active }: { active: 'products' | 'categories' | '
       ['brands', 'Brands', '/retailer/brands', Tags],
     ] as const).map(([key, label, href, Icon]) => <Link key={key} href={href} aria-current={active === key ? 'page' : undefined}
       className={cn('flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl px-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600',
-        active === key ? 'bg-blush-100 text-primary-700' : 'text-slate-600 hover:bg-ivory-100')}>
+        active === key ? 'bg-lavender-100 text-primary-700' : 'text-slate-600 hover:bg-ivory-100')}>
       <Icon className="hidden h-4 w-4 min-[360px]:block" aria-hidden="true" />{label}
     </Link>)}
   </nav>;

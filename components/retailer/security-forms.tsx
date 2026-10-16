@@ -32,8 +32,8 @@ function FormMessage({ error, success }: { error?: string; success?: string }) {
       role="status"
       className={
         error
-          ? 'rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700'
-          : 'flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700'
+          ? 'rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700'
+          : 'flex items-center gap-1.5 rounded-xl bg-mint-50 px-3 py-2 text-[11px] font-semibold text-mint-700'
       }
     >
       {success ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : null}
@@ -185,7 +185,7 @@ export function AccountRequestsCard({ hasDeletionRequest }: { hasDeletionRequest
         className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
       />
       {hasDeletionRequest && requestType === 'account_deletion' ? (
-        <p className="mt-2 rounded-xl bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-800">
+        <p className="mt-2 rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-semibold text-sky-800">
           You already have a deletion request under review.
         </p>
       ) : null}

@@ -177,10 +177,10 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
             <Link href="/retailer/catalog" className="mt-4 flex items-center gap-1 text-xs font-bold text-primary-600">Or browse the full catalog <ArrowRight className="h-3.5 w-3.5" /></Link>
           </div>
           <div className="hidden bg-slate-950 p-7 text-white md:flex md:flex-col md:justify-center">
-            <ShieldCheck className="h-7 w-7 text-emerald-400" />
+            <ShieldCheck className="h-7 w-7 text-mint-400" />
             <h3 className="mt-4 text-lg font-bold">Same secure checkout</h3>
             <ul className="mt-4 space-y-3 text-xs text-slate-300">
-              {['MOQ and availability revalidated', 'Retailer pricing applied securely', 'GST and coins checked before order'].map((item) => <li key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> {item}</li>)}
+              {['MOQ and availability revalidated', 'Retailer pricing applied securely', 'GST and coins checked before order'].map((item) => <li key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-mint-400" /> {item}</li>)}
             </ul>
           </div>
         </section>

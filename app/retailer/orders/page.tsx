@@ -58,11 +58,11 @@ const STATUS_TABS: { value: OrderStatus | ''; label: string }[] = [
 
 const STATUS_META: Record<OrderStatus, { label: string; style: string; icon: typeof Clock3; message: string }> = {
   pending: { label: 'Pending confirmation', style: 'bg-amber-50 text-amber-700 ring-amber-200', icon: Clock3, message: 'Waiting for distributor confirmation' },
-  confirmed: { label: 'Confirmed', style: 'bg-blue-50 text-blue-700 ring-blue-200', icon: CheckCircle2, message: 'Order confirmed and queued' },
-  processing: { label: 'Processing', style: 'bg-blue-50 text-blue-700 ring-blue-200', icon: CircleDashed, message: 'Your order is being prepared' },
+  confirmed: { label: 'Confirmed', style: 'bg-sky-50 text-sky-700 ring-sky-200', icon: CheckCircle2, message: 'Order confirmed and queued' },
+  processing: { label: 'Processing', style: 'bg-sky-50 text-sky-700 ring-sky-200', icon: CircleDashed, message: 'Your order is being prepared' },
   packed: { label: 'Packed', style: 'bg-violet-50 text-violet-700 ring-violet-200', icon: PackageCheck, message: 'Packed and ready to dispatch' },
-  dispatched: { label: 'On the way', style: 'bg-cyan-50 text-cyan-700 ring-cyan-200', icon: Truck, message: 'Dispatched for delivery' },
-  delivered: { label: 'Delivered', style: 'bg-emerald-50 text-emerald-700 ring-emerald-200', icon: CheckCircle2, message: 'Delivery completed' },
+  dispatched: { label: 'On the way', style: 'bg-sky-50 text-sky-700 ring-sky-200', icon: Truck, message: 'Dispatched for delivery' },
+  delivered: { label: 'Delivered', style: 'bg-mint-50 text-mint-700 ring-mint-200', icon: CheckCircle2, message: 'Delivery completed' },
   cancelled: { label: 'Cancelled', style: 'bg-slate-100 text-slate-600 ring-slate-200', icon: XCircle, message: 'This order was cancelled' },
   returned: { label: 'Returned', style: 'bg-slate-100 text-slate-600 ring-slate-200', icon: RotateCcw, message: 'This order was returned' },
 };

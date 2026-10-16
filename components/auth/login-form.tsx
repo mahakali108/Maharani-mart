@@ -63,7 +63,7 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
           ) : null}
           {phoneState?.code === 'email_not_confirmed' ? <ResendConfirmationForm /> : null}
           {phoneState?.success ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-700">
               {phoneState.success}
             </div>
           ) : null}
@@ -144,7 +144,7 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
           ) : null}
           {emailState?.code === 'email_not_confirmed' ? <ResendConfirmationForm /> : null}
           {emailState?.success ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-700">
               {emailState.success}
             </div>
           ) : null}

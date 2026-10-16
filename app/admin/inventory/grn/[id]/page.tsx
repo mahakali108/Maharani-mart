@@ -138,7 +138,7 @@ export default async function GrnDetailPage({ params }: { params: { id: string }
                   {m.products?.name ?? '—'}{' '}
                   <span className="font-mono text-xs text-ink-400">{m.inventory_batches?.batch_number}</span>
                 </span>
-                <span className="font-semibold text-green-600">+{m.quantity}</span>
+                <span className="font-semibold text-mint-600">+{m.quantity}</span>
               </li>
             ))}
           </ul>

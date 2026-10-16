@@ -152,7 +152,7 @@ export default async function PricingPage() {
                     <td className="px-5 py-3">
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                          pl.is_active ? 'bg-green-50 text-green-700' : 'bg-ink-100 text-ink-500'
+                          pl.is_active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'
                         }`}
                       >
                         {pl.is_active ? 'Active' : 'Deactivated'}

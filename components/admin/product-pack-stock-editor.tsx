@@ -21,8 +21,8 @@ export interface ProductPackStockRow {
 function statusFor(quantity: number | null) {
   if (quantity === null) return null;
   return quantity > 0
-    ? { label: 'In Stock', classes: 'bg-emerald-50 text-emerald-700' }
-    : { label: 'Out of Stock', classes: 'bg-rose-50 text-rose-700' };
+    ? { label: 'In Stock', classes: 'bg-mint-50 text-mint-700' }
+    : { label: 'Out of Stock', classes: 'bg-slate-100 text-slate-700' };
 }
 
 export function ProductPackStockEditor({
@@ -83,7 +83,7 @@ export function ProductPackStockEditor({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-ink-900">{pack.packName}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${pack.active ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${pack.active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'}`}>
                     {pack.active ? 'Active' : 'Inactive'}
                   </span>
                   {status ? (
@@ -101,7 +101,7 @@ export function ProductPackStockEditor({
                   Current: {pack.quantity === null ? '—' : `${pack.quantity} ${normalizedUnit}`}
                 </p>
                 {rowMessage ? (
-                  <p role={rowMessage.error ? 'alert' : 'status'} className={`mt-1 text-xs ${rowMessage.error ? 'text-rose-700' : 'text-emerald-700'}`}>
+                  <p role={rowMessage.error ? 'alert' : 'status'} className={`mt-1 text-xs ${rowMessage.error ? 'text-error-700' : 'text-mint-700'}`}>
                     {rowMessage.text}
                   </p>
                 ) : null}

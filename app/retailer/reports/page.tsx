@@ -110,20 +110,20 @@ export default async function ReportsPage() {
           <section className="space-y-3">
             <h2 className="text-sm font-bold text-slate-900">This week</h2>
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-              <StatCard icon={ClipboardList} label="Orders placed" value={String(windows.week.totals.orderCount)} tone="bg-blue-50 text-blue-700" />
+              <StatCard icon={ClipboardList} label="Orders placed" value={String(windows.week.totals.orderCount)} tone="bg-sky-50 text-sky-700" />
               <StatCard icon={ReceiptText} label="Purchase value" value={formatInr(windows.week.totals.purchaseValue)} />
               <StatCard icon={Percent} label="GST paid" value={formatInr(windows.week.totals.gstTotal)} tone="bg-violet-50 text-violet-700" />
-              <StatCard icon={Scale} label="Saved via discounts" value={formatInr(windows.week.totals.discountTotal)} tone="bg-emerald-50 text-emerald-700" />
+              <StatCard icon={Scale} label="Saved via discounts" value={formatInr(windows.week.totals.discountTotal)} tone="bg-mint-50 text-mint-700" />
             </div>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-sm font-bold text-slate-900">This month</h2>
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-              <StatCard icon={ClipboardList} label="Orders placed" value={String(windows.month.totals.orderCount)} tone="bg-blue-50 text-blue-700" />
+              <StatCard icon={ClipboardList} label="Orders placed" value={String(windows.month.totals.orderCount)} tone="bg-sky-50 text-sky-700" />
               <StatCard icon={ReceiptText} label="Purchase value" value={formatInr(windows.month.totals.purchaseValue)} />
               <StatCard icon={Percent} label="GST paid" value={formatInr(windows.month.totals.gstTotal)} tone="bg-violet-50 text-violet-700" />
-              <StatCard icon={Scale} label="Saved via discounts" value={formatInr(windows.month.totals.discountTotal)} tone="bg-emerald-50 text-emerald-700" />
+              <StatCard icon={Scale} label="Saved via discounts" value={formatInr(windows.month.totals.discountTotal)} tone="bg-mint-50 text-mint-700" />
             </div>
             {windows.month.topProducts.length > 0 ? (
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -203,7 +203,7 @@ export default async function ReportsPage() {
           </section>
 
           <section className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <StatCard icon={ReceiptText} label="All-time orders" value={String(trend.reduce((sum, row) => sum + row.orderCount, 0))} tone="bg-blue-50 text-blue-700" />
+            <StatCard icon={ReceiptText} label="All-time orders" value={String(trend.reduce((sum, row) => sum + row.orderCount, 0))} tone="bg-sky-50 text-sky-700" />
             <StatCard
               icon={Scale}
               label="Coins spent"
@@ -214,7 +214,7 @@ export default async function ReportsPage() {
               icon={Percent}
               label={`${COIN_SYMBOL} Coins available`}
               value={formatPaise(coinBalancePaise(walletSummary.creditLimitPaise, walletSummary.outstandingPaise))}
-              tone="bg-emerald-50 text-emerald-700"
+              tone="bg-mint-50 text-mint-700"
             />
           </section>
         </>

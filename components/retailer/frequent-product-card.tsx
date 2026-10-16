@@ -60,7 +60,7 @@ export function FrequentProductCard({
           type="button"
           onClick={handleAdd}
           disabled={isPending}
-          className={`mt-2 flex h-8 items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition ${added ? 'bg-emerald-50 text-emerald-700' : 'bg-primary-600 text-white hover:bg-primary-700'} disabled:opacity-60`}
+          className={`mt-2 flex h-8 items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition ${added ? 'bg-mint-50 text-mint-700' : 'bg-primary-600 text-white hover:bg-primary-700'} disabled:opacity-60`}
         >
           {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : added ? <Check className="h-3 w-3" /> : <ShoppingCart className="h-3 w-3" />}
           {isPending ? 'Adding…' : added ? 'Added' : `Add${moq > 1 ? ` ${moq}` : ''}`}

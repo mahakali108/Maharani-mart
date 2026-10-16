@@ -58,7 +58,7 @@ export function ProductIssueReport({ productId, packId }: { productId: string; p
           setError(null);
           setOpen(true);
         }}
-        className="flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+        className="flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-400 bg-white px-3 text-[11px] font-bold text-slate-600 transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
       >
         <Flag className="h-3.5 w-3.5" aria-hidden="true" /> Report a problem
       </button>
@@ -82,7 +82,7 @@ export function ProductIssueReport({ productId, packId }: { productId: string; p
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50"
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -90,7 +90,7 @@ export function ProductIssueReport({ productId, packId }: { productId: string; p
 
             {done ? (
               <div className="py-6 text-center">
-                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-mint-50 text-mint-600">
                   <Check className="h-6 w-6" aria-hidden="true" />
                 </span>
                 <p className="mt-3 text-sm font-bold text-slate-900">Thank you — report received</p>
@@ -98,7 +98,7 @@ export function ProductIssueReport({ productId, packId }: { productId: string; p
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="mt-4 h-10 w-full rounded-xl bg-primary-600 text-xs font-bold text-white transition hover:bg-primary-700"
+                  className="mt-4 h-11 w-full rounded-xl bg-primary-600 text-xs font-bold text-white transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                 >
                   Done
                 </button>
@@ -116,8 +116,8 @@ export function ProductIssueReport({ productId, packId }: { productId: string; p
                         aria-pressed={issueType === option.value}
                         className={
                           issueType === option.value
-                            ? 'rounded-full border-2 border-primary-500 bg-primary-50 px-3 py-1.5 text-[11px] font-bold text-primary-800'
-                            : 'rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50'
+                            ? 'inline-flex min-h-11 items-center justify-center rounded-full border-2 border-primary-500 bg-primary-50 px-3 py-2 text-[11px] font-bold text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600'
+                            : 'inline-flex min-h-11 items-center justify-center rounded-full border border-slate-400 px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600'
                         }
                       >
                         {option.label}
@@ -136,11 +136,11 @@ export function ProductIssueReport({ productId, packId }: { productId: string; p
                     rows={3}
                     maxLength={1000}
                     placeholder="Tell us what looks wrong…"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+                    className="w-full rounded-xl border border-slate-400 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
                   />
                 </div>
                 {error ? (
-                  <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700">{error}</p>
+                  <p role="alert" className="rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700">{error}</p>
                 ) : null}
                 <button
                   type="button"
@@ -191,8 +191,8 @@ export function StockAlertButton({ packId, subscribed }: { packId: string; subsc
         aria-pressed={active}
         className={
           active
-            ? 'flex h-9 items-center gap-1.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 transition disabled:opacity-60'
-            : 'flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 disabled:opacity-60'
+            ? 'flex min-h-11 items-center gap-1.5 rounded-xl border-2 border-mint-500 bg-mint-50 px-3 text-[11px] font-bold text-mint-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:opacity-60'
+            : 'flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-400 bg-white px-3 text-[11px] font-bold text-slate-700 transition hover:border-primary-500 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:opacity-60'
         }
       >
         {isPending ? (
@@ -204,7 +204,7 @@ export function StockAlertButton({ packId, subscribed }: { packId: string; subsc
         )}
         {active ? 'Will notify you' : 'Notify me when available'}
       </button>
-      {error ? <span className="mt-1 text-[9px] font-bold text-rose-600">{error}</span> : null}
+      {error ? <span className="mt-1 text-[9px] font-bold text-error-600">{error}</span> : null}
     </span>
   );
 }

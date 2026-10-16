@@ -30,7 +30,7 @@ export function ResendConfirmationForm({ defaultEmail = '' }: { defaultEmail?: s
           </div>
         ) : null}
         {state?.success ? (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <div className="rounded-lg border border-mint-200 bg-mint-50 px-3 py-2 text-xs text-mint-700">
             {state.success}
           </div>
         ) : null}

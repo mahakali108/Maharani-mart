@@ -78,7 +78,7 @@ export function CouponCard({ code, title, discountLabel, details, expiresLabel, 
           onClick={copyCode}
           className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
         >
-          {copied ? <Check className="h-3 w-3 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
+          {copied ? <Check className="h-3 w-3 text-mint-600" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
@@ -122,7 +122,7 @@ export function CouponCard({ code, title, discountLabel, details, expiresLabel, 
             className={
               applyMessage.kind === 'error'
                 ? 'rounded-lg bg-primary-50 px-3 py-2 text-[10px] font-semibold text-primary-700'
-                : 'rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-semibold text-emerald-700'
+                : 'rounded-lg bg-mint-50 px-3 py-2 text-[10px] font-semibold text-mint-700'
             }
           >
             {applyMessage.text}

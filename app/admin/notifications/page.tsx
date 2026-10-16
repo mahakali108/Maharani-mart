@@ -37,7 +37,7 @@ interface LogRow {
 const STATUS_STYLES: Record<LogRow['status'], string> = {
   queued: 'bg-ink-100 text-ink-600',
   sent: 'bg-amber-50 text-amber-700',
-  delivered: 'bg-green-50 text-green-700',
+  delivered: 'bg-mint-50 text-mint-700',
   failed: 'bg-primary-50 text-primary-700',
 };
 

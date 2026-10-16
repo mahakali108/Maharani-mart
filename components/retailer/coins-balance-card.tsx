@@ -49,7 +49,7 @@ export function CoinsBalanceCard({
             <p className="text-[9px] text-slate-500">Spend coins on any order — 1 coin = ₹1</p>
           </div>
         </div>
-        <ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+        <ShieldCheck className="h-4 w-4 text-mint-600" aria-hidden="true" />
       </div>
 
       <div className="p-4">
@@ -66,7 +66,7 @@ export function CoinsBalanceCard({
             </div>
             <div className="flex justify-between text-slate-600">
               <dt>{COIN_SYMBOL} Coins used</dt>
-              <dd className="font-semibold text-emerald-700">−{formatInr(paiseToRupees(payment.usedPaise))}</dd>
+              <dd className="font-semibold text-mint-700">−{formatInr(paiseToRupees(payment.usedPaise))}</dd>
             </div>
             <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
               <dt>Remaining payable</dt>

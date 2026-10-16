@@ -31,12 +31,12 @@ export function FavoriteToggle({
       disabled={isPending}
       aria-label={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
       aria-pressed={isFavorite}
-      className={`flex items-center justify-center gap-1.5 border font-bold shadow-sm backdrop-blur transition ${
-        compact ? 'h-10 w-10 rounded-xl bg-white/95 p-0 text-xs' : 'h-10 rounded-xl px-3.5 text-xs'
+      className={`flex items-center justify-center gap-1.5 border font-bold shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 ${
+        compact ? 'h-11 w-11 rounded-xl bg-white/95 p-0 text-xs' : 'min-h-11 rounded-xl px-3.5 text-xs'
       } ${
         isFavorite
           ? 'border-primary-200 bg-primary-50 text-primary-600'
-          : 'border-slate-200 bg-white text-slate-500 hover:border-primary-300 hover:text-primary-600'
+          : 'border-slate-400 bg-white text-slate-500 hover:border-primary-300 hover:text-primary-600'
       } disabled:opacity-60`}
     >
       {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className={`h-4 w-4 ${isFavorite ? 'fill-primary-600 text-primary-600' : ''}`} />}

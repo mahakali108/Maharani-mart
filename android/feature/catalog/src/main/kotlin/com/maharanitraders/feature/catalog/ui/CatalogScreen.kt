@@ -1086,7 +1086,7 @@ private fun CatalogProductsErrorState(
   }
 }
 
-/** One chip treatment for the whole screen: brand red selected, neutral track. */
+/** One chip treatment for the whole screen: violet selected, neutral track. */
 @Composable
 private fun catalogChipColors() = FilterChipDefaults.filterChipColors(
   containerColor = MaterialTheme.colorScheme.surface,

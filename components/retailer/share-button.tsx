@@ -52,12 +52,12 @@ export function ShareButton({ title }: { title: string }) {
       onClick={handleShare}
       aria-label={label}
       title={label}
-      className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 ${
+      className={`flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 ${
         status === 'copied'
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          ? 'border-mint-200 bg-mint-50 text-mint-700'
           : status === 'error'
             ? 'border-primary-200 bg-primary-50 text-primary-700'
-            : 'border-slate-200 bg-white/95 text-slate-500 hover:border-primary-300 hover:text-primary-600'
+            : 'border-slate-400 bg-white/95 text-slate-500 hover:border-primary-300 hover:text-primary-600'
       }`}
     >
       {status === 'pending' ? (

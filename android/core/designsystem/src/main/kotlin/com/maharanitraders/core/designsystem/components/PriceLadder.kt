@@ -125,12 +125,12 @@ fun QuantityLadder(
       text = "Buy more, pay less",
       style = MaterialTheme.typography.labelMedium,
       fontWeight = FontWeight.SemiBold,
-      color = tokens.onSaffronSurface,
+      color = tokens.onPeachSurface,
     )
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .background(tokens.saffronSurface, RoundedCornerShape(MaharaniDimens.radiusTile))
+        .background(tokens.peachSurface, RoundedCornerShape(MaharaniDimens.radiusTile))
         .padding(MaharaniDimens.spaceMd),
       verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceXs),
     ) {
@@ -152,7 +152,7 @@ fun QuantityLadder(
             text = row.priceLabel,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
-            color = tokens.onSaffronSurface,
+            color = tokens.onPeachSurface,
             maxLines = 1,
           )
         }

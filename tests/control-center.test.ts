@@ -74,11 +74,11 @@ describe('Access Status Computation', () => {
 
 describe('Status Badge Colors', () => {
   it('returns correct color for each status', () => {
-    expect(statusBadgeColor('active')).toContain('emerald');
+    expect(statusBadgeColor('active')).toContain('mint');
     expect(statusBadgeColor('expiring_soon')).toContain('amber');
-    expect(statusBadgeColor('expired')).toContain('red');
-    expect(statusBadgeColor('suspended')).toContain('gray');
-    expect(statusBadgeColor('unlimited')).toContain('blue');
+    expect(statusBadgeColor('expired')).toContain('error');
+    expect(statusBadgeColor('suspended')).toContain('slate');
+    expect(statusBadgeColor('unlimited')).toContain('sky');
   });
 });
 

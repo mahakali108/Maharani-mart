@@ -160,7 +160,7 @@ export default async function AdminWalletsPage({
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs ${
                           r.status === 'active'
-                            ? 'bg-green-50 text-green-700'
+                            ? 'bg-mint-50 text-mint-700'
                             : r.status === 'pending_approval'
                               ? 'bg-amber-50 text-amber-700'
                               : 'bg-primary-50 text-primary-700'
@@ -171,7 +171,7 @@ export default async function AdminWalletsPage({
                     </td>
                     <td className="px-5 py-3 font-medium">₹{limitRupees.toFixed(2)}</td>
                     <td className="px-5 py-3 font-medium">₹{outstandingRupees.toFixed(2)}</td>
-                    <td className={`px-5 py-3 font-bold ${availableRupees < 0 ? 'text-primary-600' : 'text-green-700'}`}>
+                    <td className={`px-5 py-3 font-bold ${availableRupees < 0 ? 'text-primary-600' : 'text-mint-700'}`}>
                       ₹{availableRupees.toFixed(2)}
                     </td>
                     <td className="px-5 py-3 text-xs">{account?.allow_overdue ? 'Yes' : 'No'}</td>

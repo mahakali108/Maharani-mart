@@ -70,14 +70,14 @@ export function CouponApplyForm({
 
       <div className="space-y-3 p-4">
         {applied ? (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-mint-200 bg-mint-50/70 px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-mint-600 text-white">
                 <BadgePercent className="h-4 w-4" aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <p className="truncate text-[11px] font-bold text-emerald-900">{applied.code}</p>
-                <p className="text-[10px] font-semibold text-emerald-700">
+                <p className="truncate text-[11px] font-bold text-mint-900">{applied.code}</p>
+                <p className="text-[10px] font-semibold text-mint-700">
                   You save {formatInr(applied.discount)} on this order
                 </p>
               </div>
@@ -86,7 +86,7 @@ export function CouponApplyForm({
               type="button"
               onClick={handleRemove}
               disabled={isPending}
-              className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 text-[10px] font-bold text-emerald-800 transition hover:bg-emerald-50 disabled:opacity-60"
+              className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-mint-300 bg-white px-2.5 text-[10px] font-bold text-mint-800 transition hover:bg-mint-50 disabled:opacity-60"
             >
               {isPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <X className="h-3 w-3" aria-hidden="true" />}
               Remove
@@ -137,7 +137,7 @@ export function CouponApplyForm({
             className={
               message.kind === 'error'
                 ? 'rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-[10px] font-medium text-primary-700'
-                : 'rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-medium text-emerald-700'
+                : 'rounded-xl border border-mint-200 bg-mint-50 px-3 py-2 text-[10px] font-medium text-mint-700'
             }
           >
             {message.text}

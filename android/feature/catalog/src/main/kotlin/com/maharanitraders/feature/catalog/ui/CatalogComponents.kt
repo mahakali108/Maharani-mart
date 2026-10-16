@@ -40,15 +40,15 @@ object CatalogTags {
 }
 
 /**
- * Rose "New" ribbon, driven by the server's `is_new_launch` flag. The app never
+ * Lavender "New" ribbon, driven by the server's `is_new_launch` flag. The app never
  * decides what is new: the flag arrives on the card or the detail.
  */
 @Composable
 fun NewLaunchBadge(modifier: Modifier = Modifier) {
   val tokens = MaharaniThemeTokens.colors
   Surface(
-    // Rose highlight, not gold: gold is reserved for OFFERS, and a "New" chip
-    // that looked like a discount would misstate what the server said. Rose is
+    // Lavender highlight is separate from peach OFFER surfaces, so a "New" chip
+    // that looked like a discount would misstate what the server said. Lavender is
     // the design system's emphasis tone — neither a saving nor a failure.
     color = tokens.highlight,
     contentColor = MaterialTheme.colorScheme.surface,
@@ -64,7 +64,7 @@ fun NewLaunchBadge(modifier: Modifier = Modifier) {
 }
 
 /**
- * Saffron "Offer" chip, driven by the server's `hasOffer` flag (an active
+ * Peach "Offer" chip, driven by the server's `hasOffer` flag (an active
  * scheme/festival price list for this product). No percentage, no claim about
  * the size of the offer — the app shows that an offer exists because the
  * pricing engine said so, and the prices themselves carry the detail.
@@ -73,8 +73,8 @@ fun NewLaunchBadge(modifier: Modifier = Modifier) {
 fun OfferBadge(modifier: Modifier = Modifier) {
   val tokens = MaharaniThemeTokens.colors
   Surface(
-    color = tokens.saffronSurface,
-    contentColor = tokens.onSaffronSurface,
+    color = tokens.peachSurface,
+    contentColor = tokens.onPeachSurface,
     shape = RoundedCornerShape(MaharaniDimens.radiusChip),
     modifier = modifier.testTag(CatalogTags.OFFER),
   ) {

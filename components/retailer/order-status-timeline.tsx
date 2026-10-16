@@ -85,13 +85,13 @@ export function OrderStatusTimeline({
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3.5 sm:px-5">
         <div><h2 className="text-sm font-bold text-slate-900">Order tracking</h2><p className="mt-0.5 text-[10px] text-slate-500">Live progress from confirmed order events</p></div>
-        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-bold capitalize text-emerald-700">{status === 'processing' ? 'Processing' : status}</span>
+        <span className="rounded-full bg-mint-50 px-2.5 py-1 text-[9px] font-bold capitalize text-mint-700">{status === 'processing' ? 'Processing' : status}</span>
       </div>
 
       <div className="scrollbar-none overflow-x-auto p-4 sm:p-6">
         <ol className="relative grid min-w-[560px] grid-cols-5">
           <span className="absolute left-[10%] right-[10%] top-5 h-0.5 bg-slate-100" />
-          <span className="absolute left-[10%] top-5 h-0.5 bg-emerald-500 transition-all" style={{ width: `${Math.min(80, (currentRank / 5) * 80)}%` }} />
+          <span className="absolute left-[10%] top-5 h-0.5 bg-mint-500 transition-all" style={{ width: `${Math.min(80, (currentRank / 5) * 80)}%` }} />
           {STAGES.map((stage, index) => {
             const nextStage = STAGES[index + 1] ?? null;
             const reached = currentRank >= stage.reachesRank;
@@ -100,7 +100,7 @@ export function OrderStatusTimeline({
             const Icon = stage.icon;
             return (
               <li key={stage.key} className="relative z-10 flex flex-col items-center px-1 text-center">
-                <span className={`flex h-10 w-10 items-center justify-center rounded-full border-4 border-white shadow-sm ${reached ? isCurrent ? 'bg-primary-600 text-white ring-2 ring-primary-100' : 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Icon className="h-4 w-4" /></span>
+                <span className={`flex h-10 w-10 items-center justify-center rounded-full border-4 border-white shadow-sm ${reached ? isCurrent ? 'bg-primary-600 text-white ring-2 ring-primary-100' : 'bg-mint-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Icon className="h-4 w-4" /></span>
                 <p className={`mt-2 text-[10px] font-bold ${reached ? 'text-slate-800' : 'text-slate-400'}`}>{stage.label}</p>
                 <p className="mt-0.5 text-[9px] leading-3 text-slate-400">{reached && event ? formatIndiaRelativeDateTime(event.created_at) : 'Awaiting'}</p>
                 {reached && event?.note ? <p className="mt-1 line-clamp-2 text-[9px] leading-3 text-slate-500">{event.note}</p> : null}

@@ -467,7 +467,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       >
         <Link
           href="/retailer/catalog"
-          className="flex min-w-0 shrink-0 items-center gap-1 rounded px-1 py-0.5 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded px-1 py-0.5 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
         >
           <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Products
         </Link>
@@ -476,7 +476,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
             <Link
               href={`/retailer/catalog?category=${product.categories.id}`}
-              className="max-w-[28%] truncate rounded px-1 py-0.5 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:max-w-[34%]"
+              className="min-h-11 min-w-11 max-w-[28%] truncate rounded px-1 py-0.5 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 sm:max-w-[34%]"
               title={product.categories.name}
             >
               {product.categories.name}
@@ -500,7 +500,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               badges={
                 <>
                   {discount > 0 ? (
-                    <span className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm">
+                    <span className="rounded-lg bg-mint-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-sm">
                       {discount}% off MRP
                     </span>
                   ) : null}
@@ -546,7 +546,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                     {formatInr(cartSummary.grandTotal)}
                   </p>
                   {cartSummary.savings > 0 ? (
-                    <p className="text-[10px] font-semibold text-emerald-700">
+                    <p className="text-[10px] font-semibold text-mint-700">
                       Save {formatInr(cartSummary.savings)} vs MRP
                     </p>
                   ) : null}
@@ -554,7 +554,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               </div>
               <Link
                 href="/retailer/cart"
-                className="mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary-600 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-primary-600 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
               >
                 Review cart &amp; checkout <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
@@ -565,7 +565,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         {/* Right Column: Mobile order per spec */}
         <div className="min-w-0 space-y-4 sm:space-y-5">
           {/* Purchase card: brand + availability, name, honest price, facts, size */}
-          <section className="min-w-0 rounded-2xl border border-blush-200 bg-white p-4 shadow-card sm:p-6">
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
             {/* Brand and availability */}
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               {product.brands?.name ? (
@@ -574,12 +574,12 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 </span>
               ) : null}
               {availabilityState === 'in_stock' ? (
-                <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> In Stock
+                <span className="flex shrink-0 items-center gap-1 rounded-full bg-mint-50 px-2.5 py-1 text-[10px] font-semibold text-mint-700">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-mint-600" aria-hidden="true" /> In Stock
                 </span>
               ) : availabilityState === 'out_of_stock' ? (
-                <span className="flex shrink-0 items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
-                  <CircleAlert className="h-3.5 w-3.5 text-rose-600" aria-hidden="true" /> Out of Stock
+                <span className="flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-700">
+                  <CircleAlert className="h-3.5 w-3.5 text-slate-700" aria-hidden="true" /> Out of Stock
                 </span>
               ) : null}
             </div>
@@ -594,7 +594,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 as the best price so it can never read as the current price. */}
             {selectedPiecePrice !== null && headlineUnit !== null ? (
               <div className="mt-3 min-w-0 border-t border-slate-100 pt-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
                   {isViewingVariant ? `Piece price · ${selectedPack?.pack_name}` : 'Piece price from'}
                 </p>
                 <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -603,12 +603,12 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                     <span className="text-sm font-bold text-slate-500">/pc</span>
                   </p>
                   {selectedPack?.mrp && selectedPack.mrp > selectedPiecePrice ? (
-                    <p className="text-sm font-medium text-slate-400 line-through">
+                    <p className="text-sm font-medium text-slate-600 line-through">
                       MRP {formatInr(selectedPack.mrp)}
                     </p>
                   ) : null}
                   {discount > 0 ? (
-                    <span className="text-sm font-extrabold text-emerald-600">
+                    <span className="text-sm font-extrabold text-mint-600">
                       up to {discount}% off
                     </span>
                   ) : null}
@@ -620,7 +620,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                   </p>
                 ) : null}
                 {saveAmount > 0 ? (
-                  <p className="mt-0.5 break-words text-xs font-bold text-emerald-700">
+                  <p className="mt-0.5 break-words text-xs font-bold text-mint-700">
                     You save up to {formatInr(saveAmount)} per piece vs MRP
                   </p>
                 ) : null}
@@ -642,7 +642,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                 ) : null}
                 {selectedPack &&
                 resolveLooseTierSet(selectedTiers, selectedPack.units_per_case).tiers.length > 0 ? (
-                  <p className="mt-1.5 text-[10px] font-semibold leading-4 text-emerald-700">
+                  <p className="mt-1.5 text-[10px] font-semibold leading-4 text-mint-700">
                     You can order as few as 1 pc — buying a full case is never compulsory.
                   </p>
                 ) : null}
@@ -749,49 +749,49 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
 
           {/* 7. PRODUCT DETAILS — collapsed until tapped; real data only. */}
           <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <summary className="flex cursor-pointer list-none items-center gap-2 p-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-300 sm:p-4 [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-2 min-h-11 p-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600 sm:p-4 [&::-webkit-details-marker]:hidden">
               <FileText className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Product details</span>
               <ChevronRight
-                className="ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90"
+                className="ml-auto h-4 w-4 shrink-0 text-slate-600 transition-transform group-open:rotate-90"
                 aria-hidden="true"
               />
             </summary>
             <dl className="grid grid-cols-2 gap-2 border-t border-slate-100 p-3.5 text-xs sm:grid-cols-4 sm:p-4">
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Base unit</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">Base unit</dt>
                 <dd className="mt-1 break-words font-bold capitalize text-slate-900">{product.unit}</dd>
               </div>
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Sold by</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">Sold by</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">Individual pieces</dd>
               </div>
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">GST rate</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">GST rate</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">{product.gst_percent}%</dd>
               </div>
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">HSN code</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">HSN code</dt>
                 <dd className="mt-1 break-words font-mono font-bold text-slate-900">{product.hsn_code ?? '—'}</dd>
               </div>
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">EAN / Barcode</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">EAN / Barcode</dt>
                 <dd className="mt-1 break-all font-mono font-bold text-slate-900">
                   {selectedPack?.barcode ?? product.barcode ?? '—'}
                 </dd>
               </div>
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Selected size</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">Selected size</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">{selectedPack?.pack_name ?? '—'}</dd>
               </div>
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Min order (MOQ)</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">Min order (MOQ)</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">
                   {selectedPack ? `${selectedPack.moq} pc${selectedPack.moq === 1 ? '' : 's'}` : '—'}
                 </dd>
               </div>
               <div className="min-w-0 rounded-xl bg-slate-50 p-2.5">
-                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Category</dt>
+                <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-600">Category</dt>
                 <dd className="mt-1 break-words font-bold text-slate-900">{product.categories?.name ?? '—'}</dd>
               </div>
             </dl>
@@ -848,13 +848,13 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
           <div className="flex items-center gap-2.5">
             <Link
               href="/retailer/catalog"
-              className="flex h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              className="flex h-11 items-center rounded-xl border border-slate-400 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-primary-500 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
             >
               Continue shopping
             </Link>
             <Link
               href="/retailer/cart"
-              className="flex h-10 items-center gap-1.5 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              className="flex h-11 items-center gap-1.5 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
             >
               Review cart <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -863,8 +863,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       </section>
 
       {/* Security Recheck Note */}
-      <div className="flex items-center justify-center gap-2 pt-2 text-[10px] text-slate-400">
-        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+      <div className="flex items-center justify-center gap-2 pt-2 text-[10px] text-slate-600">
+        <ShieldCheck className="h-3.5 w-3.5 text-mint-600" aria-hidden="true" />
         <span>Pricing, MOQ, and availability are rechecked when you place the order.</span>
       </div>
     </div>

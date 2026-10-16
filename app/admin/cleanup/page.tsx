@@ -34,7 +34,7 @@ export default async function CleanupStatusPage() {
             <h1 className="text-xl font-semibold text-ink-950 sm:text-2xl">Data Retention</h1>
           </div>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-500">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            <ShieldCheck className="h-3.5 w-3.5 text-mint-600" />
             Admin only · Scheduled cleanup (90-day temporary / 120-day business data) · Product catalog and images are never deleted
           </p>
         </div>
@@ -109,7 +109,7 @@ export default async function CleanupStatusPage() {
                       className={
                         rule.category === 'temporary_90'
                           ? 'rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700'
-                          : 'rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700'
+                          : 'rounded-full bg-error-50 px-2 py-0.5 text-xs font-medium text-error-700'
                       }
                     >
                       {rule.category === 'temporary_90' ? '90-day temp' : '120-day'}
@@ -170,8 +170,8 @@ export default async function CleanupStatusPage() {
       </Card>
 
       {overview.latestErrors.length > 0 ? (
-        <Card className="border-rose-200">
-          <CardTitle className="text-rose-700">Latest errors</CardTitle>
+        <Card className="border-error-200">
+          <CardTitle className="text-error-700">Latest errors</CardTitle>
           <ul className="space-y-1 text-sm text-ink-700">
             {overview.latestErrors.map((e, i) => (
               <li key={`${e.run_id}-${i}`} className="text-xs">

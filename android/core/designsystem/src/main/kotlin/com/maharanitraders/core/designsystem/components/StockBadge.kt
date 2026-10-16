@@ -105,8 +105,8 @@ fun FactChip(
 ) {
   val tokens = MaharaniThemeTokens.colors
   Surface(
-    color = if (accent) tokens.saffronSurface else MaterialTheme.colorScheme.surfaceVariant,
-    contentColor = if (accent) tokens.onSaffronSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+    color = if (accent) tokens.peachSurface else MaterialTheme.colorScheme.surfaceVariant,
+    contentColor = if (accent) tokens.onPeachSurface else MaterialTheme.colorScheme.onSurfaceVariant,
     shape = RoundedCornerShape(MaharaniDimens.radiusChip),
     modifier = modifier,
   ) {

@@ -44,12 +44,12 @@ function Kpi({
   tone?: 'default' | 'good' | 'warn' | 'bad';
   icon?: LucideIcon;
 }) {
-  const toneCls = tone === 'bad' ? 'text-red-600' : tone === 'warn' ? 'text-amber-600' : tone === 'good' ? 'text-emerald-600' : 'text-ink-950';
+  const toneCls = tone === 'bad' ? 'text-error-600' : tone === 'warn' ? 'text-amber-600' : tone === 'good' ? 'text-mint-600' : 'text-ink-950';
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{label}</p>
-        {Icon ? <Icon className={`h-3.5 w-3.5 ${tone === 'bad' ? 'text-red-400' : 'text-ink-300'}`} /> : null}
+        {Icon ? <Icon className={`h-3.5 w-3.5 ${tone === 'bad' ? 'text-error-400' : 'text-ink-300'}`} /> : null}
       </div>
       <p className={`mt-1.5 truncate text-lg font-bold ${toneCls}`} title={value}>
         {value}
@@ -77,31 +77,31 @@ export function OverviewSection({ data }: { data: CommandCenterData }) {
         actions={<RunAlertsButton />}
       >
         {urgentActions.length === 0 ? (
-          <Card className="flex items-center gap-3 border-emerald-200 bg-emerald-50/50 p-4">
-            <Activity className="h-5 w-5 text-emerald-600" />
-            <p className="text-sm text-emerald-800">
+          <Card className="flex items-center gap-3 border-mint-200 bg-mint-50/50 p-4">
+            <Activity className="h-5 w-5 text-mint-600" />
+            <p className="text-sm text-mint-800">
               No urgent signals right now. The alert check covers stock-out risk, credit over-limit, batch expiry, unusual orders and system failures.
             </p>
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {urgentActions.map((action) => (
-              <Card key={action.id} className="border-red-200 bg-red-50/40 p-4">
+              <Card key={action.id} className="border-error-200 bg-error-50/40 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-                      <p className="truncate text-sm font-semibold text-red-900">{action.entity}</p>
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-error-600" />
+                      <p className="truncate text-sm font-semibold text-error-900">{action.entity}</p>
                     </div>
-                    <p className="mt-1 text-xs leading-5 text-red-800">{action.reason}</p>
-                    <p className="mt-1.5 text-[11px] text-red-700">
+                    <p className="mt-1 text-xs leading-5 text-error-800">{action.reason}</p>
+                    <p className="mt-1.5 text-[11px] text-error-700">
                       <span className="font-semibold">Action:</span> {action.recommendedAction}
                     </p>
                   </div>
                   {action.entityHref ? (
                     <Link
                       href={action.entityHref}
-                      className="shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-red-700 transition hover:bg-red-100"
+                      className="shrink-0 rounded-lg border border-error-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-error-700 transition hover:bg-error-100"
                     >
                       View
                     </Link>
@@ -239,13 +239,13 @@ export function OverviewSection({ data }: { data: CommandCenterData }) {
                 ai.insights.slice(0, 6).map((insight, index) => (
                   <Card
                     key={`${insight.kind}-${insight.productId ?? index}`}
-                    className={`p-3.5 ${insight.severity === 'critical' ? 'border-red-200 bg-red-50/40' : insight.severity === 'warning' ? 'border-amber-200 bg-amber-50/40' : ''}`}
+                    className={`p-3.5 ${insight.severity === 'critical' ? 'border-error-200 bg-error-50/40' : insight.severity === 'warning' ? 'border-amber-200 bg-amber-50/40' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-xs font-semibold text-ink-900">{insight.title}</p>
                       <span
                         className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ${
-                          insight.severity === 'critical' ? 'bg-red-600 text-white' : insight.severity === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-ink-100 text-ink-500'
+                          insight.severity === 'critical' ? 'bg-error-600 text-white' : insight.severity === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-ink-100 text-ink-500'
                         }`}
                       >
                         {insight.severity}

@@ -21,30 +21,30 @@ import com.maharanitraders.feature.catalog.HomeQuickActionIcon
  * would push the shop below the fold is a worse trade than a tile that is one
  * tap further away in the drawer.
  *
- * Colour is part of the design system, not decoration: amber for money and
- * savings, violet for ordering tools, green for history, blue for the directory
- * and reports, rose for saved things, red for the shop itself.
+ * Colour is part of the design system, not decoration: violet for primary shopping, peach for configured offers, amber for balances,
+ * violet for ordering tools, mint for history, sky for directories, and lavender
+ * for favourites.
  */
 internal fun homeQuickActions(availableRoutes: Set<String>): List<HomeQuickAction> {
   val candidates = listOf(
     HomeQuickAction(MaharaniRoutes.CATALOG, "Shop now", HomeQuickActionIcon.SHOP, AccentTone.BRAND),
-    HomeQuickAction(MaharaniRoutes.CATEGORIES, "Categories", HomeQuickActionIcon.CATEGORY, AccentTone.BLUE),
-    HomeQuickAction(MaharaniRoutes.BRANDS, "Brands", HomeQuickActionIcon.BRAND, AccentTone.BLUE),
+    HomeQuickAction(MaharaniRoutes.CATEGORIES, "Categories", HomeQuickActionIcon.CATEGORY, AccentTone.SKY),
+    HomeQuickAction(MaharaniRoutes.BRANDS, "Brands", HomeQuickActionIcon.BRAND, AccentTone.SKY),
     HomeQuickAction(MaharaniRoutes.QUICK_ORDER, "Quick order", HomeQuickActionIcon.QUICK_ORDER, AccentTone.VIOLET),
     // Reordering is the single most repeated job in wholesale, so "Buy again"
     // sits in the first row rather than behind the drawer.
     HomeQuickAction(MaharaniRoutes.BUY_AGAIN, "Buy again", HomeQuickActionIcon.REORDER, AccentTone.VIOLET),
-    HomeQuickAction(MaharaniRoutes.ORDERS, "My orders", HomeQuickActionIcon.ORDERS, AccentTone.GREEN),
-    HomeQuickAction(MaharaniRoutes.FAVORITES, "Favourites", HomeQuickActionIcon.FAVORITES, AccentTone.ROSE),
-    HomeQuickAction(MaharaniRoutes.CART, "Cart", HomeQuickActionIcon.CART, AccentTone.AMBER),
+    HomeQuickAction(MaharaniRoutes.ORDERS, "My orders", HomeQuickActionIcon.ORDERS, AccentTone.MINT),
+    HomeQuickAction(MaharaniRoutes.FAVORITES, "Favourites", HomeQuickActionIcon.FAVORITES, AccentTone.LAVENDER),
+    HomeQuickAction(MaharaniRoutes.CART, "Cart", HomeQuickActionIcon.CART, AccentTone.BRAND),
     // Beyond the first two rows: still real, simply not worth pushing the shop
     // off the first screen for.
     HomeQuickAction(MaharaniRoutes.COINS, "Coins", HomeQuickActionIcon.COINS, AccentTone.AMBER),
-    HomeQuickAction(MaharaniRoutes.COUPONS, "Coupons", HomeQuickActionIcon.COUPONS, AccentTone.ROSE),
+    HomeQuickAction(MaharaniRoutes.COUPONS, "Coupons", HomeQuickActionIcon.COUPONS, AccentTone.PEACH),
     HomeQuickAction(MaharaniRoutes.SAVED_CARTS, "Saved carts", HomeQuickActionIcon.SAVED_CARTS, AccentTone.VIOLET),
-    HomeQuickAction(MaharaniRoutes.SUPPORT, "Support", HomeQuickActionIcon.SUPPORT, AccentTone.BLUE),
+    HomeQuickAction(MaharaniRoutes.SUPPORT, "Support", HomeQuickActionIcon.SUPPORT, AccentTone.SKY),
     HomeQuickAction(MaharaniRoutes.NOTIFICATIONS, "Alerts", HomeQuickActionIcon.NOTIFICATIONS, AccentTone.VIOLET),
-    HomeQuickAction(MaharaniRoutes.REPORTS, "Reports", HomeQuickActionIcon.REPORTS, AccentTone.GREEN),
+    HomeQuickAction(MaharaniRoutes.REPORTS, "Reports", HomeQuickActionIcon.REPORTS, AccentTone.MINT),
   )
   return candidates.filter { it.route in availableRoutes }.take(MAX_ACTIONS)
 }

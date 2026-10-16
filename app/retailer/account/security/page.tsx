@@ -75,9 +75,9 @@ export default async function SecurityPage() {
                 <span
                   className={
                     row.status === 'completed'
-                      ? 'shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700'
+                      ? 'shrink-0 rounded-full bg-mint-50 px-2.5 py-1 text-[10px] font-bold text-mint-700'
                       : row.status === 'rejected'
-                        ? 'shrink-0 rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700'
+                        ? 'shrink-0 rounded-full bg-error-50 px-2.5 py-1 text-[10px] font-bold text-error-700'
                         : 'shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700'
                   }
                 >

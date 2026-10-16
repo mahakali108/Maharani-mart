@@ -137,7 +137,7 @@ export function CouponForm({
         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{result.error}</div>
       ) : null}
       {result && 'success' in result ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-700">
           {isEdit ? 'Coupon updated.' : 'Coupon created — it is live the moment the start time is reached.'}
         </div>
       ) : null}

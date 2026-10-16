@@ -5,7 +5,7 @@ import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
 export function AuthFrame({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
   return <main className="auth-surface min-h-screen px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
     <Link href="/login" className="inline-flex min-h-11 items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600">
-      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blush-100 text-lg font-bold text-primary-600">M</span>
+      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lavender-100 text-lg font-bold text-primary-600">M</span>
       <span><span className="block text-base font-semibold text-slate-950">Maharani Traders</span><span className="block text-[10px] uppercase tracking-[0.16em] text-slate-500">Your everyday business partner</span></span>
     </Link>
     <div className="mx-auto mt-8 grid max-w-6xl items-center gap-8 lg:mt-14 lg:grid-cols-2 lg:gap-16">

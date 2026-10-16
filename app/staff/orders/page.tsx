@@ -32,8 +32,8 @@ interface OrderRow {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  confirmed: 'bg-blue-50 text-blue-700',
-  processing: 'bg-blue-50 text-blue-700',
+  confirmed: 'bg-sky-50 text-sky-700',
+  processing: 'bg-sky-50 text-sky-700',
   packed: 'bg-violet-50 text-violet-700',
 };
 

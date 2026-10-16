@@ -148,10 +148,10 @@ export default async function ReorderPage({ params }: { params: { id: string } }
         <div className="relative"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-mint-700">Buy again</p><h1 className="shop-heading mt-2 font-semibold tracking-tight">Review your reorder</h1><p className="mt-2 text-xs text-slate-600 sm:text-sm">From <span className="font-mono font-semibold text-slate-800">{order.order_number}</span> · {formatIndiaDateTime(order.placed_at)}</p><Link href={`/retailer/orders/${order.id}`} className="mt-4 inline-flex items-center gap-1 text-[10px] font-bold text-mint-700 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" /> Back to order details</Link></div>
       </section>
 
-      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-[10px] leading-4 text-blue-800 sm:text-xs"><Info className="mt-0.5 h-4 w-4 shrink-0" /><p><span className="font-bold">Current terms apply.</span> Edit quantities before adding. Prices, GST, availability and MOQ shown here are current and will be securely checked again at checkout.</p></div>
+      <div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-[10px] leading-4 text-sky-800 sm:text-xs"><Info className="mt-0.5 h-4 w-4 shrink-0" /><p><span className="font-bold">Current terms apply.</span> Edit quantities before adding. Prices, GST, availability and MOQ shown here are current and will be securely checked again at checkout.</p></div>
 
       <ReorderForm orderId={order.id} lines={lines} />
-      <p className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Original order pricing is never reused.</p>
+      <p className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-mint-600" /> Original order pricing is never reused.</p>
     </div>
   );
 }

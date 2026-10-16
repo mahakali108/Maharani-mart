@@ -240,7 +240,7 @@ function renderStaffRows(staff: StaffCard[], canManage: boolean) {
       <td className="px-5 py-3">
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-            s.is_active ? 'bg-green-50 text-green-700' : 'bg-ink-100 text-ink-500'
+            s.is_active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'
           }`}
         >
           {s.is_active ? 'Active' : 'Inactive'}

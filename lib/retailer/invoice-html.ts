@@ -92,22 +92,22 @@ export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string 
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0f172a; margin: 0; padding: 32px 16px; background: #fff; }
-  .invoice { max-width: 820px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 28px; }
-  .head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; }
-  .muted { color: #64748b; font-size: 12px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #17233F; margin: 0; padding: 32px 16px; background: #FFFBF4; }
+  .invoice { max-width: 820px; margin: 0 auto; border: 1px solid #E8E5F0; border-radius: 12px; padding: 28px; }
+  .head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid #E8E5F0; padding-bottom: 16px; }
+  .muted { color: #596579; font-size: 12px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .strong { font-weight: 600; }
-  .title { color: #e11d48; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 13px; }
-  .billed { margin-top: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; font-size: 13px; }
+  .title { color: #5142B8; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 13px; }
+  .billed { margin-top: 16px; border-bottom: 1px solid #E8E5F0; padding-bottom: 16px; font-size: 13px; }
   table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #F6F5FA; vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #596579; }
   td:nth-child(n+4), th:nth-child(n+4) { text-align: right; }
   .totals { max-width: 320px; margin-left: auto; margin-top: 16px; }
-  .totals .row { display: flex; justify-content: space-between; font-size: 13px; color: #334155; padding: 3px 0; }
-  .totals .grand { border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 8px; font-size: 16px; font-weight: 700; color: #0f172a; }
-  .note { margin-top: 20px; font-size: 11px; color: #94a3b8; text-align: center; }
+  .totals .row { display: flex; justify-content: space-between; font-size: 13px; color: #33415B; padding: 3px 0; }
+  .totals .grand { border-top: 1px solid #E8E5F0; margin-top: 8px; padding-top: 8px; font-size: 16px; font-weight: 700; color: #17233F; }
+  .note { margin-top: 20px; font-size: 11px; color: #596579; text-align: center; }
   @media print { body { padding: 0; } .invoice { border: 0; padding: 0; } }
 </style>
 </head>

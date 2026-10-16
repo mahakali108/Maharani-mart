@@ -99,7 +99,7 @@ export function generateForecastInsights(summary: ForecastSummary): BusinessInsi
 export function summaryNarrative(summary: ForecastSummary): string {
   const insights = generateForecastInsights(summary);
   const parts: string[] = [];
-  if (summary.productsWithStockoutRisk > 0) parts.push(`🔴 ${summary.productsWithStockoutRisk} product(s) may run out of stock`);
+  if (summary.productsWithStockoutRisk > 0) parts.push(`Attention: ${summary.productsWithStockoutRisk} product(s) may run out of stock`);
   if (summary.productsNeedingReorder > 0) parts.push(`📦 ${summary.productsNeedingReorder} product(s) need a reorder`);
   if (summary.rising > 0) parts.push(`📈 ${summary.rising} product(s) show rising demand`);
   if (summary.falling > 0) parts.push(`📉 ${summary.falling} product(s) show falling demand`);

@@ -12,26 +12,26 @@ const HORIZONS = [14, 30, 60, 90] as const;
 
 function riskBadge(risk: string): { label: string; cls: string } {
   switch (risk) {
-    case 'critical': return { label: 'Critical', cls: 'bg-red-600 text-white' };
-    case 'high': return { label: 'High', cls: 'bg-red-100 text-red-700' };
+    case 'critical': return { label: 'Critical', cls: 'bg-error-600 text-white' };
+    case 'high': return { label: 'High', cls: 'bg-error-100 text-error-700' };
     case 'medium': return { label: 'Medium', cls: 'bg-amber-100 text-amber-700' };
-    case 'low': return { label: 'Low', cls: 'bg-blue-100 text-blue-700' };
-    default: return { label: 'None', cls: 'bg-emerald-100 text-emerald-700' };
+    case 'low': return { label: 'Low', cls: 'bg-sky-100 text-sky-700' };
+    default: return { label: 'None', cls: 'bg-mint-100 text-mint-700' };
   }
 }
 
 function confidenceBadge(confidence: string): { label: string; cls: string } {
   switch (confidence) {
-    case 'High': return { label: 'High', cls: 'bg-emerald-100 text-emerald-700' };
+    case 'High': return { label: 'High', cls: 'bg-mint-100 text-mint-700' };
     case 'Medium': return { label: 'Medium', cls: 'bg-amber-100 text-amber-700' };
-    case 'Low': return { label: 'Low', cls: 'bg-orange-100 text-orange-700' };
+    case 'Low': return { label: 'Low', cls: 'bg-amber-100 text-amber-700' };
     default: return { label: 'Insufficient', cls: 'bg-slate-100 text-slate-600' };
   }
 }
 
 function directionIcon(direction: string) {
-  if (direction === 'rising') return <ArrowUpRight className="inline h-3.5 w-3.5 text-green-600" />;
-  if (direction === 'falling') return <ArrowDownRight className="inline h-3.5 w-3.5 text-red-600" />;
+  if (direction === 'rising') return <ArrowUpRight className="inline h-3.5 w-3.5 text-mint-600" />;
+  if (direction === 'falling') return <ArrowDownRight className="inline h-3.5 w-3.5 text-error-600" />;
   return <TrendingUp className="inline h-3.5 w-3.5 text-slate-500" />;
 }
 
@@ -85,8 +85,8 @@ export default async function ForecastDashboardPage({
               key={h}
               href={`/admin/inventory/forecast?days=${h}`}
               className={h === days
-                ? 'rounded-full bg-blue-700 px-3 py-1.5 text-xs font-bold text-white'
-                : 'rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100'}
+                ? 'rounded-full bg-sky-700 px-3 py-1.5 text-xs font-bold text-white'
+                : 'rounded-full border border-sky-100 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100'}
             >
               {h} days
             </a>
@@ -106,7 +106,7 @@ export default async function ForecastDashboardPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="border-l-4 border-l-red-500">
+        <Card className="border-l-4 border-l-error-500">
           <CardHeader><CardTitle>⚠️ Stock-out risk ({stockoutRisk.length})</CardTitle></CardHeader>
           {stockoutRisk.length === 0 ? (
             <p className="text-sm text-ink-500">No product is projected to run out within the forecast horizon.</p>
@@ -130,7 +130,7 @@ export default async function ForecastDashboardPage({
                     <p className="text-xs text-ink-400">{f.skuCode} · {f.explanation}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-bold text-blue-700">+{f.reorderQuantity}</p>
+                    <p className="text-sm font-bold text-sky-700">+{f.reorderQuantity}</p>
                     <p className="text-[10px] text-ink-400">stock {f.availableStock}</p>
                   </div>
                 </li>
@@ -151,7 +151,7 @@ export default async function ForecastDashboardPage({
                     <p className="truncate text-sm font-medium text-ink-900">{f.productName}</p>
                     <p className="text-xs text-ink-400">{f.overstockWarning ? 'Overstock' : 'Dead stock'}</p>
                   </div>
-                  <span className="shrink-0 text-sm font-semibold text-purple-600">stock {f.availableStock}</span>
+                  <span className="shrink-0 text-sm font-semibold text-violet-600">stock {f.availableStock}</span>
                 </li>
               ))}
             </ul>
@@ -159,7 +159,7 @@ export default async function ForecastDashboardPage({
         </Card>
       </div>
 
-      <Card className="border-l-4 border-l-orange-500">
+      <Card className="border-l-4 border-l-amber-500">
         <CardHeader><CardTitle>⚠️ Expiry risk (event)</CardTitle></CardHeader>
         {expiryRisk.length === 0 ? (
           <p className="text-sm text-ink-500">No batches are expired or expiring soon (within the configured critical window).</p>
@@ -221,8 +221,8 @@ function StatCard({ icon: Icon, label, value, sub, accent, href }: { icon: React
           <p className={`mt-1 text-2xl font-semibold ${accent ? 'text-primary-600' : 'text-ink-950'}`}>{value}</p>
           {sub ? <p className="mt-0.5 text-xs text-ink-400">{sub}</p> : null}
         </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50">
-          <Icon className="h-5 w-5 text-blue-700" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50">
+          <Icon className="h-5 w-5 text-sky-700" />
         </div>
       </div>
     </Card>
@@ -263,7 +263,7 @@ function ForecastRow({ f, days }: { f: ForecastResult; days: number }) {
         {f.stockOutDays !== null ? <span className="block text-[10px] text-ink-400">{f.stockOutDays}d</span> : null}
       </td>
       <td className="px-5 py-3 text-right">
-        <span className="font-semibold text-blue-700">{f.reorderQuantity ?? '—'}</span>
+        <span className="font-semibold text-sky-700">{f.reorderQuantity ?? '—'}</span>
         {f.reorderQuantity !== null ? <span className="block text-[10px] text-ink-400">window {f.reorderWindowDays}d</span> : null}
       </td>
       <td className="px-5 py-3">

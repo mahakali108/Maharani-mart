@@ -76,14 +76,14 @@ Proper ledger, not simple editable field. Reuses existing retailer IDs and order
 - Components: wallet-balance-cards, wallet-ledger-table (with reverse + reason prompt), wallet-payment-form (cash/bank_transfer/upi/cheque/other, paymentDate, reference, notes, idempotency), wallet-adjustment-form (credit/debit, type, reason required), wallet-limit-form (limit, overdue flag, overdueLimit, reason required)
 
 ## Retailer UI
-- `app/retailer/account/ledger/page.tsx`: rewritten to use new wallet lib
+- `app/retailer/account/ledger/page.tsx`: current retailer view presents the wallet history in coin language; it does not expose credit-limit or overdue-warning cards.
   - Mobile-first 320/360/390/412, no horizontal overflow, safe-area insets pb-[calc(6rem+env(safe-area-inset-bottom))]
-  - Clear balance cards: Credit Limit, Outstanding, Available Credit (green/red), overdue flag
-  - Transaction list: mobile list + desktop table, debit/credit visually distinguishable (ArrowUpCircle red, ArrowDownCircle green), date/type/amount/reference readable
+  - Coin summary cards: available coins use amber, spent coins use neutral slate/white, and added coins use mint; values stay navy except the mint added amount.
+  - Transaction list: mobile list + desktop table; debit/spending uses the violet primary family, while credit/refund uses mint. Direction labels, descriptions and signed amounts accompany the colours.
   - Shows only own data, hides internal details: no cost, no SKU, no other customers' balances, no admin notes, no internal audit details
-  - Real data only: no fake rows, loading/empty states, over-limit warning
-  - Payment instructions, credit position explainer, link to orders
-- Checkout: `app/retailer/checkout/page.tsx` shows wallet summary (limit/outstanding/available) from RPC, over-limit warning, server-authoritative note, link to ledger
+  - Real data only: no fake rows; loading and empty states are provided.
+  - Payment instructions and a link to orders are provided; the page describes coins, not retailer credit-limit terms.
+- Checkout: `app/retailer/checkout/page.tsx` shows the server-authoritative wallet summary and checkout guidance.
 
 ## Safety / Rules
 - No data dropped, no existing column dropped, no RLS weakened

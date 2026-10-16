@@ -41,11 +41,11 @@ const STATUS_OPTIONS = ['pending', 'confirmed', 'processing', 'packed', 'dispatc
 
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
-  confirmed: 'bg-blue-50 text-blue-700',
-  processing: 'bg-blue-50 text-blue-700',
+  confirmed: 'bg-sky-50 text-sky-700',
+  processing: 'bg-sky-50 text-sky-700',
   packed: 'bg-violet-50 text-violet-700',
   dispatched: 'bg-violet-50 text-violet-700',
-  delivered: 'bg-green-50 text-green-700',
+  delivered: 'bg-mint-50 text-mint-700',
   cancelled: 'bg-primary-50 text-primary-700',
   returned: 'bg-primary-50 text-primary-700',
 };

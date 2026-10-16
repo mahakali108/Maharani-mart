@@ -45,7 +45,7 @@ export function CoinsCheckoutSummary({
         </div>
         <div className="flex items-center justify-between gap-3">
           <dt className="text-slate-600">{COIN_SYMBOL} Coins used</dt>
-          <dd className="font-semibold text-emerald-700">−{formatInr(paiseToRupees(payment.usedPaise))}</dd>
+          <dd className="font-semibold text-mint-700">−{formatInr(paiseToRupees(payment.usedPaise))}</dd>
         </div>
         <div className="flex items-end justify-between gap-3 border-t border-dashed border-slate-200 pt-3">
           <dt className="text-sm font-bold text-slate-900">Remaining payable</dt>
@@ -54,7 +54,7 @@ export function CoinsCheckoutSummary({
           </dd>
         </div>
         <p className="flex items-start gap-1.5 text-[10px] leading-4 text-slate-500">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
+          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-mint-600" aria-hidden="true" />
           <span>
             {payment.usedPaise > 0
               ? 'Coins are deducted once, on the server, when the order is placed.'

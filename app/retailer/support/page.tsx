@@ -39,15 +39,15 @@ const ORDER: KeysetColumn[] = [
 
 const STATUS_STYLES: Record<SupportStatus, string> = {
   open: 'bg-amber-50 text-amber-700 ring-amber-200',
-  in_progress: 'bg-blue-50 text-blue-700 ring-blue-200',
-  resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  in_progress: 'bg-sky-50 text-sky-700 ring-sky-200',
+  resolved: 'bg-mint-50 text-mint-700 ring-mint-200',
   closed: 'bg-slate-100 text-slate-600 ring-slate-200',
 };
 
 const PRIORITY_STYLES: Record<SupportPriority, string> = {
   low: 'bg-slate-100 text-slate-600 ring-slate-200',
   normal: 'bg-sky-50 text-sky-700 ring-sky-200',
-  high: 'bg-orange-50 text-orange-700 ring-orange-200',
+  high: 'bg-amber-50 text-amber-700 ring-amber-200',
   urgent: 'bg-primary-50 text-primary-700 ring-primary-200',
 };
 

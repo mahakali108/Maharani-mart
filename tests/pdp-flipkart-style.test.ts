@@ -6,7 +6,7 @@
  *   2. Sticky mobile header: logo, search icon (functional), notifications,
  *      live cart count, account
  *   3. Gallery controls that work: zoom button, share, wishlist, discount badge
- *   4. B2B integrity: blue CTAs, live MOQ validation, server re-validation
+ *   4. B2B integrity: violet CTAs, live MOQ validation, server re-validation
  *   5. Loading / empty / unavailable / error states are handled
  *   6. No marketplace branding is copied — layout only
  *
@@ -130,17 +130,17 @@ describe('gallery controls', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. B2B integrity — blue CTAs, MOQ, server re-validation
+// 4. B2B integrity — violet actions, MOQ, server re-validation
 // ---------------------------------------------------------------------------
 describe('B2B marketplace actions', () => {
-  it('defines the action (CTA) palette', () => {
+  it('defines the action alias from the shared violet scale', () => {
     const config = read('tailwind.config.ts');
-    expect(config).toContain('action: {');
-    // Redesign (blush/ivory/wine/gold): action CTAs now use the wine brand core.
-    expect(config).toContain("600: '#C8102E'");
+    expect(config).toContain("const violet = familyScale('violet')");
+    expect(config).toContain('primary: violet');
+    expect(config).toContain('action: violet');
   });
 
-  it('primary buy actions use the blue action color', () => {
+  it('primary buy actions use the violet action color', () => {
     // Selected variant's Buy now, the batch add and the sticky bar's View
     // Cart are the primary CTAs (the duplicate footer button is gone).
     const buyNow = selector.slice(

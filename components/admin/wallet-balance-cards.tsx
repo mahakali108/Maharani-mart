@@ -31,9 +31,9 @@ export function WalletBalanceCards({
         <p className="mt-1 text-xl font-bold text-ink-950">₹{totalUsed.toFixed(2)}</p>
         <p className="mt-1 text-[10px] text-ink-500">Order deductions recorded on the ledger</p>
       </div>
-      <div className="rounded-2xl border border-green-200 bg-green-50 p-4 shadow-sm">
+      <div className="rounded-2xl border border-mint-200 bg-mint-50 p-4 shadow-sm">
         <p className="text-[10px] font-bold uppercase tracking-wider text-ink-400">Coins added</p>
-        <p className="mt-1 text-xl font-bold text-green-700">₹{totalPaidBack.toFixed(2)}</p>
+        <p className="mt-1 text-xl font-bold text-mint-700">₹{totalPaidBack.toFixed(2)}</p>
         <p className="mt-1 text-[10px] text-ink-500">Top-ups, refunds and credits</p>
       </div>
       <div className="rounded-2xl border border-ink-100 bg-white p-4 shadow-sm">

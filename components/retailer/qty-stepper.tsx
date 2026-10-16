@@ -29,7 +29,7 @@ export function QtyStepper({
   return (
     <div
       className={cn(
-        'flex min-w-0 items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm',
+        'flex min-w-0 items-center overflow-hidden rounded-xl border border-slate-400 bg-white shadow-sm',
         'h-11'
       )}
     >
@@ -39,7 +39,7 @@ export function QtyStepper({
         disabled={disabled || value <= min}
         className={cn(
           'flex shrink-0 items-center justify-center text-slate-600 transition hover:bg-slate-50 active:bg-slate-100',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600',
           'disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent',
           'h-full w-11'
         )}
@@ -59,8 +59,8 @@ export function QtyStepper({
         disabled={disabled}
         onChange={(event) => onChange(Math.max(min, Number(event.target.value) || min))}
         className={cn(
-          'no-spinner h-full w-full min-w-0 border-x border-slate-200 bg-white text-center font-bold text-slate-900 outline-none',
-          'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-300',
+          'no-spinner h-full w-full min-w-0 border-x border-slate-400 bg-white text-center font-bold text-slate-900 outline-none',
+          'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600',
           'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400',
           compact ? 'text-xs' : 'text-sm'
         )}
@@ -72,7 +72,7 @@ export function QtyStepper({
         disabled={disabled}
         className={cn(
           'flex shrink-0 items-center justify-center text-slate-600 transition hover:bg-slate-50 active:bg-slate-100',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600',
           'disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent',
           'h-full w-11'
         )}

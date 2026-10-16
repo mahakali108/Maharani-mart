@@ -33,19 +33,19 @@ export function dateOnly(iso: string | null): string {
 export function SeverityBadge({ severity }: { severity: Severity }) {
   const cls =
     severity === 'urgent'
-      ? 'bg-red-600 text-white'
+      ? 'bg-error-600 text-white'
       : severity === 'high'
         ? 'bg-amber-100 text-amber-800'
-        : 'bg-blue-50 text-blue-700';
+        : 'bg-sky-50 text-sky-700';
   return <span className={cn('inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', cls)}>{severity}</span>;
 }
 
 export function TagPill({ label, tone = 'default' }: { label: string; tone?: 'default' | 'bad' | 'good' | 'warn' }) {
   const cls =
     tone === 'bad'
-      ? 'bg-red-50 text-red-700'
+      ? 'bg-error-50 text-error-700'
       : tone === 'good'
-        ? 'bg-emerald-50 text-emerald-700'
+        ? 'bg-mint-50 text-mint-700'
         : tone === 'warn'
           ? 'bg-amber-50 text-amber-700'
           : 'bg-ink-50 text-ink-600';
@@ -165,6 +165,6 @@ export function LinkPill({ href, children }: { href: string; children: ReactNode
 
 export function GrowthText({ value }: { value: number | null }) {
   if (value === null) return <span className="text-xs text-ink-400">No prior data</span>;
-  const cls = value > 0 ? 'text-emerald-600' : value < 0 ? 'text-red-600' : 'text-ink-500';
+  const cls = value > 0 ? 'text-mint-600' : value < 0 ? 'text-error-600' : 'text-ink-500';
   return <span className={cn('text-xs font-semibold', cls)}>{pct(value)}</span>;
 }

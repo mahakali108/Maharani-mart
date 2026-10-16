@@ -26,8 +26,8 @@ export function RunAlertsButton() {
         <div
           className={
             result.ok
-              ? 'max-w-md rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-right text-xs text-emerald-800'
-              : 'max-w-md rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-right text-xs text-red-700'
+              ? 'max-w-md rounded-xl border border-mint-200 bg-mint-50 px-3 py-2 text-right text-xs text-mint-800'
+              : 'max-w-md rounded-xl border border-error-200 bg-error-50 px-3 py-2 text-right text-xs text-error-700'
           }
           role="status"
           aria-live="polite"

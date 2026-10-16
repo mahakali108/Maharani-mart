@@ -1,125 +1,88 @@
-# Native UI redesign — the Maharani Traders shopping app
+# Native UI redesign — coordinated premium pastel Maharani system
 
-Status: implemented and CI-verified on branch `arena/581284a2-maharani-mart`
-(web typecheck/lint/tests/build and the Android unit test + lint + debug APK job —
-see §13 for the exact runs).
-Scope: `android/` only. No backend file changed, no endpoint added, no wire
-contract touched (`docs/NATIVE_ANDROID_API_CONTRACT.md` is still the authority).
+Status: active colour-system reference for the Kotlin + Jetpack Compose app. The
+palette is generated from [`design/tokens.json`](../design/tokens.json) and shared
+with the web app. This document is not a build, visual-review, APK or production
+acceptance report; those results are recorded only after the corresponding checks
+have actually run.
 
-This document records what was built, why it looks the way it does, and — where a
-design idea needed data the API does not provide — what was left out on purpose.
+Scope: native presentation and Compose design tokens. Existing API/Supabase
+contracts, authentication/session persistence, access control, cart/order/account
+flows, wholesale pack rules and district assignments remain unchanged.
+
+This is the current implementation map. Earlier red-first redesign records are
+historical and do not describe the current UI.
 
 ---
 
 ## 1. What changed, in one paragraph
 
-The Phase D catalogue screens were functional but looked like a form: a red app
-bar, a plain text field, undifferentiated cards, one scrolling column. They are
-now a shopping app. The retailer home is a shop front (branded gradient app bar
-with a persistent search field, a banner carousel, category and brand rails, a
-"Recently added" rail, then the real catalogue grid), the catalogue is a
-responsive two-column grid under a pinned filter header with cursor pagination,
-the product detail screen is a paged gallery over server-priced pack data, and
-the shell has a real bottom bar (Home · Categories · Cart · Orders · Account)
-plus a drawer for everything the role also owns. All of it renders the same
-server data as before; nothing on a screen is invented.
+The retailer home remains a shop front with the persistent search field, server-
+provided banner carousel, category and brand rails, recently added products and
+catalogue grid. Catalogue and product-detail layouts remain responsive, with
+server-priced pack data, MOQ/availability, galleries and the existing authenticated
+bottom navigation. The shared native theme now coordinates the warm ivory canvas,
+white cards, readable navy/slate text and violet Maharani identity with the web
+system. Existing server data remains authoritative; no products, offers, prices,
+stock, schemes or assets are invented.
 
 ---
 
-## 2. Identity: Maharani red chrome, saffron accent, warm neutrals
+## 2. Shared identity and semantic colour roles
 
-The native app is **red-primary**. Brand red `#C8102E` (`MaharaniPalette.BrandRed600`,
-the same value as the printed brand, the launcher icon, the system splash and the
-web's `primary`) is the single colour of the chrome: app bars, the selected
-segment of the catalogue's segmented control, bottom-bar selection, links,
-primary buttons, focus rings and progress.
+The single source of truth is `design/tokens.json`: 117 palette values across 12
+families and 39 semantic aliases. The generated Compose palette in
+`core/designsystem/theme/Color.kt` mirrors the generated web CSS. Native screens
+prefer `MaterialTheme.colorScheme.*` and `MaharaniThemeTokens.colors.*`; new screens
+must not add ad-hoc hex values.
 
-This replaced an earlier split — *identity red, commerce chrome blue* — because
-two brand colours on one screen made the app read as a marketplace skin rather
-than as Maharani Traders: the shopper saw blue on every actionable surface, a
-red wordmark above it, and a red splash before it, and the Categories/Brands
-segments (blue-on-grey) were mistaken for disabled controls.
-
-| Surface | Colour | Why |
+| Role | Shared token/family | Native use |
 | --- | --- | --- |
-| Launcher icon, system splash (`themes.xml` → `@color/brand_red`), in-app `BrandSplash`, app bars, selected tab/segment, bottom-bar selection, links, primary buttons, focus | Brand red `#C8102E` (`BrandRed*`) | One colour for "this is Maharani" and "you can act here". The icon→splash→chrome handoff has no seam, and a selected control is unmistakable at arm's length in a shop. |
-| Supporting surfaces (selected tiles, indicators, badges, soft blocks) | Brand red 50/100 (`BrandRed50`, `BrandRed100`) | The pink supporting tone; keeps a red selection from becoming a red screen. |
-| "New launch", offers/highlights, secondary accents | Saffron (`Saffron*`) | The warm second accent for "worth a look". Never used for money, stock or a destructive action. |
-| Errors, destructive actions, out-of-stock | Rose (`error`, `OutOfStockRose*`) | Failure and unavailability stay legible next to a red brand: they are rose-pink surfaces with deep rose ink, and out-of-stock is never rendered in the brand red. |
-| Page background, card surfaces | Warm neutrals (`NeutralPage #F7F6F7`, `Neutral50–300`) + white cards | Light, airy, high-contrast text without the cool, blue-tinted greys that made the whole app look blue even where nothing was. |
-| In stock | Green (`inStock`, `inStockSurface`) | The one green in the product grid, so "can I order it" is answered at a glance. |
+| Maharani identity and primary actions | `action.primary` → `violet.600` | Primary buttons, selected navigation, links, prices, focus outline and crown-mark tint |
+| Calm selected/supporting surfaces | `lavender`, `violet`, `surface.selected` | Selected controls, shortcuts, favourite emphasis and quiet feedback |
+| Page and card surfaces | `surface.page` → warm `ivory`; `surface.card` → white | Page canvas, cards, dialogs and tables |
+| Main and supporting text | `text.primary`, `text.secondary`, `text.muted` → navy/slate | Headings, body text, labels and secondary copy |
+| Positive/available states | `status.success.*` → mint | In-stock, verified and completed states; always retain a text/icon cue |
+| Informational facts | `status.info.*` → sky | Delivery, lead-time and report context, not primary actions |
+| Configured offers | `offer.*` → peach | Server-configured merchandising and offer labels only |
+| Warning states | `status.warning.*` → amber | Expiry, attention and time-sensitive states with written labels |
+| Errors and unavailable stock | lavender/slate surfaces with navy text/icon | Explicitly non-red; status is never conveyed by colour alone |
+| Optional pink accent | `pastelPink.50`–`.400` | Light category/lifestyle backgrounds only; never text, actions, errors or identity |
 
-The Material 3 scheme in `theme/Theme.kt` is built from these palettes (light and
-dark), so screens reference `MaterialTheme.colorScheme.*` or
-`MaharaniThemeTokens.colors.*` — never a literal hex. No blue *action* family
-exists: tapping is red on every surface, and the blue that was added later (see
-§2.1) is an informational FACT token, not a control, so a blue button cannot be
-reintroduced by accident. (The **web**
-storefront keeps its own `action` blue in `tailwind.config.ts`; that is a web
-token, not an app one, and `tests/pdp-flipkart-style.test.ts` still pins it.)
+The light Material scheme uses violet primary actions, peach secondary accents,
+sky tertiary information, ivory page surfaces, white cards and navy/slate text.
+The dark scheme uses the same families at contrast-appropriate dark/light stops.
+The app-bar treatment uses a restrained violet pair; system splash, in-app session
+splash and launcher backgrounds use the same violet identity. Existing crown and
+initials artwork is retained and recoloured to violet—no new brand mark is drawn.
 
-`themes.xml` keeps `@drawable/ic_launcher_foreground`, `@color/brand_red` and
-`postSplashScreenTheme` exactly as before — the launcher and splash identity is
-unchanged, and the static guard in `tests/android-project-integrity.test.ts`
-still asserts it.
+Error styling is neutral lavender/slate with readable navy text. Destructive
+controls remain explicit and confirmed; success/warning/info/out-of-stock states
+keep labels or icons so meaning is not colour-only. No red, wine, crimson, maroon
+or saturated pink is used in the native UI or its launcher/splash assets.
 
----
+### Accent resolver
 
-## 2.1 The multi-colour system: one hue per job
+`theme/ExtraColors.kt` exposes semantic `AccentTone` values (`BRAND`, `AMBER`,
+`PEACH`, `VIOLET`, `MINT`, `SKY`, `LAVENDER`) and one `accent(tone)` resolver that
+returns the `(tint, surface, onSurface)` triple for the active theme.
+`components/AccentSurfaces.kt` consumes that mapping for reusable icon, shortcut,
+metric and information surfaces. Screens select a role rather than inventing a
+colour; every status keeps a written label or icon.
 
-Red-primary was never meant to mean red-*only*. A shop screen has to answer
-several different questions at once — *what can I tap*, *what saves me money*,
-*what is available*, *what is a fact*, *what is new* — and answering all of them
-in one hue is what makes an app look like a form. The palette is therefore
-organised as six families with exactly one job each. Nothing here is decorative:
-every family is reachable only through a named token, and the token resolves for
-the active theme.
+### Contrast and focus
 
-| Family | Job | Light token | Dark token | Where it may appear |
-| --- | --- | --- | --- | --- |
-| **Brand red** | Action and identity | `primary` `BrandRed600`, `action`, `actionContainer` | `BrandRed400` / `BrandRed900` | Primary buttons, app bar, selected tab/segment, links, focus, the crown mark, the cart badge |
-| **Amber** | Savings and offers | `secondary` `Saffron500`, `saffron*` | `Saffron300` / `Saffron900` | Offer badges, price-saving emphasis, slab highlights, the Coins balance tile |
-| **Violet** | Tools and account shortcuts | `tertiary` `Violet600`, `violet*` | `Violet300` / `Violet900` | Quick order, saved carts, security, reorder, the "starting soon" coupon state |
-| **Green** | Availability and success | `inStock`, `inStockSurface` | `Success50` / `Success900` | In-stock badges, "worth restocking", delivered states |
-| **Blue** | Neutral facts (never an action) | `info`, `infoSurface` | `Info300` / `Info950` | Delivery and lead-time facts, the wholesale-pricing note, GST split, reports |
-| **Rose** | Highlight: neither success nor failure | `highlight`, `highlightSurface`, `outOfStock*` | `Highlight300` / `Highlight950` | "New launch" companions, notification emphasis, out-of-stock and failures |
-
-Two rules keep the set from turning into a rainbow:
-
-1. **A screen names a tone, never a colour.** `theme/ExtraColors.kt` exposes
-   `AccentTone { BRAND, AMBER, VIOLET, GREEN, BLUE, ROSE }` and a single
-   `accent(tone)` resolver that returns the `(tint, surface, onSurface)` triple
-   for the current theme. `components/AccentSurfaces.kt` is the only consumer
-   that turns a tone into pixels — `AccentIcon`, `QuickActionTile`, `MetricTile`
-   and `InfoCard` — so a shortcut grid cannot invent a shade, and dark mode is
-   solved once instead of at each call site. Every surface keeps a text label
-   next to its colour, so no state is conveyed by hue alone.
-2. **Rose never means "available".** Out-of-stock, failures and the highlight
-   family sit in the same pink-red neighbourhood as the brand, so the highlight
-   values are deliberately warmer and lighter than `OutOfStockRose`, and the
-   informational blue is never used for a button. The one place a colour would
-   have been ambiguous — a "New" ribbon next to an out-of-stock chip — resolves
-   to rose-tinted highlight text plus a written word on both chips.
-
-Measured contrast (light mode, WCAG 2.1): body and label text on the page or on
-white cards clears 4.5:1; the accent `onSurface` inks are chosen from the 800/900
-steps of their family (violet 700 on violet 50, saffron 800 on saffron 50, info
-900 on info 50, highlight 800 on highlight 50, brand red 700 on red 50), each
-above 7:1 for text; the dark-mode trio mirrors it (300-step tint on a 900/950
-surface). The green and rose stock chips pair a 600-step ink with a 50-step
-surface on white cards, again above 4.5:1.
-
-The families are also what the retailer home's shortcut grid is built from: the
-tiles arrive as `(route, label, icon, tone)` data from the shell, so adding a
-shortcut is a one-line change and the colour is chosen from this table rather
-than picked per screen.
+The canonical registry documents WCAG contrast pairs for both light and dark
+surfaces. The focused test suite checks every pair, verifies CSS/Kotlin token
+parity and checks the 3px violet keyboard focus outline. Controls retain the
+existing 44px web and 48dp Compose target contracts.
 
 ---
 
 ## 3. Design tokens
 
-`core/designsystem/theme/Dimensions.kt` — one source for every dimension, so a
-card radius cannot drift between screens:
+`core/designsystem/theme/Dimensions.kt` remains the single source for dimensions,
+so card radius and touch targets cannot drift between screens:
 
 | Group | Values |
 | --- | --- |
@@ -129,14 +92,11 @@ card radius cannot drift between screens:
 | Media | `productImageRatio 1:1` · `railCardWidth 168` · `categoryTileWidth 88` · `categoryTileImage 64` · `brandTileWidth 84` · `bannerHeight 156` · `heroImageHeight 300` |
 | Elevation | `cardElevation 1` · `appBarElevation 2` (flat, modern; depth comes from borders and tone) |
 
-`theme/ExtraColors.kt` — tokens the Material scheme does not model: `action*` (= brand red),
-`inStock*` / `outOfStock*` / `warning*` (stock language), `brandMark*`,
-`saffron*`, the accent families added in §2.1 (`info*`, `violet*`, `highlight*`)
-with their `onSurface` inks, the app-bar gradient pair (`appBarStart`,
-`appBarEnd`, `onAppBar`, `onAppBarMuted`, `appBarField`, `onAppBarField`,
-`appBarFieldHint`), `skeletonBase` / `skeletonHighlight` (neutral),
-`imagePlaceholder` / `onImagePlaceholder` (neutral), `scrim`. Light and dark values are both declared; dark mode is not an
-afterthought bolted on with `copy(alpha = …)`.
+`theme/ExtraColors.kt` models Material roles the colour scheme does not expose:
+`action*`, `inStock*`, `outOfStock*`, `warning*`, `info*`, `violet*`,
+`highlight*`, `brandMark*`, `peach*`, `amber*`, the violet app-bar pair, skeleton
+colours, neutral image placeholders and the banner scrim. Light and dark values
+are derived only from the generated palette.
 
 `theme/Typography.kt` — the full M3 role scale (display/headline/title/body/label)
 with tightened line heights for dense retail rows.
@@ -145,9 +105,9 @@ with tightened line heights for dense retail rows.
 `gradle/libs.versions.toml`). `components/Glyphs.kt` draws the needed marks on a
 `Canvas` in a 24×24 grid — search, close, menu, back, chevron, home, category,
 cart, orders, account, pin, crown, refresh, filter, sort, bell, heart, check,
-coin, offer, bolt, brand, bookmark, chat — each with a content description. They cost no APK weight, cannot disagree with the theme (they take a
-`tint`), and are ordinary composables, so they work anywhere an icon slot does
-(`NavigationBarItem.icon`, `FilterChip.trailingIcon`, …).
+coin, offer, bolt, brand, bookmark, chat — each with a content description. They
+take a theme tint and remain ordinary composables, so they work anywhere an icon
+slot does (`NavigationBarItem.icon`, `FilterChip.trailingIcon`, …).
 
 ---
 
@@ -461,7 +421,7 @@ Edited:
   (`formatPaiseShort`)
 - `CatalogViewModel.kt` (`brandLabel`, `selectBrand`, `clearFilters`)
 - `app/navigation/MaharaniDestinations.kt` (`CATEGORIES`, `ACCOUNT`)
-- `app/ui/BrandSplash.kt` (pinned to brand red)
+- `app/ui/BrandSplash.kt` (shared violet identity token)
 - `app/src/test/…/MaharaniRouterTest.kt`, `feature/catalog/src/test/…/FakeCatalogApi.kt`
   (`brandsResult`, `nextCategoriesFailure`)
 
@@ -485,7 +445,7 @@ Deleted:
 
 ---
 
-## 13. The directory fix and the red-primary catalogue (latest change)
+## 13. The directory fix and the violet-primary catalogue (historical implementation note)
 
 ### 13.1 Why Categories and Brands showed nothing
 
@@ -538,13 +498,13 @@ exactly why only these two panes looked dead.
 | Requirement | How it is met |
 | --- | --- |
 | Real taxonomy, no fakes | Categories and Brands panes render exactly the rows the server returned, with the server's own names, images and counts. Nothing is hardcoded, mocked or estimated on the device. |
-| Segmented control | `CatalogTabStrip`: one pill, three equal 48dp segments. Selected = filled brand red + white semibold label; unselected = muted ink on the neutral track. `Role.Tab` per segment, inside a `selectableGroup`, so it is announced as a tab set and never reads as a disabled button. |
+| Segmented control | `CatalogTabStrip`: one pill, three equal 48dp segments. Selected = filled violet + white semibold label; unselected = muted ink on the neutral track. `Role.Tab` per segment, inside a `selectableGroup`, so it is announced as a tab set and never reads as a disabled button. |
 | Always know where you are | Brand app bar (name never truncated) + the selected segment + the applied scope as a removable chip + a "Showing…" line under the count. |
 | Category / brand tiles | 2-column grid, 96dp artwork band, two-line name, one server fact line. Selected state carries three cues (2dp primary border, primary-tinted surface, filled tick badge), so it survives colour-blindness and a screenshot. |
 | Product grid | `GridCells.Adaptive(158.dp)` → exactly two columns at 360/393/412dp, 1:1 artwork band, centred `Fit` images on a light neutral surface, 2-line name, brand, pack chips, price, MOQ and stock state; one card geometry for the grid and its skeleton. |
 | Filters and sort | "All" + every real category as chips, the applied brand as its own chip, a sort control that names the current order and opens the full list, and an in-stock switch that is filled when it is on. Every one of them performs a real request. |
-| Favourites | 48dp control with a solid backing circle, filled heart in rose when saved, progress while the write is in flight, and one shared store, so the state survives navigation. |
-| Bottom navigation | Home · Catalogue · Cart · Orders · Account, selected item in brand red with a pink indicator, server-driven cart badge, and the shell insets the content so the bar never covers the last row. |
+| Favourites | 48dp control with a solid backing circle, filled heart in lavender when saved, progress while the write is in flight, and one shared store, so the state survives navigation. |
+| Bottom navigation | Home · Catalogue · Cart · Orders · Account, selected item in violet with a lavender indicator, server-driven cart badge, and the shell insets the content so the bar never covers the last row. |
 | Loading / empty / error / retry | All three panes: skeletons while loading, "No products found" / "No categories yet" as *empty* (never an error), "No match" for a local filter with no hit, and `ErrorState`/`OfflineState` with a real retry that issues a fresh request. A failed *continuation* keeps the rows already on screen and retries the continuation, not the whole list. |
 
 ### 13.4 Files

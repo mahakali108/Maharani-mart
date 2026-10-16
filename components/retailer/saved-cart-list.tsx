@@ -109,7 +109,7 @@ function SavedCartCard({ cart }: { cart: SavedCartView }) {
             aria-label="Delete saved cart"
             title="Delete saved cart"
             onClick={() => run(() => deleteSavedCartAction(cart.id), 'Saved cart deleted.')}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -138,7 +138,7 @@ function SavedCartCard({ cart }: { cart: SavedCartView }) {
               disabled={isPending}
               aria-label="Remove saved item"
               onClick={() => run(() => removeSavedCartItemAction(item.id), 'Item removed.')}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -148,10 +148,10 @@ function SavedCartCard({ cart }: { cart: SavedCartView }) {
 
       <div className="p-4 pt-3">
         {status?.error ? (
-          <p role="alert" className="mb-2 rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700">{status.error}</p>
+          <p role="alert" className="mb-2 rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700">{status.error}</p>
         ) : null}
         {status?.success ? (
-          <p role="status" className="mb-2 flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
+          <p role="status" className="mb-2 flex items-center gap-1.5 rounded-xl bg-mint-50 px-3 py-2 text-[11px] font-semibold text-mint-700">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {status.success}
           </p>
         ) : null}

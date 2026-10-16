@@ -71,7 +71,7 @@ export default async function SalesmanDeliveryDetailPage({ params }: { params: {
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-ink-500">OTP verified</dt>
-              <dd className={delivery.otp_verified_at ? 'font-medium text-green-700' : 'text-ink-800'}>
+              <dd className={delivery.otp_verified_at ? 'font-medium text-mint-700' : 'text-ink-800'}>
                 {delivery.otp_verified_at ? `Yes (${formatIndiaDateTime(delivery.otp_verified_at)})` : 'Not yet'}
               </dd>
             </div>

@@ -30,9 +30,9 @@ export default function CatalogError({
         <h1 className="text-2xl font-semibold text-ink-950">Categories &amp; Brands</h1>
       </div>
 
-      <div className="mx-auto w-full max-w-md rounded-2xl border border-rose-100 bg-white p-8 text-center shadow-card">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-rose-50">
-          <AlertTriangle className="h-6 w-6 text-rose-600" />
+      <div className="mx-auto w-full max-w-md rounded-2xl border border-error-100 bg-white p-8 text-center shadow-card">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-error-50">
+          <AlertTriangle className="h-6 w-6 text-error-600" />
         </div>
         <h2 className="text-base font-semibold text-ink-950">The catalog could not be loaded</h2>
         <p className="mt-1.5 text-sm text-ink-500">

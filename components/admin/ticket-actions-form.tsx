@@ -128,7 +128,7 @@ export function TicketActionsForm({
         </div>
       ) : null}
       {statusMessage ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">
+        <div className="rounded-xl border border-mint-200 bg-mint-50 px-3 py-2.5 text-sm text-mint-700">
           {statusMessage}
         </div>
       ) : null}

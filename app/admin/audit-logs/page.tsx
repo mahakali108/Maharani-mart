@@ -67,8 +67,8 @@ interface AuditLogRow {
 }
 
 const ACTION_STYLES: Record<string, string> = {
-  INSERT: 'bg-green-50 text-green-700',
-  UPDATE: 'bg-blue-50 text-blue-700',
+  INSERT: 'bg-mint-50 text-mint-700',
+  UPDATE: 'bg-sky-50 text-sky-700',
   DELETE: 'bg-primary-50 text-primary-700',
 };
 

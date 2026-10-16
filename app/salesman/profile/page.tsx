@@ -57,7 +57,7 @@ export default async function SalesmanProfilePage() {
         <div>
           <p className="font-semibold text-ink-950">{profile?.full_name ?? user.fullName}</p>
           <p className="text-sm text-ink-500">Salesman</p>
-          <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${profile?.is_active ? 'bg-green-50 text-green-700' : 'bg-ink-100 text-ink-500'}`}>
+          <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${profile?.is_active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'}`}>
             {profile?.is_active ? 'Active' : 'Inactive'}
           </span>
         </div>

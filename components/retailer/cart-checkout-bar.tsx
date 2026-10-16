@@ -17,13 +17,13 @@ export function CartCheckoutBar({ grandTotal, orderableCount }: { grandTotal: nu
     >
       <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Grand total</p>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600">Grand total</p>
           <p className="truncate text-lg font-bold tracking-tight text-slate-950">{formatInr(grandTotal)}</p>
         </div>
         {orderableCount > 0 ? (
           <Link
             href="/retailer/checkout"
-            className="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2"
+            className="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
           >
             Proceed to checkout <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>

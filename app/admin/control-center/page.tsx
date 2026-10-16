@@ -28,7 +28,7 @@ export default async function ControlCenterPage() {
             <h1 className="text-xl font-semibold text-ink-950 sm:text-2xl">Master Control Center</h1>
           </div>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-500">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            <ShieldCheck className="h-3.5 w-3.5 text-mint-600" />
             Super Admin only · Full platform control · All actions audit logged
           </p>
         </div>

@@ -117,10 +117,10 @@ export function AddressForm({
       </label>
 
       {error ? (
-        <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700">{error}</p>
+        <p role="alert" className="rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700">{error}</p>
       ) : null}
       {success ? (
-        <p role="status" className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700">
+        <p role="status" className="flex items-center gap-1.5 rounded-xl bg-mint-50 px-3 py-2 text-[11px] font-semibold text-mint-700">
           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> {success}
         </p>
       ) : null}
@@ -173,7 +173,7 @@ export function AddressCardActions({ addressId, isDefault }: { addressId: string
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       {error ? (
-        <span role="alert" className="max-w-[140px] truncate rounded-lg bg-rose-50 px-2 py-1 text-[9px] font-bold text-rose-700" title={error}>
+        <span role="alert" className="max-w-[140px] truncate rounded-lg bg-error-50 px-2 py-1 text-[9px] font-bold text-error-700" title={error}>
           {error}
         </span>
       ) : null}
@@ -195,7 +195,7 @@ export function AddressCardActions({ addressId, isDefault }: { addressId: string
             type="button"
             disabled={isPending}
             onClick={() => run(() => deleteAddressAction(addressId))}
-            className="flex h-8 items-center rounded-lg bg-rose-600 px-2.5 text-[10px] font-bold text-white transition hover:bg-rose-700 disabled:opacity-50"
+            className="flex h-8 items-center rounded-lg bg-slate-100 px-2.5 text-[10px] font-bold text-slate-800 transition hover:bg-slate-200 disabled:opacity-50"
           >
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : 'Delete'}
           </button>
@@ -214,7 +214,7 @@ export function AddressCardActions({ addressId, isDefault }: { addressId: string
           aria-label="Delete address"
           title="Delete address"
           onClick={() => setConfirming(true)}
-          className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" />
         </button>

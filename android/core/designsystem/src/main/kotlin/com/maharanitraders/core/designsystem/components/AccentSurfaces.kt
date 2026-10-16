@@ -218,7 +218,7 @@ fun InfoCard(
   title: String,
   message: String,
   modifier: Modifier = Modifier,
-  tone: AccentTone = AccentTone.BLUE,
+  tone: AccentTone = AccentTone.SKY,
   glyph: @Composable (Color) -> Unit,
 ) {
   val tokens = MaharaniThemeTokens.colors

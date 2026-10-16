@@ -50,17 +50,17 @@ class HomeQuickActionsTest {
       MaharaniRoutes.CART,
     ).inOrder()
     // The tones come from the design system's families, in the documented
-    // order (red shop, violet tools, green history, amber money), so adding a
+    // order (violet shop, violet tools, mint history, lavender favourites), so adding a
     // tile is a deliberate colour decision rather than a default.
     assertThat(actions.map { it.tone }).containsExactly(
       AccentTone.BRAND,
-      AccentTone.BLUE,
-      AccentTone.BLUE,
+      AccentTone.SKY,
+      AccentTone.SKY,
       AccentTone.VIOLET,
       AccentTone.VIOLET,
-      AccentTone.GREEN,
-      AccentTone.ROSE,
-      AccentTone.AMBER,
+      AccentTone.MINT,
+      AccentTone.LAVENDER,
+      AccentTone.BRAND,
     ).inOrder()
     // Eight distinct glyphs: no two shortcuts look alike on the grid.
     assertThat(actions.map { it.icon }.toSet()).hasSize(8)

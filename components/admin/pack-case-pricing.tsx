@@ -596,7 +596,7 @@ export function PackCasePricing({
             className={`flex-1 rounded-lg border px-2.5 py-2 text-[11px] font-medium ${
               feedback.tone === 'error'
                 ? 'border-primary-200 bg-primary-50 text-primary-700'
-                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-mint-200 bg-mint-50 text-mint-700'
             }`}
           >
             {feedback.text}

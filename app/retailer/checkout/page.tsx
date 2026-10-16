@@ -236,12 +236,12 @@ export default async function CheckoutPage() {
           aria-label="Checkout progress"
         >
           <li className="flex items-center gap-1.5">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-mint-600 text-white">
               <Check className="h-3 w-3" aria-hidden="true" />
             </span>
             <span>Cart</span>
           </li>
-          <span className="h-px w-6 bg-emerald-300" aria-hidden="true" />
+          <span className="h-px w-6 bg-mint-300" aria-hidden="true" />
           <li className="flex items-center gap-1.5 text-primary-700">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white">2</span>
             <span>Checkout</span>
@@ -395,7 +395,7 @@ export default async function CheckoutPage() {
                 <span className="font-semibold text-slate-800">{formatInr(subtotal)}</span>
               </div>
               {appliedCoupon ? (
-                <div className="flex justify-between text-xs font-semibold text-emerald-700">
+                <div className="flex justify-between text-xs font-semibold text-mint-700">
                   <span>Coupon · {appliedCoupon.code}</span>
                   <span>−{formatInr(appliedCoupon.discount)}</span>
                 </div>
@@ -407,7 +407,7 @@ export default async function CheckoutPage() {
                 </div>
               ))}
               {savings > 0 ? (
-                <div className="flex justify-between text-xs font-semibold text-emerald-700">
+                <div className="flex justify-between text-xs font-semibold text-mint-700">
                   <span>Total savings</span>
                   <span>{formatInr(savings)}</span>
                 </div>
@@ -418,14 +418,14 @@ export default async function CheckoutPage() {
               </div>
               <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>🪙 Coins used</span>
-                <span className="font-semibold text-emerald-700">−{formatInr(coinsUsedRupees)}</span>
+                <span className="font-semibold text-mint-700">−{formatInr(coinsUsedRupees)}</span>
               </div>
               <div className="flex items-center justify-between text-sm font-bold text-slate-900">
                 <span>Remaining payable</span>
                 <span>{formatInr(payableOnDeliveryRupees)}</span>
               </div>
               <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                <ShieldCheck className="h-3.5 w-3.5 text-mint-600" aria-hidden="true" />
                 Final totals are validated server-side
               </div>
             </div>

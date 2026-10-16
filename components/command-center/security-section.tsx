@@ -26,7 +26,7 @@ export function SecuritySection({ security }: { security: SecurityIntel }) {
             <div className="mt-2 flex items-baseline gap-3">
               <p className="text-2xl font-bold text-ink-950">{security.ai.requests7d}</p>
               <p className="text-xs text-ink-500">requests</p>
-              <p className={`text-2xl font-bold ${security.ai.failures7d > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{security.ai.failures7d}</p>
+              <p className={`text-2xl font-bold ${security.ai.failures7d > 0 ? 'text-error-600' : 'text-mint-600'}`}>{security.ai.failures7d}</p>
               <p className="text-xs text-ink-500">failures</p>
             </div>
             {security.ai.failedTools.length > 0 ? (
@@ -41,7 +41,7 @@ export function SecuritySection({ security }: { security: SecurityIntel }) {
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 text-[11px] text-emerald-700">No provider failures recorded in the last 7 days.</p>
+              <p className="mt-2 text-[11px] text-mint-700">No provider failures recorded in the last 7 days.</p>
             )}
           </Card>
 

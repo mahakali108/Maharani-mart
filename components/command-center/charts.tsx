@@ -7,6 +7,7 @@
  * series only — empty series render an honest empty note, never bars.
  */
 
+import { useId } from 'react';
 import type { TrendPoint } from '@/lib/admin/command-center/types';
 
 function pointsToPath(points: { x: number; y: number }[]): string {
@@ -22,7 +23,8 @@ function niceMax(value: number): number {
 }
 
 /** Compact line + area trend (e.g. 14-day sales). */
-export function TrendChart({ points, height = 120, color = '#C8102E' }: { points: TrendPoint[]; height?: number; color?: string }) {
+export function TrendChart({ points, height = 120, color = 'var(--color-chart-primary)' }: { points: TrendPoint[]; height?: number; color?: string }) {
+  const gradientId = `trend-${useId().replace(/:/g, '')}`;
   const width = 560;
   const pad = 8;
   const values = points.map((p) => p.sales);
@@ -46,15 +48,15 @@ export function TrendChart({ points, height = 120, color = '#C8102E' }: { points
     <div>
       <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label={summary}>
         <defs>
-          <linearGradient id={`trend-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.18" />
             <stop offset="100%" stopColor={color} stopOpacity="0.02" />
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map((f) => (
-          <line key={f} x1={pad} x2={width - pad} y1={height - pad - f * (height - pad * 2)} y2={height - pad - f * (height - pad * 2)} stroke="#EEF0F3" strokeWidth="1" />
+          <line key={f} x1={pad} x2={width - pad} y1={height - pad - f * (height - pad * 2)} y2={height - pad - f * (height - pad * 2)} stroke="var(--palette-slate-200)" strokeWidth="1" />
         ))}
-        {area ? <path d={area} fill={`url(#trend-${color.replace('#', '')})`} /> : null}
+        {area ? <path d={area} fill={`url(#${gradientId})`} /> : null}
         {line ? <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /> : null}
         {coords.map((c, i) => {
           const point = points[i];
@@ -71,7 +73,7 @@ export function TrendChart({ points, height = 120, color = '#C8102E' }: { points
 }
 
 /** Vertical bars for weekly/bucketed totals. */
-export function BarChart({ bars, height = 120, color = '#0B0B0B' }: { bars: { label: string; value: number }[]; height?: number; color?: string }) {
+export function BarChart({ bars, height = 120, color = 'var(--color-chart-primary)' }: { bars: { label: string; value: number }[]; height?: number; color?: string }) {
   const total = bars.reduce((s, b) => s + b.value, 0);
   const summary = bars.length ? `Bars: ${bars.map((b) => `${b.label} ₹${Math.round(b.value).toLocaleString('en-IN')}`).join(', ')}.` : 'No data.';
   if (bars.length === 0 || total === 0) {
@@ -92,7 +94,7 @@ export function BarChart({ bars, height = 120, color = '#0B0B0B' }: { bars: { la
               <span className="max-w-full truncate text-[9px] font-semibold text-ink-500">
                 {bar.value >= 1000 ? `${Math.round(bar.value / 1000)}k` : Math.round(bar.value)}
               </span>
-              <div className="w-full rounded-t-md" style={{ height: h, backgroundColor: bar.value > 0 ? color : '#E5E7EB', opacity: bar.value > 0 ? 0.85 : 1 }} />
+              <div className="w-full rounded-t-md" style={{ height: h, backgroundColor: bar.value > 0 ? color : 'var(--color-chart-neutral)', opacity: bar.value > 0 ? 0.85 : 1 }} />
             </div>
           );
         })}
@@ -141,11 +143,11 @@ export function Donut({ percent, size = 120, label }: { percent: number | null; 
   const c = 2 * Math.PI * r;
   const clamped = percent === null ? 0 : Math.min(100, Math.max(0, percent));
   const dash = (clamped / 100) * c;
-  const tone = percent === null ? '#9CA3AF' : clamped > 100 ? '#DC2626' : clamped >= 80 ? '#D97706' : '#059669';
+  const tone = percent === null ? 'var(--palette-slate-500)' : clamped > 100 ? 'var(--color-status-error-text)' : clamped >= 80 ? 'var(--color-chart-warning)' : 'var(--color-chart-success)';
   return (
     <div className="flex items-center gap-4" role="img" aria-label={`${label}: ${percent === null ? 'not available' : `${Math.round(clamped)}%`}`}>
       <svg viewBox="0 0 110 110" width={size} height={size}>
-        <circle cx="55" cy="55" r={r} fill="none" stroke="#F1F2F5" strokeWidth="12" />
+        <circle cx="55" cy="55" r={r} fill="none" stroke="var(--color-chart-neutral)" strokeWidth="12" />
         <circle
           cx="55"
           cy="55"

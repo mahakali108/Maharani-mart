@@ -31,7 +31,7 @@ const PAGE_SIZE = 20;
 
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
-  verified: 'bg-green-50 text-green-700',
+  verified: 'bg-mint-50 text-mint-700',
   rejected: 'bg-primary-50 text-primary-700',
 };
 

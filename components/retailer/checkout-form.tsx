@@ -94,7 +94,7 @@ export function CheckoutForm({
             {couponDiscount > 0 ? (
               <div className="flex justify-between">
                 <span>Coupon {couponCode ? `· ${couponCode}` : ''}</span>
-                <span className="font-semibold text-emerald-700">−₹{couponDiscount.toFixed(2)}</span>
+                <span className="font-semibold text-mint-700">−₹{couponDiscount.toFixed(2)}</span>
               </div>
             ) : null}
           </div>
@@ -123,7 +123,7 @@ export function CheckoutForm({
           {isPending ? 'Placing order…' : `Place order · ₹${grandTotal.toFixed(2)}`}
         </button>
         <p className="flex items-start justify-center gap-1.5 text-center text-[9px] leading-4 text-slate-400">
-          <LockKeyhole className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" aria-hidden="true" />
+          <LockKeyhole className="mt-0.5 h-3 w-3 shrink-0 text-mint-600" aria-hidden="true" />
           <span>
             By placing this order, prices, MOQ, GST, coins and availability will be securely rechecked on the server.
           </span>

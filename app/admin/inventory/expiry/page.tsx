@@ -7,11 +7,11 @@ import { InventorySettingsForm } from '@/components/admin/inventory-settings-for
 import { BatchLossForm } from '@/components/admin/batch-loss-form';
 import type { ExpiryReportViewRow, InventorySettingsRow } from '@/types/inventory.types';
 
-const BUCKETS: { key: 'expired' | 'critical' | 'warning' | 'healthy'; label: string; dot: string; card: string }[] = [
-  { key: 'expired', label: 'Expired', dot: '🔴', card: 'border-primary-200 bg-primary-50/40' },
-  { key: 'critical', label: 'Expiring soon', dot: '🟠', card: 'border-orange-200 bg-orange-50/40' },
-  { key: 'warning', label: 'Expiring', dot: '🟡', card: 'border-amber-200 bg-amber-50/40' },
-  { key: 'healthy', label: 'Healthy', dot: '🟢', card: '' },
+const BUCKETS: { key: 'expired' | 'critical' | 'warning' | 'healthy'; label: string; marker: string; card: string }[] = [
+  { key: 'expired', label: 'Expired', marker: 'bg-error-600', card: 'border-error-200 bg-error-50' },
+  { key: 'critical', label: 'Expiring soon', marker: 'bg-amber-700', card: 'border-amber-200 bg-amber-50' },
+  { key: 'warning', label: 'Expiring', marker: 'bg-amber-500', card: 'border-amber-200 bg-amber-50' },
+  { key: 'healthy', label: 'Healthy', marker: 'bg-mint-700', card: 'border-mint-200 bg-mint-50' },
 ];
 
 export default async function InventoryExpiryPage({
@@ -64,7 +64,7 @@ export default async function InventoryExpiryPage({
         {BUCKETS.map((b) => (
           <a key={b.key} href={`/admin/inventory/expiry?bucket=${b.key}&warehouse=${warehouseFilter}`}>
             <Card className={`h-full ${b.card}`}>
-              <p className="text-sm text-ink-500">{b.dot} {b.label}</p>
+              <p className="flex items-center gap-2 text-sm text-ink-700"><span className={`h-2.5 w-2.5 rounded-full ${b.marker}`} aria-hidden="true" />{b.label}</p>
               <p className="mt-1 text-2xl font-semibold text-ink-950">{counts[b.key]}</p>
             </Card>
           </a>
@@ -128,7 +128,7 @@ export default async function InventoryExpiryPage({
                       {r.days_remaining === null ? (
                         <span className="text-ink-400">—</span>
                       ) : (
-                        <span className={r.days_remaining < 0 ? 'font-semibold text-primary-600' : r.days_remaining <= settings.expiry_critical_days ? 'font-semibold text-orange-600' : 'text-ink-600'}>
+                        <span className={r.days_remaining < 0 ? 'font-semibold text-primary-600' : r.days_remaining <= settings.expiry_critical_days ? 'font-semibold text-amber-700' : 'text-ink-600'}>
                           {r.days_remaining < 0 ? `${-r.days_remaining}d overdue` : `${r.days_remaining}d`}
                         </span>
                       )}
@@ -140,7 +140,7 @@ export default async function InventoryExpiryPage({
                       {available > 0 && r.expiry_status !== 'healthy' ? (
                         <BatchLossForm batchId={r.batch_id} lossType="expiry" maxQuantity={available} />
                       ) : (
-                        <span className="text-xs text-ink-400">{bucket.dot} {bucket.label}</span>
+                        <span className="inline-flex items-center gap-2 text-xs text-ink-600"><span className={`h-2 w-2 rounded-full ${bucket.marker}`} aria-hidden="true" />{bucket.label}</span>
                       )}
                     </td>
                   </tr>

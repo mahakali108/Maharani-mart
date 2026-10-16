@@ -48,7 +48,7 @@ export function RetailerOrderActions({ orderId, status }: { orderId: string; sta
       <div className="border-b border-slate-100 bg-slate-50 px-4 py-3.5"><h2 className="text-sm font-bold text-slate-900">Order actions</h2><p className="mt-0.5 text-[10px] text-slate-500">Reorder or manage this purchase</p></div>
       <div className="space-y-3 p-4">
         {error ? <div role="alert" className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2.5 text-[10px] font-medium text-primary-700">{error}</div> : null}
-        {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[10px] font-medium text-emerald-700">{notice}</div> : null}
+        {notice ? <div className="rounded-xl border border-mint-200 bg-mint-50 px-3 py-2.5 text-[10px] font-medium text-mint-700">{notice}</div> : null}
 
         <Link href={`/retailer/orders/${orderId}/reorder`} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 text-xs font-bold text-white transition hover:bg-primary-700"><RotateCcw className="h-4 w-4" /> Reorder these items</Link>
 

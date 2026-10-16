@@ -106,7 +106,7 @@ export function SupplierSection({ intel }: { intel: SupplierIntel }) {
                       <Td>{inrExact(c.previousCost)}</Td>
                       <Td>{inrExact(c.latestCost)}</Td>
                       <Td>
-                        <span className={c.changePct > 0 ? 'font-semibold text-red-600' : 'font-semibold text-emerald-600'}>{pct(c.changePct)}</span>
+                        <span className={c.changePct > 0 ? 'font-semibold text-error-600' : 'font-semibold text-mint-600'}>{pct(c.changePct)}</span>
                       </Td>
                     </tr>
                   ))}

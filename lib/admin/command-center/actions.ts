@@ -221,12 +221,12 @@ export async function runCommandCenterSmartAlerts(): Promise<RunAlertsResult> {
       deduped += 1;
       continue;
     }
-    const prefix = signal.severity === 'urgent' ? '🔴' : signal.severity === 'high' ? '🟠' : '🔵';
+    const prefix = signal.severity === 'urgent' ? 'URGENT' : signal.severity === 'high' ? 'HIGH' : 'INFO';
     for (const recipientId of recipients) {
       try {
         await createInAppNotification({
           recipientId,
-          title: `${prefix} ${signal.title}`,
+          title: `${prefix} — ${signal.title}`,
           body: signal.body,
           linkUrl: signal.linkUrl,
         });
