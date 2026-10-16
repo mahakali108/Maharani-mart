@@ -282,7 +282,7 @@ app/
 ```
 
 - **Mobile-first**: Tailwind breakpoints designed bottom-up; retailer app is the primary mobile surface (Saran field usage, often on mid-range Android).
-- **Theme**: Premium Red (`#C8102E` primary), White (`#FFFFFF`), Black (`#0B0B0B`) — tokens defined in `tailwind.config.ts`, no inline hex scattered in components.
+- **Theme**: premium pastel system — violet primary (`#5142B8`), ivory/white surfaces, navy/slate text, mint success, sky information, peach offers, amber warnings and neutral lavender/slate errors. `design/tokens.json` is canonical; web CSS and Android Compose palettes are generated from it.
 - **Charts**: Recharts for dashboard analytics (sales trend, top products, area performance).
 - **Empty states are first-class UI**, not an afterthought — every list component ships with a designed "No products yet — add your first product" / "No orders yet" state.
 

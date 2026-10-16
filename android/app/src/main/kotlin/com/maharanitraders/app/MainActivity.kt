@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
   lateinit var session: SessionController
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Native splash: brand red + the existing launcher foreground, then the
+    // Native splash: violet identity + the existing launcher foreground, then the
     // Compose surface takes over (identical colours, so there is no flash).
     installSplashScreen()
     super.onCreate(savedInstanceState)

@@ -59,8 +59,8 @@ export function HomeReorderCard({ item }: { item: HomeReorderItem }) {
         </button>
         <Link href={`/retailer/orders/${item.orderId}/reorder`} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[11px] font-semibold text-action-700 hover:bg-action-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500">Review order</Link>
       </div>
-      {added ? <p role="status" className="mt-2 text-[11px] text-emerald-700">Added to your cart at current terms.</p> : null}
-      {error ? <p role="alert" className="mt-2 text-[11px] text-rose-700">{error}</p> : null}
+      {added ? <p role="status" className="mt-2 text-[11px] text-mint-700">Added to your cart at current terms.</p> : null}
+      {error ? <p role="alert" className="mt-2 text-[11px] text-error-700">{error}</p> : null}
     </article>
   );
 }

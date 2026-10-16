@@ -22,8 +22,8 @@ function FormMessage({ error, success }: { error?: string; success?: string }) {
       role="status"
       className={
         error
-          ? 'rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700'
-          : 'flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700'
+          ? 'rounded-xl bg-error-50 px-3 py-2 text-[11px] font-semibold text-error-700'
+          : 'flex items-center gap-1.5 rounded-xl bg-mint-50 px-3 py-2 text-[11px] font-semibold text-mint-700'
       }
     >
       {success ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : null}

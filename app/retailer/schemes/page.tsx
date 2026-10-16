@@ -122,7 +122,7 @@ export default async function RetailerSchemesPage() {
                     <Tag className="h-3 w-3" aria-hidden="true" />{' '}
                     {scheme.is_festival ? 'Festival offer' : 'Retailer scheme'}
                   </span>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-bold text-emerald-700">Active</span>
+                  <span className="rounded-full bg-mint-50 px-2.5 py-1 text-[9px] font-bold text-mint-700">Active</span>
                 </div>
                 <h3 className="mt-4 max-w-sm text-lg font-bold leading-tight text-slate-900">{scheme.name}</h3>
                 <p className="mt-2 max-w-md text-xs leading-5 text-slate-500">

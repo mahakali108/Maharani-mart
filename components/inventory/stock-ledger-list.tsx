@@ -45,10 +45,10 @@ const ORDER: KeysetColumn[] = [
 ];
 
 const MOVEMENT_STYLES: Record<string, string> = {
-  inward: 'bg-green-50 text-green-700',
+  inward: 'bg-mint-50 text-mint-700',
   outward: 'bg-primary-50 text-primary-700',
   damage: 'bg-primary-50 text-primary-700',
-  return: 'bg-blue-50 text-blue-700',
+  return: 'bg-sky-50 text-sky-700',
   transfer: 'bg-violet-50 text-violet-700',
   adjustment: 'bg-amber-50 text-amber-700',
 };

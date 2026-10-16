@@ -67,7 +67,7 @@ export default async function SalesmanTargetsPage() {
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-ink-100">
                   <div
-                    className={`h-full rounded-full ${percent != null && percent >= 100 ? 'bg-emerald-500' : 'bg-primary-600'}`}
+                    className={`h-full rounded-full ${percent != null && percent >= 100 ? 'bg-mint-500' : 'bg-primary-600'}`}
                     style={{ width: `${Math.min(100, percent ?? 0)}%` }}
                   />
                 </div>

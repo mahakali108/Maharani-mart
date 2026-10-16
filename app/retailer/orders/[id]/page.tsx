@@ -34,11 +34,11 @@ type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'packed' | 'dispatch
 
 const STATUS_META: Record<OrderStatus, { label: string; style: string; icon: typeof Clock3 }> = {
   pending: { label: 'Pending confirmation', style: 'bg-amber-50 text-amber-700 ring-amber-200', icon: Clock3 },
-  confirmed: { label: 'Confirmed', style: 'bg-blue-50 text-blue-700 ring-blue-200', icon: CheckCircle2 },
-  processing: { label: 'Processing', style: 'bg-blue-50 text-blue-700 ring-blue-200', icon: Clock3 },
+  confirmed: { label: 'Confirmed', style: 'bg-sky-50 text-sky-700 ring-sky-200', icon: CheckCircle2 },
+  processing: { label: 'Processing', style: 'bg-sky-50 text-sky-700 ring-sky-200', icon: Clock3 },
   packed: { label: 'Packed', style: 'bg-violet-50 text-violet-700 ring-violet-200', icon: PackageCheck },
-  dispatched: { label: 'On the way', style: 'bg-cyan-50 text-cyan-700 ring-cyan-200', icon: Truck },
-  delivered: { label: 'Delivered', style: 'bg-emerald-50 text-emerald-700 ring-emerald-200', icon: CheckCircle2 },
+  dispatched: { label: 'On the way', style: 'bg-sky-50 text-sky-700 ring-sky-200', icon: Truck },
+  delivered: { label: 'Delivered', style: 'bg-mint-50 text-mint-700 ring-mint-200', icon: CheckCircle2 },
   cancelled: { label: 'Cancelled', style: 'bg-primary-50 text-primary-700 ring-primary-200', icon: XCircle },
   returned: { label: 'Returned', style: 'bg-primary-50 text-primary-700 ring-primary-200', icon: XCircle },
 };
@@ -168,7 +168,7 @@ export default async function OrderDetailPage({
     <div className="space-y-5 sm:space-y-6">
       {searchParams.placed === '1' ? <CommerceSteps current={3} /> : null}
       {searchParams.placed === '1' ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-mint-200 bg-mint-50 px-5 py-5 text-sm text-emerald-800">
+        <div className="flex items-start gap-3 rounded-2xl border border-mint-200 bg-mint-50 px-5 py-5 text-sm text-mint-800">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
             <p className="font-bold">Order placed successfully</p>
@@ -258,9 +258,9 @@ export default async function OrderDetailPage({
             <div className="space-y-3 p-4">
               <div className="flex justify-between text-xs text-slate-600"><span>Subtotal</span><span className="font-semibold text-slate-800">₹{order.subtotal.toFixed(2)}</span></div>
               <div className="flex justify-between text-xs text-slate-600"><span>GST</span><span className="font-semibold text-slate-800">₹{order.gst_total.toFixed(2)}</span></div>
-              {order.discount_total > 0 ? <div className="flex justify-between text-xs text-emerald-700"><span>Discount</span><span className="font-bold">−₹{order.discount_total.toFixed(2)}</span></div> : null}
+              {order.discount_total > 0 ? <div className="flex justify-between text-xs text-mint-700"><span>Discount</span><span className="font-bold">−₹{order.discount_total.toFixed(2)}</span></div> : null}
               <div className="flex items-end justify-between border-t border-dashed border-slate-200 pt-4"><span className="text-sm font-bold text-slate-900">Total</span><span className="text-xl font-bold tracking-tight text-slate-950">₹{order.grand_total.toFixed(2)}</span></div>
-              <div className="flex items-center justify-center gap-1.5 pt-1 text-[9px] text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Tax and totals recorded securely</div>
+              <div className="flex items-center justify-center gap-1.5 pt-1 text-[9px] text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-mint-600" /> Tax and totals recorded securely</div>
             </div>
           </section>
 

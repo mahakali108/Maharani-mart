@@ -120,17 +120,17 @@ export function ControlCenterClient({
                 key={alert.id}
                 className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
                   alert.severity === 'critical'
-                    ? 'border-red-200 bg-red-50'
+                    ? 'border-error-200 bg-error-50'
                     : alert.severity === 'warning'
                     ? 'border-amber-200 bg-amber-50'
-                    : 'border-blue-200 bg-blue-50'
+                    : 'border-sky-200 bg-sky-50'
                 }`}
               >
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${
-                  alert.severity === 'critical' ? 'text-red-600' : 'text-amber-600'
+                  alert.severity === 'critical' ? 'text-error-600' : 'text-amber-600'
                 }`} />
                 <span className={`text-sm font-medium ${
-                  alert.severity === 'critical' ? 'text-red-800' : 'text-amber-800'
+                  alert.severity === 'critical' ? 'text-error-800' : 'text-amber-800'
                 }`}>
                   {alert.message}
                 </span>
@@ -142,14 +142,14 @@ export function ControlCenterClient({
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           <StatCard label="Total Users" value={overview.totalUsers} icon={Users} />
-          <StatCard label="Active Users" value={overview.activeUsers} icon={UserCheck} color="emerald" />
-          <StatCard label="Expired Access" value={overview.expiredUsers} icon={Clock} color="red" />
-          <StatCard label="Suspended" value={overview.suspendedUsers} icon={UserX} color="gray" />
-          <StatCard label="Expiring Today" value={overview.expiringToday} icon={AlertTriangle} color="red" />
+          <StatCard label="Active Users" value={overview.activeUsers} icon={UserCheck} color="mint" />
+          <StatCard label="Expired Access" value={overview.expiredUsers} icon={Clock} color="error" />
+          <StatCard label="Suspended" value={overview.suspendedUsers} icon={UserX} color="slate" />
+          <StatCard label="Expiring Today" value={overview.expiringToday} icon={AlertTriangle} color="error" />
           <StatCard label="Expiring 3 Days" value={overview.expiringIn3Days} icon={Timer} color="amber" />
           <StatCard label="Expiring 7 Days" value={overview.expiringIn7Days} icon={Calendar} color="amber" />
-          <StatCard label="Features" value={`${overview.enabledFeatures}/${overview.totalFeatures}`} icon={Package} color="blue" />
-          <StatCard label="Disabled Features" value={overview.disabledFeatures} icon={EyeOff} color="gray" />
+          <StatCard label="Features" value={`${overview.enabledFeatures}/${overview.totalFeatures}`} icon={Package} color="sky" />
+          <StatCard label="Disabled Features" value={overview.disabledFeatures} icon={EyeOff} color="slate" />
           <StatCard label="Features Expiring" value={overview.featuresExpiringSoon} icon={Clock} color="amber" />
         </div>
 
@@ -267,7 +267,7 @@ export function ControlCenterClient({
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        u.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                        u.is_active ? 'bg-mint-100 text-mint-800' : 'bg-slate-100 text-slate-800'
                       }`}>
                         {u.is_active ? 'Active' : 'Inactive'}
                       </span>
@@ -388,12 +388,12 @@ export function ControlCenterClient({
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-ink-900">{feature.name}</span>
                   {!feature.is_implemented && (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                       Not Implemented
                     </span>
                   )}
                   {feature.expires_at && new Date(feature.expires_at) < new Date() && (
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600">
+                    <span className="rounded-full bg-error-100 px-2 py-0.5 text-[10px] font-medium text-error-600">
                       Expired
                     </span>
                   )}
@@ -412,7 +412,7 @@ export function ControlCenterClient({
                   }}
                   disabled={isPending}
                   className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors ${
-                    feature.is_enabled ? 'bg-emerald-500' : 'bg-ink-300'
+                    feature.is_enabled ? 'bg-mint-500' : 'bg-ink-300'
                   }`}
                 >
                   <span
@@ -436,7 +436,7 @@ export function ControlCenterClient({
                     }
                   }}
                   disabled={isPending}
-                  className="rounded-lg p-1.5 text-ink-400 hover:bg-red-50 hover:text-red-600"
+                  className="rounded-lg p-1.5 text-ink-400 hover:bg-slate-100 hover:text-slate-700"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -572,7 +572,7 @@ export function ControlCenterClient({
                               startTransition(async () => { await suspendUser(u.id); });
                             }
                           }}
-                          className="rounded-lg px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                          className="rounded-lg px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
                         >
                           Suspend
                         </button>
@@ -581,7 +581,7 @@ export function ControlCenterClient({
                           onClick={() => {
                             startTransition(async () => { await reactivateUser(u.id); });
                           }}
-                          className="rounded-lg px-2 py-1 text-xs text-emerald-600 hover:bg-emerald-50"
+                          className="rounded-lg px-2 py-1 text-xs text-mint-600 hover:bg-mint-50"
                         >
                           Reactivate
                         </button>
@@ -619,7 +619,7 @@ export function ControlCenterClient({
             <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
               maintenanceConfig?.enabled
                 ? 'bg-amber-100 text-amber-800'
-                : 'bg-emerald-100 text-emerald-800'
+                : 'bg-mint-100 text-mint-800'
             }`}>
               {maintenanceConfig?.enabled ? 'ACTIVE' : 'INACTIVE'}
             </span>
@@ -671,7 +671,7 @@ export function ControlCenterClient({
                   });
                 }}
                 disabled={isPending}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-mint-600 px-4 py-2 text-sm font-medium text-white hover:bg-mint-700 disabled:opacity-50"
               >
                 <Play className="h-4 w-4" /> Disable Maintenance
               </button>
@@ -804,17 +804,17 @@ function StatCard({
   color?: string;
 }) {
   const colorClasses: Record<string, string> = {
-    blue: 'bg-blue-50 text-blue-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    red: 'bg-red-50 text-red-600',
+    sky: 'bg-sky-50 text-sky-800',
+    mint: 'bg-mint-50 text-mint-800',
+    error: 'bg-error-50 text-error-700',
     amber: 'bg-amber-50 text-amber-600',
-    gray: 'bg-gray-50 text-gray-600',
+    slate: 'bg-slate-100 text-slate-700',
   };
 
   return (
     <div className="rounded-xl border border-ink-100 bg-white p-4">
       <div className="flex items-center gap-3">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${colorClasses[color] ?? colorClasses.blue}`}>
+        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${colorClasses[color] ?? colorClasses.sky}`}>
           <Icon className="h-4 w-4" />
         </div>
         <div>

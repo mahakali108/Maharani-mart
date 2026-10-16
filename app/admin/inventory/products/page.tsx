@@ -39,7 +39,7 @@ const ORDER: KeysetColumn[] = [
 ];
 
 const STATUS_STYLES: Record<string, string> = {
-  healthy: 'bg-green-50 text-green-700',
+  healthy: 'bg-mint-50 text-mint-700',
   low_stock: 'bg-amber-50 text-amber-700',
   out_of_stock: 'bg-primary-50 text-primary-700',
 };

@@ -88,9 +88,9 @@ export default async function AdminSchemesPage() {
                       ) : ended ? (
                         <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-500">Expired</span>
                       ) : started ? (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Running</span>
+                        <span className="rounded-full bg-mint-50 px-2 py-0.5 text-xs font-medium text-mint-700">Running</span>
                       ) : (
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">Scheduled</span>
+                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">Scheduled</span>
                       )}
                     </td>
                     <td className="px-5 py-3 text-right">

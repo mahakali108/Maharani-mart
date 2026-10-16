@@ -66,7 +66,7 @@ export function AttendanceCheckButton({
         </Button>
       ) : !checkedOut ? (
         <>
-          <p className="flex items-center gap-2 text-sm text-green-700">
+          <p className="flex items-center gap-2 text-sm text-mint-700">
             <CheckCircle2 className="h-4 w-4" />
             Checked in at {punchInAt ? formatIndiaTime(punchInAt) : ''}
           </p>
@@ -77,7 +77,7 @@ export function AttendanceCheckButton({
         </>
       ) : (
         <p className="flex items-center gap-2 text-sm text-ink-600">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <CheckCircle2 className="h-4 w-4 text-mint-600" />
           Day complete — checked in{' '}
           {punchInAt ? formatIndiaTime(punchInAt) : ''}, checked out{' '}
           {punchOutAt ? formatIndiaTime(punchOutAt) : ''}

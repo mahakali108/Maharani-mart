@@ -78,7 +78,7 @@ export function DeliveryAssignmentPanel({
         <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{error}</div>
       ) : null}
       {notice ? (
-        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{notice}</div>
+        <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-700">{notice}</div>
       ) : null}
 
       {canAssign && isOpen ? (

@@ -16,41 +16,63 @@ const root = process.cwd();
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 const colors = (tailwindConfig.theme?.extend?.colors ?? {}) as Record<string, Record<string, string>>;
 
-describe('premium palette — pastel / ivory / Maharani red', () => {
-  it('primary and action share the Maharani red brand core (#C8102E)', () => {
-    expect(colors.primary?.[600]).toBe('#C8102E');
-    expect(colors.action?.[600]).toBe('#C8102E');
+describe('premium palette — shared pastel Maharani system', () => {
+  const registry = JSON.parse(read('design/tokens.json')) as {
+    families: Record<string, { tokens: Record<string, string> }>;
+    semantic: Record<string, { ref: string }>;
+  };
+
+  it('documents 117 palette values in 12 families and 39 semantic aliases', () => {
+    const paletteCount = Object.values(registry.families).reduce(
+      (count, family) => count + Object.keys(family.tokens).length,
+      0,
+    );
+    expect(Object.keys(registry.families)).toHaveLength(12);
+    expect(paletteCount).toBe(117);
+    expect(Object.keys(registry.semantic)).toHaveLength(39);
+    expect(read('docs/design-system.md')).toContain('117 documented palette tokens across 12 coherent families');
   });
 
-  it('the former marketplace blue is no longer the action colour', () => {
-    expect(colors.action?.[600]).not.toBe('#1e5fd8');
-    expect(colors.action?.[500]).not.toBe('#2874f0');
+  it('resolves primary and action to the same documented violet token', () => {
+    expect(registry.semantic['action.primary']?.ref).toBe('violet.600');
+    expect(colors.primary?.[600]).toContain('--palette-violet-600-rgb');
+    expect(colors.action?.[600]).toBe(colors.primary?.[600]);
   });
 
-  it('defines all coordinated pastel accents', () => {
-    for (const tone of ['mint', 'lavender', 'peach', 'sky']) expect(colors[tone]?.[100]).toBeDefined();
-    expect(colors.blush?.[100]).toBeDefined();
-    expect(colors.ivory?.DEFAULT).toBeDefined();
+  it('exposes the coordinated mint, lavender, peach, sky and ivory scales', () => {
+    for (const tone of ['mint', 'lavender', 'peach', 'sky']) {
+      expect(colors[tone]?.[100]).toContain('--palette-');
+    }
+    expect(colors.blush?.[100]).toContain('--palette-pastel-pink-100-rgb');
+    expect(colors.ivory?.DEFAULT).toBe('var(--palette-ivory-100)');
+    expect(colors.slate?.[50]).toContain('--palette-slate-50-rgb');
+    expect(colors.ink?.[900]).toContain('--palette-navy-900-rgb');
   });
 
-  it('warm slate replaces the cool grey default, with dark body text', () => {
-    expect(colors.slate?.[50]).toBe('#fcf9f8');
-    expect(colors.slate?.[900]).toBe('#231b1e');
+  it('uses the shared violet and ivory on install, offline, manifest and app chrome', () => {
+    const violet = registry.families.violet!.tokens['600']!;
+    const install = read('components/pwa/InstallPrompt.tsx');
+    const offline = read('public/offline.html');
+    expect(install).toContain('var(--color-action-primary)');
+    expect(install).toContain('var(--color-surface-card)');
+    expect(offline).toContain(`--violet: ${violet};`);
+    expect(manifest().theme_color).toBe(violet);
+    expect(manifest().background_color).toBe(registry.families.ivory!.tokens['100']!);
+    expect(read('app/layout.tsx')).toContain(`themeColor: '${violet}'`);
   });
 
-  it('manifest theme colour matches the primary brand core', () => {
-    expect(manifest().theme_color).toBe(colors.primary?.[600]);
-  });
-
-  it('the install/offline surfaces use the same brand colour', () => {
-    expect(read('components/pwa/InstallPrompt.tsx')).toContain("'#C8102E'");
-    expect(read('public/offline.html')).toContain('#C8102E');
-    expect(read('app/layout.tsx')).toContain("themeColor: '#C8102E'");
-  });
-
-  it('no screen still uses the old red or blue hex values', () => {
-    for (const file of ['app/layout.tsx', 'app/manifest.ts', 'components/pwa/InstallPrompt.tsx', 'public/offline.html']) {
-      expect(read(file)).not.toContain('#c8102e');
+  it('removes prior red/wine brand values from the app chrome', () => {
+    for (const file of [
+      'app/layout.tsx',
+      'app/manifest.ts',
+      'components/pwa/InstallPrompt.tsx',
+      'public/offline.html',
+      'lib/retailer/invoice-html.ts',
+    ]) {
+      const source = read(file).toLowerCase();
+      expect(source).not.toContain('#c8102e');
+      expect(source).not.toContain('#8f1d40');
+      expect(source).not.toContain('#e11d48');
     }
     expect(read('components/layout/retailer-shell.tsx')).not.toContain('bg-[#fafafa]');
   });
@@ -92,8 +114,9 @@ describe('catalogue — categories and brands are both visible and combine', () 
 
 describe('home — premium banner and service-area selector', () => {
   const home = read('components/retailer/home-content.tsx');
-  it('renders an ivory/blush storefront hero with catalogue and reorder entry points', () => {
-    expect(home).toContain('bg-blush-50');
+  it('renders an ivory/lavender storefront hero with catalogue and reorder entry points', () => {
+    expect(home).toContain('bg-lavender-50');
+    expect(home).not.toContain('bg-blush-50');
     expect(home).toContain('Explore catalogue');
     expect(home).toContain('Buy again');
     expect(read('app/globals.css')).not.toContain('.retailer-theme [class~=');

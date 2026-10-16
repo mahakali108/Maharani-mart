@@ -18,7 +18,7 @@ function metricTone(quality?: string) {
 
 function ResultCard({ card, onPrompt, onConfirm, confirming }: { card: AICard; onPrompt: (value: string) => void; onConfirm: (token: string) => void; confirming: boolean }) {
   return (
-    <article className="overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_8px_24px_rgba(30,64,175,0.08)]">
+    <article className="overflow-hidden rounded-2xl border border-lavender-200 bg-white shadow-card">
       <div className="flex gap-3 p-3.5 sm:p-4">
         {card.imageUrl ? <Image src={card.imageUrl} alt="" width={64} height={64} unoptimized className="h-16 w-16 shrink-0 rounded-xl bg-slate-50 object-contain p-1" /> : null}
         <div className="min-w-0 flex-1">
@@ -27,7 +27,7 @@ function ResultCard({ card, onPrompt, onConfirm, confirming }: { card: AICard; o
               <p className="font-bold text-slate-950">{card.title}</p>
               {card.subtitle ? <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{card.subtitle}</p> : null}
             </div>
-            {card.badge ? <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[9px] font-bold capitalize text-blue-700">{card.badge}</span> : null}
+            {card.badge ? <span className="shrink-0 rounded-full bg-lavender-50 px-2 py-1 text-[9px] font-bold capitalize text-primary-700">{card.badge}</span> : null}
           </div>
           {card.metrics?.length ? (
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -37,9 +37,9 @@ function ResultCard({ card, onPrompt, onConfirm, confirming }: { card: AICard; o
         </div>
       </div>
       {card.lines?.length ? <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto border-t border-slate-100 px-4">{card.lines.map((line, index) => <div key={`${line.label}-${index}`} className="flex items-start justify-between gap-3 py-2.5 text-[11px]"><div><p className="font-semibold text-slate-800">{line.label}</p>{line.detail ? <p className="mt-0.5 text-[10px] leading-4 text-slate-500">{line.detail}</p> : null}</div><span className="shrink-0 font-bold text-slate-900">{line.value}</span></div>)}</div> : null}
-      {card.source ? <p className="border-t border-slate-100 px-4 py-2 text-[9px] leading-4 text-slate-400"><ShieldCheck className="mr-1 inline h-3 w-3 text-emerald-600" /> Source: {card.source}</p> : null}
+      {card.source ? <p className="border-t border-slate-100 px-4 py-2 text-[9px] leading-4 text-slate-400"><ShieldCheck className="mr-1 inline h-3 w-3 text-mint-600" /> Source: {card.source}</p> : null}
       {card.actions?.length ? <div className="flex flex-wrap gap-2 border-t border-slate-100 bg-slate-50/70 p-3">{card.actions.map((action, index) => {
-        const classes = cn('inline-flex h-9 items-center justify-center rounded-xl px-3 text-[10px] font-bold transition', action.tone === 'primary' ? 'bg-blue-700 text-white hover:bg-blue-800' : action.tone === 'danger' ? 'bg-red-600 text-white hover:bg-red-700' : 'border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:text-blue-700');
+        const classes = cn('inline-flex h-9 items-center justify-center rounded-xl px-3 text-[10px] font-bold transition', action.tone === 'primary' ? 'bg-primary-600 text-white hover:bg-primary-700' : action.tone === 'danger' ? 'border border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200' : 'border border-slate-200 bg-white text-slate-700 hover:border-primary-200 hover:text-primary-700');
         if (action.type === 'link' && action.href) return <Link key={index} href={action.href} className={classes}>{action.label}</Link>;
         if (action.type === 'confirm_tool' && action.confirmationToken) return <button key={index} type="button" disabled={confirming} onClick={() => onConfirm(action.confirmationToken!)} className={classes}>{confirming ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}{action.label}</button>;
         return <button key={index} type="button" onClick={() => onPrompt(action.value ?? action.label)} className={classes}>{action.label}</button>;
@@ -119,19 +119,19 @@ export function MaharaniAIChat({ surface, title, subtitle, quickActions }: { sur
   }
 
   return (
-    <div className="mx-auto max-w-5xl overflow-hidden rounded-[1.5rem] border border-blue-100 bg-white shadow-[0_24px_70px_rgba(30,64,175,0.12)]">
+    <div className="mx-auto max-w-5xl overflow-hidden rounded-[1.5rem] border border-lavender-200 bg-white shadow-[0_24px_70px_rgba(81,66,184,0.12)]">
       <header className="bg-primary-800 px-4 py-5 text-white sm:px-6 sm:py-6">
-        <div className="flex items-start justify-between gap-4"><div className="flex gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20"><Sparkles className="h-5 w-5" /></span><div><h1 className="text-xl font-bold sm:text-2xl">{title}</h1><p className="mt-1 max-w-2xl text-xs leading-5 text-blue-100">{subtitle}</p></div></div><button type="button" onClick={() => void resetMemory()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3 text-[10px] font-bold text-blue-50 hover:bg-white/15" title="Reset safe business memory"><RotateCcw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Reset memory</span></button></div>
-        <div className="mt-4 flex items-center gap-2 text-[9px] text-blue-100"><ShieldCheck className="h-3.5 w-3.5 text-emerald-300" /> RLS-protected tools · Confirmed cart writes · No automatic orders</div>
+        <div className="flex items-start justify-between gap-4"><div className="flex gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20"><Sparkles className="h-5 w-5" /></span><div><h1 className="text-xl font-bold sm:text-2xl">{title}</h1><p className="mt-1 max-w-2xl text-xs leading-5 text-lavender-100">{subtitle}</p></div></div><button type="button" onClick={() => void resetMemory()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3 text-[10px] font-bold text-lavender-50 hover:bg-white/15" title="Reset safe business memory"><RotateCcw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Reset memory</span></button></div>
+        <div className="mt-4 flex items-center gap-2 text-[9px] text-lavender-100"><ShieldCheck className="h-3.5 w-3.5 text-mint-300" /> RLS-protected tools · Confirmed cart writes · No automatic orders</div>
       </header>
 
-      <div className="border-b border-slate-100 bg-white px-3 py-3 sm:px-5"><div className="scrollbar-none flex gap-2 overflow-x-auto">{quickActions.map((action) => <button key={action.label} type="button" disabled={busy} onClick={() => void streamRequest(action.prompt)} className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-3 py-2 text-[10px] font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50">{action.label}</button>)}</div></div>
+      <div className="border-b border-slate-100 bg-white px-3 py-3 sm:px-5"><div className="scrollbar-none flex gap-2 overflow-x-auto">{quickActions.map((action) => <button key={action.label} type="button" disabled={busy} onClick={() => void streamRequest(action.prompt)} className="shrink-0 rounded-full border border-lavender-200 bg-lavender-50 px-3 py-2 text-[10px] font-bold text-primary-700 transition hover:bg-lavender-100 disabled:opacity-50">{action.label}</button>)}</div></div>
 
-      <main ref={conversationRef} className="h-[min(62vh,650px)] space-y-5 overflow-y-auto bg-[#f8faff] p-3 sm:p-6" aria-live="polite">
+      <main ref={conversationRef} className="h-[min(62vh,650px)] space-y-5 overflow-y-auto bg-ivory-50 p-3 sm:p-6" aria-live="polite">
         {messages.map((message) => <div key={message.id} className={cn('flex gap-2.5', message.role === 'user' && 'justify-end')}>
-          {message.role === 'assistant' ? <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-700 text-white"><Bot className="h-4 w-4" /></span> : null}
+          {message.role === 'assistant' ? <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white"><Bot className="h-4 w-4" /></span> : null}
           <div className={cn('max-w-[88%] space-y-3 sm:max-w-[78%]', message.role === 'user' && 'items-end')}>
-            {(message.text || message.loading) ? <div className={cn('rounded-2xl px-3.5 py-3 text-xs leading-5 shadow-sm sm:text-sm', message.role === 'user' ? 'rounded-br-md bg-blue-700 text-white' : message.error ? 'rounded-bl-md border border-red-100 bg-red-50 text-red-700' : 'rounded-bl-md border border-slate-100 bg-white text-slate-700')}>{message.text}{message.loading ? <Loader2 className="ml-2 inline h-4 w-4 animate-spin text-blue-600" /> : null}</div> : null}
+            {(message.text || message.loading) ? <div className={cn('rounded-2xl px-3.5 py-3 text-xs leading-5 shadow-sm sm:text-sm', message.role === 'user' ? 'rounded-br-md bg-primary-600 text-white' : message.error ? 'rounded-bl-md border border-error-100 bg-error-50 text-error-700' : 'rounded-bl-md border border-slate-100 bg-white text-slate-700')}>{message.text}{message.loading ? <Loader2 className="ml-2 inline h-4 w-4 animate-spin text-primary-600" /> : null}</div> : null}
             {message.cards.map((card, index) => <ResultCard key={`${card.type}-${card.id ?? index}-${index}`} card={card} onPrompt={(value) => { setInput(value); }} onConfirm={(token) => void streamRequest('Confirm cart change', token)} confirming={confirming} />)}
           </div>
           {message.role === 'user' ? <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-600"><UserRound className="h-4 w-4" /></span> : null}
@@ -139,11 +139,11 @@ export function MaharaniAIChat({ surface, title, subtitle, quickActions }: { sur
       </main>
 
       <footer className="border-t border-slate-200 bg-white p-3 sm:p-4">
-        <form onSubmit={submit} className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
+        <form onSubmit={submit} className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-primary-300 focus-within:ring-2 focus-within:ring-primary-100">
           <button type="button" disabled className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-300" title="Image understanding is not configured"><ImagePlus className="h-4.5 w-4.5" /></button>
           <textarea value={input} onChange={(event) => setInput(event.target.value.slice(0, 2000))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (input.trim()) void streamRequest(input); } }} rows={1} placeholder="Ask in Hindi, Hinglish or English…" className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-xs text-slate-900 outline-none placeholder:text-slate-400 sm:text-sm" />
           <button type="button" disabled className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-300" title="Voice input is ready for a future supported provider"><Mic className="h-4.5 w-4.5" /></button>
-          <button type="submit" disabled={busy || !input.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-700 text-white transition hover:bg-blue-800 disabled:bg-slate-300"><ArrowUp className="h-4 w-4" /></button>
+          <button type="submit" disabled={busy || !input.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white transition hover:bg-primary-700 disabled:bg-slate-300"><ArrowUp className="h-4 w-4" /></button>
         </form>
         <p className="mt-2 text-center text-[9px] text-slate-400">Maharani AI can make mistakes in language, but business values are shown only from verified tools. Review before acting.</p>
       </footer>

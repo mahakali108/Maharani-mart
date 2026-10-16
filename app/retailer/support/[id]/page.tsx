@@ -18,15 +18,15 @@ import {
 
 const STATUS_STYLES: Record<SupportStatus, string> = {
   open: 'bg-amber-50 text-amber-700 ring-amber-200',
-  in_progress: 'bg-blue-50 text-blue-700 ring-blue-200',
-  resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  in_progress: 'bg-sky-50 text-sky-700 ring-sky-200',
+  resolved: 'bg-mint-50 text-mint-700 ring-mint-200',
   closed: 'bg-slate-100 text-slate-600 ring-slate-200',
 };
 
 const PRIORITY_STYLES: Record<SupportPriority, string> = {
   low: 'bg-slate-100 text-slate-600 ring-slate-200',
   normal: 'bg-sky-50 text-sky-700 ring-sky-200',
-  high: 'bg-orange-50 text-orange-700 ring-orange-200',
+  high: 'bg-amber-50 text-amber-700 ring-amber-200',
   urgent: 'bg-primary-50 text-primary-700 ring-primary-200',
 };
 
@@ -208,7 +208,7 @@ export default async function SupportTicketDetailPage({ params }: { params: { id
       ) : (
         <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
           {ticket.status === 'resolved' ? (
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-mint-600" aria-hidden="true" />
           ) : (
             <Lock className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" aria-hidden="true" />
           )}

@@ -56,7 +56,7 @@ interface RetailerCard extends RetailerRow {
 
 const STATUS_STYLES: Record<RetailerRow['status'], string> = {
   pending_approval: 'bg-amber-50 text-amber-700',
-  active: 'bg-green-50 text-green-700',
+  active: 'bg-mint-50 text-mint-700',
   suspended: 'bg-primary-50 text-primary-700',
 };
 

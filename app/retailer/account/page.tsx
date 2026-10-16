@@ -47,23 +47,23 @@ interface ProfileContactRow {
 
 const ACCOUNT_LINKS = [
   { href: '/retailer/account/edit', label: 'Edit profile', body: 'Shop, owner and contact details', icon: NotebookText, tone: 'bg-sky-50 text-sky-700' },
-  { href: '/retailer/account/addresses', label: 'Address book', body: 'Saved delivery addresses for checkout', icon: MapPinned, tone: 'bg-teal-50 text-teal-700' },
-  { href: '/retailer/reports', label: 'Purchase reports', body: 'Monthly totals, GST, top products, statements', icon: PieChart, tone: 'bg-orange-50 text-orange-700' },
-  { href: '/retailer/cart/saved', label: 'Saved carts', body: 'Your reusable order lists', icon: Folders, tone: 'bg-lime-50 text-lime-700' },
-  { href: '/retailer/account/security', label: 'Security', body: 'Password, sessions and account requests', icon: KeyRound, tone: 'bg-rose-50 text-rose-700' },
-  { href: '/retailer/account/notification-preferences', label: 'Notification settings', body: 'Choose which updates you receive', icon: Settings2, tone: 'bg-fuchsia-50 text-fuchsia-700' },
+  { href: '/retailer/account/addresses', label: 'Address book', body: 'Saved delivery addresses for checkout', icon: MapPinned, tone: 'bg-sky-50 text-sky-700' },
+  { href: '/retailer/reports', label: 'Purchase reports', body: 'Monthly totals, GST, top products, statements', icon: PieChart, tone: 'bg-sky-50 text-sky-700' },
+  { href: '/retailer/cart/saved', label: 'Saved carts', body: 'Your reusable order lists', icon: Folders, tone: 'bg-lavender-50 text-lavender-700' },
+  { href: '/retailer/account/security', label: 'Security', body: 'Password, sessions and account requests', icon: KeyRound, tone: 'bg-error-50 text-error-700' },
+  { href: '/retailer/account/notification-preferences', label: 'Notification settings', body: 'Choose which updates you receive', icon: Settings2, tone: 'bg-lavender-50 text-lavender-700' },
   { href: '#coins', label: '🪙 Coins', body: 'Your coin balance and what it covers', icon: WalletCards, tone: 'bg-amber-50 text-amber-700' },
   { href: '/retailer/account/ledger', label: 'Coin history', body: 'Every coin added, spent and refunded, with dates', icon: Scale, tone: 'bg-slate-100 text-slate-700' },
-  { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-blue-50 text-blue-700' },
-  { href: '/retailer/home#home-reorder', label: 'Reorder', body: 'Your recently purchased packs, one tap away', icon: RotateCcw, tone: 'bg-cyan-50 text-cyan-700' },
+  { href: '/retailer/orders', label: 'Orders', body: 'Track deliveries, invoices and reorders', icon: ClipboardList, tone: 'bg-sky-50 text-sky-700' },
+  { href: '/retailer/home#home-reorder', label: 'Reorder', body: 'Your recently purchased packs, one tap away', icon: RotateCcw, tone: 'bg-violet-50 text-violet-700' },
   { href: '/retailer/quick-order', label: 'Quick order', body: 'Find products by name', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-700' },
-  { href: '/retailer/favorites', label: 'Favourites', body: 'Your saved products for faster restocking', icon: Heart, tone: 'bg-rose-50 text-rose-700' },
-  { href: '/retailer/coupons', label: 'Coupons & offers', body: 'Your available codes and used offers', icon: Ticket, tone: 'bg-pink-50 text-pink-700' },
+  { href: '/retailer/favorites', label: 'Favourites', body: 'Your saved products for faster restocking', icon: Heart, tone: 'bg-error-50 text-error-700' },
+  { href: '/retailer/coupons', label: 'Coupons & offers', body: 'Your available codes and used offers', icon: Ticket, tone: 'bg-peach-50 text-peach-800' },
   { href: '/retailer/notifications', label: 'Notifications', body: 'Order and account updates', icon: Bell, tone: 'bg-violet-50 text-violet-700' },
-  { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-indigo-50 text-indigo-700' },
-  { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, coins and reorders', icon: Sparkles, tone: 'bg-blue-50 text-blue-700' },
-  { href: '/retailer/support', label: 'Support tickets', body: 'Raise an issue and track every reply', icon: MessageCircle, tone: 'bg-emerald-50 text-emerald-700' },
-  { href: '/retailer/help', label: 'Help centre', body: 'FAQs and distributor support', icon: CircleHelp, tone: 'bg-teal-50 text-teal-700' },
+  { href: '/retailer/schemes', label: 'Schemes & offers', body: 'Current retailer savings and offers', icon: BadgePercent, tone: 'bg-peach-50 text-peach-700' },
+  { href: '/retailer/ai', label: 'Ask Maharani AI', body: 'Smart products, orders, coins and reorders', icon: Sparkles, tone: 'bg-sky-50 text-sky-700' },
+  { href: '/retailer/support', label: 'Support tickets', body: 'Raise an issue and track every reply', icon: MessageCircle, tone: 'bg-mint-50 text-mint-700' },
+  { href: '/retailer/help', label: 'Help centre', body: 'FAQs and distributor support', icon: CircleHelp, tone: 'bg-sky-50 text-sky-700' },
 ];
 
 export default async function RetailerAccountPage() {
@@ -146,7 +146,7 @@ export default async function RetailerAccountPage() {
             <span
               className={
                 retailer?.status === 'active'
-                  ? 'inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700'
+                  ? 'inline-flex w-fit items-center gap-1.5 rounded-full bg-mint-50 px-3 py-1.5 text-[10px] font-bold text-mint-700'
                   : 'inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-[10px] font-bold text-amber-700'
               }
             >
@@ -231,7 +231,7 @@ export default async function RetailerAccountPage() {
                 <h2 className="mt-0.5 text-base font-bold text-slate-900 sm:text-lg">Account shortcuts</h2>
               </div>
               {unreadCount && unreadCount > 0 ? (
-                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">
+                <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-bold text-sky-700">
                   {unreadCount} unread
                 </span>
               ) : null}
@@ -323,13 +323,13 @@ function ProfileCompletionBar({ completion }: { completion: ReturnType<typeof co
     <div className="relative mt-5 border-t border-slate-100 pt-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Profile completion</p>
-        <p className={done ? 'text-[11px] font-bold text-emerald-700' : 'text-[11px] font-bold text-primary-700'}>
+        <p className={done ? 'text-[11px] font-bold text-mint-700' : 'text-[11px] font-bold text-primary-700'}>
           {completion.percent}%{done ? ' — complete' : ''}
         </p>
       </div>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={completion.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completion">
         <div
-          className={done ? 'h-full rounded-full bg-emerald-500 transition-all' : 'h-full rounded-full bg-primary-500 transition-all'}
+          className={done ? 'h-full rounded-full bg-mint-500 transition-all' : 'h-full rounded-full bg-primary-500 transition-all'}
           style={{ width: `${Math.max(4, completion.percent)}%` }}
         />
       </div>

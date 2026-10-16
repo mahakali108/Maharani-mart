@@ -115,16 +115,16 @@ export default function InstallPrompt() {
         gap: 12,
         flexWrap: 'wrap',
         padding: '12px 16px',
-        background: '#ffffff',
-        color: '#1a1a1a',
-        borderTop: '1px solid #ececec',
+        background: 'var(--color-surface-card)',
+        color: 'var(--color-text-primary)',
+        borderTop: '1px solid var(--color-surface-border)',
         boxShadow: '0 -4px 16px rgba(0,0,0,0.08)',
         fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
       }}
     >
       <div style={{ flex: '1 1 180px', minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 14 }}>Maharani Traders</div>
-        <div style={{ fontSize: 12.5, color: '#6d6d6d', lineHeight: 1.4 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
           Install the app for a faster, app-like experience.
         </div>
       </div>
@@ -135,8 +135,8 @@ export default function InstallPrompt() {
           appearance: 'none',
           border: 0,
           cursor: 'pointer',
-          background: '#C8102E',
-          color: '#fff',
+          background: 'var(--color-action-primary)',
+          color: 'var(--color-action-on-primary)',
           fontWeight: 600,
           fontSize: 14,
           padding: '10px 18px',
@@ -154,10 +154,12 @@ export default function InstallPrompt() {
           border: 0,
           cursor: 'pointer',
           background: 'transparent',
-          color: '#6d6d6d',
+          color: 'var(--color-text-secondary)',
           fontWeight: 600,
           fontSize: 14,
           padding: '10px 12px',
+          minHeight: 44,
+          minWidth: 44,
           borderRadius: 10,
         }}
       >

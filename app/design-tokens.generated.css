@@ -1,0 +1,368 @@
+/* Generated from design/tokens.json. Do not edit by hand. */
+:root {
+  /* Primary interaction and Maharani identity. Use the deep core for buttons, selected navigation, links, and prices; reserve light stops for quiet selected surfaces. */
+  --palette-violet-50: #F7F5FF;
+  --palette-violet-50-rgb: 247 245 255;
+  --palette-violet-100: #EEEAFE;
+  --palette-violet-100-rgb: 238 234 254;
+  --palette-violet-200: #DCD5FF;
+  --palette-violet-200-rgb: 220 213 255;
+  --palette-violet-300: #C3B8FF;
+  --palette-violet-300-rgb: 195 184 255;
+  --palette-violet-400: #9988F2;
+  --palette-violet-400-rgb: 153 136 242;
+  --palette-violet-500: #6D5AD6;
+  --palette-violet-500-rgb: 109 90 214;
+  --palette-violet-600: #5142B8;
+  --palette-violet-600-rgb: 81 66 184;
+  --palette-violet-700: #403398;
+  --palette-violet-700-rgb: 64 51 152;
+  --palette-violet-800: #35277F;
+  --palette-violet-800-rgb: 53 39 127;
+  --palette-violet-900: #291F62;
+  --palette-violet-900-rgb: 41 31 98;
+  --palette-violet-950: #1B1544;
+  --palette-violet-950-rgb: 27 21 68;
+  /* Low-chroma supporting surfaces for selected rows, calm error notices, account shortcuts, and premium merchandising. Dark stops are reserved for contrast, not large decorative fills. */
+  --palette-lavender-50: #FBFAFF;
+  --palette-lavender-50-rgb: 251 250 255;
+  --palette-lavender-100: #F3F0FF;
+  --palette-lavender-100-rgb: 243 240 255;
+  --palette-lavender-200: #E9E2FF;
+  --palette-lavender-200-rgb: 233 226 255;
+  --palette-lavender-300: #D6CCFA;
+  --palette-lavender-300-rgb: 214 204 250;
+  --palette-lavender-400: #B9A9E8;
+  --palette-lavender-400-rgb: 185 169 232;
+  --palette-lavender-500: #9A88D3;
+  --palette-lavender-500-rgb: 154 136 211;
+  --palette-lavender-600: #7867B4;
+  --palette-lavender-600-rgb: 120 103 180;
+  --palette-lavender-700: #5C4F8D;
+  --palette-lavender-700-rgb: 92 79 141;
+  --palette-lavender-800: #473D6E;
+  --palette-lavender-800-rgb: 71 61 110;
+  --palette-lavender-900: #332C50;
+  --palette-lavender-900-rgb: 51 44 80;
+  --palette-lavender-950: #201B34;
+  --palette-lavender-950-rgb: 32 27 52;
+  /* High-contrast text, headings, operational data, and the dark application shell. The 500 stop is the preferred secondary-text colour on light surfaces. */
+  --palette-navy-50: #F5F7FB;
+  --palette-navy-50-rgb: 245 247 251;
+  --palette-navy-100: #E9EEF6;
+  --palette-navy-100-rgb: 233 238 246;
+  --palette-navy-200: #D1D9E7;
+  --palette-navy-200-rgb: 209 217 231;
+  --palette-navy-300: #ACB9CD;
+  --palette-navy-300-rgb: 172 185 205;
+  --palette-navy-400: #7B8BA5;
+  --palette-navy-400-rgb: 123 139 165;
+  --palette-navy-500: #596579;
+  --palette-navy-500-rgb: 89 101 121;
+  --palette-navy-600: #46536A;
+  --palette-navy-600-rgb: 70 83 106;
+  --palette-navy-700: #33415B;
+  --palette-navy-700-rgb: 51 65 91;
+  --palette-navy-800: #23304A;
+  --palette-navy-800-rgb: 35 48 74;
+  --palette-navy-900: #17233F;
+  --palette-navy-900-rgb: 23 35 63;
+  --palette-navy-950: #0B1427;
+  --palette-navy-950-rgb: 11 20 39;
+  /* Cool, quiet interface neutrals for separators, table bands, disabled controls, and low-emphasis supporting content. */
+  --palette-slate-50: #FCFBFE;
+  --palette-slate-50-rgb: 252 251 254;
+  --palette-slate-100: #F6F5FA;
+  --palette-slate-100-rgb: 246 245 250;
+  --palette-slate-200: #E8E5F0;
+  --palette-slate-200-rgb: 232 229 240;
+  --palette-slate-300: #D3D0DF;
+  --palette-slate-300-rgb: 211 208 223;
+  --palette-slate-400: #8B91A5;
+  --palette-slate-400-rgb: 139 145 165;
+  --palette-slate-500: #69738A;
+  --palette-slate-500-rgb: 105 115 138;
+  --palette-slate-600: #525D74;
+  --palette-slate-600-rgb: 82 93 116;
+  --palette-slate-700: #3C4760;
+  --palette-slate-700-rgb: 60 71 96;
+  --palette-slate-800: #2A354D;
+  --palette-slate-800-rgb: 42 53 77;
+  --palette-slate-900: #1B263E;
+  --palette-slate-900-rgb: 27 38 62;
+  --palette-slate-950: #10192C;
+  --palette-slate-950-rgb: 16 25 44;
+  /* Warm page backgrounds and calm merchandising surfaces. Ivory is a background family; use navy or slate for text rather than the darker decorative stops. */
+  --palette-ivory-50: #FFFEFB;
+  --palette-ivory-50-rgb: 255 254 251;
+  --palette-ivory-100: #FFFBF4;
+  --palette-ivory-100-rgb: 255 251 244;
+  --palette-ivory-200: #F9F3E8;
+  --palette-ivory-200-rgb: 249 243 232;
+  --palette-ivory-300: #F0E7D7;
+  --palette-ivory-300-rgb: 240 231 215;
+  --palette-ivory-400: #E5D8C2;
+  --palette-ivory-400-rgb: 229 216 194;
+  --palette-ivory-500: #CFBD9F;
+  --palette-ivory-500-rgb: 207 189 159;
+  --palette-ivory-600: #B49E7A;
+  --palette-ivory-600-rgb: 180 158 122;
+  --palette-ivory-700: #927958;
+  --palette-ivory-700-rgb: 146 121 88;
+  --palette-ivory-800: #6C593F;
+  --palette-ivory-800-rgb: 108 89 63;
+  --palette-ivory-900: #4D402F;
+  --palette-ivory-900-rgb: 77 64 47;
+  --palette-ivory-950: #2E261C;
+  --palette-ivory-950-rgb: 46 38 28;
+  /* Positive, in-stock, completed, and verified states. Use dark mint for text/icons and pale mint for status containers; always retain a visible label or icon. */
+  --palette-mint-50: #F3FBF6;
+  --palette-mint-50-rgb: 243 251 246;
+  --palette-mint-100: #E8F7EE;
+  --palette-mint-100-rgb: 232 247 238;
+  --palette-mint-200: #DDF4E7;
+  --palette-mint-200-rgb: 221 244 231;
+  --palette-mint-300: #BFE9D2;
+  --palette-mint-300-rgb: 191 233 210;
+  --palette-mint-400: #91D6B0;
+  --palette-mint-400-rgb: 145 214 176;
+  --palette-mint-500: #63BA8D;
+  --palette-mint-500-rgb: 99 186 141;
+  --palette-mint-600: #3B986C;
+  --palette-mint-600-rgb: 59 152 108;
+  --palette-mint-700: #287552;
+  --palette-mint-700-rgb: 40 117 82;
+  --palette-mint-800: #1D5A3F;
+  --palette-mint-800-rgb: 29 90 63;
+  --palette-mint-900: #143E2C;
+  --palette-mint-900-rgb: 20 62 44;
+  --palette-mint-950: #0B271C;
+  --palette-mint-950-rgb: 11 39 28;
+  /* Informational and delivery context, such as service-area notes, schedules, and neutral progress. It is not the primary action colour. */
+  --palette-sky-50: #F3F9FE;
+  --palette-sky-50-rgb: 243 249 254;
+  --palette-sky-100: #E7F3FD;
+  --palette-sky-100-rgb: 231 243 253;
+  --palette-sky-200: #DCEEFF;
+  --palette-sky-200-rgb: 220 238 255;
+  --palette-sky-300: #BADDF5;
+  --palette-sky-300-rgb: 186 221 245;
+  --palette-sky-400: #8BC6E8;
+  --palette-sky-400-rgb: 139 198 232;
+  --palette-sky-500: #5BA5D1;
+  --palette-sky-500-rgb: 91 165 209;
+  --palette-sky-600: #3584B4;
+  --palette-sky-600-rgb: 53 132 180;
+  --palette-sky-700: #286B94;
+  --palette-sky-700-rgb: 40 107 148;
+  --palette-sky-800: #205475;
+  --palette-sky-800-rgb: 32 84 117;
+  --palette-sky-900: #173D56;
+  --palette-sky-900-rgb: 23 61 86;
+  --palette-sky-950: #0E2638;
+  --palette-sky-950-rgb: 14 38 56;
+  /* Soft merchandising and campaign surfaces. Pair its pale stops with dark navy text; the darker stops support small offer labels and icons. */
+  --palette-peach-50: #FFF9F4;
+  --palette-peach-50-rgb: 255 249 244;
+  --palette-peach-100: #FFF1E6;
+  --palette-peach-100-rgb: 255 241 230;
+  --palette-peach-200: #FFE8D6;
+  --palette-peach-200-rgb: 255 232 214;
+  --palette-peach-300: #FFD7BB;
+  --palette-peach-300-rgb: 255 215 187;
+  --palette-peach-400: #F5B98F;
+  --palette-peach-400-rgb: 245 185 143;
+  --palette-peach-500: #E59862;
+  --palette-peach-500-rgb: 229 152 98;
+  --palette-peach-600: #CA743C;
+  --palette-peach-600-rgb: 202 116 60;
+  --palette-peach-700: #A85C2A;
+  --palette-peach-700-rgb: 168 92 42;
+  --palette-peach-800: #7F4725;
+  --palette-peach-800-rgb: 127 71 37;
+  --palette-peach-900: #58341F;
+  --palette-peach-900-rgb: 88 52 31;
+  --palette-peach-950: #342014;
+  --palette-peach-950-rgb: 52 32 20;
+  /* Warnings, time-sensitive notices, and configured offers. Amber is distinct from the primary action family and should be accompanied by plain-language status text. */
+  --palette-amber-50: #FFFBF0;
+  --palette-amber-50-rgb: 255 251 240;
+  --palette-amber-100: #FFF4D6;
+  --palette-amber-100-rgb: 255 244 214;
+  --palette-amber-200: #FFE6A8;
+  --palette-amber-200-rgb: 255 230 168;
+  --palette-amber-300: #FFD36B;
+  --palette-amber-300-rgb: 255 211 107;
+  --palette-amber-400: #F5B840;
+  --palette-amber-400-rgb: 245 184 64;
+  --palette-amber-500: #D99617;
+  --palette-amber-500-rgb: 217 150 23;
+  --palette-amber-600: #AF760A;
+  --palette-amber-600-rgb: 175 118 10;
+  --palette-amber-700: #8A5A05;
+  --palette-amber-700-rgb: 138 90 5;
+  --palette-amber-800: #684300;
+  --palette-amber-800-rgb: 104 67 0;
+  --palette-amber-900: #483000;
+  --palette-amber-900-rgb: 72 48 0;
+  --palette-amber-950: #2B1C00;
+  --palette-amber-950-rgb: 43 28 0;
+  /* Utility neutral scale for quiet dividers, empty states, outlines, and monochrome iconography. Do not use its light stops for small text. */
+  --palette-stone-50: #FBFBFC;
+  --palette-stone-50-rgb: 251 251 252;
+  --palette-stone-100: #F1F2F4;
+  --palette-stone-100-rgb: 241 242 244;
+  --palette-stone-200: #E1E4E9;
+  --palette-stone-200-rgb: 225 228 233;
+  --palette-stone-300: #C8CFD8;
+  --palette-stone-300-rgb: 200 207 216;
+  --palette-stone-400: #A1AAB8;
+  --palette-stone-400-rgb: 161 170 184;
+  --palette-stone-500: #7B8797;
+  --palette-stone-500-rgb: 123 135 151;
+  --palette-stone-600: #626D7C;
+  --palette-stone-600-rgb: 98 109 124;
+  --palette-stone-700: #4C5665;
+  --palette-stone-700-rgb: 76 86 101;
+  --palette-stone-800: #38414E;
+  --palette-stone-800-rgb: 56 65 78;
+  --palette-stone-900: #252D39;
+  --palette-stone-900-rgb: 37 45 57;
+  --palette-stone-950: #131A24;
+  --palette-stone-950-rgb: 19 26 36;
+  /* Soft pastel-only accents for beauty/personal-care categories and occasional lifestyle surfaces. Every stop is a light background; never use this family for text, buttons, errors, or strong branding. */
+  --palette-pastel-pink-50: #FFFAFD;
+  --palette-pastel-pink-50-rgb: 255 250 253;
+  --palette-pastel-pink-100: #FDF2F8;
+  --palette-pastel-pink-100-rgb: 253 242 248;
+  --palette-pastel-pink-200: #F9E2EF;
+  --palette-pastel-pink-200-rgb: 249 226 239;
+  --palette-pastel-pink-300: #F0D5E5;
+  --palette-pastel-pink-300-rgb: 240 213 229;
+  --palette-pastel-pink-400: #E7D2E8;
+  --palette-pastel-pink-400-rgb: 231 210 232;
+  /* Essential surface and overlay values used sparingly by the system. */
+  --palette-foundation-white: #FFFFFF;
+  --palette-foundation-white-rgb: 255 255 255;
+  --palette-foundation-black: #000000;
+  --palette-foundation-black-rgb: 0 0 0;
+
+  /* Semantic aliases: prefer these names for UI roles. */
+  /* Default primary button, price emphasis, and selected control. */
+  --color-action-primary: var(--palette-violet-600);
+  --color-action-primary-rgb: var(--palette-violet-600-rgb);
+  /* Hover/pressed primary action. */
+  --color-action-hover: var(--palette-violet-700);
+  --color-action-hover-rgb: var(--palette-violet-700-rgb);
+  /* Visible keyboard focus ring. */
+  --color-action-focus: var(--palette-violet-500);
+  --color-action-focus-rgb: var(--palette-violet-500-rgb);
+  /* Text and icons on primary violet actions. */
+  --color-action-on-primary: var(--palette-foundation-white);
+  --color-action-on-primary-rgb: var(--palette-foundation-white-rgb);
+  /* Storefront and operational workspace page background. */
+  --color-surface-page: var(--palette-ivory-100);
+  --color-surface-page-rgb: var(--palette-ivory-100-rgb);
+  /* Card, dialog, and table body surface. */
+  --color-surface-card: var(--palette-foundation-white);
+  --color-surface-card-rgb: var(--palette-foundation-white-rgb);
+  /* Quiet warm inset surface. */
+  --color-surface-subtle: var(--palette-ivory-50);
+  --color-surface-subtle-rgb: var(--palette-ivory-50-rgb);
+  /* Selected row or secondary selection surface. */
+  --color-surface-selected: var(--palette-lavender-100);
+  --color-surface-selected-rgb: var(--palette-lavender-100-rgb);
+  /* Default card and form border. */
+  --color-surface-border: var(--palette-slate-200);
+  --color-surface-border-rgb: var(--palette-slate-200-rgb);
+  /* Optional beauty and personal-care category tile surface. */
+  --color-surface-beauty: var(--palette-pastel-pink-100);
+  --color-surface-beauty-rgb: var(--palette-pastel-pink-100-rgb);
+  /* Primary headings, labels, and body content. */
+  --color-text-primary: var(--palette-navy-900);
+  --color-text-primary-rgb: var(--palette-navy-900-rgb);
+  /* Secondary body copy on white/ivory surfaces. */
+  --color-text-secondary: var(--palette-navy-500);
+  --color-text-secondary-rgb: var(--palette-navy-500-rgb);
+  /* Low-emphasis but readable supporting text. */
+  --color-text-muted: var(--palette-navy-600);
+  --color-text-muted-rgb: var(--palette-navy-600-rgb);
+  /* Text on dark or saturated controls. */
+  --color-text-inverse: var(--palette-foundation-white);
+  --color-text-inverse-rgb: var(--palette-foundation-white-rgb);
+  /* In-stock, completed, and verified state text. */
+  --color-status-success-text: var(--palette-mint-800);
+  --color-status-success-text-rgb: var(--palette-mint-800-rgb);
+  /* Positive status container. */
+  --color-status-success-surface: var(--palette-mint-50);
+  --color-status-success-surface-rgb: var(--palette-mint-50-rgb);
+  /* Positive status outline. */
+  --color-status-success-border: var(--palette-mint-200);
+  --color-status-success-border-rgb: var(--palette-mint-200-rgb);
+  /* Warning state text and icons. */
+  --color-status-warning-text: var(--palette-amber-800);
+  --color-status-warning-text-rgb: var(--palette-amber-800-rgb);
+  /* Warning state container. */
+  --color-status-warning-surface: var(--palette-amber-50);
+  --color-status-warning-surface-rgb: var(--palette-amber-50-rgb);
+  /* Warning state outline. */
+  --color-status-warning-border: var(--palette-amber-200);
+  --color-status-warning-border-rgb: var(--palette-amber-200-rgb);
+  /* Informational and delivery state text. */
+  --color-status-info-text: var(--palette-sky-800);
+  --color-status-info-text-rgb: var(--palette-sky-800-rgb);
+  /* Informational state container. */
+  --color-status-info-surface: var(--palette-sky-50);
+  --color-status-info-surface-rgb: var(--palette-sky-50-rgb);
+  /* Informational state outline. */
+  --color-status-info-border: var(--palette-sky-200);
+  --color-status-info-border-rgb: var(--palette-sky-200-rgb);
+  /* Error/validation text. Pair with an explicit label or icon; not colour alone. */
+  --color-status-error-text: var(--palette-navy-800);
+  --color-status-error-text-rgb: var(--palette-navy-800-rgb);
+  /* Neutral lavender validation and failure surface. */
+  --color-status-error-surface: var(--palette-lavender-50);
+  --color-status-error-surface-rgb: var(--palette-lavender-50-rgb);
+  /* Neutral lavender validation outline. */
+  --color-status-error-border: var(--palette-lavender-300);
+  --color-status-error-border-rgb: var(--palette-lavender-300-rgb);
+  /* Error icon colour, intentionally non-red. */
+  --color-status-error-icon: var(--palette-navy-700);
+  --color-status-error-icon-rgb: var(--palette-navy-700-rgb);
+  /* Out-of-stock label; always shown as text. */
+  --color-status-out-of-stock-text: var(--palette-navy-700);
+  --color-status-out-of-stock-text-rgb: var(--palette-navy-700-rgb);
+  /* Neutral out-of-stock container. */
+  --color-status-out-of-stock-surface: var(--palette-slate-100);
+  --color-status-out-of-stock-surface-rgb: var(--palette-slate-100-rgb);
+  /* Neutral out-of-stock outline. */
+  --color-status-out-of-stock-border: var(--palette-slate-300);
+  --color-status-out-of-stock-border-rgb: var(--palette-slate-300-rgb);
+  /* Offer label text on pale peach. */
+  --color-offer-text: var(--palette-peach-800);
+  --color-offer-text-rgb: var(--palette-peach-800-rgb);
+  /* Offer and merchandising surface. */
+  --color-offer-surface: var(--palette-peach-100);
+  --color-offer-surface-rgb: var(--palette-peach-100-rgb);
+  /* Primary operational chart series. */
+  --color-chart-primary: var(--palette-violet-600);
+  --color-chart-primary-rgb: var(--palette-violet-600-rgb);
+  /* Positive operational chart series. */
+  --color-chart-success: var(--palette-mint-700);
+  --color-chart-success-rgb: var(--palette-mint-700-rgb);
+  /* Threshold or warning chart series. */
+  --color-chart-warning: var(--palette-amber-700);
+  --color-chart-warning-rgb: var(--palette-amber-700-rgb);
+  /* Chart guides and neutral tracks. */
+  --color-chart-neutral: var(--palette-slate-300);
+  --color-chart-neutral-rgb: var(--palette-slate-300-rgb);
+  /* High-visibility keyboard focus outline. */
+  --color-focus-outline: var(--palette-violet-600);
+  --color-focus-outline-rgb: var(--palette-violet-600-rgb);
+  /* Disabled control text; disabled state also uses shape/opacity and remains legible. */
+  --color-disabled-text: var(--palette-slate-600);
+  --color-disabled-text-rgb: var(--palette-slate-600-rgb);
+  /* Disabled control surface. */
+  --color-disabled-surface: var(--palette-slate-100);
+  --color-disabled-surface-rgb: var(--palette-slate-100-rgb);
+}

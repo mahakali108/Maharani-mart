@@ -17,9 +17,9 @@ export function normalizeAvailabilityState(raw: string | null | undefined): Avai
 export function availabilityBadge(state: AvailabilityState): { label: string; className: string } | null {
   switch (state) {
     case 'out_of_stock':
-      return { label: 'Out of stock', className: 'bg-rose-50 px-3 py-1.5 text-[11px] font-bold text-rose-700 rounded-full' };
+      return { label: 'Out of stock', className: 'bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-700 rounded-full' };
     case 'in_stock':
-      return { label: 'In Stock', className: 'bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 rounded-full' };
+      return { label: 'In Stock', className: 'bg-mint-50 px-3 py-1.5 text-[11px] font-bold text-mint-700 rounded-full' };
     default:
       return null;
   }

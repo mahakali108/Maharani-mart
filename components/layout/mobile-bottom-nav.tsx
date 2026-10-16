@@ -47,7 +47,7 @@ export function MobileBottomNav({
             key={item.href}
             href={item.href}
             className={cn(
-              'group relative flex min-w-0 flex-1 flex-col items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action-500',
+              'group relative flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action-500',
               marketplace ? 'gap-0.5 text-[10px]' : 'gap-1 text-[11px]',
               active ? 'text-primary-600' : marketplace ? 'text-slate-600' : 'text-ink-400'
             )}
@@ -60,7 +60,7 @@ export function MobileBottomNav({
             <span
               className={cn(
                 'relative flex items-center justify-center transition-transform group-active:scale-90',
-                marketplace && active ? 'h-8 w-11 rounded-2xl bg-blush-100' : 'h-8 w-9'
+                marketplace && active ? 'h-8 w-11 rounded-2xl bg-lavender-100' : 'h-8 w-9'
               )}
             >
               <Icon aria-hidden="true" className={cn('h-5 w-5', active && marketplace && 'stroke-[2.5]')} />

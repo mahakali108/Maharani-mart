@@ -42,7 +42,7 @@ export function ClearCartButton({ itemCount }: { itemCount: number }) {
           type="button"
           onClick={handleClear}
           disabled={isPending}
-          className="flex h-9 items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 text-[10px] font-bold text-primary-700 transition hover:bg-primary-100 disabled:opacity-60"
+          className="flex min-h-11 items-center gap-1.5 rounded-lg border border-primary-500 bg-primary-50 px-3 text-[10px] font-bold text-primary-700 transition hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:opacity-60"
         >
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
           {isPending ? 'Clearing…' : 'Confirm clear'}
@@ -51,7 +51,7 @@ export function ClearCartButton({ itemCount }: { itemCount: number }) {
           type="button"
           onClick={() => setConfirming(false)}
           disabled={isPending}
-          className="flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 transition hover:text-slate-900 disabled:opacity-60"
+          className="flex min-h-11 items-center rounded-lg border border-slate-400 bg-white px-3 text-[10px] font-bold text-slate-600 transition hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 disabled:opacity-60"
         >
           Keep
         </button>
@@ -68,7 +68,7 @@ export function ClearCartButton({ itemCount }: { itemCount: number }) {
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-500 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+      className="flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-400 bg-white px-3 text-[10px] font-bold text-slate-500 shadow-sm transition hover:border-primary-200 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
     >
       <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Clear cart
     </button>

@@ -57,7 +57,7 @@ export function WalletAdjustmentForm({ retailerId }: { retailerId: string }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       {error ? <p className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-700">{error}</p> : null}
-      {message ? <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">{message}</p> : null}
+      {message ? <p className="rounded-lg border border-mint-200 bg-mint-50 px-3 py-2 text-xs text-mint-700">{message}</p> : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>

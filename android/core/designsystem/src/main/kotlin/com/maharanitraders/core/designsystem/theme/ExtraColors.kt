@@ -4,17 +4,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Brand tokens that Material 3's [androidx.compose.material3.ColorScheme] has no
- * slot for: the Maharani-red commerce chrome, stock states, the saffron accent,
- * the app-bar gradient and skeleton tones.
- *
- * Read them through [MaharaniThemeTokens.colors] so screens never reach for a
- * palette constant directly and dark mode keeps working:
- *
- *     Text(color = MaharaniThemeTokens.colors.inStock, text = "...")
- *
- * Every value is an existing entry of [MaharaniPalette] - no colour is invented
- * on this layer.
+ * Semantic roles not represented by Material 3's [androidx.compose.material3.ColorScheme].
+ * Every value comes from the generated web/native registry in [MaharaniPalette],
+ * so screens do not pick ad-hoc colours and light/dark mode stays coordinated.
  */
 @Immutable
 data class MaharaniExtraColors(
@@ -27,30 +19,30 @@ data class MaharaniExtraColors(
   val outOfStockSurface: Color,
   val warning: Color,
   val warningSurface: Color,
-  /** Informational facts only (delivery, lead time, GST split). Never an action. */
+  /** Sky information for delivery, lead time and other neutral facts. */
   val info: Color,
   val infoSurface: Color,
   val onInfoSurface: Color,
-  /** Violet: the shortcut / account family, mirroring Material's `tertiary`. */
+  /** Supporting violet identity for tools and account shortcuts. */
   val violet: Color,
   val violetSurface: Color,
   val onVioletSurface: Color,
-  /**
-   * Rose highlight: emphasis that is neither success nor failure ("New"
-   * launches, the notification badge's emphasis). Deliberately distinct from
-   * [outOfStock], so a highlight can never be read as a failure.
-   */
+  /** Quiet lavender emphasis for favourites and selected supporting content. */
   val highlight: Color,
   val highlightSurface: Color,
   val onHighlightSurface: Color,
-  /** Brand red, used for the crown mark and identity accents on light chrome. */
+  /** Maharani crown/wordmark accent, recoloured to the approved violet identity. */
   val brandMark: Color,
   val brandMarkSurface: Color,
-  /** Restrained saffron accent (wholesale emphasis, slab-table highlight). */
-  val saffron: Color,
-  val saffronSurface: Color,
-  val onSaffronSurface: Color,
-  /** The shopping app bar's subtle two-stop gradient. */
+  /** Peach for configured offers and merchandising. */
+  val peach: Color,
+  val peachSurface: Color,
+  val onPeachSurface: Color,
+  /** Amber for warnings and time-sensitive states, never red. */
+  val amber: Color,
+  val amberSurface: Color,
+  val onAmberSurface: Color,
+  /** The app bar's subtle two-stop violet treatment. */
   val appBarStart: Color,
   val appBarEnd: Color,
   val onAppBar: Color,
@@ -61,132 +53,114 @@ data class MaharaniExtraColors(
   /** Loading skeleton tones. */
   val skeletonBase: Color,
   val skeletonHighlight: Color,
-  /** Neutral tile behind a product image while it loads or when it is missing. */
+  /** Neutral tile behind product artwork while it loads or when it is missing. */
   val imagePlaceholder: Color,
   val onImagePlaceholder: Color,
-  /** Scrim under banner copy, so text stays legible on any artwork. */
+  /** Scrim under server-provided banner artwork. */
   val scrim: Color,
 )
 
 internal val LightExtraColors = MaharaniExtraColors(
-  // Buy actions (add to cart, place order, checkout) are the brand red: one
-  // family across chrome and commerce, so "where am I" and "what can I tap"
-  // are the same colour and the shop never looks like a marketplace clone.
-  action = MaharaniPalette.BrandRed600,
-  actionContainer = MaharaniPalette.BrandRed50,
-  onActionContainer = MaharaniPalette.BrandRed700,
-  inStock = MaharaniPalette.Success600,
-  inStockSurface = MaharaniPalette.Success50,
-  outOfStock = MaharaniPalette.OutOfStockRose,
-  outOfStockSurface = MaharaniPalette.OutOfStockRoseSurface,
-  warning = MaharaniPalette.Warning600,
-  warningSurface = MaharaniPalette.Warning50,
-  info = MaharaniPalette.Info700,
-  infoSurface = MaharaniPalette.Info50,
-  onInfoSurface = MaharaniPalette.Info900,
+  action = MaharaniPalette.ActionPrimary,
+  actionContainer = MaharaniPalette.Violet50,
+  onActionContainer = MaharaniPalette.Violet800,
+  inStock = MaharaniPalette.StatusSuccessText,
+  inStockSurface = MaharaniPalette.StatusSuccessSurface,
+  outOfStock = MaharaniPalette.StatusOutOfStockText,
+  outOfStockSurface = MaharaniPalette.StatusOutOfStockSurface,
+  warning = MaharaniPalette.StatusWarningText,
+  warningSurface = MaharaniPalette.StatusWarningSurface,
+  info = MaharaniPalette.StatusInfoText,
+  infoSurface = MaharaniPalette.StatusInfoSurface,
+  onInfoSurface = MaharaniPalette.Sky900,
   violet = MaharaniPalette.Violet600,
-  violetSurface = MaharaniPalette.Violet50,
-  onVioletSurface = MaharaniPalette.Violet700,
-  highlight = MaharaniPalette.Highlight700,
-  highlightSurface = MaharaniPalette.Highlight50,
-  onHighlightSurface = MaharaniPalette.Highlight800,
-  brandMark = MaharaniPalette.BrandRed600,
-  brandMarkSurface = MaharaniPalette.BrandRed50,
-  saffron = MaharaniPalette.Saffron600,
-  saffronSurface = MaharaniPalette.Saffron50,
-  onSaffronSurface = MaharaniPalette.Saffron800,
-  // The app bar's two-stop brand gradient: deep at the top edge, a touch
-  // lighter behind the search field, so the header reads as premium Maharani
-  // red without a loud gradient. White content on it clears 4.5:1 at 600.
-  appBarStart = MaharaniPalette.BrandRed700,
-  appBarEnd = MaharaniPalette.BrandRed600,
-  onAppBar = MaharaniPalette.White,
-  onAppBarMuted = Color(0xD9FFFFFF),
-  appBarField = MaharaniPalette.White,
-  onAppBarField = MaharaniPalette.Ink900,
-  appBarFieldHint = MaharaniPalette.Ink500,
-  skeletonBase = MaharaniPalette.Neutral200,
-  skeletonHighlight = MaharaniPalette.Neutral100,
-  // A neutral (not pink) tile behind artwork, so a photo is never tinted by the
-  // surface it loads on. Brand-tinted placeholder surfaces are opt-in per
-  // component (see the directory tiles' monogram).
-  imagePlaceholder = MaharaniPalette.Neutral100,
-  onImagePlaceholder = MaharaniPalette.Ink400,
-  scrim = Color(0x990B0B0B),
+  violetSurface = MaharaniPalette.Lavender50,
+  onVioletSurface = MaharaniPalette.Lavender800,
+  highlight = MaharaniPalette.Lavender700,
+  highlightSurface = MaharaniPalette.Lavender100,
+  onHighlightSurface = MaharaniPalette.Lavender800,
+  brandMark = MaharaniPalette.ActionPrimary,
+  brandMarkSurface = MaharaniPalette.Violet50,
+  peach = MaharaniPalette.OfferText,
+  peachSurface = MaharaniPalette.OfferSurface,
+  onPeachSurface = MaharaniPalette.Peach800,
+  amber = MaharaniPalette.StatusWarningText,
+  amberSurface = MaharaniPalette.StatusWarningSurface,
+  onAmberSurface = MaharaniPalette.Amber800,
+  appBarStart = MaharaniPalette.Violet700,
+  appBarEnd = MaharaniPalette.Violet600,
+  onAppBar = MaharaniPalette.FoundationWhite,
+  onAppBarMuted = MaharaniPalette.FoundationWhite.copy(alpha = 0.85f),
+  appBarField = MaharaniPalette.FoundationWhite,
+  onAppBarField = MaharaniPalette.TextPrimary,
+  appBarFieldHint = MaharaniPalette.TextSecondary,
+  skeletonBase = MaharaniPalette.Slate200,
+  skeletonHighlight = MaharaniPalette.Slate100,
+  imagePlaceholder = MaharaniPalette.Slate100,
+  onImagePlaceholder = MaharaniPalette.Navy500,
+  scrim = MaharaniPalette.FoundationBlack.copy(alpha = 0.60f),
 )
 
 internal val DarkExtraColors = MaharaniExtraColors(
-  action = MaharaniPalette.BrandRed400,
-  actionContainer = MaharaniPalette.BrandRed900,
-  onActionContainer = MaharaniPalette.BrandRed100,
-  inStock = MaharaniPalette.Success50,
-  inStockSurface = MaharaniPalette.Success900,
-  outOfStock = MaharaniPalette.OutOfStockRoseDark,
-  outOfStockSurface = MaharaniPalette.OutOfStockRoseSurfaceDark,
-  warning = MaharaniPalette.Warning600,
-  warningSurface = MaharaniPalette.Warning900,
-  info = MaharaniPalette.Info300,
-  infoSurface = MaharaniPalette.Info950,
-  onInfoSurface = MaharaniPalette.Info100,
+  action = MaharaniPalette.Violet300,
+  actionContainer = MaharaniPalette.Violet950,
+  onActionContainer = MaharaniPalette.Violet100,
+  inStock = MaharaniPalette.Mint200,
+  inStockSurface = MaharaniPalette.Mint950,
+  outOfStock = MaharaniPalette.Slate200,
+  outOfStockSurface = MaharaniPalette.Slate900,
+  warning = MaharaniPalette.Amber300,
+  warningSurface = MaharaniPalette.Amber950,
+  info = MaharaniPalette.Sky300,
+  infoSurface = MaharaniPalette.Sky950,
+  onInfoSurface = MaharaniPalette.Sky100,
   violet = MaharaniPalette.Violet300,
   violetSurface = MaharaniPalette.Violet950,
   onVioletSurface = MaharaniPalette.Violet100,
-  highlight = MaharaniPalette.Highlight300,
-  highlightSurface = MaharaniPalette.Highlight950,
-  onHighlightSurface = MaharaniPalette.Highlight100,
-  brandMark = MaharaniPalette.BrandRed400,
-  brandMarkSurface = MaharaniPalette.BrandRed950,
-  saffron = MaharaniPalette.Saffron300,
-  saffronSurface = MaharaniPalette.Saffron900,
-  onSaffronSurface = MaharaniPalette.Saffron100,
-  appBarStart = MaharaniPalette.BrandRed900,
-  appBarEnd = MaharaniPalette.BrandRed800,
-  onAppBar = MaharaniPalette.White,
-  onAppBarMuted = Color(0xB3FFFFFF),
-  appBarField = MaharaniPalette.SurfaceDarkHigh,
-  onAppBarField = MaharaniPalette.Ink50,
-  appBarFieldHint = MaharaniPalette.Ink400,
-  skeletonBase = MaharaniPalette.SurfaceDarkHigh,
-  skeletonHighlight = Color(0xFF332E31),
-  imagePlaceholder = MaharaniPalette.SurfaceDarkHigh,
-  onImagePlaceholder = MaharaniPalette.Ink500,
-  scrim = Color(0xB3000000),
+  highlight = MaharaniPalette.Lavender300,
+  highlightSurface = MaharaniPalette.Lavender950,
+  onHighlightSurface = MaharaniPalette.Lavender100,
+  brandMark = MaharaniPalette.Violet300,
+  brandMarkSurface = MaharaniPalette.Violet950,
+  peach = MaharaniPalette.Peach300,
+  peachSurface = MaharaniPalette.Peach950,
+  onPeachSurface = MaharaniPalette.Peach100,
+  amber = MaharaniPalette.Amber300,
+  amberSurface = MaharaniPalette.Amber950,
+  onAmberSurface = MaharaniPalette.Amber100,
+  appBarStart = MaharaniPalette.Violet950,
+  appBarEnd = MaharaniPalette.Violet900,
+  onAppBar = MaharaniPalette.FoundationWhite,
+  onAppBarMuted = MaharaniPalette.FoundationWhite.copy(alpha = 0.70f),
+  appBarField = MaharaniPalette.Navy900,
+  onAppBarField = MaharaniPalette.Navy50,
+  appBarFieldHint = MaharaniPalette.Navy300,
+  skeletonBase = MaharaniPalette.Slate800,
+  skeletonHighlight = MaharaniPalette.Slate700,
+  imagePlaceholder = MaharaniPalette.Slate900,
+  onImagePlaceholder = MaharaniPalette.Navy300,
+  scrim = MaharaniPalette.FoundationBlack.copy(alpha = 0.70f),
 )
 
-/**
- * The six accent families, in the ONE order screens should reach for them.
- *
- * A screen picks a [AccentTone], never a colour: the tone resolves through the
- * `accent` extension below into the container/tint pair that is correct for the
- * current theme,
- * so a shortcut tile cannot be legible in light mode and unreadable in dark
- * mode, and two screens cannot give the same job two different colours.
- */
+/** Semantic accents for reusable tiles and icon surfaces. */
 enum class AccentTone {
-  /** Brand red: the primary action of a surface (Shop, Cart, Checkout). */
+  /** Maharani's violet primary action and identity. */
   BRAND,
-
-  /** Amber: savings and offers. */
+  /** Amber for balances and warning-related metrics. */
   AMBER,
-
-  /** Violet: tools and account shortcuts (Quick order, Saved carts). */
+  /** Peach for configured offers and coupons. */
+  PEACH,
+  /** Supporting violet for tools and account shortcuts. */
   VIOLET,
-
-  /** Green: availability, success and "worth restocking". */
-  GREEN,
-
-  /** Blue: neutral facts (delivery, lead time, reports). */
-  BLUE,
-
-  /** Rose: highlights that are neither success nor failure (New, favourites). */
-  ROSE,
+  /** Mint for history and positive states. */
+  MINT,
+  /** Sky for directory, support and informational routes. */
+  SKY,
+  /** Lavender for favourites and quiet emphasis. */
+  LAVENDER,
 }
 
-/**
- * One accent, resolved for the active theme: the glyph/edge [tint], the
- * [surface] container it sits on, and [onSurface] for text inside that
- * container.
- */
+/** Container/tint pair resolved for the active theme. */
 @Immutable
 data class MaharaniAccentColors(
   val tint: Color,
@@ -194,19 +168,13 @@ data class MaharaniAccentColors(
   val onSurface: Color,
 )
 
-/**
- * Resolve an [AccentTone] to concrete colours.
- *
- * Read through the token holder — `MaharaniThemeTokens.colors`, held under a
- * local name — and call `accent(tone)` on it, so dark mode is handled here
- * rather than at every call site. No call site spells a token holder as
- * `colors`, which keeps this file the only place that names a colour at all.
- */
+/** Resolve an accent once so shared components stay consistent in both themes. */
 fun MaharaniExtraColors.accent(tone: AccentTone): MaharaniAccentColors = when (tone) {
   AccentTone.BRAND -> MaharaniAccentColors(action, actionContainer, onActionContainer)
-  AccentTone.AMBER -> MaharaniAccentColors(saffron, saffronSurface, onSaffronSurface)
+  AccentTone.AMBER -> MaharaniAccentColors(amber, amberSurface, onAmberSurface)
+  AccentTone.PEACH -> MaharaniAccentColors(peach, peachSurface, onPeachSurface)
   AccentTone.VIOLET -> MaharaniAccentColors(violet, violetSurface, onVioletSurface)
-  AccentTone.GREEN -> MaharaniAccentColors(inStock, inStockSurface, inStock)
-  AccentTone.BLUE -> MaharaniAccentColors(info, infoSurface, onInfoSurface)
-  AccentTone.ROSE -> MaharaniAccentColors(highlight, highlightSurface, onHighlightSurface)
+  AccentTone.MINT -> MaharaniAccentColors(inStock, inStockSurface, inStock)
+  AccentTone.SKY -> MaharaniAccentColors(info, infoSurface, onInfoSurface)
+  AccentTone.LAVENDER -> MaharaniAccentColors(highlight, highlightSurface, onHighlightSurface)
 }

@@ -41,7 +41,7 @@ import com.maharanitraders.feature.catalog.ui.CatalogTags
  *
  * Both tiles are the SAME component shape on purpose — artwork, name, server
  * count, and a selected state that is visible before it is read (a filled tick
- * badge, a red border AND the soft pink surface, not colour alone). A shopper
+ * badge, a violet border AND the soft lavender surface, not colour alone). A shopper
  * who learns one pane has learned the other, and neither tile can show a count
  * the server did not send: a missing `productCount` is omitted rather than
  * rounded into "0 items".

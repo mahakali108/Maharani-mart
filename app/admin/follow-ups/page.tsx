@@ -20,7 +20,7 @@ interface FollowUpRow {
 
 const STATUS_STYLES: Record<string, string> = {
   open: 'bg-amber-50 text-amber-700',
-  done: 'bg-emerald-50 text-emerald-700',
+  done: 'bg-mint-50 text-mint-700',
   cancelled: 'bg-ink-100 text-ink-500',
 };
 

@@ -100,7 +100,7 @@ export function CheckoutAddressSelector({
                 <MapPin className="h-3.5 w-3.5 text-primary-600" aria-hidden="true" />
                 {address.label}
                 {address.is_default ? (
-                  <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Default</span>
+                  <span className="rounded-full bg-mint-50 px-1.5 py-0.5 text-[9px] font-bold text-mint-700">Default</span>
                 ) : null}
               </span>
               <span className="mt-1 block break-words text-[11px] leading-4 text-slate-600">

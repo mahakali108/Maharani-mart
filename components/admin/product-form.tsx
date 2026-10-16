@@ -54,7 +54,7 @@ function Field({
       <Label htmlFor={id}>{label}</Label>
       {children}
       {error ? (
-        <p className="mt-1 flex items-start gap-1 text-xs font-medium text-rose-600" role="alert">
+        <p className="mt-1 flex items-start gap-1 text-xs font-medium text-error-600" role="alert">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {error}
         </p>
       ) : hint ? (
@@ -93,7 +93,7 @@ export function ProductForm({
     <form action={formAction} className="space-y-5">
       {state?.error ? (
         <div
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          className="rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700"
           role="alert"
         >
           {state.error}

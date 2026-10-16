@@ -644,7 +644,7 @@ private fun RoutedShell(
  * The shopping app bar: brand, the shop the server verified, the notification
  * and account entries, and the always-visible search field.
  *
- * It is drawn in the MAHARANI BRAND RED (the app-bar gradient pair in
+ * It is drawn in the MAHARANI VIOLET IDENTITY (the app-bar gradient pair in
  * `ExtraColors`) rather than a marketplace blue, and it extends behind the
  * status bar (edge-to-edge) and pads its own content, so the brand colour is
  * continuous from the top of the window down to the search field.

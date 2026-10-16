@@ -59,7 +59,7 @@ export default async function AddressesPage() {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-xs font-bold text-slate-900">{address.label}</span>
                     {address.is_default ? (
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
+                      <span className="rounded-full bg-mint-50 px-2 py-0.5 text-[9px] font-bold text-mint-700">
                         Default
                       </span>
                     ) : null}

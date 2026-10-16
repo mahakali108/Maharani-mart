@@ -88,14 +88,14 @@ export function ProductImportPanel() {
       </form>
 
       {failed ? (
-        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
+        <div className="flex items-start gap-2 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700" role="alert">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{failed}</span>
         </div>
       ) : null}
 
       {done ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">
+        <div className="rounded-xl border border-mint-200 bg-mint-50 px-4 py-3 text-sm text-mint-800" role="status">
           <p className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{done.summary}</span>
@@ -111,7 +111,7 @@ export function ProductImportPanel() {
             </ul>
           ) : null}
           <p className="mt-3">
-            <Link href="/admin/products" className="text-xs font-semibold text-emerald-800 underline">
+            <Link href="/admin/products" className="text-xs font-semibold text-mint-800 underline">
               Go to the product list →
             </Link>
           </p>
@@ -122,11 +122,11 @@ export function ProductImportPanel() {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="font-semibold text-ink-800">Preview</span>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+            <span className="rounded-full bg-mint-50 px-2.5 py-0.5 text-xs font-bold text-mint-700">
               {preview.validCount} will import
             </span>
             {preview.invalidCount > 0 ? (
-              <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-bold text-rose-700">
+              <span className="rounded-full bg-error-50 px-2.5 py-0.5 text-xs font-bold text-error-700">
                 {preview.invalidCount} will be skipped
               </span>
             ) : null}
@@ -150,7 +150,7 @@ export function ProductImportPanel() {
                 </thead>
                 <tbody className="divide-y divide-ink-100">
                   {preview.rows.map((row) => (
-                    <tr key={row.rowNumber} className={cn(!row.valid && 'bg-rose-50/40')}>
+                    <tr key={row.rowNumber} className={cn(!row.valid && 'bg-error-50/40')}>
                       <td className="px-3 py-3 text-ink-400">{row.rowNumber}</td>
                       <td className="px-3 py-3 font-medium text-ink-900">{row.name || <span className="text-ink-300">—</span>}</td>
                       <td className="px-3 py-3 text-ink-600">{row.brand || '—'}</td>
@@ -164,11 +164,11 @@ export function ProductImportPanel() {
                       <td className="px-3 py-3 text-ink-600">{row.moq}</td>
                       <td className="px-3 py-3">
                         {row.valid ? (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                          <span className="rounded-full bg-mint-50 px-2 py-0.5 text-[10px] font-bold text-mint-700">
                             Ready
                           </span>
                         ) : (
-                          <ul className="space-y-0.5 text-[11px] font-medium text-rose-600">
+                          <ul className="space-y-0.5 text-[11px] font-medium text-error-600">
                             {row.issues.map((issue) => (
                               <li key={issue}>{issue}</li>
                             ))}

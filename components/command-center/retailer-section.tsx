@@ -75,7 +75,7 @@ export function RetailerSection({ intel }: { intel: RetailerIntel }) {
 }
 
 function CountCard({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'bad' | 'good' | 'warn' }) {
-  const cls = tone === 'bad' ? 'text-red-600' : tone === 'warn' ? 'text-amber-600' : tone === 'good' ? 'text-emerald-600' : 'text-ink-950';
+  const cls = tone === 'bad' ? 'text-error-600' : tone === 'warn' ? 'text-amber-600' : tone === 'good' ? 'text-mint-600' : 'text-ink-950';
   return (
     <Card className="p-4">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{label}</p>

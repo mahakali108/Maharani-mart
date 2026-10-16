@@ -75,7 +75,7 @@ export function RetailerPriceSchedule({
           {looseCeiling > 0 ? 'Enter a quantity to see your piece rate.' : 'This size is available to order by the piece.'}
         </p>
       )}
-      {gstNote ? <p className="mt-1.5 text-[10px] text-slate-400">{gstNote}</p> : null}
+      {gstNote ? <p className="mt-1.5 text-[10px] text-slate-600">{gstNote}</p> : null}
     </div>
   );
 }
@@ -100,7 +100,7 @@ export function RetailerLineBreakdown({
 
   return (
     <div className={cn('rounded-xl bg-slate-50 px-3 py-2.5', className)}>
-      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Piece price</p>
+      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600">Piece price</p>
       <ul className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-700">
         <li className="flex items-baseline justify-between gap-2">
           <span>

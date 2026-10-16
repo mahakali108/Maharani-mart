@@ -72,8 +72,8 @@ export function toBulkPanelProduct(row: ResolvedAdminProduct): BulkPanelProduct 
 }
 
 const STOCK_BADGE: Record<'in_stock' | 'out_of_stock', { label: string; className: string }> = {
-  in_stock: { label: 'In Stock', className: 'bg-emerald-50 text-emerald-700' },
-  out_of_stock: { label: 'Out of Stock', className: 'bg-rose-50 text-rose-700' },
+  in_stock: { label: 'In Stock', className: 'bg-mint-50 text-mint-700' },
+  out_of_stock: { label: 'Out of Stock', className: 'bg-slate-100 text-slate-700' },
 };
 
 type BulkKind = 'activate' | 'deactivate' | 'category' | 'brand' | 'gst' | 'moq' | 'price';
@@ -198,7 +198,7 @@ export function ProductBulkPanel({
         <div
           className={cn(
             'rounded-xl border px-4 py-3 text-sm',
-            state.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-700'
+            state.ok ? 'border-mint-200 bg-mint-50 text-mint-800' : 'border-error-200 bg-error-50 text-error-700'
           )}
           role="status"
         >
@@ -394,7 +394,7 @@ export function ProductBulkPanel({
                           {row.margin === null ? (
                             <span className="text-ink-300">—</span>
                           ) : (
-                            <span className={cn(row.margin < 0 && 'font-semibold text-rose-600')}>
+                            <span className={cn(row.margin < 0 && 'font-semibold text-error-600')}>
                               {row.margin.toFixed(2)}%
                             </span>
                           )}
@@ -454,7 +454,7 @@ export function ProductBulkPanel({
                         <span
                           className={cn(
                             'rounded-full px-2 py-0.5 text-[10px] font-bold',
-                            row.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'
+                            row.is_active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'
                           )}
                         >
                           {row.is_active ? 'Active' : 'Inactive'}
@@ -480,7 +480,7 @@ export function ProductBulkPanel({
                                 startRowTransition(() => deleteProductAction(row.id));
                               }
                             }}
-                            className="text-xs font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                            className="text-xs font-medium text-error-600 hover:text-error-700 disabled:opacity-50"
                           >
                             Delete
                           </button>
@@ -540,7 +540,7 @@ export function ProductBulkPanel({
                   <span
                     className={cn(
                       'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
-                      row.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'
+                      row.is_active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'
                     )}
                   >
                     {row.is_active ? 'Active' : 'Inactive'}
@@ -567,7 +567,7 @@ export function ProductBulkPanel({
                   {canViewCost ? (
                     <div>
                       <dt className="text-ink-400">Margin</dt>
-                      <dd className={cn('font-semibold', row.margin !== null && row.margin < 0 ? 'text-rose-600' : 'text-ink-800')}>
+                      <dd className={cn('font-semibold', row.margin !== null && row.margin < 0 ? 'text-error-600' : 'text-ink-800')}>
                         {row.margin === null ? '—' : `${row.margin.toFixed(2)}%`}
                       </dd>
                     </div>
@@ -584,7 +584,7 @@ export function ProductBulkPanel({
                       <div key={pack.packId} className="rounded-lg border border-ink-100 bg-ink-50/50 p-2.5">
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <p className="truncate text-xs font-semibold text-ink-800">{pack.packName}</p>
-                          <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold', pack.active ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500')}>
+                          <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold', pack.active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500')}>
                             {pack.active ? 'Active' : 'Inactive'}
                           </span>
                         </div>
@@ -623,7 +623,7 @@ export function ProductBulkPanel({
                           startRowTransition(() => deleteProductAction(row.id));
                         }
                       }}
-                      className="text-xs font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                      className="text-xs font-medium text-error-600 hover:text-error-700 disabled:opacity-50"
                     >
                       Delete
                     </button>

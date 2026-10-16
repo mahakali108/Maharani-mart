@@ -75,7 +75,7 @@ export function WalletLedgerTable({ ledger, retailerId }: { ledger: LedgerRow[];
                   {row.is_reversed ? <span className="ml-1 rounded-full bg-primary-100 px-2 py-0.5 text-[10px]">REVERSED</span> : null}
                 </td>
                 <td className="px-4 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${row.direction === 'debit' ? 'bg-primary-50 text-primary-700' : 'bg-green-50 text-green-700'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${row.direction === 'debit' ? 'bg-primary-50 text-primary-700' : 'bg-mint-50 text-mint-700'}`}>
                     {row.direction.toUpperCase()}
                   </span>
                 </td>

@@ -33,7 +33,7 @@ import com.maharanitraders.feature.catalog.ui.CatalogScreenTags
  * The Catalogue's segmented control: Products | Categories | Brands.
  *
  * One pill, three equal segments. The selected segment is filled with the
- * Maharani brand red and its label is white and semibold; the unselected ones
+ * Maharani violet and its label is white and semibold; the unselected ones
  * sit on the shared neutral track in muted ink. That is three cues at once
  * (fill, weight, contrast) rather than a single colour shift, so "which pane am
  * I on" survives a screenshot, a colour-vision difference and a bright shop

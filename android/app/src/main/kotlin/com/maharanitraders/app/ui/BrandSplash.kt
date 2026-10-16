@@ -14,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.maharanitraders.core.designsystem.theme.MaharaniPalette
 
@@ -22,14 +21,12 @@ import com.maharanitraders.core.designsystem.theme.MaharaniPalette
 const val BRAND_SPLASH_TAG = "brand_splash"
 
 /**
- * In-app continuation of the system splash: the same brand red, the same
- * wordmark, while stored credentials are verified with the server.
+ * In-app continuation of the system splash: the same violet identity and
+ * existing wordmark, while stored credentials are verified with the server.
  *
- * The red here is pinned rather than themed, so this surface cannot change if
- * the scheme is ever re-tuned. It also happens to MATCH the chrome now: the
- * native shopping app's app bars and selected controls are brand red too, so
- * the launcher icon → system splash → this surface → home screen sequence reads
- * as one product with no colour seam. See `docs/NATIVE_UI_REDESIGN.md` §2.
+ * The launcher icon, system splash, continuation surface and primary actions
+ * all use the shared violet token. No account data is shown until the server
+ * has confirmed the session.
  *
  * It shows no account data — nothing about the user is displayed until the
  * server has confirmed the session.
@@ -40,8 +37,8 @@ fun BrandSplash() {
     modifier = Modifier
       .fillMaxSize()
       .testTag(BRAND_SPLASH_TAG),
-    color = MaharaniPalette.BrandRed600,
-    contentColor = Color.White,
+    color = MaharaniPalette.ActionPrimary,
+    contentColor = MaharaniPalette.FoundationWhite,
   ) {
     Column(
       modifier = Modifier
@@ -65,7 +62,7 @@ fun BrandSplash() {
         modifier = Modifier
           .padding(top = 32.dp)
           .size(28.dp),
-        color = Color.White,
+        color = MaharaniPalette.FoundationWhite,
       )
       Text(
         text = "Checking your session…",

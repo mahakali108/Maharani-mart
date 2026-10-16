@@ -11,6 +11,7 @@ import {
   Home,
   LayoutGrid,
   LogOut,
+  MapPin,
   Search,
   ShoppingCart,
   Sparkles,
@@ -110,7 +111,7 @@ export function RetailerShell({
 
   return (
     <div className="retailer-theme min-h-screen min-w-0 w-full bg-ivory-100 pb-24 text-slate-900 lg:pb-0">
-      <a href="#retailer-main" className="sr-only z-50 rounded-lg bg-white p-3 text-action-700 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
+      <a href="#retailer-main" className="sr-only z-50 rounded-lg bg-white p-3 text-action-700 focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:inline-flex focus:min-h-11 focus:items-center">Skip to content</a>
       <div className="hidden border-b border-mint-200 bg-mint-100 px-5 py-2 text-center text-[11px] font-medium text-mint-700 lg:block">Made for your everyday business · Wholesale piece pricing · Packs &amp; MOQ clearly shown</div>
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 pt-[env(safe-area-inset-top)] text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-3 sm:px-5">
@@ -120,17 +121,17 @@ export function RetailerShell({
                 type="button"
                 onClick={handleBack}
                 aria-label="Go back"
-                className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:-ml-1"
+                className="-ml-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 lg:-ml-1"
               >
                 <ArrowLeft className="h-6 w-6" aria-hidden="true" strokeWidth={2.25} />
               </button>
             ) : null}
             <Link
               href="/retailer/home"
-              className="group flex min-w-0 shrink items-center gap-1.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 lg:gap-2.5"
+              className="group flex min-h-11 min-w-0 shrink items-center gap-1.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 lg:gap-2.5"
               aria-label="Maharani Traders home"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blush-100 text-sm font-black text-primary-600 shadow-sm lg:h-11 lg:w-11 lg:text-lg">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lavender-100 text-sm font-black text-primary-600 shadow-sm lg:h-11 lg:w-11 lg:text-lg">
                 M
               </span>
               <span className="min-w-0 leading-none">
@@ -141,7 +142,7 @@ export function RetailerShell({
                 </span>
                 {areaName ? (
                   <span className="mt-0.5 hidden max-w-[240px] items-center gap-1 truncate text-[10px] font-semibold text-slate-500 lg:flex">
-                    <span className="h-1 w-1 rounded-full bg-emerald-500" aria-hidden="true" />
+                    <span className="h-1 w-1 rounded-full bg-mint-500" aria-hidden="true" />
                     Delivering to {areaName}
                   </span>
                 ) : null}
@@ -159,13 +160,13 @@ export function RetailerShell({
                 aria-label="Search"
                 aria-expanded={searchOpen}
                 aria-controls="retailer-mobile-search"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:hidden"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 lg:hidden"
               >
                 <Search className="h-[18px] w-[18px]" aria-hidden="true" />
               </button>
               <Link
                 href="/retailer/notifications"
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                className="relative flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                 aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
               >
                 <Bell className="h-[18px] w-[18px] lg:h-5 lg:w-5" aria-hidden="true" />
@@ -173,14 +174,14 @@ export function RetailerShell({
               </Link>
               <Link
                 href="/retailer/favorites"
-                className="relative hidden h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:flex"
+                className="relative hidden h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 sm:flex"
                 aria-label="Favourites"
               >
                 <Heart className="h-[18px] w-[18px] lg:h-5 lg:w-5" aria-hidden="true" />
               </Link>
               <Link
                 href="/retailer/cart"
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                className="relative flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                 aria-label={`Cart${cartCount > 0 ? ` (${cartCount} items)` : ''}`}
               >
                 <ShoppingCart className="h-[18px] w-[18px] lg:h-5 lg:w-5" aria-hidden="true" />
@@ -189,7 +190,7 @@ export function RetailerShell({
 
               <Link
                 href="/retailer/account"
-                className="ml-0.5 flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 lg:ml-1 lg:h-auto lg:w-auto lg:items-center lg:gap-2 lg:rounded-xl lg:bg-slate-50 lg:px-2.5 lg:py-1.5 lg:text-slate-900 lg:hover:bg-slate-100"
+                className="ml-0.5 flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 lg:ml-1 lg:h-auto lg:w-auto lg:min-h-11 lg:items-center lg:gap-2 lg:rounded-xl lg:bg-slate-50 lg:px-2.5 lg:py-1.5 lg:text-slate-900 lg:hover:bg-slate-100"
                 aria-label="Account"
               >
                 <UserRound className="h-[18px] w-[18px] lg:hidden" aria-hidden="true" />
@@ -204,7 +205,7 @@ export function RetailerShell({
               <form action={logoutAction} className="hidden lg:block">
                 <button
                   type="submit"
-                  className="ml-1 flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                  className="ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
                   aria-label="Sign out"
                   title="Sign out"
                 >
@@ -218,6 +219,16 @@ export function RetailerShell({
             <div id="retailer-mobile-search" className="relative pb-3 pt-1 lg:hidden">
               <SearchField inputRef={searchInputRef} />
             </div>
+          ) : null}
+          {areaName ? (
+            <Link
+              href="/retailer/account/addresses"
+              className="flex min-h-11 items-center gap-2 border-t border-slate-100 py-1.5 text-[11px] text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 lg:hidden"
+              aria-label={`Delivery area: ${areaName}. Manage delivery addresses`}
+            >
+              <MapPin className="h-4 w-4 shrink-0 text-sky-800" aria-hidden="true" />
+              <span className="truncate">Delivering to <strong className="font-semibold text-slate-800">{areaName}</strong></span>
+            </Link>
           ) : null}
         </div>
 
@@ -233,7 +244,7 @@ export function RetailerShell({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'relative flex h-full items-center text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2',
+                      'relative flex h-full min-w-11 items-center justify-center px-1 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2',
                       active ? 'text-primary-600' : 'text-slate-600 hover:text-primary-600'
                     )}
                     aria-current={active ? 'page' : undefined}
@@ -248,7 +259,7 @@ export function RetailerShell({
             </nav>
             <Link
               href="/retailer/quick-order"
-              className="flex items-center gap-1.5 text-[11px] font-semibold text-primary-600 hover:text-primary-700"
+              className="flex min-h-11 items-center gap-1.5 px-2 text-[11px] font-semibold text-primary-600 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
             >
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               Quick order
@@ -258,7 +269,7 @@ export function RetailerShell({
       </header>
 
       <main id="retailer-main" tabIndex={-1} className="mx-auto min-w-0 w-full scroll-mt-20 lg:scroll-mt-32 max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-8">{children}</main>
-      <footer className="mx-auto hidden max-w-7xl items-center justify-between border-t border-slate-200 px-5 py-6 text-xs text-slate-500 lg:flex"><span>Maharani Traders · For your everyday business</span><div className="flex gap-5"><Link href="/retailer/help" className="hover:text-primary-600">Help centre</Link><Link href="/retailer/account/addresses" className="hover:text-primary-600">Delivery addresses</Link></div></footer>
+      <footer className="mx-auto hidden max-w-7xl items-center justify-between border-t border-slate-200 px-5 py-6 text-xs text-slate-500 lg:flex"><span>Maharani Traders · For your everyday business</span><div className="flex gap-5"><Link href="/retailer/help" className="inline-flex min-h-11 items-center hover:text-primary-600">Help centre</Link><Link href="/retailer/account/addresses" className="inline-flex min-h-11 items-center hover:text-primary-600">Delivery addresses</Link></div></footer>
       <MobileBottomNav navItems={mobileNav} marketplace />
     </div>
   );

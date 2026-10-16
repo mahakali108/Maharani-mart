@@ -185,7 +185,7 @@ export default async function RetailerCouponsPage() {
                     {isCancelled ? (
                       <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">Order cancelled</span>
                     ) : (
-                      <span className="shrink-0 text-xs font-bold text-emerald-700">−{formatInr(row.discount_amount)}</span>
+                      <span className="shrink-0 text-xs font-bold text-mint-700">−{formatInr(row.discount_amount)}</span>
                     )}
                   </li>
                 );

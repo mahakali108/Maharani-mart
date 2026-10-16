@@ -588,8 +588,8 @@ private fun ProductFacts(detail: ProductDetail, modifier: Modifier = Modifier) {
 private fun OrderingNote(canAddToCart: Boolean, modifier: Modifier = Modifier) {
   val tokens = MaharaniThemeTokens.colors
   Surface(
-    color = tokens.saffronSurface,
-    contentColor = tokens.onSaffronSurface,
+    color = tokens.peachSurface,
+    contentColor = tokens.onPeachSurface,
     shape = RoundedCornerShape(MaharaniDimens.radiusTile),
     modifier = modifier.fillMaxWidth(),
   ) {

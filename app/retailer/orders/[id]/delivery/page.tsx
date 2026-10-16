@@ -47,15 +47,15 @@ export default async function RetailerDeliveryPage({ params }: { params: { id: s
       </div>
 
       {isOpen ? (
-        <Card className="space-y-2 border-cyan-200 bg-cyan-50/60 p-5">
-          <p className="flex items-center gap-2 text-sm font-medium text-cyan-800">
+        <Card className="space-y-2 border-sky-200 bg-sky-50/60 p-5">
+          <p className="flex items-center gap-2 text-sm font-medium text-sky-800">
             <KeyRound className="h-4 w-4" /> Your delivery OTP
           </p>
-          <p className="text-sm text-cyan-800">
+          <p className="text-sm text-sky-800">
             The one-time password was sent to your notifications when the order was dispatched. Share it with the
             delivery person <strong>only after</strong> you have received your goods — it confirms the delivery.
           </p>
-          <p className="text-xs text-cyan-700">
+          <p className="text-xs text-sky-700">
             Lost it? Check your notification centre or ask the delivery person to have the office resend it.
           </p>
         </Card>
@@ -87,7 +87,7 @@ export default async function RetailerDeliveryPage({ params }: { params: { id: s
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-ink-500">OTP verification</dt>
-              <dd className={`text-right font-medium ${delivery.otp_verified_at ? 'text-green-700' : 'text-ink-800'}`}>
+              <dd className={`text-right font-medium ${delivery.otp_verified_at ? 'text-mint-700' : 'text-ink-800'}`}>
                 {delivery.otp_verified_at ? 'Verified at handover' : 'Not yet verified'}
               </dd>
             </div>
@@ -109,7 +109,7 @@ export default async function RetailerDeliveryPage({ params }: { params: { id: s
           </p>
           {delivery.return_deadline ? (
             <div className="border-t border-ink-100 pt-2 text-sm">
-              <p className={windowOpen ? 'font-medium text-green-700' : 'font-medium text-primary-700'}>
+              <p className={windowOpen ? 'font-medium text-mint-700' : 'font-medium text-primary-700'}>
                 {windowOpen
                   ? `You can request a return until ${formatIndiaDate(delivery.return_deadline)} (inclusive).`
                   : `The return window closed on ${formatIndiaDate(delivery.return_deadline)}.`}

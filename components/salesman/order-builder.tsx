@@ -251,7 +251,7 @@ export function SalesmanOrderBuilder({
                           {pack.moq} pcs · {pack.skuCode}
                         </p>
                         {pack.availability !== 'unknown' ? (
-                          <p className={`mt-1 text-xs font-semibold ${pack.availability === 'in_stock' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          <p className={`mt-1 text-xs font-semibold ${pack.availability === 'in_stock' ? 'text-mint-800' : 'text-slate-700'}`}>
                             {pack.availability === 'in_stock' ? 'In stock' : 'Out of stock'}
                           </p>
                         ) : null}

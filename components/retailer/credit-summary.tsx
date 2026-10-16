@@ -37,7 +37,7 @@ export function CreditSummary({
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3.5">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-mint-50 text-mint-700">
             <WalletCards className="h-4.5 w-4.5" />
           </span>
           <div>
@@ -45,7 +45,7 @@ export function CreditSummary({
             <p className="text-[9px] text-slate-500">Secure account limit</p>
           </div>
         </div>
-        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+        <ShieldCheck className="h-4 w-4 text-mint-600" />
       </div>
 
       <div className="p-4">
@@ -67,7 +67,7 @@ export function CreditSummary({
           <>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
               <div
-                className={`h-full rounded-full ${usedPercent > 85 ? 'bg-primary-600' : usedPercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                className={`h-full rounded-full ${usedPercent > 85 ? 'bg-primary-600' : usedPercent > 60 ? 'bg-amber-500' : 'bg-mint-500'}`}
                 style={{ width: `${usedPercent}%` }}
               />
             </div>

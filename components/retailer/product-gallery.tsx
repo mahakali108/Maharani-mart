@@ -1,9 +1,35 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
+import { StoredImage } from '@/components/media/stored-image';
 import { ChevronLeft, ChevronRight, ImageOff, ZoomIn, ZoomOut, X, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+
+function GalleryImageFallback({
+  name,
+  compact = false,
+  className,
+}: {
+  name: string;
+  compact?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      role="img"
+      aria-label={`${name} image unavailable`}
+      className={cn(
+        'flex flex-col items-center justify-center gap-2 bg-ivory-50 px-3 text-center text-slate-600',
+        className
+      )}
+    >
+      <ImageOff className={compact ? 'h-5 w-5' : 'h-14 w-14'} aria-hidden="true" />
+      <span className={compact ? 'sr-only' : 'text-[11px] font-bold uppercase tracking-wider'}>
+        Product image unavailable
+      </span>
+    </div>
+  );
+}
 
 /**
  * Universal product gallery — works for EVERY category (Face Wash, Powder,
@@ -136,16 +162,18 @@ export function ProductGallery({
                 type="button"
                 onClick={openLightbox}
                 aria-label={`Open image viewer for ${name} — image ${active + 1} of ${images.length}`}
-                className="absolute inset-0 flex h-full w-full items-center justify-center p-3 sm:p-4 lg:p-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-300"
+                className="absolute inset-0 flex h-full w-full items-center justify-center p-3 sm:p-4 lg:p-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600"
               >
-                <Image
+                <StoredImage
                   src={current.image_url}
                   alt={altFor(active)}
                   fill
+                  size="detail"
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 45vw"
                   className="object-contain"
                   unoptimized
                   priority
+                  fallback={<GalleryImageFallback name={name} className="absolute inset-0" />}
                 />
               </button>
 
@@ -164,7 +192,7 @@ export function ProductGallery({
                 type="button"
                 onClick={openLightbox}
                 aria-label="Zoom image"
-                className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-600 shadow-sm backdrop-blur transition hover:border-primary-300 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:bottom-4 sm:right-4"
+                className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-600 shadow-sm backdrop-blur transition hover:border-primary-300 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 sm:bottom-4 sm:right-4"
               >
                 <ZoomIn className="h-4 w-4" />
               </button>
@@ -176,7 +204,7 @@ export function ProductGallery({
                     type="button"
                     onClick={() => step(-1)}
                     aria-label="Previous image"
-                    className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:left-3 sm:h-10 sm:w-10"
+                    className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-400 bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 sm:left-3 "
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </button>
@@ -184,7 +212,7 @@ export function ProductGallery({
                     type="button"
                     onClick={() => step(1)}
                     aria-label="Next image"
-                    className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:right-3 sm:h-10 sm:w-10"
+                    className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-400 bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 sm:right-3 "
                   >
                     <ChevronRight className="h-5 w-5" />
                   </button>
@@ -192,10 +220,7 @@ export function ProductGallery({
               ) : null}
             </>
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-3 py-16 text-slate-300">
-              <ImageOff className="h-14 w-14" aria-hidden="true" />
-              <span className="text-[11px] font-bold uppercase tracking-wider">Product image unavailable</span>
-            </div>
+            <GalleryImageFallback name={name} className="h-full w-full py-16" />
           )}
 
           {/* Badges — discount / NEW / OFFER, top-left */}
@@ -231,18 +256,20 @@ export function ProductGallery({
               aria-label={`View ${altFor(index)}`}
               onClick={() => setActive(index)}
               className={cn(
-                'relative h-[72px] w-[72px] shrink-0 snap-start overflow-hidden rounded-xl border bg-white transition sm:h-16 sm:w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                'relative h-[72px] w-[72px] shrink-0 snap-start overflow-hidden rounded-xl border bg-white transition sm:h-16 sm:w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600',
                 index === active
                   ? 'border-primary-600 ring-2 ring-primary-100'
                   : 'border-slate-200 hover:border-primary-300'
               )}
             >
-              <Image
+              <StoredImage
                 src={image.image_url}
                 alt={altFor(index)}
                 fill
+                size="thumb"
                 className="object-contain p-1.5"
                 unoptimized
+                fallback={<GalleryImageFallback name={name} compact className="absolute inset-0" />}
               />
               {index === active ? (
                 <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-primary-600" />
@@ -275,10 +302,11 @@ export function ProductGallery({
               className="relative h-full w-full"
               style={{ touchAction: lightboxZoom > 1 ? 'pan-x pan-y' : 'pan-y' }}
             >
-              <Image
+              <StoredImage
                 src={current.image_url}
                 alt={altFor(active)}
                 fill
+                size="detail"
                 sizes="100vw"
                 className={cn(
                   'object-contain p-4 pb-16 pt-14 sm:p-8 sm:pb-20 sm:pt-16 transition-transform duration-200',
@@ -287,6 +315,7 @@ export function ProductGallery({
                 style={{ transform: `scale(${lightboxZoom})` }}
                 unoptimized
                 priority
+                fallback={<GalleryImageFallback name={name} className="absolute inset-0" />}
               />
             </div>
           ) : null}
@@ -302,7 +331,7 @@ export function ProductGallery({
                 onClick={() => setLightboxZoom((z) => Math.max(1, Math.round((z - 0.5) * 10) / 10))}
                 disabled={lightboxZoom <= 1}
                 aria-label="Zoom out"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-30 sm:h-10 sm:w-10"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-30 "
               >
                 <ZoomOut className="h-5 w-5" />
               </button>
@@ -311,7 +340,7 @@ export function ProductGallery({
                 onClick={() => setLightboxZoom((z) => Math.min(3, Math.round((z + 0.5) * 10) / 10))}
                 disabled={lightboxZoom >= 3}
                 aria-label="Zoom in"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-30 sm:h-10 sm:w-10"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-30 "
               >
                 <Maximize2 className="h-4 w-4" />
               </button>
@@ -319,7 +348,7 @@ export function ProductGallery({
                 type="button"
                 onClick={closeLightbox}
                 aria-label="Close image viewer"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:h-10 sm:w-10"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white "
               >
                 <X className="h-5 w-5" />
               </button>
@@ -363,7 +392,15 @@ export function ProductGallery({
                     index === active ? 'border-white ring-2 ring-white' : 'border-white/30 opacity-70 hover:opacity-100'
                   )}
                 >
-                  <Image src={image.image_url} alt={altFor(index)} fill className="object-contain p-1" unoptimized />
+                  <StoredImage
+                    src={image.image_url}
+                    alt={altFor(index)}
+                    fill
+                    size="thumb"
+                    className="object-contain p-1"
+                    unoptimized
+                    fallback={<GalleryImageFallback name={name} compact className="absolute inset-0" />}
+                  />
                 </button>
               ))}
             </div>

@@ -254,7 +254,7 @@ private fun HomeOfferCard(
         horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
       ) {
         AccentIcon(
-          tone = AccentTone.AMBER,
+          tone = AccentTone.PEACH,
           size = 34.dp,
           glyph = { tint -> OfferGlyph(tint = tint) },
         )
@@ -341,8 +341,8 @@ fun HomeOffersUnavailableNote(modifier: Modifier = Modifier) {
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm),
   ) {
-    // A 6dp error mark: the one piece of red on the line, so the note is
-    // recognisable as a problem without being an error card.
+    // A small neutral error mark keeps the note recognizable without turning it
+    // into a saturated error card or relying on colour alone.
     Box(
       modifier = Modifier
         .size(6.dp)

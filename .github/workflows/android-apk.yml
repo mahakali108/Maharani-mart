@@ -345,10 +345,10 @@ jobs:
       # and the audit step below enforces that.
       - name: Verify release artifacts are unsigned and report signing readiness
         env:
-          HAS_RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE != '' }}
-          HAS_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD != '' }}
-          HAS_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS != '' }}
-          HAS_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD != '' }}
+          HAS_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 != '' }}
+          HAS_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD != '' }}
+          HAS_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS != '' }}
+          HAS_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD != '' }}
         run: |
           set -euo pipefail
           APK_SIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
@@ -641,9 +641,10 @@ jobs:
       - name: Audit logs for keystore passwords, tokens, and private signing material
         if: always()
         env:
-          SCAN_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          SCAN_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          SCAN_RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}
+          SCAN_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          SCAN_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          SCAN_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          SCAN_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
           GH_TOKEN_VALUE: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -682,6 +683,7 @@ jobs:
             fi
           }
           check_value "RELEASE_KEYSTORE_PASSWORD" "$SCAN_RELEASE_KEYSTORE_PASSWORD"
+          check_value "RELEASE_KEY_ALIAS" "$SCAN_RELEASE_KEY_ALIAS"
           check_value "RELEASE_KEY_PASSWORD" "$SCAN_RELEASE_KEY_PASSWORD"
           check_value "RELEASE_KEYSTORE (base64)" "$SCAN_RELEASE_KEYSTORE"
           check_value "GITHUB_TOKEN" "$GH_TOKEN_VALUE"
@@ -834,4 +836,8 @@ jobs:
             0) echo "production reachable" ;;
             4) echo "production unverifiable from this runner — recorded as NETWORK_RESTRICTED, build stays green" ;;
             *) echo "::error::production probe reported a real problem (exit $CODE) — see the job summary verdict"; exit 1 ;;
+          esac
+t"; exit 1 ;;
+          esac
+ry verdict"; exit 1 ;;
           esac

@@ -63,7 +63,7 @@ fun SectionHeader(
             .width(4.dp)
             .height(18.dp)
             .clip(RoundedCornerShape(MaharaniDimens.radiusPill))
-            .background(MaharaniThemeTokens.colors.saffron),
+            .background(MaharaniThemeTokens.colors.action),
         )
         Text(
           text = title,

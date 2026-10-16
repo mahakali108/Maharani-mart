@@ -128,7 +128,7 @@ export default async function InventoryPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className={`font-semibold ${m.direction === 'out' ? 'text-primary-600' : 'text-green-600'}`}>
+                    <p className={`font-semibold ${m.direction === 'out' ? 'text-primary-600' : 'text-mint-600'}`}>
                       {m.direction === 'out' ? '−' : '+'}{Math.abs(m.quantity)}
                     </p>
                     <p className="text-xs text-ink-400">{formatIndiaDateTime(m.created_at)}</p>

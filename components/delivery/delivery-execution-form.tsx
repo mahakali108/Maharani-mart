@@ -206,7 +206,7 @@ export function DeliveryExecutionForm({
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-2">
                       <div>
-                        <label className="text-[11px] text-green-700">Delivered</label>
+                        <label className="text-[11px] text-mint-700">Delivered</label>
                         <Input
                           value={q.delivered}
                           onChange={(e) => updateQuantity(item.orderItemId, 'delivered', e.target.value)}
@@ -265,7 +265,7 @@ export function DeliveryExecutionForm({
                 <Signature className="h-3.5 w-3.5" /> Receiver&apos;s signature (optional)
               </p>
               {signatureUrl ? (
-                <div className="flex items-center justify-between gap-2 text-xs text-green-700">
+                <div className="flex items-center justify-between gap-2 text-xs text-mint-700">
                   <span>Signature captured</span>
                   <button type="button" onClick={() => setSignatureUrl(null)} className="text-primary-600 hover:underline">
                     Remove
@@ -286,7 +286,7 @@ export function DeliveryExecutionForm({
                 <Upload className="h-3.5 w-3.5" /> Delivery photo (optional)
               </p>
               {photoUrl ? (
-                <div className="flex items-center justify-between gap-2 text-xs text-green-700">
+                <div className="flex items-center justify-between gap-2 text-xs text-mint-700">
                   <span>Photo attached</span>
                   <button type="button" onClick={() => setPhotoUrl(null)} className="text-primary-600 hover:underline">
                     Remove

@@ -39,7 +39,7 @@ export function CommissionRowActions({ commissionId, status }: { commissionId: s
             type="button"
             disabled={isPending}
             onClick={() => run(() => markCommissionPaidAction(commissionId))}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-mint-50 px-2.5 py-1 text-xs font-medium text-mint-700 transition-colors hover:bg-mint-100 disabled:opacity-50"
           >
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Mark paid

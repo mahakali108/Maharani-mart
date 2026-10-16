@@ -122,7 +122,7 @@ export function ProductCard({
         {/* A sibling of the link, never an interactive element nested in it. */}
         <button type="button" onClick={handleFavorite} disabled={favPending}
           aria-label={`${favorite ? 'Remove' : 'Add'} ${name} ${favorite ? 'from' : 'to'} favourites`} aria-pressed={favorite}
-          className={cn('absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white/95 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:right-3 sm:top-3', favorite ? 'text-rose-600' : 'text-slate-500 hover:text-rose-600')}>
+          className={cn('absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full border border-slate-400 bg-white/95 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:right-3 sm:top-3', favorite ? 'text-primary-600' : 'text-slate-500 hover:text-primary-700')}>
           <Heart className={cn('h-4 w-4', favorite && 'fill-current')} aria-hidden="true" />
         </button>
       </div>
@@ -137,7 +137,7 @@ export function ProductCard({
         </p>
         {availabilityLabel ? (
           <span className={cn('mt-2 w-fit rounded-md px-1.5 py-1 text-[10px] font-semibold',
-            availability === 'in_stock' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-700')}>
+            availability === 'in_stock' ? 'bg-mint-50 text-mint-800' : 'bg-slate-100 text-slate-700')}>
             {availabilityLabel}
           </span>
         ) : null}
@@ -148,7 +148,7 @@ export function ProductCard({
             {piecePrice !== null && piecePrice > 0 ? <>{formatInr(piecePrice)}<span className="text-[10px] font-normal text-slate-500"> /pc</span></> : <span className="text-xs font-semibold text-slate-600">Price unavailable</span>}
           </p>
           {mrp != null && mrp > 0 ? <p className="mt-1 text-[10px] text-slate-500">MRP <span className={cn(piecePrice !== null && mrp > piecePrice && 'line-through')}>{formatInr(mrp)}</span></p> : null}
-          {savings > 0 ? <p className="mt-1 text-[10px] font-semibold text-emerald-700">Save {formatInr(savings)} /pc</p> : null}
+          {savings > 0 ? <p className="mt-1 text-[10px] font-semibold text-mint-700">Save {formatInr(savings)} /pc</p> : null}
           {gstPercent != null && piecePrice !== null ? <p className="mt-1 text-[9px] text-slate-500">Includes {gstPercent}% GST</p> : null}
           {nextTierHint ? <p aria-hidden={quantity >= nextTierHint.minQuantity} className={cn("mt-2 flex min-h-4 items-start gap-1 text-[10px] font-medium text-action-700", quantity >= nextTierHint.minQuantity && "invisible")}><Tag className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>{nextTierHint.minQuantity} pcs: {formatInr(nextTierHint.pricePerPiece)}/pc</span></p> : null}
         </div>
@@ -164,10 +164,10 @@ export function ProductCard({
               {isPending ? 'Adding…' : added ? 'Add again' : 'Add to Cart'}
             </button>
           </> : availability === 'out_of_stock' ? null : <p className="py-1 text-[10px] text-slate-500">Check details for current terms.</p>}
-          <Link href={detailsHref} aria-label={`View details for ${name}`} className="flex min-h-10 w-full items-center justify-center rounded-lg border border-slate-200 px-1 text-[11px] font-semibold text-action-700 transition hover:border-action-300 hover:bg-action-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:text-xs">View Details</Link>
-          {added ? <p role="status" className="text-[10px] font-medium text-emerald-700">Added to your cart.</p> : null}
-          {error ? <p role="alert" className="text-[10px] text-rose-700">{error}</p> : null}
-          {pricing && !pricing.orderable && !unavailable ? <p role="alert" className="text-[10px] text-rose-700">{pricing.message}</p> : null}
+          <Link href={detailsHref} aria-label={`View details for ${name}`} className="flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-200 px-1 text-[11px] font-semibold text-action-700 transition hover:border-action-300 hover:bg-action-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 sm:text-xs">View Details</Link>
+          {added ? <p role="status" className="text-[10px] font-medium text-mint-700">Added to your cart.</p> : null}
+          {error ? <p role="alert" className="text-[10px] text-error-700">{error}</p> : null}
+          {pricing && !pricing.orderable && !unavailable ? <p role="alert" className="text-[10px] text-error-700">{pricing.message}</p> : null}
         </div>
       </div>
     </article>

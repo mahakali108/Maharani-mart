@@ -60,7 +60,7 @@ export function PricePreviewForm({ products, retailers }: { products: Option[]; 
         </div>
       ) : null}
       {state?.price !== null && state?.price !== undefined ? (
-        <div className="rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800">
+        <div className="rounded-xl border border-mint-100 bg-mint-50 px-4 py-3 text-sm text-mint-800">
           Effective price: <span className="text-lg font-semibold">₹{state.price.toFixed(2)}</span>
         </div>
       ) : null}

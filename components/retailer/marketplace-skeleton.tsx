@@ -4,7 +4,7 @@ export function MarketplaceSkeleton() {
   return (
     <div role="status" aria-label="Loading store" className="space-y-6">
       <span className="sr-only">Loading your store…</span>
-      <div className="rounded-[1.75rem] border border-blush-200 bg-blush-50 p-6 sm:p-10">
+      <div className="rounded-[1.75rem] border border-lavender-200 bg-lavender-50 p-6 sm:p-10">
         <Skeleton className="h-3 w-28" />
         <Skeleton className="mt-2 h-12 w-full max-w-lg" />
         <Skeleton className="mt-4 h-4 w-48" />

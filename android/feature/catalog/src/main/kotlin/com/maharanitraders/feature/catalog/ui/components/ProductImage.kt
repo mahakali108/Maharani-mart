@@ -42,7 +42,7 @@ fun ProductImage(
   modifier: Modifier = Modifier,
   contentScale: ContentScale = ContentScale.Fit,
   testTag: String = CatalogTags.PRODUCT_IMAGE,
-  /** Tint the monogram with the brand red (directory tiles) instead of ink grey. */
+  /** Tint the monogram with the violet identity (directory tiles) instead of ink grey. */
   brandedMonogram: Boolean = false,
 ) {
   SubcomposeAsyncImage(

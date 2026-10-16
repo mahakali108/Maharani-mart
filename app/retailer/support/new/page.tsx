@@ -84,7 +84,7 @@ export default async function NewSupportTicketPage({
       >
         <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to all tickets
       </Link>
-      <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-[10px] leading-4 text-blue-800 sm:text-xs">
+      <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-[10px] leading-4 text-sky-800 sm:text-xs">
         <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <p>
           Tickets are private to you and your distributor. Statuses are <strong>Open → In progress → Resolved →

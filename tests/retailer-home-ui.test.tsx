@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProductCard } from '@/components/retailer/product-card';
+import { ProductGallery } from '@/components/retailer/product-gallery';
+import { CartItemRow } from '@/components/retailer/cart-item-row';
 import { HomeContent } from '@/components/retailer/home-content';
 import { HomeQuickActions } from '@/components/retailer/home-quick-actions';
 import { HomeCartSummary } from '@/components/retailer/home-cart-summary';
@@ -20,12 +22,13 @@ import { emptyHome, product, pricingData, PRODUCT, PACK, ORDER, CATEGORY, BRAND 
 
 const mocks = vi.hoisted(() => ({
   path: '/retailer/home', push: vi.fn(), replace: vi.fn(), back: vi.fn(), refresh: vi.fn(),
-  add: vi.fn(), reorder: vi.fn(), favorite: vi.fn(), suggestions: vi.fn(),
+  add: vi.fn(), reorder: vi.fn(), favorite: vi.fn(), suggestions: vi.fn(), updateCartQuantity: vi.fn(), removeCartItem: vi.fn(), saveCartItem: vi.fn(),
 }));
 vi.mock('next/navigation', () => ({ usePathname: () => mocks.path, useRouter: () => ({ push: mocks.push, replace: mocks.replace, back: mocks.back, refresh: mocks.refresh }) }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => React.createElement('a', { href, ...props }, children) }));
 vi.mock('next/image', () => ({ default: ({ src, alt, className, onError }: { src: string; alt: string; className?: string; onError?: () => void }) => React.createElement('img', { src, alt, className, onError }) }));
-vi.mock('@/lib/retailer/cart-actions', () => ({ addToCartAction: mocks.add }));
+vi.mock('@/lib/retailer/cart-actions', () => ({ addToCartAction: mocks.add, updateCartQuantityAction: mocks.updateCartQuantity, removeCartItemAction: mocks.removeCartItem }));
+vi.mock('@/lib/retailer/saved-cart-actions', () => ({ saveCartItemForLaterAction: mocks.saveCartItem }));
 vi.mock('@/lib/retailer/order-actions', () => ({ addReorderLinesToCartAction: mocks.reorder }));
 vi.mock('@/lib/retailer/favorite-actions', () => ({ toggleFavoriteAction: mocks.favorite }));
 vi.mock('@/lib/retailer/search-actions', () => ({ searchSuggestionsAction: mocks.suggestions }));
@@ -307,6 +310,35 @@ describe('product purchase, cart feedback and wholesale deal', () => {
     view.rerender(<ProductCard {...card()} fromPrice={null} />);
     expect(screen.getByText('Price unavailable')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /pieces to cart/ })).toBeNull();
+  });
+  it('product-gallery broken URLs render the shared accessible fallback', () => {
+    const view = render(<ProductGallery name="Fixture gallery product" images={[{ id: 'gallery-image', image_url: '/broken-gallery.png' }]} />);
+    const image = view.container.querySelector('button[aria-label^="Open image viewer"] img');
+    expect(image).toBeTruthy();
+    fireEvent.error(image!);
+    expect(screen.getByRole('img', { name: 'Fixture gallery product image unavailable' })).toBeTruthy();
+    expect(screen.getByText('Product image unavailable')).toBeTruthy();
+  });
+  it('cart-row broken URLs render the existing image placeholder instead of a broken image', () => {
+    const view = render(<CartItemRow
+      id="fixture-cart-line"
+      productId={PRODUCT}
+      productName="Fixture product"
+      brandName="Fixture brand"
+      packName="250 g"
+      imageUrl="/broken-cart.png"
+      quantity={6}
+      gstPercent={5}
+      moq={6}
+      derivedPiecePrice={30}
+      isUnavailable={false}
+    />);
+    const image = view.container.querySelector('img[src="/broken-cart.png"]');
+    expect(image).toBeTruthy();
+    fireEvent.error(image!);
+    expect(screen.getByRole('img', { name: /image unavailable/ })).toBeTruthy();
+    expect(screen.getByText('Image unavailable')).toBeTruthy();
+    expect(screen.getByText('No product image available')).toBeTruthy();
   });
   it('image errors show a fallback and a later valid source can recover', () => {
     const view = render(<ProductCard {...card()} imageUrl="/broken.png" />);

@@ -37,22 +37,22 @@ const PAGE_SIZE = 30;
 const ORDER: KeysetColumn[] = [{ column: 'seq', ascending: false }];
 
 const MOVEMENT_STYLES: Record<string, string> = {
-  inward: 'bg-green-50 text-green-700',
+  inward: 'bg-mint-50 text-mint-700',
   outward: 'bg-primary-50 text-primary-700',
   damage: 'bg-primary-50 text-primary-700',
-  return: 'bg-blue-50 text-blue-700',
+  return: 'bg-sky-50 text-sky-700',
   transfer: 'bg-violet-50 text-violet-700',
   transfer_out: 'bg-violet-50 text-violet-700',
   transfer_in: 'bg-violet-50 text-violet-700',
   adjustment: 'bg-amber-50 text-amber-700',
   stock_adjustment: 'bg-amber-50 text-amber-700',
   manual_correction: 'bg-amber-50 text-amber-700',
-  opening_stock: 'bg-teal-50 text-teal-700',
-  grn_receipt: 'bg-green-50 text-green-700',
+  opening_stock: 'bg-sky-50 text-sky-700',
+  grn_receipt: 'bg-mint-50 text-mint-700',
   sale: 'bg-primary-50 text-primary-700',
   sale_reservation: 'bg-sky-50 text-sky-700',
   sale_release: 'bg-sky-50 text-sky-700',
-  expiry: 'bg-orange-50 text-orange-700',
+  expiry: 'bg-amber-50 text-amber-700',
 };
 
 const MOVEMENT_OPTIONS = [
@@ -144,7 +144,7 @@ function renderMovementRows(rows: MovementRow[]) {
           {m.movement_type.replace(/_/g, ' ')}
         </span>
       </td>
-      <td className={`px-5 py-3 text-right font-semibold ${m.direction === 'out' ? 'text-primary-600' : 'text-green-600'}`}>
+      <td className={`px-5 py-3 text-right font-semibold ${m.direction === 'out' ? 'text-primary-600' : 'text-mint-600'}`}>
         {m.direction === 'out' ? '\u2212' : '+'}
         {Math.abs(m.quantity)}
       </td>

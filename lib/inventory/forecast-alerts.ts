@@ -72,7 +72,7 @@ export async function notifyForecastSignalsIfNeeded(options: { days?: number } =
     for (const insight of insights.slice(0, MAX_NOTIFICATIONS)) {
       const link = alertLink(insight.kind, insight.productId ?? 'global');
       if (alreadySent.has(link)) continue;
-      const title = insight.severity === 'critical' ? `🔴 ${insight.title}` : `🟠 ${insight.title}`;
+      const title = insight.severity === 'critical' ? `Critical — ${insight.title}` : `Priority — ${insight.title}`;
       const body = `${insight.detail} (${insight.trace})`;
       for (const adminId of adminIds) {
         await createInAppNotification({ recipientId: adminId, title, body, linkUrl: link }).catch(() => {

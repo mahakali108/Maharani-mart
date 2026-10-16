@@ -27,8 +27,8 @@ interface CommissionRow {
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-amber-50 text-amber-700',
-  approved: 'bg-blue-50 text-blue-700',
-  paid: 'bg-emerald-50 text-emerald-700',
+  approved: 'bg-sky-50 text-sky-700',
+  paid: 'bg-mint-50 text-mint-700',
 };
 
 function paiseToRupees(paise: number): string {

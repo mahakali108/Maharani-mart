@@ -34,7 +34,7 @@ export function CategoryCard({
         aria-label={`Browse ${category.name}`}
         className="group flex h-full min-w-0 flex-col items-center gap-2 rounded-xl px-1 pb-1 pt-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2"
       >
-        <span className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white bg-[var(--aisle-color,#fbeff1)] shadow-[0_1px_2px_rgba(79,20,36,0.06)] transition duration-200 group-hover:-translate-y-0.5 group-hover:border-primary-300 group-hover:shadow-md sm:h-20 sm:w-20">
+        <span className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white bg-[var(--aisle-color)] shadow-card transition duration-200 group-hover:-translate-y-0.5 group-hover:border-primary-300 group-hover:shadow-md sm:h-20 sm:w-20">
           {category.image_url ? (
             <StoredImage
               src={category.image_url}
@@ -60,7 +60,7 @@ export function CategoryCard({
       href={target}
       className="group block h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-premium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2"
     >
-      <div className="relative aspect-[3/2] overflow-hidden bg-[var(--aisle-color,#fbeff1)]">
+      <div className="relative aspect-[3/2] overflow-hidden bg-[var(--aisle-color)]">
         {category.image_url ? (
           <StoredImage
             src={category.image_url}

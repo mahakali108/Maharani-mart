@@ -1,5 +1,7 @@
 # Maharani Traders redesign and district review
 
+> Historical review snapshot. Colour guidance and branch-specific status below have been superseded by [`design-system.md`](design-system.md) and current-session verification; existing district/business-rule notes remain background context.
+
 Review date: 14 October 2026. Branch: `arena/af7f872f-maharani-mart`.
 Starting HEAD/base: `68f53eb4c6fd8043b2bffdb36a07d5ed2686fd8c`; default PR base: `main`.
 The initial working tree was clean. Earlier merged work, pricing/order logic, authentication and production URL (`https://maharanitraders.vercel.app`) are preserved. No database migration, seed, deployment, release or manual Actions dispatch was performed.

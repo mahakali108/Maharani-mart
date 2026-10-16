@@ -133,8 +133,8 @@ export function SearchField({
         className={cn(
           'min-w-0 w-full rounded-xl bg-white text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-500',
           variant === 'header'
-            ? 'h-10 border border-slate-200 bg-slate-50 pl-10 pr-20 focus:border-action-300 focus:bg-white focus:ring-2 focus:ring-action-100 lg:h-11 lg:pr-36'
-            : cn('h-12 border border-action-200 bg-action-50/40 pl-10 focus:border-action-400 focus:bg-white focus:ring-2 focus:ring-action-100 sm:h-14 sm:pl-11', value ? 'pr-28 sm:pr-32' : 'pr-24')
+            ? 'h-11 border border-slate-400 bg-slate-50 pl-10 pr-28 focus:border-action-600 focus:bg-white focus:ring-2 focus:ring-action-100 lg:pr-40'
+            : cn('h-12 border border-action-500 bg-action-50/40 pl-10 focus:border-action-600 focus:bg-white focus:ring-2 focus:ring-action-100 sm:h-14 sm:pl-11', value ? 'pr-32 sm:pr-36' : 'pr-24')
         )}
       />
       {value ? (
@@ -144,7 +144,7 @@ export function SearchField({
             setValue('');
             setSuggestions({ products: [], brands: [], categories: [] });
           }}
-          className={cn('absolute top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500', variant === 'hero' ? 'right-20 sm:right-24' : 'right-11 lg:right-28')}
+          className={cn('absolute top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500', variant === 'hero' ? 'right-20 sm:right-24' : 'right-14 lg:right-28')}
           aria-label="Clear search"
         >
           <X className="h-3.5 w-3.5" />
@@ -153,10 +153,10 @@ export function SearchField({
       <button
         type="submit"
         className={cn(
-          'absolute right-1.5 top-1.5 rounded-lg font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2',
+          'absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 focus-visible:ring-offset-2',
           variant === 'header'
-            ? 'hidden h-8 bg-action-600 px-5 text-xs hover:bg-action-700 lg:inline-flex lg:items-center'
-            : 'inline-flex h-9 items-center bg-action-600 px-3 text-xs hover:bg-action-700 sm:right-2 sm:top-2 sm:h-10 sm:px-5'
+            ? 'hidden h-11 bg-action-600 px-5 text-xs hover:bg-action-700 lg:inline-flex lg:items-center'
+            : 'inline-flex h-11 items-center bg-action-600 px-3 text-xs hover:bg-action-700 sm:right-2 sm:px-5'
         )}
       >
         Search
@@ -164,7 +164,7 @@ export function SearchField({
       {variant === 'header' ? (
         <button
           type="submit"
-          className="absolute right-1.5 top-1.5 flex h-7 w-9 items-center justify-center rounded-lg bg-action-600 text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 lg:hidden"
+          className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg bg-action-600 text-white transition hover:bg-action-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 lg:hidden"
           aria-label="Search"
         >
           <Search className="h-3.5 w-3.5" />
@@ -179,7 +179,7 @@ export function SearchField({
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Recent searches</p>
                 <button
                   type="button"
-                  className="text-[10px] font-bold text-primary-600"
+                  className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10px] font-bold text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action-500"
                   onClick={() => {
                     try { window.localStorage.removeItem(RECENT_KEY); } catch { /* Optional storage. */ }
                     setRecent([]);
@@ -194,7 +194,7 @@ export function SearchField({
                     key={term}
                     type="button"
                     onClick={() => go(catalogHref({ q: term }), term)}
-                    className="flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-primary-50 hover:text-primary-700"
+                    className="flex min-h-11 items-center gap-1 rounded-full bg-slate-50 px-2.5 py-2 text-[11px] font-semibold text-slate-600 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action-500 hover:text-primary-700"
                   >
                     <Clock3 className="h-3 w-3" /> {term}
                   </button>
@@ -216,7 +216,7 @@ export function SearchField({
                   <button
                     type="button"
                     onClick={() => go(`/retailer/catalog/${product.id}`, product.name)}
-                    className="flex w-full items-start gap-2 px-4 py-2 text-left hover:bg-slate-50"
+                    className="flex min-h-11 w-full items-start gap-2 px-4 py-2 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action-500"
                   >
                     <Search className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
                     <span className="min-w-0">
@@ -242,7 +242,7 @@ export function SearchField({
                   key={category.id}
                   type="button"
                   onClick={() => go(catalogHref({ category: category.id }), category.name)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action-500"
                 >
                   <LayoutGrid className="h-3.5 w-3.5 text-primary-500" /> {category.name}
                   <span className="text-[10px] font-medium text-slate-500">Category</span>
@@ -253,7 +253,7 @@ export function SearchField({
                   key={brand.id}
                   type="button"
                   onClick={() => go(catalogHref({ brand: brand.id }), brand.name)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action-500"
                 >
                   <Tag className="h-3.5 w-3.5 text-amber-600" /> {brand.name}
                   <span className="text-[10px] font-medium text-slate-500">Brand</span>

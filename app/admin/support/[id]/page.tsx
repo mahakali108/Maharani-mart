@@ -18,15 +18,15 @@ import {
 
 const STATUS_STYLES: Record<SupportStatus, string> = {
   open: 'bg-amber-50 text-amber-700',
-  in_progress: 'bg-blue-50 text-blue-700',
-  resolved: 'bg-emerald-50 text-emerald-700',
+  in_progress: 'bg-sky-50 text-sky-700',
+  resolved: 'bg-mint-50 text-mint-700',
   closed: 'bg-ink-100 text-ink-500',
 };
 
 const PRIORITY_STYLES: Record<SupportPriority, string> = {
   low: 'bg-ink-50 text-ink-500',
   normal: 'bg-sky-50 text-sky-700',
-  high: 'bg-orange-50 text-orange-700',
+  high: 'bg-amber-50 text-amber-700',
   urgent: 'bg-primary-50 text-primary-700',
 };
 

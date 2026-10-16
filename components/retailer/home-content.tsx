@@ -47,7 +47,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
 
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
-      <section aria-labelledby="home-welcome" className="relative overflow-hidden rounded-[1.75rem] border border-blush-200 bg-blush-50 shadow-card">
+      <section aria-labelledby="home-welcome" className="relative overflow-hidden rounded-[1.75rem] border border-lavender-200 bg-lavender-50 shadow-card">
         <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full border-[40px] border-peach-100/70 sm:h-96 sm:w-96" />
         <div className="relative grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.4fr_1fr] lg:gap-10 lg:p-10">
           <div className="min-w-0">
@@ -65,7 +65,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
               <p className="shop-eyebrow">Your business, connected</p>
               {shop ? <p className="mt-2 break-words text-lg font-semibold text-slate-900">{shop}</p> : null}
               {location ? <p className="mt-2 flex gap-2 text-xs leading-5 text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words"><span className="block text-[10px] font-semibold uppercase tracking-wide">{areaName ? 'Delivery area' : 'Shop location'}</span>{location}</span></p> : null}
-              <Link href="/retailer/account/addresses" className="mt-3 inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4">Manage delivery addresses <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
+              <Link href="/retailer/account/addresses" className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4">Manage delivery addresses <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Link href="/retailer/schemes" className="rounded-2xl border border-mint-200 bg-mint-100 p-4 text-mint-700"><Tag className="mb-3 h-5 w-5" aria-hidden="true" /><span className="block text-sm font-semibold">Shop offers</span><span className="mt-1 block text-[11px]">Eligible schemes</span></Link>
@@ -73,9 +73,9 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
             </div>
           </div>
         </div>
-        <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-blush-200 bg-white/60 px-5 py-3 text-[11px] text-slate-600 sm:px-8" data-testid="service-area-selector">
+        <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-lavender-200 bg-white/60 px-5 py-3 text-[11px] text-slate-600 sm:px-8" data-testid="service-area-selector">
           <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{areaName ? `Your service area: ${areaName}` : `Based in ${SERVICE_AREA_LABEL}`}</span>
-          <Link href="/retailer/reports" className="inline-flex min-h-9 items-center gap-1.5 font-medium underline underline-offset-4"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Purchase reports</Link>
+          <Link href="/retailer/reports" className="inline-flex min-h-11 items-center gap-1.5 font-medium underline underline-offset-4"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Purchase reports</Link>
         </div>
       </section>
       <HomeQuickActions />
@@ -88,7 +88,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
 
       <section aria-label="Shop by category" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <SectionHeading eyebrow="Find your aisle" title="Shop by category" href="/retailer/categories" linkLabel="View all categories" />
-        {data.categories.length ? <ul className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 lg:grid-cols-10">
+        {data.categories.length ? <ul className="grid grid-cols-4 gap-2.5 sm:grid-cols-5 lg:grid-cols-10">
           {data.categories.map((category) => <li className="discovery-tile min-w-0" key={category.id}><CategoryCard category={category} compact /></li>)}
         </ul> : <HomeEmptyState icon={LayoutGrid} title={data.errors.categories ? 'Categories are temporarily unavailable' : 'No categories available yet'} body="You can still open the catalog to look for products." href="/retailer/catalog" linkLabel="Browse catalog" />}
       </section>
@@ -106,7 +106,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
         </div> : <HomeEmptyState icon={Package} title={data.errors.catalog ? 'Products are temporarily unavailable' : 'Your catalog is getting ready'} body="Active products and your current wholesale prices will appear here when available." href="/retailer/catalog" linkLabel="Browse Products" />}
       </section>
 
-      <section aria-label="Offers and coupons" className="space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 sm:p-5">
+      <section aria-label="Offers and coupons" className="space-y-4 rounded-2xl border border-mint-100 bg-mint-50/40 p-4 sm:p-5">
         <SectionHeading eyebrow="Save more on restocks" title="Offers &amp; coupons" href="/retailer/schemes" linkLabel="View all offers" />
         {data.schemes.length ? <div className="grid gap-3 sm:grid-cols-2">
           {data.schemes.slice(0, 3).map((scheme) => (
@@ -121,7 +121,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
               </div>
               <h3 className="mt-2 truncate text-sm font-bold text-slate-900">{scheme.name}</h3>
               {scheme.description ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-600">{scheme.description}</p> : null}
-              <Link href="/retailer/catalog?offers=1" className="mt-2.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300">
+              <Link href="/retailer/catalog?offers=1" className="mt-2.5 inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-[10px] font-bold text-white transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600">
                 View products <ArrowRight className="h-3 w-3" aria-hidden="true" />
               </Link>
             </article>

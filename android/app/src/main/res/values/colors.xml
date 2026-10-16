@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Window-level colours only. In-app colours come from the Compose theme
-  (core/designsystem `MaharaniPalette`), which mirrors the web palette in
-  tailwind.config.ts. Keep both in sync when branding changes.
--->
+<!-- Window-level colours match the generated shared Maharani design tokens. -->
 <resources>
-  <color name="brand_red">#C8102E</color>
-  <color name="window_background_light">#F6F6F6</color>
-  <color name="window_background_dark">#0B0B0B</color>
+  <color name="brand_violet">#5142B8</color>
+  <color name="window_background_light">#FFFBF4</color>
+  <color name="window_background_dark">#0B1427</color>
 </resources>

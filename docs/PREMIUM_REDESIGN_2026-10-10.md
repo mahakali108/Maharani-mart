@@ -1,5 +1,7 @@
 # Premium redesign and Saran district — 10 October 2026
 
+> Historical design record. Its wine/red-first palette was superseded by the current coordinated pastel system in [`design-system.md`](design-system.md); do not use its colour values as current UI guidance. The service-area and business-rule notes remain historical context.
+
 Branch: `arena/e73680ac-maharani-mart`, based on `main` @ `6c7b634`.
 Scope: the Next.js web app / PWA only. Android was not touched.
 

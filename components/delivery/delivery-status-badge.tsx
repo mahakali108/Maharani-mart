@@ -15,9 +15,9 @@ import {
 import type { DeliveryStatus } from '@/lib/delivery/state-machine';
 
 const STATUS_CONFIG: Record<DeliveryStatus, { label: string; className: string; icon: typeof Truck }> = {
-  assigned: { label: 'Assigned', className: 'bg-blue-50 text-blue-700', icon: CircleDashed },
+  assigned: { label: 'Assigned', className: 'bg-sky-50 text-sky-700', icon: CircleDashed },
   in_progress: { label: 'In progress', className: 'bg-violet-50 text-violet-700', icon: Truck },
-  delivered: { label: 'Delivered', className: 'bg-green-50 text-green-700', icon: PackageCheck },
+  delivered: { label: 'Delivered', className: 'bg-mint-50 text-mint-700', icon: PackageCheck },
   partially_delivered: { label: 'Partially delivered', className: 'bg-amber-50 text-amber-700', icon: PackageCheck },
   failed: { label: 'Failed', className: 'bg-primary-50 text-primary-700', icon: PackageX },
   returned_to_warehouse: { label: 'Returned to warehouse', className: 'bg-ink-100 text-ink-700', icon: CircleX },
