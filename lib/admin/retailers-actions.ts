@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import { deleteMedia } from '@/lib/media';
 import type { Database } from '@/types/database.types';
 
 type RetailerUpdate = Database['public']['Tables']['retailers']['Update'];
@@ -160,23 +159,11 @@ export async function addRetailerDocumentAction(
   revalidatePath(`/admin/retailers/${retailerId}`);
 }
 
-export async function deleteRetailerDocumentAction(documentId: string, retailerId: string) {
+export async function deleteRetailerDocumentAction(_documentId: string, _retailerId: string) {
   await requirePermission('retailers.approve');
-  const supabase = createClient();
-
-  const { data, error } = await supabase
-    .from('retailer_documents')
-    .delete()
-    .eq('id', documentId)
-    .select('file_url')
-    .maybeSingle<{ file_url: string }>();
-  if (error) throw new Error(error.message);
-
-  // Best-effort cleanup of the underlying object. A failure here never aborts
-  // the row deletion, and legacy files are never auto-deleted en masse.
-  if (data) {
-    await deleteMedia(data.file_url);
-  }
-
-  revalidatePath(`/admin/retailers/${retailerId}`);
+  // An admin may still upload a newer document. Do not erase the previous
+  // identity/registration evidence or its stored object until retention and
+  // correction procedures have been approved; 0059 also removes direct DELETE
+  // policies for the row and private storage bucket.
+  throw new Error('Document deletion is paused pending an approved retention and correction policy.');
 }

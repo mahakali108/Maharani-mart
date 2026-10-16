@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { broadcastSchema, type BroadcastInput } from '@/lib/notifications/broadcast';
+import { currentOfferRollout } from '@/lib/notifications/offer-eligibility';
 
 export type BroadcastResult =
   | { error: string }
@@ -20,6 +21,17 @@ export async function broadcastNotificationAction(input: BroadcastInput): Promis
 
   const parsed = broadcastSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the notification details.' };
+  // Free-text broadcasts cannot be automatically distinguished from an offer.
+  // Pause ALL manual campaigns until the owner has reviewed the notice and
+  // editorial/approval process; normal code-generated order events are intact.
+  if (process.env.MANUAL_BROADCASTS_APPROVED !== 'true') {
+    return { error: 'Manual broadcasts are paused pending an owner-approved messaging process.' };
+  }
+  const rollout = currentOfferRollout();
+  if (parsed.data.category === 'promotional' &&
+      (!rollout.approved || !Number.isFinite(Date.parse(rollout.noticePublishedAt ?? '')))) {
+    return { error: 'Promotional messaging is paused pending owner approval and publication of the notice.' };
+  }
 
   const supabase = createClient();
 
@@ -56,21 +68,21 @@ export async function broadcastNotificationAction(input: BroadcastInput): Promis
   let lastError: string | null = null;
   for (const recipientId of recipientIds) {
     try {
-      await createInAppNotification({
+      const delivered = await createInAppNotification({
         recipientId,
         title: parsed.data.title,
         body: parsed.data.body,
         linkUrl: parsed.data.linkUrl || undefined,
         category: parsed.data.category,
       });
-      sent += 1;
+      if (delivered) sent += 1;
     } catch (error) {
       lastError = error instanceof Error ? error.message : 'Unknown delivery error.';
     }
   }
 
   if (sent === 0) {
-    return { error: lastError ?? 'The notification could not be delivered to anyone.' };
+    return { error: lastError ?? 'No eligible recipients enabled this category; nothing was sent.' };
   }
 
   revalidatePath('/admin/notifications');

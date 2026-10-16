@@ -3,21 +3,17 @@ import { enforceRateLimit, jsonError, jsonOk, logServerError, newRequestId } fro
 import { requireRetailerCommerceSession } from '@/lib/mobile/commerce-route';
 import { createClient } from '@/lib/supabase/server';
 import { toPaise } from '@/lib/retailer/case-pricing';
-import { classifyTaxSplit, computeInvoiceTaxLines } from '@/lib/retailer/invoice-tax';
+import { computeInvoiceTaxLines } from '@/lib/retailer/invoice-tax';
+import { ORDER_SUMMARY_NOTICE, orderSummaryTaxMode } from '@/lib/retailer/order-document';
 import { toInvoiceDisplayLines, type InvoiceOrderItemRow } from '@/lib/retailer/invoice-display';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/mobile/v1/orders/{id}/invoice — the GST invoice for one order the
- * caller owns.
- *
- * This route contains NO tax arithmetic of its own. It folds the stored order
- * rows with the exact same helpers the retailer invoice page uses
- * (`toInvoiceDisplayLines`, `classifyTaxSplit`, `computeInvoiceTaxLines`), so
- * the app and the web invoice can never disagree about a paisa — which is the
- * whole reason ORD-03 was blocked until this endpoint existed. Re-deriving GST
- * in Kotlin would have created a second implementation of tax arithmetic.
+ * GET /api/mobile/v1/orders/{id}/invoice — legacy URL for an ORDER SUMMARY,
+ * not a tax invoice. No seller-of-record or issued tax document is stored.
+ * The route retains stored amounts in integer paise; both web and native use
+ * the same unsplit, unverified tax summary. No Kotlin tax arithmetic.
  *
  * Money is returned in integer paise (contract §1.5), converted from the
  * rupee columns with the shared `toPaise`.
@@ -46,12 +42,6 @@ interface RetailerInvoiceRow {
   areas: { name: string } | null;
 }
 
-/** Company identity for the invoice header; null when not configured. */
-function companyField(value: string | undefined): string | null {
-  const trimmed = (value ?? '').trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -65,7 +55,7 @@ export async function GET(
   });
   if (limited) return limited;
   if (!z.string().uuid().safeParse(params.id).success) {
-    return jsonError('not_found', 'This invoice could not be found.', { status: 404, requestId });
+    return jsonError('not_found', 'This order summary could not be found.', { status: 404, requestId });
   }
 
   try {
@@ -80,7 +70,7 @@ export async function GET(
       .maybeSingle<OrderInvoiceRow>();
     if (orderResult.error) throw orderResult.error;
     if (!orderResult.data) {
-      return jsonError('not_found', 'This invoice could not be found.', { status: 404, requestId });
+      return jsonError('not_found', 'This order summary could not be found.', { status: 404, requestId });
     }
     const order = orderResult.data;
 
@@ -95,15 +85,15 @@ export async function GET(
         .select(ITEM_SELECT)
         .eq('order_id', params.id),
     ]);
+    if (retailerResult.error) throw retailerResult.error;
     if (itemResult.error) throw itemResult.error;
 
     const retailer = retailerResult.data ?? null;
     const items = (itemResult.data ?? []) as unknown as InvoiceOrderItemRow[];
 
     const lines = toInvoiceDisplayLines(items);
-    // CGST/SGST vs IGST is decided only from real GSTIN state codes; when
-    // either side is missing the tax stays unsplit — never guessed.
-    const taxMode = classifyTaxSplit(companyField(process.env.COMPANY_GSTIN), retailer?.gstin ?? null);
+    // Do not infer an issuer, supply state or tax type from env/profile GSTINs.
+    const taxMode = orderSummaryTaxMode();
     const tax = computeInvoiceTaxLines(
       taxMode,
       lines.map((line) => ({
@@ -120,12 +110,13 @@ export async function GET(
         orderNumber: order.order_number,
         status: order.status,
         placedAt: order.placed_at,
-        biller: {
-          name: companyField(process.env.COMPANY_NAME),
-          gstin: companyField(process.env.COMPANY_GSTIN),
-          address: companyField(process.env.COMPANY_ADDRESS),
-          phone: companyField(process.env.COMPANY_PHONE),
-        },
+        documentType: 'order_summary',
+        documentNotice: ORDER_SUMMARY_NOTICE,
+        // Legacy per-line tax fields are estimates; only the saved order totals
+        // are authoritative for the order summary, not a verified tax return.
+        taxBreakdownVerified: false,
+        // No verified issuer is attached to this historical order.
+        biller: { name: null, gstin: null, address: null, phone: null },
         billedTo: {
           shopName: retailer?.shop_name ?? null,
           address: retailer?.address ?? null,
@@ -168,7 +159,7 @@ export async function GET(
     );
   } catch (cause) {
     logServerError('orders.invoice', requestId, cause);
-    return jsonError('database_unavailable', 'This invoice could not be loaded. Please try again.', {
+    return jsonError('database_unavailable', 'This order summary could not be loaded. Please try again.', {
       status: 503,
       requestId,
     });

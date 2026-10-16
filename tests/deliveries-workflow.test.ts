@@ -18,6 +18,7 @@ const sql42 = read('supabase/migrations/0042_order_state_machine.sql');
 const sql43 = read('supabase/migrations/0043_deliveries_module.sql');
 const sql44 = read('supabase/migrations/0044_payment_collections.sql');
 const sql45 = read('supabase/migrations/0045_delivery_payment_proof_buckets.sql');
+const sql59 = read('supabase/migrations/0059_india_compliance_safety.sql');
 const dispatchSrc = read('lib/staff/dispatch-actions.ts');
 const deliverySrc = read('lib/delivery/delivery-actions.ts');
 const retailerOrderSrc = read('lib/retailer/order-actions.ts');
@@ -101,7 +102,11 @@ describe('0043 delivery tasks', () => {
     expect(trigger).toContain("old.delivery_status = 'in_progress' and new.delivery_status in ('delivered', 'partially_delivered', 'failed')");
     expect(trigger).toContain("old.delivery_status = 'delivered' and new.delivery_status in ('returned_to_warehouse')");
     expect(trigger).toContain("old.delivery_status = 'partially_delivered' and new.delivery_status in ('returned_to_warehouse')");
+    // Historical 0043 allowed the failed-attempt reset. The proposed 0059
+    // additional trigger holds it without rewriting previously deployed SQL.
     expect(trigger).toContain("old.delivery_status = 'failed' and new.delivery_status in ('assigned')");
+    expect(sql59).toContain('create trigger trg_hold_failed_delivery_evidence');
+    expect(sql59).toContain("old.delivery_status = 'failed'");
     expect(trigger).toContain('INVALID_DELIVERY_STATUS_TRANSITION');
     // returned_to_warehouse has NO outgoing branch — it is terminal in SQL too.
     expect(trigger).not.toContain("old.delivery_status = 'returned_to_warehouse' and new.delivery_status");
@@ -156,7 +161,7 @@ describe('0043 delivery tasks', () => {
 
 describe('0043 delivery RLS', () => {
   it('has NO delete policy on order_deliveries — the record is permanent proof', () => {
-    // (order_delivery_items MAY be deleted — the re-dispatch snapshot reset.)
+    // Historical child deletion is also paused by the proposed 0059 policy.
     const deliveryDeletes = stripComments(sql43).match(
       /create policy "order_deliveries[^"]*"\s+on order_deliveries\s+for delete/gi
     );
@@ -222,14 +227,16 @@ describe('dispatch creates exactly one delivery task (idempotent)', () => {
     expect(notify).toContain('delivery OTP');
   });
 
-  it('re-dispatch RESETS the failed task instead of creating a second one', () => {
-    expect(dispatchSrc).toContain(".eq('delivery_status', 'failed')");
-    expect(dispatchSrc).toContain('A delivery task already exists for this order and is not in a failed state.');
+  it('pauses re-dispatch BEFORE stock consumption or order mutation', () => {
+    expect(dispatchSrc).toContain('Re-dispatch is paused to preserve the failed attempt');
+    expect(dispatchSrc.indexOf('if (priorDelivery)')).toBeLessThan(dispatchSrc.indexOf("rpc('consume_order_stock'"));
+    expect(dispatchSrc.indexOf('if (priorDelivery)')).toBeLessThan(dispatchSrc.indexOf(".update({\n      status: 'dispatched'"));
   });
 
-  it('re-snapshots the line quantities on re-dispatch (delete + insert)', () => {
-    expect(dispatchSrc).toContain("from('order_delivery_items').delete()");
+  it('never deletes a prior delivery-line snapshot to create a new one', () => {
+    expect(dispatchSrc).not.toContain("from('order_delivery_items').delete()");
     expect(dispatchSrc).toContain('quantity_ordered: item.quantity_pieces ?? item.quantity');
+    expect(sql59).toContain('drop policy if exists "order_delivery_items_delete"');
   });
 });
 

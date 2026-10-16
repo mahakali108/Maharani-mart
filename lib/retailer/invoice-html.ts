@@ -1,12 +1,7 @@
 /**
- * Standalone HTML invoice builder for the DOWNLOAD path
- * (`/retailer/orders/[id]/invoice/download`).
- *
- * The on-screen invoice (app/retailer/orders/[id]/invoice/page.tsx) stays a
- * styled React component with print CSS; this builder renders the SAME data
- * into a self-contained, print-friendly HTML document that a retailer can
- * save and share. It is pure: every amount is passed in already derived from
- * stored order/invoice data — nothing is re-priced here.
+ * Standalone HTML ORDER SUMMARY for the legacy /invoice/download path.
+ * This is not an issued GST document: the supplier and tax split are unverified.
+ * Amounts are passed in from stored order rows; nothing is re-priced here.
  */
 
 import { formatIndiaDateTime } from '@/lib/datetime/india';
@@ -15,6 +10,7 @@ import {
   type TaxSplitMode,
 } from '@/lib/retailer/invoice-tax';
 import type { InvoiceLineForDisplay } from '@/lib/retailer/invoice-display';
+import { ORDER_SUMMARY_NOTICE, orderSummaryTaxMode } from '@/lib/retailer/order-document';
 
 function esc(value: string | null | undefined): string {
   return (value ?? '')
@@ -29,7 +25,6 @@ const money = (value: number) => `₹${value.toFixed(2)}`;
 export interface StandaloneInvoiceData {
   orderNumber: string;
   placedAt: string;
-  company: { name: string; gstin: string; address: string; phone: string };
   billedTo: { shopName: string; address: string; areaName: string; gstin: string };
   lines: InvoiceLineForDisplay[];
   taxMode: TaxSplitMode;
@@ -40,7 +35,9 @@ export interface StandaloneInvoiceData {
 }
 
 export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string {
-  const { lines, taxMode } = data;
+  const { lines } = data;
+  // Ignore any legacy caller's inferred taxMode. No verified issuer/PoS exists.
+  const taxMode: TaxSplitMode = orderSummaryTaxMode();
   const tax = computeInvoiceTaxLines(
     taxMode,
     lines.map((line) => ({ lineKey: line.key, lineTotal: line.total, gstPercent: line.gstPercent }))
@@ -49,10 +46,10 @@ export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string 
 
   const taxHeaders =
     taxMode === 'intra'
-      ? '<th>CGST</th><th>SGST</th>'
+      ? '<th>Estimated CGST*</th><th>Estimated SGST*</th>'
       : taxMode === 'inter'
-        ? '<th>IGST</th>'
-        : '<th>GST</th>';
+        ? '<th>Estimated IGST*</th>'
+        : '<th>Estimated GST*</th>';
 
   const rows = lines
     .map((line) => {
@@ -77,18 +74,18 @@ export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string 
 
   const taxTotalRows =
     taxMode === 'intra'
-      ? `<div class="row"><span>CGST</span><span>${money(tax.totals.cgst)}</span></div>
-         <div class="row"><span>SGST</span><span>${money(tax.totals.sgst)}</span></div>`
+      ? `<div class="row"><span>Estimated CGST (unverified)</span><span>${money(tax.totals.cgst)}</span></div>
+         <div class="row"><span>Estimated SGST (unverified)</span><span>${money(tax.totals.sgst)}</span></div>`
       : taxMode === 'inter'
-        ? `<div class="row"><span>IGST</span><span>${money(tax.totals.igst)}</span></div>`
-        : `<div class="row"><span>GST</span><span>${money(data.gstTotal)}</span></div>`;
+        ? `<div class="row"><span>Estimated IGST (unverified)</span><span>${money(tax.totals.igst)}</span></div>`
+        : `<div class="row"><span>Stored order GST (unverified)</span><span>${money(data.gstTotal)}</span></div>`;
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tax Invoice ${esc(data.orderNumber)} — ${esc(data.company.name)}</title>
+<title>Order summary ${esc(data.orderNumber)}</title>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -115,36 +112,34 @@ export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string 
   <div class="invoice">
     <div class="head">
       <div>
-        <p class="strong" style="font-size:16px;margin:0 0 4px">${esc(data.company.name)}</p>
-        <p class="muted" style="margin:0">${esc(data.company.address)}</p>
-        <p class="muted" style="margin:2px 0 0">GSTIN: ${esc(data.company.gstin)}</p>
-        <p class="muted" style="margin:2px 0 0">${esc(data.company.phone)}</p>
+        <p class="strong" style="font-size:16px;margin:0 0 4px">Order summary</p>
+        <p class="muted" style="margin:0">${esc(ORDER_SUMMARY_NOTICE)}</p>
       </div>
       <div style="text-align:right">
-        <p class="title">Tax Invoice</p>
+        <p class="title">Not a tax invoice</p>
         <p class="mono strong" style="margin:4px 0">${esc(data.orderNumber)}</p>
         <p class="muted" style="margin:0">${esc(formatIndiaDateTime(data.placedAt))}</p>
       </div>
     </div>
 
     <div class="billed">
-      <p class="muted" style="margin:0 0 4px;text-transform:uppercase;font-size:11px;letter-spacing:0.05em">Billed to</p>
+      <p class="muted" style="margin:0 0 4px;text-transform:uppercase;font-size:11px;letter-spacing:0.05em">Current account profile (not a billing snapshot)</p>
       <p class="strong" style="margin:0">${esc(data.billedTo.shopName)}</p>
       <p class="muted" style="margin:2px 0 0">${esc(data.billedTo.address)}</p>
       ${data.billedTo.areaName ? `<p class="muted" style="margin:2px 0 0">${esc(data.billedTo.areaName)}</p>` : ''}
-      ${data.billedTo.gstin ? `<p class="muted" style="margin:2px 0 0">GSTIN: ${esc(data.billedTo.gstin)}</p>` : ''}
+      ${data.billedTo.gstin ? `<p class="muted" style="margin:2px 0 0">GSTIN on account (unverified): ${esc(data.billedTo.gstin)}</p>` : ''}
     </div>
 
     <table>
       <thead>
-        <tr><th>Item</th><th>HSN</th><th>Qty</th><th>Unit Price</th><th>GST %</th>${taxHeaders}<th>Total</th></tr>
+        <tr><th>Item</th><th>Current catalog HSN*</th><th>Qty</th><th>Unit Price</th><th>Recorded GST %</th>${taxHeaders}<th>Total</th></tr>
       </thead>
       <tbody>
         ${rows}
       </tbody>
     </table>
     <p class="muted" style="font-size:11px;margin-top:8px">
-      Rates are GST-inclusive; the tax columns above are the tax components already contained in each line total.
+      * HSN is from today's catalog, not an order-time snapshot. Per-line GST is estimated from stored rates, not an issued tax calculation; it may not reconcile to stored order tax. This is not a tax invoice.
     </p>
 
     <div class="totals">
@@ -154,7 +149,7 @@ export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string 
       <div class="row grand"><span>Grand Total</span><span>${money(data.grandTotal)}</span></div>
     </div>
 
-    <p class="note">This is a computer-generated invoice for ${esc(data.company.name)} — ${esc(data.orderNumber)}.</p>
+    <p class="note">${esc(ORDER_SUMMARY_NOTICE)}</p>
   </div>
 </body>
 </html>`;

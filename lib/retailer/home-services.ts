@@ -24,7 +24,9 @@ export function homeServices(config: {
     href: '/retailer/orders',
   });
   if (config.deliveryEstimate?.trim()) services.push({ id: 'delivery', title: 'Estimated delivery', detail: config.deliveryEstimate.trim() });
-  if (config.gstin?.trim()) services.push({ id: 'invoice', title: 'GST invoice', detail: `GSTIN ${config.gstin.trim()}`, href: '/retailer/orders' });
+  // A configured string is not verified issuer identity. Keep the old service
+  // placement but never print that GSTIN or promise a legally issued invoice.
+  if (config.gstin?.trim()) services.push({ id: 'invoice', title: 'Order summaries', detail: 'Order figures only — not a GST tax invoice. Request the supplier-issued document from support.', href: '/retailer/orders' });
   services.push({ id: 'moq', title: 'MOQ-protected ordering', detail: 'Pack minimums checked before ordering.' });
   if (config.hasWholesalePrices) services.push({ id: 'pricing', title: 'Wholesale pricing', detail: 'Current retailer prices, inclusive of GST.' });
   // The existing help centre is available even without a configured helpline.

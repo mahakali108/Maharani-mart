@@ -18,7 +18,7 @@ export function NotificationComposer() {
   const [body, setBody] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [audience, setAudience] = useState<BroadcastAudience>('active_retailers');
-  const [category, setCategory] = useState<'transactional' | 'promotional'>('transactional');
+  const [category, setCategory] = useState<'transactional' | 'promotional'>('promotional');
   const [result, setResult] = useState<BroadcastResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -100,9 +100,10 @@ export function NotificationComposer() {
             onChange={(e) => setCategory(e.target.value as 'transactional' | 'promotional')}
             disabled={isPending}
           >
-            <option value="transactional">Transactional (always delivered)</option>
-            <option value="promotional">Promotional (respects retailer preferences)</option>
+            <option value="transactional">Essential operational notice only (not marketing)</option>
+            <option value="promotional">Optional promotion (paused until approved, then opt-in only)</option>
           </Select>
+          <p className="mt-1 text-xs text-ink-500">Manual broadcasts are paused pending owner approval. Never classify an offer as operational to bypass a recipient&apos;s choice.</p>
         </div>
       </div>
 

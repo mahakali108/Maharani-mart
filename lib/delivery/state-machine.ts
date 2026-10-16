@@ -9,9 +9,8 @@
  *
  *   assigned ──▶ in_progress ──▶ delivered | partially_delivered
  *      │              │
- *      │              └──▶ failed ──▶ assigned   (re-attempt: order goes
- *      │                                    back to processing, the next
- *      │                                    dispatch resets the task)
+ *      │              └──▶ failed (attempt evidence held; order may re-open
+ *      │                             but re-dispatch awaits a new attempt model)
  *      └──▶ failed
  *
  *   delivered / partially_delivered ──▶ returned_to_warehouse (terminal)
@@ -19,8 +18,8 @@
  * Rules:
  *  - `assigned` is created at DISPATCH. It may sit unassigned (admin assigns
  *    later) — `assigned_staff_id` is nullable.
- *  - `failed` re-opens the order (dispatched → processing) so the warehouse
- *    can re-pick; the next dispatch flips the task back to `assigned`.
+ *  - `failed` re-opens the order (dispatched → processing); the task and its
+ *    evidence cannot be reset while the immutable-attempt model is unapproved.
  *  - `returned_to_warehouse` is terminal: the order moves to `returned` and
  *    stock is restored via the return_order_stock RPC.
  */
@@ -50,9 +49,9 @@ export function isTerminalDeliveryStatus(status: DeliveryStatus): boolean {
 }
 
 /**
- * Legal transitions. Mirrors the lifecycle diagram above.
- * `failed → assigned` is the re-dispatch reset, performed only by the
- * dispatch action (never by a delivery staff member directly).
+ * Legal transitions under the interim evidence hold. The historical 0043
+ * trigger permitted failed → assigned; proposed 0059 prevents resets until
+ * the task model supports multiple immutable attempts.
  */
 const ALLOWED_DELIVERY_TRANSITIONS: Record<DeliveryStatus, readonly DeliveryStatus[]> = {
   // Completion is allowed straight from `assigned` — a delivery person on a
@@ -61,7 +60,7 @@ const ALLOWED_DELIVERY_TRANSITIONS: Record<DeliveryStatus, readonly DeliveryStat
   in_progress: ['delivered', 'partially_delivered', 'failed'],
   delivered: ['returned_to_warehouse'],
   partially_delivered: ['returned_to_warehouse'],
-  failed: ['assigned'],
+  failed: [],
   returned_to_warehouse: [],
 };
 

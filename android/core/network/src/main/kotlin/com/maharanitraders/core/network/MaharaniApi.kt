@@ -323,10 +323,9 @@ interface MaharaniApi {
   suspend fun orderDetail(@Path("id") orderId: String): ApiEnvelope<MobileOrderDto>
 
   /**
-   * The GST invoice for one owned order.
-   *
-   * The server folds the stored lines with the SAME helpers the web invoice
-   * uses and returns integer paise, so the app never derives a tax component.
+   * Non-tax-invoice order summary for one owned order (legacy URL).
+   * The server returns stored figures in integer paise; the app does not
+   * derive a tax component or infer an issuer.
    */
   @GET("api/mobile/v1/orders/{id}/invoice")
   suspend fun orderInvoice(@Path("id") orderId: String): ApiEnvelope<MobileInvoiceDto>

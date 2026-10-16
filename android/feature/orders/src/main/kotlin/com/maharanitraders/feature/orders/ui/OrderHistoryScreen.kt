@@ -155,7 +155,7 @@ private fun OrderCard(order: RetailerOrder, onOpen: () -> Unit) {
         Text("View order & reorder")
       }
       Text(
-        "${order.items.size} item(s) · Tap for the full record, invoice and reorder",
+        "${order.items.size} item(s) · Tap for order details, summary and reorder",
         style = MaterialTheme.typography.labelMedium,
       )
     }

@@ -111,18 +111,15 @@ describe('order creation revalidates and records the coupon server-side', () => 
   });
 });
 
-describe('cancellation releases the coupon on every cancel path', () => {
-  it('retailer self-cancel releases the redemption', () => {
-    const source = retailerCancel();
-    expect(source).toContain('releaseOrderCoupon');
-    const cancelFn = source.slice(source.indexOf('export async function cancelOrderAction'));
-    expect(cancelFn).toContain('releaseOrderCoupon(supabase, orderId)');
-  });
-
-  it('admin cancel releases the redemption', () => {
-    const source = adminCancel();
-    expect(source).toContain('releaseOrderCoupon');
-    const cancelFn = source.slice(source.indexOf('export async function cancelOrderAction'));
-    expect(cancelFn).toContain('releaseOrderCoupon(supabase, orderId)');
+describe('cancellation preserves coupon redemption evidence pending reviewed reversal model', () => {
+  it('retailer, admin and mobile cancellations still call the hold helper', () => {
+    for (const source of [retailerCancel(), adminCancel(), read('app/api/mobile/v1/orders/[id]/cancel/route.ts')]) {
+      expect(source).toContain('releaseOrderCoupon(');
+    }
+    const helper = read('lib/coupons/validate.ts');
+    const release = helper.slice(helper.indexOf('export async function releaseOrderCoupon'));
+    expect(release).not.toContain(".rpc('release_coupon'");
+    expect(release).toContain('No mutation. Preserve the redemption');
+    expect(read('supabase/migrations/0059_india_compliance_safety.sql')).toContain('revoke execute on function public.release_coupon(uuid)');
   });
 });

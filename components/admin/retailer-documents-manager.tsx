@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { FileText, Trash2, Download } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, Download } from 'lucide-react';
 import { MediaUploadField } from '@/components/media/media-upload-field';
-import { addRetailerDocumentAction, deleteRetailerDocumentAction } from '@/lib/admin/retailers-actions';
+import { addRetailerDocumentAction } from '@/lib/admin/retailers-actions';
 import { Select } from '@/components/ui/select';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
@@ -30,7 +30,6 @@ export function RetailerDocumentsManager({
   documents: RetailerDocument[];
 }) {
   const [docType, setDocType] = useState('gstin_certificate');
-  const [isPending, startTransition] = useTransition();
 
   return (
     <div className="space-y-4">
@@ -62,25 +61,14 @@ export function RetailerDocumentsManager({
                     <Download className="h-4 w-4" />
                   </a>
                 ) : null}
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => {
-                    if (confirm('Delete this document?')) {
-                      startTransition(() => deleteRetailerDocumentAction(doc.id, retailerId));
-                    }
-                  }}
-                  className="rounded-lg p-1.5 text-ink-400 hover:bg-primary-50 hover:text-primary-600 disabled:opacity-50"
-                  aria-label="Delete document"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <span className="text-xs text-ink-500" title="Deletion paused pending retention review">Retained</span>
               </div>
             </li>
           ))}
         </ul>
       )}
 
+      <p className="text-xs text-ink-500">Existing documents are retained pending an approved correction and retention policy. Uploading a replacement does not erase the original.</p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Select value={docType} onChange={(e) => setDocType(e.target.value)} className="sm:max-w-[200px]">
           {DOC_TYPES.map((t) => (

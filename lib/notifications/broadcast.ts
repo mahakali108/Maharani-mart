@@ -33,7 +33,8 @@ export const broadcastSchema = z.object({
     .refine((value) => value === '' || value.startsWith('/'), 'Links must be internal app paths (starting with /).')
     .optional(),
   audience: z.custom<BroadcastAudience>((value) => isBroadcastAudience(value), 'Choose an audience.'),
-  category: z.enum(['transactional', 'promotional']).default('transactional'),
+  // A missing category must never silently bypass the marketing gate.
+  category: z.enum(['transactional', 'promotional']).default('promotional'),
 });
 
 export type BroadcastInput = z.input<typeof broadcastSchema>;

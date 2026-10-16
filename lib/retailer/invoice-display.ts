@@ -1,7 +1,7 @@
 /**
- * Shared display shape for GST invoice lines — used by BOTH the on-screen
- * invoice page and the standalone download HTML so the two can never drift
- * apart. Pure mapping over the grouped, stored order lines; it labels and
+ * Shared display shape for ORDER SUMMARY lines — used by BOTH the on-screen
+ * summary page and standalone download HTML so the two cannot drift apart.
+ * Pure mapping over the grouped, stored order lines; it labels and
  * organises data, it never prices anything.
  */
 

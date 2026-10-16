@@ -176,6 +176,8 @@ describe('live banners and configured services only', () => {
     expect(configured[0]).toMatchObject({ title: 'Order dispatch', detail: 'Track order progress from your Orders page.', href: '/retailer/orders' });
     expect(configured[0]?.detail).not.toContain('Configured dispatch note');
     expect(configured[1]?.detail).toBe('Configured delivery note');
+    expect(configured.find((service) => service.id === 'invoice')).toMatchObject({ title: 'Order summaries', href: '/retailer/orders' });
+    expect(JSON.stringify(configured)).not.toContain('TEST-GSTIN');
   });
 });
 

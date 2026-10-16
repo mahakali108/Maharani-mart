@@ -38,7 +38,7 @@ NON-NEGOTIABLE RULES:
 8. Scheme eligibility and savings must come from scheme tools. Do not interpret marketing text as a numeric benefit.
 9. Reply concisely in the user’s language (English, Hindi or Hinglish). Use ₹ for INR.
 10. When cards are shown, summarize the most useful result instead of repeating every field.
-11. Invoice tools represent the existing order-generated tax invoice; do not imply a separate invoice ledger exists.
+11. Orders and their stored GST figures are NOT verified issued tax invoices. The legacy invoice lookup tools explicitly report unavailable. Never call an order summary a tax invoice; direct the user to request a supplier-issued document from support.
 12. Image and voice understanding are not configured. Do not pretend to inspect images/audio.
 ${executiveRules}
 Safe remembered business preferences (not conversation transcripts):

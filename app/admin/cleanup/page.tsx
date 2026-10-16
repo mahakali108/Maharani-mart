@@ -12,9 +12,9 @@ export const dynamic = 'force-dynamic';
  * Admin-only data-retention status page (spec §23).
  *
  * Shows the last cleanup, next scheduled cleanup, status, run IDs, rows
- * cleaned and the 90/120-day summaries — plus the latest errors. The ONLY
- * action available is a dry-run audit; production deletion runs on the
- * scheduler. There is deliberately no "delete everything" button.
+ * cleaned and the historical 90/120-day summaries — plus latest errors.
+ * Proposed 0059 pauses business + evidence targets if separately applied;
+ * this UI is not proof of live deployment. The ONLY admin action is dry-run.
  */
 export default async function CleanupStatusPage() {
   await requirePermission('cleanup.view');
@@ -35,7 +35,7 @@ export default async function CleanupStatusPage() {
           </div>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-500">
             <ShieldCheck className="h-3.5 w-3.5 text-mint-600" />
-            Admin only · Scheduled cleanup (90-day temporary / 120-day business data) · Product catalog and images are never deleted
+            Admin only · Proposed 0059 holds financial/evidence cleanup; verify DB and deployment before treating this as active. Product images are excluded from automatic sweeps.
           </p>
         </div>
         <CleanupDryRunButton />
@@ -59,7 +59,7 @@ export default async function CleanupStatusPage() {
             <CalendarClock className="h-4 w-4 text-ink-400" />
             {formatIndiaDateTime(overview.schedule.nextRunAt)}
           </p>
-          <p className="mt-0.5 text-xs text-ink-500">{overview.schedule.label}</p>
+          <p className="mt-0.5 text-xs text-ink-500">Configured schedule (not proof a deployment is running): {overview.schedule.label}</p>
         </Card>
         <Card>
           <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Rows cleaned (last run)</p>

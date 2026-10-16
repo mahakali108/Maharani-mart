@@ -65,6 +65,7 @@ export async function createSalesmanOrderAction(input: SalesmanOrderInput): Prom
       title: 'Order placed by your salesman',
       body: `Order ${result.order.orderNumber} has been created for your shop and is awaiting confirmation.`,
       linkUrl: `/retailer/orders/${result.order.id}`,
+      category: 'order',
     });
   } catch (error) {
     console.error('Salesman order created but retailer notification failed.', error);

@@ -42,12 +42,9 @@ object InvoiceTags {
 }
 
 /**
- * The GST invoice, rendered entirely from server figures.
- *
- * The tax columns follow the server's `taxMode`: CGST + SGST for an intra-state
- * invoice, IGST for an inter-state one, and a single GST column when the server
- * could not split it (a missing or invalid GSTIN is never guessed). This screen
- * never divides by a tax rate.
+ * Legacy invoice route renders an ORDER SUMMARY, never an issued tax invoice.
+ * No supplier or place of supply is verified. Values come from stored order
+ * rows; this screen never performs its own tax arithmetic.
  */
 @Composable
 fun OrderInvoiceScreen(
@@ -68,14 +65,14 @@ fun OrderInvoiceContent(
 ) {
   val invoice = state.invoice
   if (state.loading && invoice == null) {
-    LoadingState("Loading this invoice…", modifier)
+    LoadingState("Loading order summary…", modifier)
     return
   }
   if (invoice == null) {
     if (state.offline) {
       OfflineState(modifier, onRetry = onRetry)
     } else {
-      ErrorState(state.error ?: "This invoice could not be loaded.", modifier, retryable = true, onRetry = onRetry)
+      ErrorState(state.error ?: "This order summary could not be loaded.", modifier, retryable = true, onRetry = onRetry)
     }
     return
   }
@@ -96,8 +93,7 @@ fun OrderInvoiceContent(
 
     item {
       Text(
-        "Prices are GST-inclusive. The tax columns are extracted from the line " +
-          "totals and are already contained in the grand total.",
+        "Catalog HSN is current, not an order-time snapshot. Per-line GST is estimated, may not reconcile to stored order tax and is not an issued tax calculation.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -116,11 +112,13 @@ fun OrderInvoiceContent(
 private fun InvoiceHeader(invoice: OrderInvoice) {
   Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
     Text(
-      "Tax invoice",
+      "Order summary — NOT a tax invoice",
       style = MaterialTheme.typography.labelMedium,
       color = MaterialTheme.colorScheme.primary,
     )
     Text(invoice.orderNumber, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+    Text(invoice.documentNotice ?: "Order summary only — not a GST tax invoice. Contact support about any supplier-issued tax invoice.",
+      style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Text(invoice.placedAt, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
@@ -128,17 +126,11 @@ private fun InvoiceHeader(invoice: OrderInvoice) {
 @Composable
 private fun InvoiceParties(invoice: OrderInvoice) {
   Column(verticalArrangement = Arrangement.spacedBy(MaharaniDimens.spaceSm)) {
-    InvoiceCard(title = "From") {
-      invoice.biller.name?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
-      invoice.biller.address?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-      invoice.biller.gstin?.let { Text("GSTIN: $it", style = MaterialTheme.typography.bodySmall) }
-      invoice.biller.phone?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-    }
-    InvoiceCard(title = "Billed to") {
+    InvoiceCard(title = "Current account profile (not a billing snapshot)") {
       invoice.billedTo.shopName?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
       invoice.billedTo.address?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
       invoice.billedTo.areaName?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-      invoice.billedTo.gstin?.let { Text("GSTIN: $it", style = MaterialTheme.typography.bodySmall) }
+      invoice.billedTo.gstin?.let { Text("GSTIN on account (unverified): $it", style = MaterialTheme.typography.bodySmall) }
     }
   }
 }
@@ -147,7 +139,7 @@ private fun InvoiceParties(invoice: OrderInvoice) {
 private fun InvoiceLineCard(line: InvoiceLine, invoice: OrderInvoice) {
   InvoiceCard(title = line.displayName, testTag = InvoiceTags.LINE) {
     Text(
-      "${line.packName} · ${line.quantityLabel}" + (line.hsn?.let { " · HSN $it" } ?: ""),
+      "${line.packName} · ${line.quantityLabel}" + (line.hsn?.let { " · Catalog HSN (unverified) $it" } ?: ""),
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -157,14 +149,14 @@ private fun InvoiceLineCard(line: InvoiceLine, invoice: OrderInvoice) {
         style = MaterialTheme.typography.bodySmall,
       )
     }
-    Text("GST ${formatPercent(line.gstPercent)}", style = MaterialTheme.typography.bodySmall)
+    Text("Recorded GST rate (unverified) ${formatPercent(line.gstPercent)}", style = MaterialTheme.typography.bodySmall)
     // Only the columns the server actually split are shown.
     if (invoice.isIntraState) {
-      Text("CGST ${MoneyFormat.formatPaise(line.cgstPaise)} · SGST ${MoneyFormat.formatPaise(line.sgstPaise)}", style = MaterialTheme.typography.bodySmall)
+      Text("Estimated CGST/SGST (unverified): ${MoneyFormat.formatPaise(line.cgstPaise)} · ${MoneyFormat.formatPaise(line.sgstPaise)}", style = MaterialTheme.typography.bodySmall)
     } else if (invoice.isInterState) {
-      Text("IGST ${MoneyFormat.formatPaise(line.igstPaise)}", style = MaterialTheme.typography.bodySmall)
+      Text("Estimated IGST (unverified) ${MoneyFormat.formatPaise(line.igstPaise)}", style = MaterialTheme.typography.bodySmall)
     } else {
-      Text("GST ${MoneyFormat.formatPaise(line.taxPaise)}", style = MaterialTheme.typography.bodySmall)
+      Text("Estimated GST (unverified) ${MoneyFormat.formatPaise(line.taxPaise)}", style = MaterialTheme.typography.bodySmall)
     }
     Text("Line total ${MoneyFormat.formatPaise(line.lineTotalPaise)}", style = MaterialTheme.typography.titleSmall)
   }
@@ -176,13 +168,13 @@ private fun InvoiceTotalsCard(invoice: OrderInvoice) {
     InvoiceAmountRow("Subtotal", invoice.totals.subtotalPaise)
     when {
       invoice.isIntraState -> {
-        InvoiceAmountRow("CGST", invoice.totals.cgstPaise)
-        InvoiceAmountRow("SGST", invoice.totals.sgstPaise)
+        InvoiceAmountRow("Estimated CGST (unverified)", invoice.totals.cgstPaise)
+        InvoiceAmountRow("Estimated SGST (unverified)", invoice.totals.sgstPaise)
       }
-      invoice.isInterState -> InvoiceAmountRow("IGST", invoice.totals.igstPaise)
+      invoice.isInterState -> InvoiceAmountRow("Estimated IGST (unverified)", invoice.totals.igstPaise)
       // The stored order tax is the printed value whenever the server could not
       // split it — the same figure the web invoice shows.
-      else -> InvoiceAmountRow("GST", invoice.totals.gstTotalPaise)
+      else -> InvoiceAmountRow("Stored order GST (unverified)", invoice.totals.gstTotalPaise)
     }
     if (invoice.totals.discountPaise > 0) InvoiceAmountRow("Discount", -invoice.totals.discountPaise)
     HorizontalDivider()

@@ -15,6 +15,7 @@ interface BulkRow {
   product_packs: {
     id: string;
     pack_name: string;
+    barcode: string | null;
     units_per_case: number;
     base_price: number;
     ptr: number | null;
@@ -25,6 +26,10 @@ interface BulkRow {
     is_active: boolean;
   }[];
 }
+
+const BULK_PRODUCT_SELECT =
+  'id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), ' +
+  'product_packs ( id, pack_name, barcode, units_per_case, base_price, ptr, case_price, mrp, moq, allow_loose_pieces, is_active )';
 
 export interface BulkMatchPack {
   packId: string;
@@ -76,23 +81,35 @@ export async function matchBulkLinesAction(raw: string): Promise<{ error?: strin
         .from('product_packs')
         .select('product_id')
         .eq('is_active', true)
-        .or(`pack_name.ilike."${line.term}",barcode.ilike."${line.term}"`)
+        .or(`pack_name.ilike."${like}",barcode.ilike."${like}"`)
         .limit(30),
       supabase
         .from('products')
-        .select(
-          'id, name, gst_percent, brands ( name ), product_images ( image_url, sort_order ), product_packs ( id, pack_name, units_per_case, base_price, ptr, case_price, mrp, moq, allow_loose_pieces, is_active )'
-        )
+        .select(BULK_PRODUCT_SELECT)
         .eq('is_active', true)
         .or(`name.ilike."${like}",barcode.ilike."${like}"`)
         .order('name')
         .limit(6),
     ]);
-    void packMatches;
-
-    const rows = ((directMatches ?? []) as unknown as BulkRow[]).filter((row) =>
-      row.product_packs.some((pack) => pack.is_active)
-    );
+    // Follow the pack/barcode hit through to its active parent product. The
+    // old query discarded packMatches, so scanning a pack barcode returned no
+    // product unless that barcode happened to be copied onto the product.
+    const packProductIds = [...new Set(
+      ((packMatches ?? []) as { product_id: string }[]).map((pack) => pack.product_id)
+    )].slice(0, 6);
+    const { data: viaPacks } = packProductIds.length > 0
+      ? await supabase.from('products').select(BULK_PRODUCT_SELECT)
+          .eq('is_active', true).in('id', packProductIds).limit(6)
+      : { data: [] as BulkRow[] };
+    const seen = new Set<string>();
+    const rows = ([...(viaPacks ?? []), ...(directMatches ?? [])] as BulkRow[])
+      .filter((row) => row.product_packs.some((pack) => pack.is_active))
+      .filter((row) => {
+        if (seen.has(row.id)) return false;
+        seen.add(row.id);
+        return true;
+      })
+      .slice(0, 6);
     perLineProducts.push({ line, rows });
     for (const row of rows) allProductIds.push(row.id);
   }
@@ -110,8 +127,13 @@ export async function matchBulkLinesAction(raw: string): Promise<{ error?: strin
       matches.push({ line: line.line, quantity: line.quantity, productId: '', productName: line.term, brandName: null, matches: [], error: 'No orderable pack found.' });
       continue;
     }
+    const term = line.term.toLowerCase();
     const packs = row.product_packs
       .filter((pack) => pack.is_active)
+      .sort((a, b) =>
+        Number(b.pack_name.toLowerCase().includes(term) || b.barcode?.toLowerCase().includes(term)) -
+        Number(a.pack_name.toLowerCase().includes(term) || a.barcode?.toLowerCase().includes(term))
+      )
       .slice(0, 3)
       .map((pack) => {
         const casePrice = resolvePackPrice(pack, overrides.get(row.id) ?? null);

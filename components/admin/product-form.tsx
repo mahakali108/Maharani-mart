@@ -91,6 +91,12 @@ export function ProductForm({
 
   return (
     <form action={formAction} className="space-y-5">
+      <p className="rounded-xl border border-ink-200 bg-white px-4 py-3 text-xs text-ink-700">
+        List Maharani-owned stock only. Do not enter third-party/consignment goods:
+        this catalogue cannot record a separate seller-of-record, tax-invoice
+        issuer or seller obligations. Third-party selling needs a reviewed model
+        and technical controls before any listing or checkout.
+      </p>
       {state?.error ? (
         <div
           className="rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700"
@@ -237,7 +243,7 @@ export function ProductForm({
           id="hsnCode"
           label="HSN code"
           error={errors.hsnCode}
-          hint="2, 4, 6 or 8 digits. Printed on the tax invoice — leave blank only if you do not have one."
+          hint="2, 4, 6 or 8 digits. Verify product classification with the GST practitioner before issuing any tax invoice."
         >
           <Input
             id="hsnCode"

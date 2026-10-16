@@ -358,7 +358,7 @@ export function DeliveryExecutionForm({
                 placeholder="e.g. Shop closed, retailer refused, address not found…"
               />
               <p className="text-[11px] text-primary-700">
-                The order will go back to the warehouse queue and be re-attempted after a fresh dispatch.
+                The failed attempt and any proof will be retained. Re-dispatch is paused until an evidence-preserving workflow is approved; an administrator must review next steps.
               </p>
               <Button
                 variant="secondary"

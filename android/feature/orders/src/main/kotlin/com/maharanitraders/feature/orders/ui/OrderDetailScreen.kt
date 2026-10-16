@@ -107,7 +107,7 @@ fun OrderDetailScreen(
       title = { Text("Cancel this order?") },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("Only a pending order can be cancelled. The server will handle the Coins reversal and coupon release.")
+          Text("Only a pending order can be cancelled. The server handles the Coins reversal; coupon use stays recorded pending retention review.")
           OutlinedTextField(
             value = cancelReason,
             onValueChange = { cancelReason = it.take(500) },
@@ -175,7 +175,7 @@ fun OrderDetailContent(
         Button(
           onClick = { onOpenInvoice(order.id) },
           modifier = Modifier.weight(1f).testTag(OrderDetailTags.INVOICE),
-        ) { Text("Invoice") }
+        ) { Text("Order summary") }
         OutlinedButton(
           onClick = { onOpenDelivery(order.id) },
           modifier = Modifier.weight(1f).testTag(OrderDetailTags.DELIVERY),

@@ -50,6 +50,22 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
     return { error: 'Only confirmed, processing, or packed orders can be dispatched.' };
   }
 
+  // A re-dispatch currently overwrites the failed task and DELETES its old
+  // item snapshots; it also clears proof links and failure details. Preserve
+  // that evidence until an immutable multi-attempt model is reviewed. Check
+  // BEFORE stock consumption and the order status write so rejection is safe.
+  const { data: priorDelivery, error: priorDeliveryError } = await supabase
+    .from('order_deliveries')
+    .select('id, delivery_status')
+    .eq('order_id', orderId)
+    .maybeSingle<{ id: string; delivery_status: string }>();
+  if (priorDeliveryError) return { error: 'Delivery history could not be checked. Dispatch paused.' };
+  if (priorDelivery) {
+    return { error: priorDelivery.delivery_status === 'failed'
+      ? 'Re-dispatch is paused to preserve the failed attempt and its proof; contact an administrator.'
+      : 'A delivery task already exists for this order.' };
+  }
+
   const { data: itemData } = await supabase
     .from('order_items')
     .select('id, product_id, quantity, quantity_pieces')
@@ -77,72 +93,27 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
 
   if (orderError) return { error: orderError.message };
 
-  // --- Phase 4: create (or reset, after a failed attempt) the delivery task
-  // with a fresh OTP. The plain OTP goes ONLY to the retailer; only its
-  // SHA-256 hash is stored (lib/delivery/otp.ts, decision D5). ---
+  // --- Phase 4: create a NEW delivery task with a fresh OTP. The plain OTP
+  // goes ONLY to the retailer; only its SHA-256 hash is stored. An existing
+  // (especially failed) task must not be reset or its evidence erased. ---
   const otp = generateDeliveryOtp();
   const otpHash = hashDeliveryOtp(orderId, otp);
   const nowIso = new Date().toISOString();
-
-  const { data: existingDelivery } = await supabase
+  const { data: inserted, error: insertError } = await supabase
     .from('order_deliveries')
-    .select('id, delivery_status')
-    .eq('order_id', orderId)
-    .maybeSingle<{ id: string; delivery_status: string }>();
-
-  let deliveryId: string;
-  if (existingDelivery) {
-    // Re-dispatch after a failed attempt: reset the same task row.
-    const { data: reset, error: resetError } = await supabase
-      .from('order_deliveries')
-      .update({
-        delivery_status: 'assigned',
-        assigned_staff_id: user.id,
-        assigned_at: nowIso,
-        assigned_by: user.id,
-        dispatched_at: nowIso,
-        in_progress_at: null,
-        delivered_at: null,
-        receiver_name: null,
-        otp_hash: otpHash,
-        otp_verified_at: null,
-        otp_attempts: 0,
-        signature_url: null,
-        photo_url: null,
-        delivery_notes: null,
-        failure_reason: null,
-        return_window_days: null,
-        return_deadline: null,
-        completed_by: null,
-      } as never)
-      .eq('id', existingDelivery.id)
-      .eq('delivery_status', 'failed')
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (resetError) return { error: `Delivery task could not be reset: ${resetError.message}` };
-    if (reset) {
-      deliveryId = reset.id;
-      await supabase.from('order_delivery_items').delete().eq('delivery_id', deliveryId);
-    } else {
-      return { error: 'A delivery task already exists for this order and is not in a failed state.' };
-    }
-  } else {
-    const { data: inserted, error: insertError } = await supabase
-      .from('order_deliveries')
-      .insert({
-        order_id: orderId,
-        delivery_status: 'assigned',
-        assigned_staff_id: user.id,
-        assigned_at: nowIso,
-        assigned_by: user.id,
-        dispatched_at: nowIso,
-        otp_hash: otpHash,
-      } as never)
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (insertError || !inserted) return { error: `Delivery task could not be created: ${insertError?.message ?? 'unknown error'}` };
-    deliveryId = inserted.id;
-  }
+    .insert({
+      order_id: orderId,
+      delivery_status: 'assigned',
+      assigned_staff_id: user.id,
+      assigned_at: nowIso,
+      assigned_by: user.id,
+      dispatched_at: nowIso,
+      otp_hash: otpHash,
+    } as never)
+    .select('id')
+    .maybeSingle<{ id: string }>();
+  if (insertError || !inserted) return { error: `Delivery task could not be created: ${insertError?.message ?? 'unknown error'}` };
+  const deliveryId = inserted.id;
 
   // Snapshot the ordered quantities for the completion form + settlement.
   const itemSnapshots = items.map((item) => ({
@@ -162,6 +133,7 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
     // The OTP is shown only in the retailer's in-app notification — never persisted in the channel queue.
     channelBody: `Your order ${order.order_number} is on its way. Open the Maharani app to view your delivery OTP.`,
     linkUrl: `/retailer/orders/${orderId}/delivery`,
+    category: 'account', // essential OTP; opting out of routine order updates must not block delivery
   });
 
   // Stock just went out — check reorder levels (anti-spam dedupe inside).

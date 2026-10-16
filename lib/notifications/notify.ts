@@ -1,14 +1,15 @@
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database.types';
+import { currentOfferRollout, isOfferEligible } from '@/lib/notifications/offer-eligibility';
 
 export type NotificationChannel = 'whatsapp' | 'sms' | 'push' | 'in_app';
 
 /**
- * Explicit retailer-facing order, payment, wallet and promotional messages
- * respect the matching preference. Critical/account notices and legacy
- * unclassified transactional messages remain deliverable. The preferences are
- * for the in-app feed; external channel queues retain their existing behavior.
+ * Classified retailer notifications respect the same preference before both
+ * in-app inserts and outbound queue inserts. Missing rows allow transactional
+ * notices only. Critical/account and legacy unclassified notices are not
+ * filtered; callers must never label a marketing message as transactional.
  */
 export type NotificationCategory = 'transactional' | 'account' | 'order' | 'payment' | 'wallet' | 'promotional';
 
@@ -59,31 +60,42 @@ const PREFERENCE_COLUMNS: Partial<Record<NotificationCategory, PreferenceColumn>
  * `.insert()` overload quirk that can resolve to `never[]`.
  */
 
-export async function createInAppNotification(input: NotifyInput) {
-  const supabase = createClient();
+type PrefsRow = {
+  order_updates: boolean;
+  payment_updates: boolean;
+  wallet_updates: boolean;
+  offer_updates: boolean;
+  offer_preference_recorded_at: string | null;
+};
 
+async function mayDeliver(supabase: ReturnType<typeof createClient>, input: NotifyInput): Promise<boolean> {
   const preferenceColumn = input.category ? PREFERENCE_COLUMNS[input.category] : undefined;
+  if (!preferenceColumn) return true; // essential account / unclassified operational notices
 
-  // `account`, unclassified/legacy transactional notices, admins, and
-  // recipients without a preferences row remain unaffected. A preference
-  // read failure is fail-open so a settings outage cannot suppress a notice.
-  if (preferenceColumn) {
-    try {
-      const { data: prefs } = await supabase
-        .from('retailer_notification_prefs')
-        .select('order_updates, payment_updates, wallet_updates, offer_updates')
-        .eq('retailer_id', input.recipientId)
-        .maybeSingle<{
-          order_updates: boolean;
-          payment_updates: boolean;
-          wallet_updates: boolean;
-          offer_updates: boolean;
-        }>();
-      if (prefs && prefs[preferenceColumn] === false) return;
-    } catch {
-      // On any prefs read failure, deliver — missing prefs row means "on".
+  // Do not send offers on a legacy true preference, or without an owner-approved
+  // privacy/marketing rollout. The switch is server-only and OFF when unset.
+  if (input.category === 'promotional' && !currentOfferRollout().approved) return false;
+
+  try {
+    const { data: prefs, error } = await supabase
+      .from('retailer_notification_prefs')
+      .select('order_updates, payment_updates, wallet_updates, offer_updates, offer_preference_recorded_at')
+      .eq('retailer_id', input.recipientId)
+      .maybeSingle<PrefsRow>();
+    if (error) return false; // read failure must not override a possible opt-out
+    if (input.category === 'promotional') {
+      return isOfferEligible(prefs, currentOfferRollout());
     }
+    // An absent row continues to allow order/payment/wallet updates.
+    return prefs?.[preferenceColumn] !== false;
+  } catch {
+    return false;
   }
+}
+
+export async function createInAppNotification(input: NotifyInput): Promise<boolean> {
+  const supabase = createClient();
+  if (!(await mayDeliver(supabase, input))) return false;
 
   const payload: NotificationInsert = {
     recipient_id: input.recipientId,
@@ -93,6 +105,7 @@ export async function createInAppNotification(input: NotifyInput) {
   };
   const { error } = await supabase.from('notifications').insert(payload as unknown as never);
   if (error) throw new Error(`Failed to create notification: ${error.message}`);
+  return true;
 }
 
 export async function queueChannelNotification(
@@ -100,6 +113,7 @@ export async function queueChannelNotification(
   input: NotifyInput
 ) {
   const supabase = createClient();
+  if (!(await mayDeliver(supabase, input))) return;
   const payload: NotificationLogInsert = {
     recipient_id: input.recipientId,
     channel,
@@ -119,6 +133,9 @@ export async function queueChannelNotification(
  * reach a retailer in Phase 2.
  */
 export async function notifyOrderEvent(input: NotifyInput) {
-  await createInAppNotification(input);
-  await queueChannelNotification('whatsapp', input);
+  // Order-event callers that omit a category must not bypass an order opt-out.
+  // Essential delivery-OTP callers explicitly use 'account' instead.
+  const classified = { ...input, category: input.category ?? 'order' };
+  await createInAppNotification(classified);
+  await queueChannelNotification('whatsapp', classified);
 }

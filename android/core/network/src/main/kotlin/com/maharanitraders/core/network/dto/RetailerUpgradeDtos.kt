@@ -30,7 +30,7 @@ data class MobileNotificationPreferencesDto(
   @EncodeDefault(EncodeDefault.Mode.ALWAYS) val orderUpdates: Boolean = true,
   @EncodeDefault(EncodeDefault.Mode.ALWAYS) val paymentUpdates: Boolean = true,
   @EncodeDefault(EncodeDefault.Mode.ALWAYS) val walletUpdates: Boolean = true,
-  @EncodeDefault(EncodeDefault.Mode.ALWAYS) val offerUpdates: Boolean = true,
+  @EncodeDefault(EncodeDefault.Mode.ALWAYS) val offerUpdates: Boolean = false,
 )
 
 @Serializable

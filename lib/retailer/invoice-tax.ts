@@ -1,15 +1,14 @@
 /**
- * GST invoice tax split — pure helpers.
+ * Historical GST arithmetic helpers — pure calculations, NOT an invoice issuer.
  *
- * Prices in this platform are GST-INCLUSIVE: every stored `line_total`
- * already contains the tax. These helpers only EXTRACT the tax component
- * from stored amounts and decide how it splits into CGST/SGST (intra-state)
- * or IGST (inter-state) based on the state codes inside the two GSTINs.
+ * Prices are GST-INCLUSIVE: every stored `line_total` already contains the
+ * recorded tax. Splitting a recorded amount based on GSTIN state prefixes
+ * cannot establish supplier identity or place of supply. Order summaries
+ * deliberately use the unsplit mode until CA/owner verification.
  *
  * Rules (real data only — nothing invented):
- *  - Both the company GSTIN (COMPANY_GSTIN) and the retailer GSTIN
- *    (retailers.gstin) must be valid 15-char GSTINs, otherwise the tax is
- *    shown as a single "GST" line (unsplit) — never guessed.
+ *  - This syntax-only helper accepts two GSTINs and falls back to unsplit
+ *    when either is invalid. It does not verify the supplier or the supply.
  *  - Same state code (first two digits of the GSTIN)  → CGST = half, SGST = rest.
  *  - Different state codes                             → the whole tax is IGST.
  */

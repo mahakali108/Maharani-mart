@@ -8,6 +8,7 @@ import {
   parseJsonBody,
 } from '@/lib/mobile';
 import { requireRetailerCommerceSession } from '@/lib/mobile/commerce-route';
+import { currentOfferRollout, displayOfferPreference } from '@/lib/notifications/offer-eligibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,14 @@ type PreferencesRow = {
   payment_updates: boolean;
   wallet_updates: boolean;
   offer_updates: boolean;
+  offer_preference_recorded_at: string | null;
 };
 
 /**
  * GET/PATCH /api/mobile/v1/notifications/preferences
  *
- * Defaults match the PWA: an absent row means all categories are enabled.
+ * Defaults match the web: transactional categories on, offers off.
+ * A legacy offers=true without a post-migration choice marker is OFF.
  * The retailer id is always taken from the verified bearer session.
  */
 export async function GET(request: Request): Promise<Response> {
@@ -40,7 +43,7 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     const { data, error } = await auth.session.supabase.from('retailer_notification_prefs')
-      .select('order_updates, payment_updates, wallet_updates, offer_updates')
+      .select('order_updates, payment_updates, wallet_updates, offer_updates, offer_preference_recorded_at')
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<PreferencesRow>();
     if (error) throw error;
@@ -48,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
       orderUpdates: data?.order_updates ?? true,
       paymentUpdates: data?.payment_updates ?? true,
       walletUpdates: data?.wallet_updates ?? true,
-      offerUpdates: data?.offer_updates ?? true,
+      offerUpdates: displayOfferPreference(data, currentOfferRollout()),
     }, { requestId });
   } catch (cause) {
     logServerError('notification-preferences.read', requestId, cause);
@@ -76,6 +79,7 @@ export async function PATCH(request: Request): Promise<Response> {
       payment_updates: body.data.paymentUpdates,
       wallet_updates: body.data.walletUpdates,
       offer_updates: body.data.offerUpdates,
+      offer_preference_recorded_at: body.data.offerUpdates ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     } as unknown as never, { onConflict: 'retailer_id' });
     if (error) throw error;

@@ -197,7 +197,7 @@ fun NotificationPreferencesScreen(
     item { PreferenceRow("Order updates", "Order status and delivery progress", preferences.orderUpdates, !state.saving, viewModel::setOrderUpdates) }
     item { PreferenceRow("Payment updates", "Payments and payment confirmations", preferences.paymentUpdates, !state.saving, viewModel::setPaymentUpdates) }
     item { PreferenceRow("Coins updates", "Coins wallet activity and adjustments", preferences.walletUpdates, !state.saving, viewModel::setWalletUpdates) }
-    item { PreferenceRow("Offers", "Schemes, offers and marketplace updates", preferences.offerUpdates, !state.saving, viewModel::setOfferUpdates) }
+    item { PreferenceRow("Optional offers", "Saving your choice does not enable messages until approved", preferences.offerUpdates, !state.saving, viewModel::setOfferUpdates) }
     item {
       Button(onClick = viewModel::save, enabled = !state.saving, modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget)) {
         if (state.saving) CircularProgressIndicator(Modifier.padding(end = 8.dp), strokeWidth = 2.dp)

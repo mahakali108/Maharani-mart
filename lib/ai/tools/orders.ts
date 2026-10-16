@@ -33,7 +33,7 @@ interface OrderItemRow {
   product_packs: { pack_name: string } | null;
 }
 
-function orderCard(order: OrderRow, context: AIToolContext, invoice = false): AICard {
+function orderCard(order: OrderRow, context: AIToolContext): AICard {
   const base = context.actor.surface === 'retailer'
     ? '/retailer/orders'
     : context.actor.surface === 'salesman'
@@ -42,14 +42,14 @@ function orderCard(order: OrderRow, context: AIToolContext, invoice = false): AI
         ? '/staff/orders'
         : '/admin/orders';
   return {
-    type: invoice ? 'invoice' : 'order', id: order.id, title: invoice ? `Invoice ${order.order_number}` : order.order_number,
-    subtitle: order.retailers?.shop_name ?? formatIndiaDateTime(order.placed_at), badge: order.status, quality: 'verified', source: 'RLS-authorized order record',
+    type: 'order', id: order.id, title: order.order_number,
+    subtitle: order.retailers?.shop_name ?? formatIndiaDateTime(order.placed_at), badge: order.status, quality: 'verified', source: 'RLS-authorized order record; not an issued tax invoice',
     metrics: [
-      { label: 'Total', value: inr(order.grand_total), quality: 'verified' },
-      { label: 'GST', value: inr(order.gst_total), quality: 'verified' },
+      { label: 'Recorded total', value: inr(order.grand_total), quality: 'verified' },
+      { label: 'Recorded GST (not verified for invoicing)', value: inr(order.gst_total), quality: 'verified' },
       { label: 'Placed', value: formatIndiaDateTime(order.placed_at), quality: 'verified' },
     ],
-    actions: [{ type: 'link', label: invoice && context.actor.surface === 'retailer' ? 'View invoice' : 'View order', href: invoice && context.actor.surface === 'retailer' ? `${base}/${order.id}/invoice` : `${base}/${order.id}`, tone: 'primary' }],
+    actions: [{ type: 'link', label: 'View order', href: `${base}/${order.id}`, tone: 'primary' }],
   };
 }
 
@@ -66,12 +66,16 @@ async function listOrders(input: z.infer<typeof retailerOptionalSchema>, context
 }
 
 async function getOrder(orderId: string, context: AIToolContext) {
-  const [{ data: order, error }, { data: items, error: itemError }] = await Promise.all([
-    context.supabase.from('orders').select('id, order_number, retailer_id, status, subtotal, gst_total, discount_total, grand_total, placed_at, notes, retailers ( shop_name )').eq('id', orderId).maybeSingle<OrderRow>(),
-    context.supabase.from('order_items').select('id, order_id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, sku_code ), product_packs ( pack_name )').eq('order_id', orderId).returns<OrderItemRow[]>(),
-  ]);
-  if (error || itemError) return dbFailure();
+  // Verify the RLS-authorized parent before fetching its child rows.
+  const { data: order, error } = await context.supabase.from('orders')
+    .select('id, order_number, retailer_id, status, subtotal, gst_total, discount_total, grand_total, placed_at, notes, retailers ( shop_name )')
+    .eq('id', orderId).maybeSingle<OrderRow>();
+  if (error) return dbFailure();
   if (!order) return unavailable('That order was not found in your authorized data.');
+  const { data: items, error: itemError } = await context.supabase.from('order_items')
+    .select('id, order_id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, sku_code ), product_packs ( pack_name )')
+    .eq('order_id', orderId).returns<OrderItemRow[]>();
+  if (itemError) return dbFailure();
   const card = orderCard(order, context);
   /*
    * Each row is shown with the unit it was billed in: new orders are one pieces
@@ -257,9 +261,12 @@ export const orderTools: AIToolDefinition[] = [
   { name: 'get_retailer_credit', description: 'Deprecated alias of get_retailer_coins — retailer credit was removed; this reports the 🪙 coin balance.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000).optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number' } } }, execute: coinSummary },
   { name: 'get_available_credit', description: 'Deprecated alias of get_retailer_coins — retailer credit was removed; this reports 🪙 coins available.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional() }), inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' } } }, execute: coinSummary },
   { name: 'calculate_order_credit_impact', description: 'Deprecated alias of calculate_order_coin_impact — reports the 🪙 coins an order would use.', actionClass: 'READ', roles: ['retailer', 'salesman', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'admin'], inputSchema: z.object({ retailerId: z.string().uuid().optional(), orderValue: z.number().nonnegative().max(10_000_000) }), inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderValue'], properties: { retailerId: { type: 'string', format: 'uuid' }, orderValue: { type: 'number', minimum: 0 } } }, execute: coinSummary },
-  { name: 'search_invoices', description: 'Search existing order-generated tax invoices in RLS-authorized order data.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: retailerOptionalSchema, inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, limit: { type: 'integer', maximum: 30 } } }, execute: async (input, context) => { const result = await listOrders(input, context); if (result.cards) result.cards = result.cards.map((card) => ({ ...card, type: 'invoice' as const, title: `Invoice ${card.title}`, actions: card.id ? [{ type: 'link', label: context.actor.surface === 'retailer' ? 'View invoice' : 'View order', href: context.actor.surface === 'retailer' ? `/retailer/orders/${card.id}/invoice` : `${context.actor.surface === 'salesman' ? '/salesman/orders' : context.actor.surface === 'staff' ? '/staff/orders' : '/admin/orders'}/${card.id}` }] : card.actions })); return result; } },
-  { name: 'get_invoice', description: 'Get an existing order-generated invoice from RLS-authorized order data.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: orderIdSchema, inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderId'], properties: { orderId: { type: 'string', format: 'uuid' } } }, execute: async ({ orderId }, context) => getOrder(orderId, context) },
-  { name: 'get_invoice_summary', description: 'Summarize verified subtotal, discount, GST and total from an order-generated invoice.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: orderIdSchema, inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderId'], properties: { orderId: { type: 'string', format: 'uuid' } } }, execute: async ({ orderId }, context) => getOrder(orderId, context) },
+  // Preserve legacy tool names for callers, but never turn an order into an
+  // invented, supplier-issued GST tax invoice. Order summaries remain available
+  // through get_orders/get_order_details and the retailer's own order page.
+  { name: 'search_invoices', description: 'Issued tax-invoice lookup is unavailable; orders are not tax invoices. Use get_orders for recorded order figures.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: retailerOptionalSchema, inputJsonSchema: { type: 'object', additionalProperties: false, properties: { retailerId: { type: 'string', format: 'uuid' }, limit: { type: 'integer', maximum: 30 } } }, execute: async () => unavailable('No verified issued tax-invoice ledger is available. Use get_orders for order summaries, or request the supplier-issued document from support.') },
+  { name: 'get_invoice', description: 'Issued tax-invoice lookup is unavailable; orders are not tax invoices.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: orderIdSchema, inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderId'], properties: { orderId: { type: 'string', format: 'uuid' } } }, execute: async () => unavailable('No verified issued tax-invoice ledger is available. Use get_order_details for an order summary, or request the supplier-issued document from support.') },
+  { name: 'get_invoice_summary', description: 'Issued tax-invoice summary is unavailable; order figures are not verified invoice data.', actionClass: 'READ', roles: ['retailer', 'salesman', 'staff', 'admin', 'super_admin'], surfaces: ['retailer', 'salesman', 'staff', 'admin'], inputSchema: orderIdSchema, inputJsonSchema: { type: 'object', additionalProperties: false, required: ['orderId'], properties: { orderId: { type: 'string', format: 'uuid' } } }, execute: async () => unavailable('No verified issued tax-invoice ledger is available. Use get_order_details for recorded order figures, or request the supplier-issued document from support.') },
 ];
 
 export { listOrders, getOrder, reorderDraft, reorderSuggestions, coinSummary, creditSummary };

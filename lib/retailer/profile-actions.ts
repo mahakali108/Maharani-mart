@@ -170,7 +170,13 @@ export async function saveNotificationPrefsAction(_prev: ProfileActionResult, fo
   const supabase = createClient();
   const { error } = await supabase.from('retailer_notification_prefs').upsert({
     retailer_id: user.id,
-    ...parsed.data,
+    order_updates: parsed.data.orderUpdates,
+    payment_updates: parsed.data.paymentUpdates,
+    wallet_updates: parsed.data.walletUpdates,
+    offer_updates: parsed.data.offerUpdates,
+    // A deliberate post-migration save of offers=on; legacy true rows stay
+    // unconfirmed until the account holder actively saves this choice.
+    offer_preference_recorded_at: parsed.data.offerUpdates ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
   } as unknown as never);
   if (error) return { error: error.message };
