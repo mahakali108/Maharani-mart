@@ -32,6 +32,12 @@ export interface MediaUploadFieldProps {
   multiple?: boolean;
   /** Max files when multiple (defense against huge selections). */
   maxFiles?: number;
+  /**
+   * Optimistic local previews: called with `blob:` object URLs as soon as files
+   * are picked, and with `[]` once the batch settles (success or failure).
+   * This field creates and revokes the object URLs itself; callers only render.
+   */
+  onPreviewUrls?: (urls: string[]) => void;
 }
 
 export function MediaUploadField({
@@ -45,6 +51,7 @@ export function MediaUploadField({
   className,
   multiple = false,
   maxFiles = 10,
+  onPreviewUrls,
 }: MediaUploadFieldProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +72,13 @@ export function MediaUploadField({
     }
     setIsUploading(true);
     setProgress(multiple && files.length > 1 ? `Uploading 1/${files.length}…` : null);
+
+    // Optimistic previews: hand the caller blob: URLs for the picked files.
+    let previewUrls: string[] = [];
+    if (onPreviewUrls && typeof URL.createObjectURL === 'function') {
+      previewUrls = files.map((file) => URL.createObjectURL(file));
+      onPreviewUrls(previewUrls);
+    }
 
     try {
       for (let idx = 0; idx < files.length; idx += 1) {
@@ -103,6 +117,13 @@ export function MediaUploadField({
     } finally {
       setIsUploading(false);
       setProgress(null);
+      if (previewUrls.length > 0) {
+        for (const url of previewUrls) {
+          if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+        }
+        onPreviewUrls?.([]);
+        previewUrls = [];
+      }
       if (inputRef.current) inputRef.current.value = '';
     }
   }
