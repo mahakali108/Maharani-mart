@@ -41,8 +41,8 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
     console.warn('Wallet reversal failed (non-blocking):', err);
   }
 
-  // A cancelled order no longer consumes its coupon (0051): the redemption is
-  // released so the retailer can reuse it within its own limits.
+  // Interim evidence hold: keep the redemption linked to this cancelled order.
+  // Coupon uses remain consumed until an append-only reversal is reviewed.
   await releaseOrderCoupon(supabase, orderId);
 
   revalidatePath(`/retailer/orders/${orderId}`);

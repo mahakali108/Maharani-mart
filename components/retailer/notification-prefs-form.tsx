@@ -18,7 +18,7 @@ const OPTIONS: { name: keyof NotificationPrefsValues; title: string; body: strin
   { name: 'orderUpdates', title: 'Order updates', body: 'Confirmations, packing, dispatch and delivery' },
   { name: 'paymentUpdates', title: 'Payment updates', body: 'Payments received and refunds' },
   { name: 'walletUpdates', title: '🪙 Coins', body: 'Coin top-ups, spending and refunds' },
-  { name: 'offerUpdates', title: 'Offers & schemes', body: 'Festival schemes, new launches and promotions' },
+  { name: 'offerUpdates', title: 'Offers & schemes (optional)', body: 'Off by default. Saving this choice does not enable marketing while the notice is under review.' },
 ];
 
 export function NotificationPrefsForm({ initial }: { initial: NotificationPrefsValues }) {

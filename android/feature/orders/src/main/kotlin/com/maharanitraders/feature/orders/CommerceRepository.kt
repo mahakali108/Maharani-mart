@@ -55,7 +55,7 @@ interface CommerceRepository {
   suspend fun orderHistory(cursor: String?): AppResult<OrderHistoryPage>
   /** One owned order, with its status history and this order's Coins movement. */
   suspend fun orderDetail(orderId: String): AppResult<RetailerOrder>
-  /** The server-computed GST invoice for one owned order. */
+  /** Non-tax-invoice order summary for one owned order. */
   suspend fun orderInvoice(orderId: String): AppResult<OrderInvoice>
   /** The delivery record for one owned order. */
   suspend fun orderDelivery(orderId: String): AppResult<OrderDelivery>
@@ -411,6 +411,7 @@ private fun MobileInvoiceDto.toDomain() = OrderInvoice(
   taxMode = taxMode,
   lines = lines.map(MobileInvoiceLineDto::toDomain),
   totals = totals.toDomain(),
+  documentNotice = documentNotice,
 )
 
 private fun MobileDeliveryProofDto.toDomain() = DeliveryProof(

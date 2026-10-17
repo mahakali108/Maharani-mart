@@ -116,11 +116,12 @@ class ApiSerializationTest {
       MobileNotificationPreferencesDto(),
     )
     assertEquals(
-      """{"orderUpdates":true,"paymentUpdates":true,"walletUpdates":true,"offerUpdates":true}""",
+      """{"orderUpdates":true,"paymentUpdates":true,"walletUpdates":true,"offerUpdates":false}""",
       body,
     )
     val defaults = json.decodeFromString(MobileNotificationPreferencesDto.serializer(), "{}")
-    assertTrue(defaults.orderUpdates && defaults.paymentUpdates && defaults.walletUpdates && defaults.offerUpdates)
+    assertTrue(defaults.orderUpdates && defaults.paymentUpdates && defaults.walletUpdates)
+    assertEquals(false, defaults.offerUpdates)
   }
 
   @Test

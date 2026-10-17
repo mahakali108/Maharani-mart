@@ -32,10 +32,10 @@ describe('broadcast input validation', () => {
     audience: 'active_retailers',
   };
 
-  it('accepts a valid broadcast and defaults to transactional', () => {
+  it('defaults uncategorised manual broadcasts to promotional (fail closed)', () => {
     const parsed = broadcastSchema.safeParse(valid);
     expect(parsed.success).toBe(true);
-    if (parsed.success) expect(parsed.data.category).toBe('transactional');
+    if (parsed.success) expect(parsed.data.category).toBe('promotional');
   });
 
   it('rejects short titles/bodies and unknown audiences', () => {

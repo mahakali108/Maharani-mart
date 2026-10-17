@@ -1019,7 +1019,7 @@ export interface Database {
         ];
       };
 
-      // ─── 0035_retailer_profile_rpc_prefs_requests.sql ───
+      // ─── 0035_retailer_profile_rpc_prefs_requests.sql / 0059_safety ───
       retailer_notification_prefs: {
         Row: {
           retailer_id: string;
@@ -1027,6 +1027,7 @@ export interface Database {
           payment_updates: boolean;
           wallet_updates: boolean;
           offer_updates: boolean;
+          offer_preference_recorded_at: string | null;
           updated_at: string;
         };
         Insert: {
@@ -1035,6 +1036,7 @@ export interface Database {
           payment_updates?: boolean;
           wallet_updates?: boolean;
           offer_updates?: boolean;
+          offer_preference_recorded_at?: string | null;
         };
         Update: Partial<Database['public']['Tables']['retailer_notification_prefs']['Insert']>;
         Relationships: [

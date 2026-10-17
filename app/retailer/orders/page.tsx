@@ -249,7 +249,7 @@ export default async function OrdersPage({
           <p className="shop-eyebrow">Purchase history</p>
             <h1 className="shop-heading mt-2 font-semibold tracking-tight text-slate-950">My orders</h1>
             <p className="mt-2 text-xs text-slate-600 sm:text-sm">
-              Track deliveries, view invoices and reorder essentials.
+              Track recorded status, view order summaries and reorder essentials.
             </p>
           </div>
           <Link

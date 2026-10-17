@@ -194,7 +194,7 @@ export default async function OrderDetailPage({
           </div>
           <div className="flex items-center justify-between gap-3 sm:justify-end">
             <span className={`rounded-full px-3 py-1.5 text-[10px] font-bold ring-1 ring-inset ${meta.style}`}>{meta.label}</span>
-            <Link href={`/retailer/orders/${order.id}/invoice`} className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600"><FileText className="h-4 w-4" /> Invoice</Link>
+            <Link href={`/retailer/orders/${order.id}/invoice`} className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600"><FileText className="h-4 w-4" /> Order summary</Link>
           </div>
         </div>
         <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-3 sm:divide-y-0 border-t border-slate-100 bg-slate-50/70">

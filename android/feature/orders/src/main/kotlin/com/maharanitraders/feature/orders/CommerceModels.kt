@@ -171,7 +171,7 @@ data class InvoiceLine(
   val igstPaise: Long,
 )
 
-/** Who issued the invoice. */
+/** Legacy issuer shape: deliberately null for an unverified order summary. */
 data class InvoiceParty(
   val name: String? = null,
   val gstin: String? = null,
@@ -198,7 +198,7 @@ data class InvoiceTotals(
   val grandTotalPaise: Long,
 )
 
-/** One order's invoice. `taxMode` is 'intra', 'inter' or 'unsplit'. */
+/** One order summary; legacy invoice API route retained for compatibility. */
 data class OrderInvoice(
   val orderId: String,
   val orderNumber: String,
@@ -209,6 +209,7 @@ data class OrderInvoice(
   val taxMode: String,
   val lines: List<InvoiceLine>,
   val totals: InvoiceTotals,
+  val documentNotice: String? = null,
 ) {
   /** True only when the server split the tax into CGST + SGST. */
   val isIntraState: Boolean get() = taxMode == "intra"

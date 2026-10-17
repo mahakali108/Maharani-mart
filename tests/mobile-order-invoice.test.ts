@@ -7,15 +7,9 @@ import { supabaseFixture } from './helpers/supabase-fixture';
  * `GET /api/mobile/v1/orders/{id}/invoice` and the order-detail extras.
  *
  * WHY THIS FILE EXISTS
- * The invoice is the one surface where a second implementation of tax
- * arithmetic would be invisible until a retailer compared an app invoice with a
- * web invoice. These tests pin the two properties that prevent that:
- *
- *   1. the endpoint folds the stored rows with the SAME shared helpers the web
- *      invoice uses (`toInvoiceDisplayLines` + `classifyTaxSplit` +
- *      `computeInvoiceTaxLines`) — reimplementing GST would fail the source
- *      assertion below;
- *   2. the figures it returns are the stored ones, expressed in integer paise.
+ * Legacy invoice URLs now return a clearly labelled order summary. Tests pin:
+ *   1. No unverified supplier or inferred intra/inter-state tax split;
+ *   2. Stored order figures are unchanged and expressed in integer paise.
  *
  * The detail extras (status history, Coins movement) are asserted here too:
  * they are additive keys on the same order, and the list payload must stay
@@ -150,6 +144,9 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
       data: {
         orderNumber: string;
         taxMode: string;
+        documentType: string;
+        documentNotice: string;
+        taxBreakdownVerified: boolean;
         lines: { key: string; displayName: string; quantityLabel: string; lineTotalPaise: number; gstPercent: number; cgstPaise: number; sgstPaise: number; unitPrices: { unitPricePaise: number; unit: string }[] }[];
         totals: Record<string, number>;
         biller: { name: string | null; gstin: string | null };
@@ -159,9 +156,13 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
 
     expect(response.status).toBe(200);
     expect(payload.data.orderNumber).toBe('MT-1001');
-    // Both GSTINs are Bihar (state code 10) → CGST + SGST, never IGST.
-    expect(payload.data.taxMode).toBe('intra');
-    expect(payload.data.biller.name).toBe('Maharani Traders');
+    // Matching GSTINs alone do not establish the issuer or place of supply.
+    expect(payload.data.documentType).toBe('order_summary');
+    expect(payload.data.documentNotice).toMatch(/not a GST tax invoice/i);
+    expect(payload.data.taxBreakdownVerified).toBe(false);
+    expect(payload.data.taxMode).toBe('unsplit');
+    expect(payload.data.biller.name).toBeNull();
+    expect(payload.data.biller.gstin).toBeNull();
     expect(payload.data.billedTo.shopName).toBe('Shop');
     expect(payload.data.billedTo.areaName).toBe('Khagaria');
 
@@ -172,12 +173,11 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
     expect(first.displayName).toContain('Soap');
     expect(first.lineTotalPaise).toBe(120_000);
     expect(first.unitPrices).toEqual([{ unitPricePaise: 1_200, unit: 'pc' }]);
-    // GST is EXTRACTED from the inclusive line total: ₹1200 − 1200/1.18 =
-    // ₹183.0508 → 18305 paise, split 9153 / 9152 (the half-paisa remainder
-    // always lands on SGST, so a line never drifts).
-    expect(first.cgstPaise).toBe(9_153);
-    expect(first.sgstPaise).toBe(9_152);
-    expect(first.cgstPaise + first.sgstPaise).toBe(18_305);
+    // The legacy helper still extracts stored inclusive line tax for reference,
+    // but a supplier and intra/inter-state split are NOT asserted.
+    expect(first.cgstPaise).toBe(0);
+    expect(first.sgstPaise).toBe(0);
+    expect(first.lineTotalPaise).toBe(120_000);
 
     // Totals are the stored order values in paise — the endpoint never re-adds
     // the cart, and the stored GST wins over a re-computation.
@@ -221,6 +221,17 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
     // even attempted for someone else's order.
     expect(client.queries.some((query) => query.table === 'order_items')).toBe(false);
     expect(client.queries.some((query) => query.table === 'retailer_wallet_ledger')).toBe(false);
+  });
+
+  it('fails closed when order-summary details cannot be read', async () => {
+    install({}, { order_items: 'temporary read error' });
+    const response = await getOrderInvoice(apiRequest(`/api/mobile/v1/orders/${ORDER}/invoice`), {
+      params: { id: ORDER },
+    });
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(await response.json())).not.toContain('MT-1001');
+    const route = readFileSync(join(process.cwd(), 'app/api/mobile/v1/orders/[id]/invoice/route.ts'), 'utf8');
+    expect(route).toContain('if (retailerResult.error) throw retailerResult.error');
   });
 
   it('rejects a malformed id before touching the database', async () => {

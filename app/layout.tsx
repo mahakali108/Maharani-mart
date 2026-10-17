@@ -44,7 +44,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="font-sans">
         {children}
-        <Analytics />
+        {/* Optional third-party telemetry stays off until the owner approves
+            vendor processing, notices and any required consent flow. */}
+        {process.env.ANALYTICS_APPROVED === 'true' ? <Analytics /> : null}
         {/* PWA: registers the service worker (browser only) and shows an
             optional, dismissible install prompt. No effect on Capacitor. */}
         <ServiceWorkerRegister />

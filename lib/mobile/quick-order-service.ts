@@ -197,8 +197,8 @@ export async function loadMobileQuickOrderProducts(
 
 /**
  * Resolve each pasted line to a real product and up to three real packs by
- * product name or barcode — the same retailer-visible fields the web bulk
- * matcher searches, with the same shared parser and the same per-line shape
+ * product/pack name or barcode — the same retailer-visible fields the web
+ * bulk matcher searches, with the same shared parser and per-line shape
  * (`2 x tea 250g` / `tea 250g x 24` / a bare term).
  *
  * The pasted lines are untrusted text: the parser caps the count and the term
@@ -216,15 +216,32 @@ export async function matchMobileBulkLines(
 
   const perLineRows: { line: ParsedBulkLine; rows: QuickOrderProductRow[] }[] = [];
   for (const line of parsed) {
-    const { data } = await supabase
-      .from('products')
-      .select(QUICK_ORDER_SELECT)
-      .eq('is_active', true)
-      .or(`name.ilike."%${line.term}%",barcode.ilike."%${line.term}%"`)
-      .order('name')
-      .limit(6)
-      .returns<QuickOrderProductRow[]>();
-    const rows = (data ?? []).filter((row) => row.product_packs.some((pack) => pack.is_active));
+    const like = `%${line.term}%`;
+    const [{ data, error: productError }, { data: packMatches, error: packError }] = await Promise.all([
+      supabase.from('products').select(QUICK_ORDER_SELECT)
+        .eq('is_active', true)
+        .or(`name.ilike."${like}",barcode.ilike."${like}"`)
+        .order('name').limit(6).returns<QuickOrderProductRow[]>(),
+      supabase.from('product_packs').select('product_id')
+        .eq('is_active', true)
+        .or(`pack_name.ilike."${like}",barcode.ilike."${like}"`)
+        .limit(30),
+    ]);
+    if (productError || packError) throw productError ?? packError;
+    const packProductIds = [...new Set((packMatches ?? []).map((pack) => pack.product_id))].slice(0, 6);
+    const fromPacks = packProductIds.length > 0
+      ? await supabase.from('products').select(QUICK_ORDER_SELECT)
+          .eq('is_active', true).in('id', packProductIds).limit(6).returns<QuickOrderProductRow[]>()
+      : { data: [] as QuickOrderProductRow[], error: null };
+    if (fromPacks.error) throw fromPacks.error;
+    const seen = new Set<string>();
+    const rows = [...(fromPacks.data ?? []), ...(data ?? [])]
+      .filter((row) => row.product_packs.some((pack) => pack.is_active))
+      .filter((row) => {
+        if (seen.has(row.id)) return false;
+        seen.add(row.id);
+        return true;
+      }).slice(0, 6);
     perLineRows.push({ line, rows });
   }
 
@@ -265,8 +282,13 @@ export async function matchMobileBulkLines(
       });
       continue;
     }
+    const term = line.term.toLowerCase();
     const packs = row.product_packs
       .filter((pack) => pack.is_active)
+      .sort((a, b) =>
+        Number(b.pack_name.toLowerCase().includes(term) || b.barcode?.toLowerCase().includes(term)) -
+        Number(a.pack_name.toLowerCase().includes(term) || a.barcode?.toLowerCase().includes(term))
+      )
       .slice(0, QUICK_ORDER_PACK_CANDIDATES)
       .map((pack): MobileBulkMatchPack => {
         const pricing = priceCatalogPack(pack, row, pricingData, pack.moq);

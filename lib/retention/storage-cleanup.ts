@@ -10,12 +10,14 @@
  *     product-images, brand-logos, category-images, banners, avatars,
  *     retailer-documents (KYC paperwork is customer master data)
  *
- *   TEMPORARY (per-record proof artifacts; their DB rows are deleted by the
- *   120-day business cleanup, so the objects go with them after 120 days):
- *     delivery-proofs, payment-proofs
+ *   ON HOLD (financial/delivery proof evidence): delivery-proofs and
+ *     payment-proofs were formerly swept at 120 days. Pending Indian legal/
+ *     tax retention review, both are classified permanent to prevent ANY
+ *     automatic proof deletion; the linked DB business cleanup is paused in
+ *     migration 0059. No existing object is modified or removed here.
  *
- * Product images in particular must NEVER be deleted merely because their
- * created_at is old — this module physically cannot touch that bucket.
+ * Product images and financial proofs must NEVER be deleted merely because
+ * their created_at is old while the retention policy is unapproved.
  */
 
 export type StorageRetentionClass = 'permanent' | 'temporary';
@@ -62,15 +64,13 @@ const POLICIES: BucketRetentionPolicy[] = [
   },
   {
     bucket: 'delivery-proofs',
-    classification: 'temporary',
-    retentionDays: 120,
-    reason: 'Per-delivery proof artifacts; order_deliveries rows are deleted with the 120-day order cleanup.',
+    classification: 'permanent',
+    reason: 'Financial/delivery evidence — no automatic deletion until counsel and CA approve retention.',
   },
   {
     bucket: 'payment-proofs',
-    classification: 'temporary',
-    retentionDays: 120,
-    reason: 'Per-payment proof artifacts; payment_collections rows are deleted by the 120-day payment cleanup.',
+    classification: 'permanent',
+    reason: 'Payment evidence — no automatic deletion until counsel and CA approve retention.',
   },
 ];
 

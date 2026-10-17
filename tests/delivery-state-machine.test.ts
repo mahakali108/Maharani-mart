@@ -51,8 +51,9 @@ describe('legal transitions', () => {
     expect(canTransitionDeliveryStatus('in_progress', 'failed')).toBe(true);
   });
 
-  it('re-dispatch resets a failed task', () => {
-    expect(canTransitionDeliveryStatus('failed', 'assigned')).toBe(true);
+  it('holds a failed attempt until an immutable re-attempt model exists', () => {
+    expect(canTransitionDeliveryStatus('failed', 'assigned')).toBe(false);
+    expect(allowedDeliveryTransitionsFrom('failed')).toEqual([]);
   });
 
   it('delivered / partially delivered may be returned to the warehouse', () => {
@@ -78,7 +79,7 @@ describe('illegal transitions', () => {
     ['returned_to_warehouse', 'assigned'],
     ['returned_to_warehouse', 'delivered'],
     ['returned_to_warehouse', 'failed'],
-    ['failed', 'delivered'], // must be re-dispatched first
+    ['failed', 'delivered'], // immutable failed attempt cannot be completed
     ['failed', 'partially_delivered'],
     ['failed', 'returned_to_warehouse'],
   ];

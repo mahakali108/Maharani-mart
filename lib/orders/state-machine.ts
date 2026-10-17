@@ -27,7 +27,8 @@ export function isOrderStatus(value: unknown): value is OrderStatus {
  * Valid transitions. Notes:
  * - `confirmed/processing/packed → dispatched`: the FEFO dispatch RPC accepts
  *   all three (lib/staff/dispatch-actions.ts), so all three stay legal.
- * - `dispatched → processing`: failed-delivery re-attempt (decision D3).
+ * - `dispatched → processing`: failed-delivery review; re-dispatch is held
+ *   pending an immutable attempt model (the order status still re-opens).
  * - `dispatched → returned`: return-to-warehouse (Phase 4).
  * - `delivered → returned`: full return-to-warehouse after delivery (Phase 4);
  *   per-item returns keep the order `delivered` (existing returns flow).

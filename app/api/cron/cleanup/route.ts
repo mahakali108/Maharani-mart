@@ -12,13 +12,14 @@ import type { CleanupRunReport } from '@/lib/retention/cleanup';
  *             configured the endpoint refuses to run (fail closed), so an
  *             unauthenticated visitor can never trigger deletion.
  *
- * What it does on each tick:
- *   1. run_data_cleanup(false, 'cron') — the service-role-only SQL engine:
- *      90-day temporary cleanup + 120-day business cleanup, batched,
- *      idempotent, audited in `cleanup_runs`.
- *   2. sweepTemporaryStorage — bounded removal of EXPIRED proof objects from
- *      the explicitly-temporary buckets (delivery-proofs / payment-proofs).
- *      Permanent buckets (product images included) are never visited.
+ * What it does on each tick (AFTER the 0059 migration):
+ *   1. Refuses to run if any unapproved 120-day business cleanup rule is
+ *      enabled. DB read failure also fails closed: protects against deploying
+ *      this code before the safety migration.
+ *   2. Runs only enabled temporary cleanup rules. The 120-day orders,
+ *      payments, returns, wallet and inventory targets are paused by 0059.
+ *   3. Storage sweeper has no eligible proof buckets while financial proof
+ *      retention is under review (product images were always protected).
  *
  * If the DB run reports errors the route returns them with a 200 body that
  * marks `status: 'completed_with_errors'` (the run row recorded the details) —
@@ -57,7 +58,24 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServiceRoleClient();
 
-  // 1. Database retention (the authoritative cleanup).
+  // Code and migration must deploy together. A still-active financial rule or
+  // an evidence-bearing 90-day rule (or a failed read) must fail closed.
+  const [business, evidence] = await Promise.all([
+    supabase.from('data_retention_rules').select('target_key')
+      .eq('category', 'business_120').eq('enabled', true).limit(1),
+    supabase.from('data_retention_rules').select('target_key')
+      .in('target_key', ['expired_notifications', 'notification_logs', 'cleanup_run_logs'])
+      .eq('enabled', true).limit(1),
+  ]);
+  if (business.error || evidence.error || !business.data || !evidence.data ||
+      business.data.length > 0 || evidence.data.length > 0) {
+    return NextResponse.json(
+      { error: 'Cleanup paused: financial/evidence retention has not been reviewed or the safety migration is missing.' },
+      { status: 503 }
+    );
+  }
+
+  // 1. Database retention (only unheld temporary targets).
   const { data, error } = await supabase.rpc('run_data_cleanup' as never, {
     p_dry_run: false,
     p_triggered_by: 'cron',
@@ -70,8 +88,8 @@ export async function GET(request: NextRequest) {
   }
   const report = data as unknown as CleanupRunReport;
 
-  // 2. Temporary storage objects (proof buckets only; product images and all
-  //    other permanent buckets are never touched).
+  // 2. No proof buckets are classified temporary under the interim hold;
+  //    the allow-listed sweep returns no deletion targets.
   const storageResults = await sweepTemporaryStorage(supabase.storage as unknown as StorageApi);
 
   return NextResponse.json({

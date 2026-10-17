@@ -6,8 +6,9 @@
  *
  *   - explicit retention rules only (no table is ever guessed),
  *   - 90-day temporary cleanup (exact boundary: exactly-90-days kept, older removed),
- *   - 120-day business cleanup (orders tree, payments, returns, coins/credit
- *     ledger, historical inventory),
+ *   - legacy 120-day business cleanup engine (TEST-ONLY manual opt-in after
+ *     0059 pauses this unsafe production policy; never re-enable in production
+ *     without an owner/CA-approved retention schedule),
  *   - permanent product/catalog/stock/image data is NEVER deleted,
  *   - coins/credit balances are mathematically unchanged by ledger purge
  *     (delta folded into the frozen opening baseline),
@@ -143,6 +144,14 @@ async function seedLedger(
 
 beforeAll(async () => {
   db = await createMigratedDb();
+  // LEGACY ENGINE TEST ONLY, isolated PGlite fixture — NEVER in production:
+  // 0059 disables and constrains business_120 and evidence-bearing 90-day
+  // rules. Remove holds *only in this disposable scratch DB* to exercise the
+  // historical engine; production must never repeat these statements.
+  await db.query(`alter table data_retention_rules drop constraint data_retention_business_hold`);
+  await db.query(`alter table data_retention_rules drop constraint data_retention_evidence_hold`);
+  await db.query(`update data_retention_rules set enabled = true where category = 'business_120'
+    or target_key in ('expired_notifications', 'notification_logs', 'cleanup_run_logs')`);
   admin = await createUser(db, 'admin');
   retailer = await createRetailer(db, { creditLimitRupees: 10000 });
   pack = await createPack(db);

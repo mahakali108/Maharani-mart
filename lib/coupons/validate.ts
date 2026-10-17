@@ -175,22 +175,18 @@ export async function loadActiveCouponForRetailer(
 }
 
 /**
- * Releases a coupon redemption when its order is cancelled. Best-effort: a
- * failed release must not block the cancellation itself (the redemption row
- * is audited; support can reconcile).
+ * Interim financial-evidence hold: a cancelled order and its coupon redemption
+ * must remain linked. The legacy release_coupon RPC DELETES the redemption;
+ * do not call it until a reviewed, append-only reversal and usage-count model
+ * exists. Its direct API grant is revoked by proposed migration 0059.
+ *
+ * Consequence: cancelled coupons remain consumed (conservative overcount).
+ * This is an explicit operational limitation, not a completed refund policy.
+ * Keep the existing function signature so all three cancel flows stay wired.
  */
 export async function releaseOrderCoupon(
-  supabase: ReturnType<typeof createClient>,
-  orderId: string
+  _supabase: ReturnType<typeof createClient>,
+  _orderId: string
 ): Promise<void> {
-  try {
-    const { error } = await (
-      supabase as unknown as {
-        rpc: (name: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
-      }
-    ).rpc('release_coupon', { p_order_id: orderId });
-    if (error) console.warn('Coupon release failed (order cancelled anyway):', error.message);
-  } catch (error) {
-    console.warn('Coupon release failed (order cancelled anyway):', error instanceof Error ? error.message : error);
-  }
+  // No mutation. Preserve the redemption and its order linkage.
 }

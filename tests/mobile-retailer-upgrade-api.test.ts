@@ -152,10 +152,17 @@ describe('mobile retailer upgrade routes', () => {
     expect(tampered.status).toBe(400);
   });
 
-  it('defaults missing notification preferences to enabled and upserts only caller-owned values', async () => {
-    const client = install();
+  it('defaults offers off (including legacy true without a marker) and upserts only caller-owned values', async () => {
+    let client = install();
     const defaults = await json(await getPreferences(request('GET', '/api/mobile/v1/notifications/preferences')));
-    expect(defaults.data).toEqual({ orderUpdates: true, paymentUpdates: true, walletUpdates: true, offerUpdates: true });
+    expect(defaults.data).toEqual({ orderUpdates: true, paymentUpdates: true, walletUpdates: true, offerUpdates: false });
+    install({ tables: { retailer_notification_prefs: [{
+      retailer_id: RETAILER, order_updates: true, payment_updates: true, wallet_updates: true,
+      offer_updates: true, offer_preference_recorded_at: null,
+    }] } });
+    const legacyPrefs = await json(await getPreferences(request('GET', '/api/mobile/v1/notifications/preferences')));
+    expect(legacyPrefs.data.offerUpdates).toBe(false);
+    client = install();
 
     const saved = await patchPreferences(request('PATCH', '/api/mobile/v1/notifications/preferences', {
       orderUpdates: false, paymentUpdates: true, walletUpdates: false, offerUpdates: true,
@@ -163,7 +170,8 @@ describe('mobile retailer upgrade routes', () => {
     expect(saved.status).toBe(200);
     const upsert = client.queries.find((query) => query.table === 'retailer_notification_prefs' && query.operation === 'upsert');
     expect(upsert?.operation).toBe('upsert');
-    expect(upsert?.payload).toMatchObject({ retailer_id: RETAILER, order_updates: false, wallet_updates: false });
+    expect(upsert?.payload).toMatchObject({ retailer_id: RETAILER, order_updates: false, wallet_updates: false, offer_updates: true });
+    expect(typeof (upsert?.payload as Record<string, unknown>)?.offer_preference_recorded_at).toBe('string');
 
     const tampered = await patchPreferences(request('PATCH', '/api/mobile/v1/notifications/preferences', {
       orderUpdates: true, paymentUpdates: true, walletUpdates: true, offerUpdates: true, retailerId: OTHER_RETAILER,

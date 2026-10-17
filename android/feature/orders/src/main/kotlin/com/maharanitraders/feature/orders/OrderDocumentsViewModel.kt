@@ -15,12 +15,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * The GST invoice for one owned order.
- *
- * Every figure on this screen — the folded lines, the CGST/SGST/IGST split and
- * the totals — is returned by the server, which computed it with the same
- * helpers the web invoice prints. The app performs no tax arithmetic, which is
- * the reason the endpoint exists at all.
+ * The order summary for one owned order (legacy invoice endpoint name).
+ * The server supplies stored figures without an issuer or verified tax split;
+ * Android does not calculate GST or issue a tax document.
  */
 data class InvoiceUiState(
   val loading: Boolean = true,
@@ -48,7 +45,7 @@ class InvoiceViewModel @Inject constructor(
   fun load() {
     if (orderId.isBlank()) {
       _state.update {
-        it.copy(loading = false, error = "This invoice could not be opened.", errorCode = ApiErrorCode.NOT_FOUND)
+        it.copy(loading = false, error = "This order summary could not be opened.", errorCode = ApiErrorCode.NOT_FOUND)
       }
       return
     }

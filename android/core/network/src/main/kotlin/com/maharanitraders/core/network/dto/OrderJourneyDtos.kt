@@ -3,8 +3,8 @@ package com.maharanitraders.core.network.dto
 import kotlinx.serialization.Serializable
 
 /**
- * Order-journey wire shapes: the detail extras, the GST invoice and the
- * delivery record.
+ * Order-journey wire shapes: the detail extras, a non-tax-invoice order
+ * summary (legacy invoice URL), and the delivery record.
  *
  * Every monetary field is integer paise, produced by the server (contract
  * §1.5). Nothing in these DTOs computes tax, a total or a return window — the
@@ -20,7 +20,7 @@ data class MobileOrderStatusEntryDto(
   val createdAt: String,
 )
 
-/** Who issued the invoice. Any field may be absent when not configured. */
+/** Legacy biller shape; the order summary has no verified issuer (null fields). */
 @Serializable
 data class MobileInvoiceBillerDto(
   val name: String? = null,
@@ -46,8 +46,8 @@ data class MobileInvoiceUnitPriceDto(
 )
 
 /**
- * One folded invoice line. The server already decided every figure here,
- * including the tax split, using the same helpers the web invoice prints.
+ * One folded order-summary line. The saved order amounts are authoritative;
+ * per-line tax is an unverified estimate, not an issued tax breakdown.
  */
 @Serializable
 data class MobileInvoiceLineDto(
@@ -68,9 +68,9 @@ data class MobileInvoiceLineDto(
 /**
  * Invoice totals in paise.
  *
- * [gstTotalPaise] is the STORED order tax (what the web invoice prints);
- * [cgstPaise]/[sgstPaise]/[igstPaise] are the computed split for the
- * `taxMode` — shown only when the server split the tax.
+ * [gstTotalPaise] is the STORED order tax (also displayed on the web summary);
+ * split fields are legacy estimates, not an issued invoice or verified tax
+ * breakdown. Current summaries deliberately return `taxMode=unsplit`.
  */
 @Serializable
 data class MobileInvoiceTotalsDto(
@@ -83,13 +83,15 @@ data class MobileInvoiceTotalsDto(
   val grandTotalPaise: Long,
 )
 
-/** One order's GST invoice; `taxMode` is 'intra', 'inter' or 'unsplit'. */
+/** Legacy invoice API now returns an order summary, not an issued tax invoice. */
 @Serializable
 data class MobileInvoiceDto(
   val orderId: String,
   val orderNumber: String,
   val status: String,
   val placedAt: String,
+  val documentType: String = "order_summary",
+  val documentNotice: String? = null,
   val biller: MobileInvoiceBillerDto = MobileInvoiceBillerDto(),
   val billedTo: MobileInvoiceBilledToDto = MobileInvoiceBilledToDto(),
   val taxMode: String = "unsplit",

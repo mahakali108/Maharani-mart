@@ -1,11 +1,8 @@
 /**
- * GST invoice upgrades — tax split (CGST/SGST vs IGST), HSN and download.
- *
- * Pure-function tests for the extraction/split math (lib/retailer/invoice-tax)
- * plus source-level guards that lock in:
- *   1. The invoice shows HSN, CGST/SGST or IGST (never a guess), GSTIN and totals
- *   2. A real download route exists with auth + ownership + attachment headers
- *   3. The standalone HTML builder is XSS-safe (escapes all interpolated data)
+ * Legacy tax arithmetic remains available as pure functions, but no invoice
+ * may be inferred from a buyer GSTIN and an unverified company env var.
+ * Source guards pin a safe order-summary presentation, ownership, stored
+ * amounts, and escaped HTML.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -218,12 +215,11 @@ describe('invoice page guards', () => {
     expect(invoicePage).toContain('HSN');
   });
 
-  it('renders CGST/SGST or IGST via the classifier — and a plain GST line otherwise', () => {
-    expect(invoicePage).toContain('classifyTaxSplit');
-    expect(invoicePage).toContain('computeInvoiceTaxLines');
-    expect(invoicePage).toContain('CGST');
-    expect(invoicePage).toContain('SGST');
-    expect(invoicePage).toContain('IGST');
+  it('forces an unsplit, non-tax-invoice summary without an inferred issuer', () => {
+    expect(invoicePage).toContain('orderSummaryTaxMode()');
+    expect(invoicePage).toContain('ORDER_SUMMARY_NOTICE');
+    expect(invoicePage).not.toContain('classifyTaxSplit(');
+    expect(invoicePage).not.toContain('company.name');
   });
 
   it('keeps the stored grand total authoritative (not the recomputed tax sum)', () => {
@@ -255,12 +251,13 @@ describe('invoice download route guards', () => {
   it('serves the file as an attachment with the order number in the filename', () => {
     expect(downloadRoute).toContain('Content-Disposition');
     expect(downloadRoute).toContain('attachment');
-    expect(downloadRoute).toContain('invoice-');
+    expect(downloadRoute).toContain('order-summary-');
   });
 
-  it('derives the same GST split as the page (single rule, no divergence)', () => {
-    expect(downloadRoute).toContain('classifyTaxSplit');
+  it('uses the same unsplit order summary as the page', () => {
+    expect(downloadRoute).toContain('orderSummaryTaxMode()');
     expect(downloadRoute).toContain('buildStandaloneInvoiceHtml');
+    expect(downloadRoute).not.toContain('COMPANY_GSTIN');
   });
 });
 
@@ -269,13 +266,7 @@ describe('standalone HTML builder', () => {
     const html = buildStandaloneInvoiceHtml({
       orderNumber: 'MK-<script>alert(1)</script>',
       placedAt: new Date().toISOString(),
-      company: {
-        name: '<img src=x onerror=alert(1)>',
-        gstin: 'Configure COMPANY_GSTIN in environment variables',
-        address: 'a & b',
-        phone: '—',
-      },
-      billedTo: { shopName: 'Shop "Quotes"', address: '—', areaName: '', gstin: '' },
+      billedTo: { shopName: 'Shop "Quotes"', address: '<img src=x onerror=alert(1)> & a & b', areaName: '', gstin: '' },
       lines: [],
       taxMode: 'unsplit',
       subtotal: 0,
@@ -289,11 +280,10 @@ describe('standalone HTML builder', () => {
     expect(html).toContain('a &amp; b');
   });
 
-  it('prints CGST/SGST columns in intra mode', () => {
+  it('ignores a legacy caller asking for intra-state columns on a summary', () => {
     const html = buildStandaloneInvoiceHtml({
       orderNumber: 'MK-2026-001',
       placedAt: new Date().toISOString(),
-      company: { name: 'C', gstin: '10ABCDE1234F1Z5', address: 'A', phone: 'P' },
       billedTo: { shopName: 'S', address: 'A', areaName: '', gstin: '10XYZPA9999Q1Z2' },
       lines: [
         {
@@ -313,9 +303,15 @@ describe('standalone HTML builder', () => {
       discountTotal: 0,
       grandTotal: 118,
     });
-    expect(html).toContain('CGST');
-    expect(html).toContain('SGST');
+    expect(html).toContain('Not a tax invoice');
+    expect(html).not.toContain('>CGST<');
+    expect(html).not.toContain('>SGST<');
     expect(html).not.toContain('>IGST<');
+    expect(html).not.toContain('Estimated CGST');
+    expect(html).not.toContain('Estimated SGST');
+    expect(html).not.toContain('Estimated IGST');
+    expect(html).toContain('Stored order GST (unverified)');
+    expect(html).toContain('Current catalog HSN*');
   });
 });
 

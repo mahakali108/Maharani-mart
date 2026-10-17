@@ -16,9 +16,9 @@
  *    Missing/damaged value is credited back to the retailer's wallet as a
  *    REFUND_CREDIT (decision D4) — the retailer never pays for undelivered
  *    goods.
- *  - A FAILED delivery re-opens the order (dispatched → processing,
- *    decision D3) so the warehouse can re-pick; the next dispatch resets
- *    the same task row.
+ *  - A FAILED delivery re-opens the order (dispatched → processing) but the
+ *    existing task/proof is retained. Re-dispatch is paused pending an
+ *    immutable multi-attempt workflow (proposed 0059 safety hold).
  *  - RETURN TO WAREHOUSE is terminal: stock is booked back via
  *    return_order_stock, the order moves to `returned` and the wallet
  *    debit (minus any shortfall already refunded) is reversed.
@@ -293,7 +293,7 @@ export async function regenerateDeliveryOtpAction(orderId: string): Promise<Deli
     // The OTP is shown only in the retailer's in-app notification — never persisted in the channel queue.
     channelBody: `A new delivery OTP for order ${order.order_number} is ready. Open the Maharani app to view it.`,
     linkUrl: `/retailer/orders/${orderId}/delivery`,
-    category: 'order',
+    category: 'account', // essential OTP even if routine order updates are off
   });
 
   revalidateDeliveryPaths(orderId);
@@ -593,7 +593,7 @@ export async function completeDeliveryAction(
   };
 }
 
-/** Record a failed delivery attempt (decision D3: order re-opens for re-pick). */
+/** Record a failed delivery attempt; order re-opens but re-dispatch stays on hold. */
 export async function recordFailedDeliveryAction(
   orderId: string,
   reason: string
@@ -640,7 +640,8 @@ export async function recordFailedDeliveryAction(
   if (error) return { error: error.message };
   if (!claimed) return { error: 'This delivery changed while saving — refresh and try again.' };
 
-  // Re-open the order for a re-attempt (guarded; 0042 trigger validates).
+  // Re-open the order for review (guarded; 0042 trigger validates).
+  // Re-dispatch remains paused; this is NOT a promise of a new delivery attempt.
   // Skipped when the order already re-opened concurrently.
   if (order.status === 'dispatched') {
     const { data: claimedOrder, error: orderError } = await supabase
@@ -659,14 +660,14 @@ export async function recordFailedDeliveryAction(
   await notifyOrderEvent({
     recipientId: order.retailer_id,
     title: 'Delivery could not be completed',
-    body: `Your order ${order.order_number} could not be delivered (${failureReason}). It has been returned to the warehouse queue and will be re-attempted.`,
+    body: `Your order ${order.order_number} could not be delivered (${failureReason}). Please check the order for updates; support will review the next steps.`,
     linkUrl: `/retailer/orders/${orderId}`,
     category: 'order',
   });
 
   revalidateDeliveryPaths(orderId);
   revalidatePath('/admin/orders');
-  return { success: true, message: `Delivery attempt failed — order ${order.order_number} re-opened for re-pick.` };
+  return { success: true, message: `Delivery attempt failed — order ${order.order_number} re-opened. Re-dispatch is paused pending review of attempt evidence.` };
 }
 
 /**

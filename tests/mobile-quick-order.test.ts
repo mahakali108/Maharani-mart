@@ -71,6 +71,7 @@ const PRODUCT = {
 function install({
   role = 'retailer',
   products = [PRODUCT] as object[],
+  packs = [] as object[],
   errors = {} as Record<string, string>,
 } = {}) {
   const userId = role === 'retailer' ? RETAILER : STAFF;
@@ -86,6 +87,7 @@ function install({
       ? [{ id: RETAILER, status: 'active', area_id: null }]
       : [],
     products,
+    product_packs: packs,
     // Both tables are read while pricing a pack; empty means every price below
     // comes from the pack itself, with no scheme and no selling tier.
     product_pricing_tiers: [],
@@ -214,6 +216,30 @@ describe('bulk line matching', () => {
     );
 
     // The matcher is a read: the cart is the only writer.
+    expect(client.queries.filter((query) => query.operation !== 'select')).toHaveLength(0);
+  });
+
+  it('resolves an active pack barcode when the parent product name/barcode does not match', async () => {
+    const client = install({
+      products: [{ ...PRODUCT, name: 'Plain biscuit', barcode: 'other', product_packs: [
+        { ...PRODUCT.product_packs[0], pack_name: '24 biscuits', barcode: '8901234567890' },
+        { ...PRODUCT.product_packs[0], id: 'pack-second', pack_name: 'unrelated pack', barcode: null },
+      ] }],
+      packs: [{ product_id: PRODUCT.id, is_active: true, pack_name: '24 biscuits', barcode: '8901234567890' }],
+    });
+    const response = await matchBulkLines(apiRequest('POST', '/api/mobile/v1/quick-order/match', {
+      raw: '3 x 8901234567890',
+    }));
+    expect(response.status).toBe(200);
+    const data = (await json(response)).data as { matches: { productId: string; matches: { packId: string }[] }[] };
+    expect(data.matches[0]?.productId).toBe(PRODUCT.id);
+    expect(data.matches[0]?.matches[0]?.packId).toBe('pack-active');
+    expect(client.queries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: 'product_packs', operation: 'select' }),
+      expect.objectContaining({ table: 'products', filters: expect.arrayContaining([
+        { op: 'in', column: 'id', value: [PRODUCT.id] },
+      ]) }),
+    ]));
     expect(client.queries.filter((query) => query.operation !== 'select')).toHaveLength(0);
   });
 
