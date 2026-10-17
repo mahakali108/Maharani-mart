@@ -82,7 +82,10 @@ export type Permission =
    */
   | 'suppliers.review'
   /** Upload staff-managed supplier documents (private bucket, 0059). V1 has no document deletion. */
-  | 'suppliers.documents.manage';
+  | 'suppliers.documents.manage'
+  | 'sellers.view'
+  | 'sellers.review'
+  | 'sellers.manage';
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
@@ -95,6 +98,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'team.manage', 'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all',
     'command_center.view', 'dashboard.view', 'cleanup.view', 'support.manage', 'suppliers.view', 'suppliers.review', 'suppliers.documents.manage',
+    'sellers.view', 'sellers.review', 'sellers.manage',
   ],
   admin: [
     'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',
@@ -105,6 +109,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet', 'coins.manage',
     'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all', 'dashboard.view', 'cleanup.view', 'support.manage', 'suppliers.view', 'suppliers.review', 'suppliers.documents.manage',
+    'sellers.view', 'sellers.review', 'sellers.manage',
   ],
   staff: [
     // No 'products.create' / 'pricing.manage': creating a product or pack
@@ -129,6 +134,12 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'orders.view.own', 'orders.create', 'orders.cancel', 'orders.return.request', 'returns.request',
     'reports.view.own',
   ],
+  // Marketplace sellers (0062) have no web surface yet (owner decision pending
+  // on the seller login experience). Empty web permissions fail closed: a
+  // seller JWT can reach no role-gated page or action. Seller data access is
+  // tenant-scoped by RLS (`is_member_of_seller`) and will get its own routes
+  // and permissions in the seller-portal stage.
+  seller: [],
 };
 
 /**
