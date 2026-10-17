@@ -7,8 +7,13 @@ import {
 } from '@/lib/mobile';
 import { requireRetailerCommerceSession } from '@/lib/mobile/commerce-route';
 import { formatIndiaDate, formatIndiaDateTime, indiaDayEnd, indiaDayStart, isValidIndiaDateKey } from '@/lib/datetime/india';
-import { loadPurchaseStatement, statementCsv } from '@/lib/retailer/reports';
-import { getRetailerLedger, type WalletTransaction } from '@/lib/retailer/wallet';
+import {
+  iteratePurchaseStatement,
+  PURCHASE_STATEMENT_CSV_HEADER,
+  statementCsvRow,
+  streamCsvRows,
+} from '@/lib/retailer/reports';
+import { iterateRetailerLedgerStatement, type WalletTransaction } from '@/lib/retailer/wallet';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +36,7 @@ function selectedDate(raw: string | null, fallback: Date, end = false): Date {
   return (end ? indiaDayEnd(raw) : indiaDayStart(raw)) ?? fallback;
 }
 
-function csvResponse(csv: string, type: 'orders' | 'ledger', from: Date, to: Date, requestId: string): Response {
+function csvResponse(csv: ReadableStream<Uint8Array>, type: 'orders' | 'ledger', from: Date, to: Date, requestId: string): Response {
   const stamp = `${formatIndiaDate(from.toISOString())}_${formatIndiaDate(to.toISOString())}`.replace(/\s/g, '-');
   const response = new NextResponse(csv, {
     status: 200,
@@ -81,24 +86,44 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const supabase = auth.session.supabase as unknown as ReturnType<typeof createClient>;
     if (typeRaw === 'orders') {
-      const rows = await loadPurchaseStatement(supabase, auth.session.userId, from.toISOString(), to.toISOString());
-      return csvResponse(statementCsv(rows), 'orders', from, to, requestId);
+      const iterator = iteratePurchaseStatement(
+        supabase,
+        auth.session.userId,
+        from.toISOString(),
+        to.toISOString()
+      );
+      const first = await iterator.next();
+      const csv = streamCsvRows(
+        PURCHASE_STATEMENT_CSV_HEADER,
+        first,
+        iterator,
+        statementCsvRow,
+        (cause) => logServerError('reports.statement.stream', requestId, cause)
+      );
+      return csvResponse(csv, 'orders', from, to, requestId);
     }
 
-    const ledger = await getRetailerLedger(supabase, auth.session.userId, 1000);
-    const inRange = ledger.filter((row) => {
-      const at = new Date(row.created_at).getTime();
-      return at >= from.getTime() && at <= to.getTime();
-    });
-    const header = 'Date (IST),Type,Direction,Amount (Rs),Reference';
-    const lines = inRange.map((row) => [
-      formatIndiaDateTime(row.created_at),
-      TX_LABELS[row.transaction_type] ?? row.transaction_type,
-      row.direction === 'credit' ? 'Added' : 'Used',
-      (row.amount_paise / 100).toFixed(2),
-      row.description ?? '',
-    ].map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','));
-    return csvResponse([header, ...lines].join('\n'), 'ledger', from, to, requestId);
+    const iterator = iterateRetailerLedgerStatement(
+      supabase,
+      auth.session.userId,
+      from.toISOString(),
+      to.toISOString()
+    );
+    const first = await iterator.next();
+    const csv = streamCsvRows(
+      'Date (IST),Type,Direction,Amount (Rs),Reference',
+      first,
+      iterator,
+      (row) => [
+        formatIndiaDateTime(row.created_at),
+        TX_LABELS[row.transaction_type] ?? row.transaction_type,
+        row.direction === 'credit' ? 'Added' : 'Used',
+        (row.amount_paise / 100).toFixed(2),
+        row.description ?? '',
+      ].map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+      (cause) => logServerError('reports.statement.stream', requestId, cause)
+    );
+    return csvResponse(csv, 'ledger', from, to, requestId);
   } catch (cause) {
     logServerError('reports.statement', requestId, cause);
     return jsonError('database_unavailable', 'The statement could not be prepared. Please try again.', {

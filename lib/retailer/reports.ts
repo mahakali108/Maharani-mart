@@ -2,6 +2,9 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { formatIndiaDate, indiaMonthStart } from '@/lib/datetime/india';
+import { applyCursor, applyKeysetOrder, type KeysetColumn } from '@/lib/infinite-scroll/keyset';
+import { collectKeysetPages, iterateKeysetPages } from '@/lib/infinite-scroll/collect-keyset-pages';
+import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
 /**
  * Retailer business insights (Purchase reports). Every number is computed
@@ -219,30 +222,48 @@ export interface StatementRow {
   grandTotal: number;
 }
 
-/** Purchase statement rows for CSV export (own orders only, RLS-scoped). */
-export async function loadPurchaseStatement(
+const PURCHASE_STATEMENT_PAGE_SIZE = 500;
+const PURCHASE_STATEMENT_ORDER: KeysetColumn[] = [
+  { column: 'placed_at', ascending: true },
+  { column: 'id', ascending: true },
+];
+
+type PurchaseStatementDatabaseRow = {
+  id: string;
+  order_number: string;
+  placed_at: string;
+  status: string;
+  subtotal: number;
+  discount_total: number;
+  gst_total: number;
+  grand_total: number;
+};
+
+async function fetchPurchaseStatementPage(
   supabase: ReturnType<typeof createClient>,
   retailerId: string,
   fromIso: string,
-  toIso: string
-): Promise<StatementRow[]> {
-  const { data, error } = await supabase
+  toIso: string,
+  cursor: ListCursor | null
+): Promise<PurchaseStatementDatabaseRow[]> {
+  const query = supabase
     .from('orders')
-    .select('order_number, placed_at, status, subtotal, discount_total, gst_total, grand_total')
+    .select('id, order_number, placed_at, status, subtotal, discount_total, gst_total, grand_total')
     .eq('retailer_id', retailerId)
     .gte('placed_at', fromIso)
-    .lte('placed_at', toIso)
-    .order('placed_at', { ascending: true });
+    .lte('placed_at', toIso);
+  const { data, error } = await applyCursor(
+    applyKeysetOrder(query, PURCHASE_STATEMENT_ORDER),
+    cursor,
+    PURCHASE_STATEMENT_ORDER,
+    PURCHASE_STATEMENT_PAGE_SIZE
+  ).returns<PurchaseStatementDatabaseRow[]>();
   if (error) throw error;
-  return ((data ?? []) as unknown as {
-    order_number: string;
-    placed_at: string;
-    status: string;
-    subtotal: number;
-    discount_total: number;
-    gst_total: number;
-    grand_total: number;
-  }[]).map((row): StatementRow => ({
+  return data ?? [];
+}
+
+function mapPurchaseStatementRow(row: PurchaseStatementDatabaseRow): StatementRow {
+  return {
     orderNumber: row.order_number,
     placedAt: row.placed_at,
     status: row.status,
@@ -250,23 +271,90 @@ export async function loadPurchaseStatement(
     discountTotal: row.discount_total,
     gstTotal: row.gst_total,
     grandTotal: row.grand_total,
-  }));
+  };
+}
+
+/** Streamable purchase statement rows (own orders only, RLS-scoped). */
+export async function* iteratePurchaseStatement(
+  supabase: ReturnType<typeof createClient>,
+  retailerId: string,
+  fromIso: string,
+  toIso: string
+): AsyncGenerator<StatementRow> {
+  const rows = iterateKeysetPages(
+    (cursor) => fetchPurchaseStatementPage(supabase, retailerId, fromIso, toIso, cursor),
+    PURCHASE_STATEMENT_ORDER,
+    PURCHASE_STATEMENT_PAGE_SIZE
+  );
+  for await (const row of rows) yield mapPurchaseStatementRow(row);
+}
+
+/** Collect all purchase statement rows for callers that explicitly need an array. */
+export async function loadPurchaseStatement(
+  supabase: ReturnType<typeof createClient>,
+  retailerId: string,
+  fromIso: string,
+  toIso: string
+): Promise<StatementRow[]> {
+  const rows = await collectKeysetPages(
+    (cursor) => fetchPurchaseStatementPage(supabase, retailerId, fromIso, toIso, cursor),
+    PURCHASE_STATEMENT_ORDER,
+    PURCHASE_STATEMENT_PAGE_SIZE
+  );
+  return rows.map(mapPurchaseStatementRow);
+}
+
+export const PURCHASE_STATEMENT_CSV_HEADER = 'Order number,Placed on (IST),Status,Subtotal (Rs),Discount (Rs),GST (Rs),Grand total (Rs)';
+
+export function statementCsvRow(row: StatementRow): string {
+  return [
+    row.orderNumber,
+    formatIndiaDate(row.placedAt),
+    row.status,
+    row.subtotal.toFixed(2),
+    row.discountTotal.toFixed(2),
+    row.gstTotal.toFixed(2),
+    row.grandTotal.toFixed(2),
+  ]
+    .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+    .join(',');
 }
 
 export function statementCsv(rows: StatementRow[]): string {
-  const header = 'Order number,Placed on (IST),Status,Subtotal (Rs),Discount (Rs),GST (Rs),Grand total (Rs)';
-  const lines = rows.map((row) =>
-    [
-      row.orderNumber,
-      formatIndiaDate(row.placedAt),
-      row.status,
-      row.subtotal.toFixed(2),
-      row.discountTotal.toFixed(2),
-      row.gstTotal.toFixed(2),
-      row.grandTotal.toFixed(2),
-    ]
-      .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-      .join(',')
-  );
-  return [header, ...lines].join('\n');
+  return [PURCHASE_STATEMENT_CSV_HEADER, ...rows.map(statementCsvRow)].join('\n');
+}
+
+/** Stream CSV chunks with backpressure while keeping only the current DB page in memory. */
+export function streamCsvRows<T>(
+  header: string,
+  first: IteratorResult<T>,
+  iterator: AsyncIterator<T>,
+  renderRow: (row: T) => string,
+  onError: (cause: unknown) => void
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  let pending: IteratorResult<T> | null = first;
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(header));
+    },
+    async pull(controller) {
+      try {
+        const next = pending ?? await iterator.next();
+        pending = null;
+        if (next.done) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(encoder.encode(`\n${renderRow(next.value)}`));
+      } catch (cause) {
+        onError(cause);
+        controller.error(new Error('The statement export could not be completed.'));
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
 }

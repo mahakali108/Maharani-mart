@@ -122,8 +122,10 @@ describe('2. retailer data isolation (RLS matrix)', () => {
     const route = read('app/retailer/reports/statement/route.ts');
     expect(route).toContain('const user = await requireUser()');
     expect(route).toContain("user.role !== 'retailer'");
-    expect(route).toContain('getRetailerLedger(supabase, user.id');
-    expect(route).toContain('loadPurchaseStatement(supabase, user.id');
+    expect(route).toContain('iterateRetailerLedgerStatement(');
+    expect(route).not.toContain('getRetailerLedger(supabase, user.id');
+    expect(route).toContain('iteratePurchaseStatement(');
+    expect(read('app/api/mobile/v1/reports/statement/route.ts')).toContain('iterateRetailerLedgerStatement(');
   });
 
   it('product issues: retailer can create/read/withdraw own rows but can NEVER set status', () => {
