@@ -107,6 +107,7 @@ export function ProductImageManager({
         <div className="grid grid-cols-3 gap-3 opacity-60 sm:grid-cols-4">
           {localPreviews.map((src, i) => (
             <div key={`preview-${i}`} className="aspect-square overflow-hidden rounded-xl border border-dashed border-ink-200 bg-ink-50">
+              {/* eslint-disable-next-line @next/next/no-img-element -- transient blob: upload preview; next/image cannot optimize object URLs */}
               <img src={src} alt="" className="h-full w-full object-contain p-2" />
             </div>
           ))}
@@ -125,6 +126,7 @@ export function ProductImageManager({
           setLocalPreviews([]);
           return addProductImageAction(productId, media.ref, sorted.length);
         }}
+        onPreviewUrls={setLocalPreviews}
       />
       <p className="text-[11px] text-ink-400">
         Images are stored in the product-images bucket (5 MB max each, PNG/JPEG/WebP). You can select several at once,
