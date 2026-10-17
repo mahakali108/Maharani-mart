@@ -8,6 +8,7 @@ import {
   toListBatch,
   type KeysetColumn,
 } from '@/lib/infinite-scroll/keyset';
+import { iterateKeysetPages } from '@/lib/infinite-scroll/collect-keyset-pages';
 import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 import type { createClient } from '@/lib/supabase/server';
 
@@ -29,6 +30,11 @@ export interface WalletTransaction {
   metadata: Record<string, unknown> | null;
   is_reversed: boolean;
 }
+
+export type WalletStatementTransaction = Pick<
+  WalletTransaction,
+  'id' | 'created_at' | 'transaction_type' | 'amount_paise' | 'direction' | 'description'
+>;
 
 export interface CreditAccount {
   id: string;
@@ -218,6 +224,55 @@ export const WALLET_LEDGER_ORDER: { column: string; ascending: boolean }[] = [
   { column: 'created_at', ascending: false },
   { column: 'id', ascending: false },
 ];
+
+/** Rendered rows per page; the extra continuation probe stays under the usual PostgREST cap. */
+export const WALLET_LEDGER_STATEMENT_PAGE_SIZE = 500;
+
+async function fetchRetailerLedgerStatementPage(
+  supabase: ReturnType<typeof createClient>,
+  retailerId: string,
+  fromIso: string,
+  toIso: string,
+  cursor: ListCursor | null,
+  order: KeysetColumn[]
+): Promise<WalletStatementTransaction[]> {
+  const query = supabase
+    .from('retailer_wallet_ledger')
+    .select('id, created_at, transaction_type, amount_paise, direction, description')
+    .eq('retailer_id', retailerId)
+    .gte('created_at', fromIso)
+    .lte('created_at', toIso);
+  const { data, error } = await applyCursor(
+    applyKeysetOrder(query, order),
+    cursor,
+    order,
+    WALLET_LEDGER_STATEMENT_PAGE_SIZE
+  ).returns<WalletStatementTransaction[]>();
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Stream every matching wallet row in stable newest-first order. SQL applies
+ * owner/date predicates on each bounded request; the authenticated RLS session
+ * is reused, and `(created_at, id)` is a unique cursor even for tied times.
+ */
+export function iterateRetailerLedgerStatement(
+  supabase: ReturnType<typeof createClient>,
+  retailerId: string,
+  fromIso: string,
+  toIso: string
+): AsyncGenerator<WalletStatementTransaction> {
+  const order: KeysetColumn[] = WALLET_LEDGER_ORDER.map((column) => ({
+    column: column.column,
+    ascending: column.ascending,
+  }));
+  return iterateKeysetPages(
+    (cursor) => fetchRetailerLedgerStatementPage(supabase, retailerId, fromIso, toIso, cursor, order),
+    order,
+    WALLET_LEDGER_STATEMENT_PAGE_SIZE
+  );
+}
 
 export async function getRetailerLedgerBatch(
   supabase: ReturnType<typeof createClient>,

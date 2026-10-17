@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { formatIndiaDate, formatIndiaDateTime, indiaDayEnd, indiaDayStart, isValidIndiaDateKey } from '@/lib/datetime/india';
-import { loadPurchaseStatement, statementCsv } from '@/lib/retailer/reports';
-import { getRetailerLedger, type WalletTransaction } from '@/lib/retailer/wallet';
+import {
+  iteratePurchaseStatement,
+  PURCHASE_STATEMENT_CSV_HEADER,
+  statementCsvRow,
+  streamCsvRows,
+} from '@/lib/retailer/reports';
+import { iterateRetailerLedgerStatement, type WalletTransaction } from '@/lib/retailer/wallet';
 
 const TX_LABELS: Record<WalletTransaction['transaction_type'], string> = {
   ORDER_DEBIT: 'Order spend',
@@ -53,41 +58,56 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Choose a range of two years or less.' }, { status: 400 });
   }
 
-  const supabase = createClient();
   const stamp = `${formatIndiaDate(from.toISOString())}_${formatIndiaDate(to.toISOString())}`.replace(/\s/g, '-');
   const filename = `maharani-${type}-statement-${stamp}.csv`;
+  const ledgerHeader = 'Date (IST),Type,Direction,Amount (Rs),Reference';
+  let csvStream: ReadableStream<Uint8Array>;
 
-  let csv: string;
   try {
+    const supabase = createClient();
     if (type === 'orders') {
-      const rows = await loadPurchaseStatement(supabase, user.id, from.toISOString(), to.toISOString());
-      csv = statementCsv(rows);
+      const iterator = iteratePurchaseStatement(
+        supabase,
+        user.id,
+        from.toISOString(),
+        to.toISOString()
+      );
+      const first = await iterator.next();
+      csvStream = streamCsvRows(
+        PURCHASE_STATEMENT_CSV_HEADER,
+        first,
+        iterator,
+        statementCsvRow,
+        (cause) => console.error('[retailer:reports.statement] Statement stream failed.', cause)
+      );
     } else {
-      const ledger = await getRetailerLedger(supabase, user.id, 1000);
-      const inRange = ledger.filter((tx) => {
-        const at = new Date(tx.created_at).getTime();
-        return at >= from.getTime() && at <= to.getTime();
-      });
-      const header = 'Date (IST),Type,Direction,Amount (Rs),Reference';
-      const lines = inRange.map((tx) =>
-        [
+      const iterator = iterateRetailerLedgerStatement(
+        supabase,
+        user.id,
+        from.toISOString(),
+        to.toISOString()
+      );
+      const first = await iterator.next();
+      csvStream = streamCsvRows(
+        ledgerHeader,
+        first,
+        iterator,
+        (tx) => [
           formatIndiaDateTime(tx.created_at),
           TX_LABELS[tx.transaction_type] ?? tx.transaction_type,
           tx.direction === 'credit' ? 'Added' : 'Used',
           (tx.amount_paise / 100).toFixed(2),
           tx.description ?? '',
-        ]
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(',')
+        ].map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+        (cause) => console.error('[retailer:reports.statement] Statement stream failed.', cause)
       );
-      csv = [header, ...lines].join('\n');
     }
   } catch (cause) {
     console.error('[retailer:reports.statement] Statement query failed.', cause);
     return NextResponse.json({ error: 'The statement could not be prepared. Please try again.' }, { status: 503 });
   }
 
-  return new NextResponse(csv, {
+  return new NextResponse(csvStream, {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
