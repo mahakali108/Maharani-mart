@@ -74,6 +74,13 @@ const PUBLIC_ALLOWLIST = new Set([
   'lib/auth/actions.ts::resendConfirmationAction',
   'lib/auth/actions.ts::logoutAction',
   'lib/auth/actions.ts::registerRetailerAction',
+  // Supplier application submission is public BY DESIGN (V1 application-only,
+  // owner-approved): it has no session to guard with. Its defences are the
+  // honeypot + per-phone throttle in the action and, at the database layer,
+  // a SECURITY DEFINER function that can only create a 'pending' row —
+  // anon has no SELECT/INSERT grant on `suppliers` (migration 0059, covered
+  // by tests/supplier-applications-db.test.ts).
+  'lib/admin/supplier-actions.ts::submitSupplierApplicationAction',
   // Session sign-outs: the only effect is ending the caller's own session.
   'lib/retailer/profile-actions.ts::logoutAllSessionsAction',
   'lib/retailer/profile-actions.ts::logoutThisDeviceAction',

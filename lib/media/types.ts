@@ -17,6 +17,7 @@ export const MEDIA_KINDS = [
   'banner',
   'retailer-avatar',
   'retailer-document',
+  'supplier-document',
   'delivery-proof',
   'payment-proof',
 ] as const;
@@ -127,6 +128,17 @@ export const MEDIA_KIND_CONFIG: Record<MediaKind, MediaKindConfig> = {
     maxEdge: null,
     maxDimension: 20000,
     folder: (ownerId) => `retailers/${ownerId ?? '_draft'}/documents`,
+  },
+  'supplier-document': {
+    label: 'Supplier document',
+    bucket: 'supplier-documents',
+    maxBytes: 10 * 1024 * 1024,
+    mimeTypes: DOC_MIME,
+    private: true,
+    // Verification paperwork must stay legible — never downscaled.
+    maxEdge: null,
+    maxDimension: 20000,
+    folder: (ownerId) => `suppliers/${ownerId ?? '_draft'}/documents`,
   },
   'delivery-proof': {
     label: 'Delivery proof',

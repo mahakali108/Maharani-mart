@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/server';
  *  - payment-proofs (0045): a retailer only for their own folder; the
  *    collecting salesman for rows they recorded; admin+ for anything.
  */
-export type PrivateBucket = 'retailer-documents' | 'delivery-proofs' | 'payment-proofs';
+export type PrivateBucket = 'retailer-documents' | 'supplier-documents' | 'delivery-proofs' | 'payment-proofs';
 
 /**
  * `client` lets a caller that is NOT cookie-authenticated (the mobile API,

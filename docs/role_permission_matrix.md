@@ -38,6 +38,8 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | Answer tickets / change status | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Set credit payment terms (Net-N) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | View Supplier Directory & Purchase Ledger (`suppliers.view`, GRN-derived, read-only) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Review supplier applications — approve/reject (`suppliers.review`, 0059) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Manage supplier documents, private bucket (`suppliers.documents.manage`, 0059) | ✅ | ✅ | ❌ | ❌ | ❌ |
 
 ## Notes
 

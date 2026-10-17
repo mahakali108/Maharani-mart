@@ -59,6 +59,9 @@ export default async function SuppliersPage({
             GSTIN, payable and settlement data are intentionally not shown.
           </p>
         </div>
+        <Link href="/admin/suppliers/applications">
+          <Button size="sm" variant="outline">Supplier applications</Button>
+        </Link>
         <Link href="/admin/inventory/grn/new">
           <Button size="sm">
             <Plus className="h-4 w-4" aria-hidden /> New GRN

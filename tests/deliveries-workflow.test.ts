@@ -366,8 +366,8 @@ describe('0045 proof buckets are private', () => {
 });
 
 describe('proof viewing uses signed URLs only', () => {
-  it('getSignedUrl serves exactly the three private buckets', () => {
-    expect(signedUrlSrc).toContain("export type PrivateBucket = 'retailer-documents' | 'delivery-proofs' | 'payment-proofs'");
+  it('getSignedUrl serves exactly the four private buckets', () => {
+    expect(signedUrlSrc).toContain("export type PrivateBucket = 'retailer-documents' | 'supplier-documents' | 'delivery-proofs' | 'payment-proofs'");
   });
 
   it('the upload pipeline can never mint a public URL for a private kind', () => {
