@@ -1,11 +1,9 @@
 import Link from 'next/link';
 import {
-  ArrowDownToLine,
   BarChart3,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  FileText,
   Percent,
   ReceiptText,
   Scale,
@@ -21,6 +19,7 @@ import {
 } from '@/lib/retailer/reports';
 import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
 import { coinBalancePaise, COIN_SYMBOL } from '@/lib/coins/math';
+import { StatementExportForm } from '@/components/retailer/statement-export-form';
 
 export const metadata = { title: 'Purchase reports — Maharani Traders' };
 
@@ -70,29 +69,13 @@ export default async function ReportsPage() {
         <span className="truncate text-slate-800">Reports</span>
       </nav>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="shop-intro">
-          <p className="shop-eyebrow">Business insights</p>
-          <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Purchase reports</h1>
-          <p className="mt-1 text-xs text-slate-500">Your purchases, GST and savings — computed from your own orders.</p>
-        </div>
-        <div className="flex w-full gap-2 sm:w-auto">
-          <Link
-            href="/retailer/reports/statement?type=orders"
-            prefetch={false}
-            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white transition hover:bg-primary-700 sm:flex-none"
-          >
-            <ArrowDownToLine className="h-4 w-4" aria-hidden="true" /> Purchase statement
-          </Link>
-          <Link
-            href="/retailer/reports/statement?type=ledger"
-            prefetch={false}
-            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:bg-slate-50 sm:flex-none"
-          >
-            <FileText className="h-4 w-4" aria-hidden="true" /> Payment ledger
-          </Link>
-        </div>
+      <div className="shop-intro">
+        <p className="shop-eyebrow">Business insights</p>
+        <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Purchase reports</h1>
+        <p className="mt-1 text-xs text-slate-500">Your purchases, GST and savings — computed from your own orders.</p>
       </div>
+
+      <StatementExportForm />
 
       {!hasAnyData ? (
         <section className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center">
