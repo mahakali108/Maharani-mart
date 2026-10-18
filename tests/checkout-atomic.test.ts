@@ -79,7 +79,7 @@ vi.mock('next/navigation', () => ({
 async function place(notes = '', addressId?: string) {
   const { placeOrderAction } = await import('@/lib/retailer/checkout-actions');
   try {
-    return await placeOrderAction(notes, addressId);
+    return await placeOrderAction(notes, addressId === undefined ? 'owned-address' : addressId);
   } catch (cause) {
     if (cause instanceof Error && cause.message === 'NEXT_REDIRECT') return { success: true as const };
     throw cause;
@@ -92,7 +92,7 @@ beforeEach(() => {
     { pack_id: 'pack-2', quantity: 6 },
   ];
   state.ops = [];
-  state.address = { label: 'Shop', receiver_name: 'Owner', phone: '90000', line1: 'A', line2: null, landmark: null, city: 'Khagaria', district: null, state: null, pincode: '851204' };
+  state.address = { label: 'Shop', receiver_name: 'Owner', phone: '90000', line1: 'A', line2: null, landmark: null, city: 'Gaya', district: 'Gaya', state: 'Bihar', pincode: '823001' };
   state.retailer = { address: 'Shop line, Khagaria' };
   state.orderCommitted = false;
   redirects.length = 0;
@@ -202,6 +202,14 @@ describe('one cart, one order', () => {
     expect(state.cartRows).toHaveLength(2);
     const lookup = state.ops.find((op) => op.table === 'retailer_addresses');
     expect(lookup!.filters).toContainEqual(['retailer_id', 'retailer-1']);
+  });
+
+  it('does not place an order from unstructured registered-shop text', async () => {
+    const { placeOrderAction } = await import('@/lib/retailer/checkout-actions');
+    const result = await placeOrderAction('', undefined);
+    expect(result).toHaveProperty('error');
+    expect((result as { error: string }).error).toMatch(/saved delivery address/i);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
   });
 
   it('refuses an empty cart instead of creating a zero-line order', async () => {

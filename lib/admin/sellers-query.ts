@@ -6,6 +6,13 @@ import type {
   SellerRow,
 } from '@/types/marketplace.types';
 
+export interface SellerInviteStatus {
+  consumed_at: string | null;
+  invitation_sent_at: string | null;
+  expires_at: string;
+  auth_user_id: string | null;
+}
+
 /**
  * Admin list/detail reads for the seller marketplace. RLS gives admin-or-above
  * full visibility and sellers ONLY their own rows (0062/0063); these helpers
@@ -80,9 +87,10 @@ export async function getSellerDetail(sellerId: string): Promise<{
   seller: SellerRow | null;
   members: SellerMemberRow[];
   offers: SellerOfferRow[];
+  invite: SellerInviteStatus | null;
 }> {
   const supabase = createClient();
-  const [{ data: seller }, { data: members }, { data: offers }] = await Promise.all([
+  const [{ data: seller }, { data: members }, { data: offers }, { data: invite }] = await Promise.all([
     supabase
       .from('sellers' as never)
       .select('*')
@@ -98,11 +106,17 @@ export async function getSellerDetail(sellerId: string): Promise<{
       .select('*')
       .eq('seller_id', sellerId)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('seller_account_invites' as never)
+      .select('consumed_at, invitation_sent_at, expires_at, auth_user_id')
+      .eq('seller_id', sellerId)
+      .maybeSingle<SellerInviteStatus>(),
   ]);
   return {
     seller: (seller ?? null) as SellerRow | null,
     members: ((members ?? []) as unknown as SellerMemberRow[]),
     offers: ((offers ?? []) as unknown as SellerOfferRow[]),
+    invite: invite ?? null,
   };
 }
 

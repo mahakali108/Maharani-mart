@@ -89,10 +89,11 @@ export function migrationFiles(): string[] {
   return readdirSync(MIGRATIONS_DIR).filter((file) => file.endsWith('.sql')).sort();
 }
 
-export async function createMigratedDb(): Promise<PGlite> {
+export async function createMigratedDb(options: { lastMigration?: string } = {}): Promise<PGlite> {
   const db = new PGlite({ extensions: { uuid_ossp } });
   await db.exec(PLATFORM_STUB);
   for (const file of migrationFiles()) {
+    if (options.lastMigration && file > options.lastMigration) break;
     try {
       await db.exec(adaptMigration(readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8')));
     } catch (error) {

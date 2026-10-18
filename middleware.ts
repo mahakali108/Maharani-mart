@@ -112,6 +112,29 @@ export async function middleware(request: NextRequest) {
       }
     }
 
+    // Middleware is convenience only: every seller page/action/RLS policy
+    // independently enforces active tenant membership, including stale JWTs.
+    if (role === 'seller' && (pathname === '/seller' || pathname.startsWith('/seller/'))) {
+      const { data: membership } = await supabase
+        .from('seller_members' as never)
+        .select('seller_id')
+        .eq('profile_id', user.id)
+        .maybeSingle<{ seller_id: string }>();
+      if (!membership) return NextResponse.redirect(new URL('/unauthorized', request.url));
+      const { data: seller } = await supabase
+        .from('sellers' as never)
+        .select('status')
+        .eq('id', membership.seller_id)
+        .maybeSingle<{ status: string }>();
+      if (!seller) return NextResponse.redirect(new URL('/unauthorized', request.url));
+      if (seller.status !== 'active' && pathname !== '/seller/status') {
+        return NextResponse.redirect(new URL('/seller/status', request.url));
+      }
+      if (seller.status === 'active' && pathname === '/seller/status') {
+        return NextResponse.redirect(new URL('/seller/dashboard', request.url));
+      }
+    }
+
     // Already logged in, don't let them sit on login/register screens.
     if (pathname === '/login' || pathname === '/register-retailer' || pathname === '/register-seller') {
       return NextResponse.redirect(new URL(homeForRole(role), request.url));

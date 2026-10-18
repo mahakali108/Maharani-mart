@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   PackageCheck, BadgeIndianRupee,
   LayoutDashboard,
@@ -45,7 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Areas', href: '/admin/areas', icon: MapPin },
   { label: 'Warehouses', href: '/admin/warehouses', icon: Warehouse },
   { label: 'Suppliers', href: '/admin/suppliers', icon: Factory, roles: ['super_admin', 'admin'] },
-  { label: 'Sellers', href: '/admin/sellers', icon: Store, roles: ['super_admin', 'admin'] },
+  { label: 'Sellers', href: '/admin/sellers', icon: Store, roles: ['super_admin'] },
   { label: 'Seller offers', href: '/admin/offers', icon: ShieldCheck, roles: ['super_admin', 'admin'] },
   { label: 'Pricing & Schemes', href: '/admin/pricing', icon: Tag },
   { label: 'Coupons', href: '/admin/coupons', icon: Ticket },
@@ -91,6 +92,12 @@ export function AdminShell({
         <main className="w-full min-w-0 flex-1 p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8">
           {children}
         </main>
+        <footer className="flex flex-wrap items-center gap-x-4 border-t border-ink-100 px-4 py-3 text-xs text-ink-600 sm:px-6" aria-label="Public information">
+          <Link href="/about" className="inline-flex min-h-11 items-center hover:text-primary-700">About</Link>
+          <Link href="/legal/terms" className="inline-flex min-h-11 items-center hover:text-primary-700">Terms</Link>
+          <Link href="/legal/privacy" className="inline-flex min-h-11 items-center hover:text-primary-700">Privacy</Link>
+          <Link href="/contact" className="inline-flex min-h-11 items-center hover:text-primary-700">Contact</Link>
+        </footer>
       </div>
     </div>
   );

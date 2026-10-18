@@ -73,6 +73,7 @@ describe('mobile checkout address constraints', () => {
         label: 'Shop entrance',
         receiverName: 'Shop Owner',
         phone: '9000000000',
+        district: 'Patna', state: 'Bihar', pincode: '800001',
       },
     });
     expect(client.queries.find((query) => query.table === 'retailer_addresses')?.filters)
@@ -90,12 +91,13 @@ describe('mobile checkout address constraints', () => {
     expect(error).toMatchObject({ code: 'not_found', status: 404 });
   });
 
-  it('requires a non-empty registered profile address when no saved address is selected', async () => {
-    const { value } = session({ retailers: [{ id: RETAILER, address: '   ' }] });
+  it('rejects unstructured registered-shop text even when a profile address exists', async () => {
+    const { value } = session();
 
     const error = await resolveMobileAddress(value, null).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(MobileCommerceError);
     expect(error).toMatchObject({ code: 'invalid_request', status: 400 });
+    expect((error as Error).message).toMatch(/saved delivery address/);
   });
 });

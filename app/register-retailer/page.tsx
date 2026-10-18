@@ -22,7 +22,7 @@ export default async function RegisterRetailerPage() {
           <h1 className="shop-heading">Register your shop</h1>
           <p className="mt-1.5 mb-8 text-sm text-ink-500">
             Create your retailer account. An admin will review and approve it before you can
-            place orders. Default service district: <span className="font-medium text-ink-700">{SERVICE_AREA_LABEL}</span>. Choose from the currently configured districts below.
+            place orders. Initial district default (not a coverage promise): <span className="font-medium text-ink-700">{SERVICE_AREA_LABEL}</span>. Choose from the currently configured areas below. Delivery is available only for verified PINs at checkout.
           </p>
 
           {areasError ? <p role="alert" className="mb-4 rounded-xl bg-peach-50 p-3 text-sm text-peach-700">The service-area directory could not be loaded. Refresh to try again before registering.</p> : null}
@@ -35,7 +35,7 @@ export default async function RegisterRetailerPage() {
           </Link>
           {' · '}
           <Link href="/register-seller" className="font-medium text-primary-600 hover:text-primary-700">
-            Register as a seller
+            Seller access by invitation
           </Link>
         </p>
     </AuthFrame>

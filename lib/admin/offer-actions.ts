@@ -28,7 +28,7 @@ export async function setOfferFloorAction(
   floorRupees: string,
   note?: string
 ): Promise<OfferActionResult> {
-  await requirePermission('sellers.manage');
+  await requirePermission('sellers.offers.manage');
   if (!UUID_RE.test(packId)) return { ok: false, error: 'Invalid pack.' };
   const floorPaise = parsePaise(floorRupees);
   if (floorPaise === null) return { ok: false, error: 'Enter a valid floor price (₹ up to 2 decimals).' };
@@ -57,7 +57,7 @@ export async function moderateOfferAction(
   decision: 'approved' | 'rejected',
   reason?: string
 ): Promise<OfferActionResult> {
-  const user = await requirePermission('sellers.manage');
+  const user = await requirePermission('sellers.offers.manage');
   if (!UUID_RE.test(offerId)) return { ok: false, error: 'Invalid offer.' };
   if (decision !== 'approved' && decision !== 'rejected') {
     return { ok: false, error: 'Invalid moderation decision.' };
@@ -94,7 +94,7 @@ export async function setOfferActiveAction(
   offerId: string,
   isActive: boolean
 ): Promise<OfferActionResult> {
-  await requirePermission('sellers.manage');
+  await requirePermission('sellers.offers.manage');
   if (!UUID_RE.test(offerId)) return { ok: false, error: 'Invalid offer.' };
 
   const supabase = createClient();
@@ -111,13 +111,13 @@ export async function setOfferActiveAction(
 }
 
 /**
- * Admin-managed offer creation on behalf of a seller (V1 has no seller login
- * surface; this is the only offer-authoring path until the seller portal
- * lands). New offers always start in pending moderation, and the 0063 floor
+ * Admin-managed offer creation on behalf of a seller. The active-tenant seller
+ * portal also supports offers; moderation is a separate admin operation.
+ * New offers start in pending moderation, and the 0063 floor
  * trigger re-checks the admin minimum server-side.
  */
 export async function createOfferAction(formData: FormData): Promise<OfferActionResult> {
-  await requirePermission('sellers.manage');
+  await requirePermission('sellers.offers.manage');
   const sellerId = String(formData.get('sellerId') ?? '');
   const packId = String(formData.get('packId') ?? '');
   const fulfilmentType = String(formData.get('fulfilmentType') ?? 'seller');
@@ -183,7 +183,7 @@ export async function createOfferAction(formData: FormData): Promise<OfferAction
 
 /** Update an offer's price/stock/MOQ (identity fields are DB-immutable). */
 export async function updateOfferAction(formData: FormData): Promise<OfferActionResult> {
-  await requirePermission('sellers.manage');
+  await requirePermission('sellers.offers.manage');
   const offerId = String(formData.get('offerId') ?? '');
   if (!UUID_RE.test(offerId)) return { ok: false, error: 'Invalid offer.' };
 

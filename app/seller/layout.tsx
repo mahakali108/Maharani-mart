@@ -12,7 +12,7 @@ export default async function SellerPortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { seller } = await requireSellerPage();
+  const { seller } = await requireSellerPage({ allowInactive: true });
 
   const navItems = [
     { href: '/seller/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -41,19 +41,21 @@ export default async function SellerPortalLayout({
           </div>
 
           <nav className="flex flex-wrap items-center gap-1.5" aria-label="Seller navigation">
-            {navItems.map((item) => {
+            {seller.status === 'active' ? navItems.map((item) => {
               const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-primary-600"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-primary-600"
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {item.label}
                 </Link>
               );
-            })}
+            }) : null}
+            <Link href="/legal/terms" className="inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-primary-600">Terms</Link>
+            <Link href="/contact" className="inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-primary-600">Contact</Link>
             <form action={logoutAction}>
               <Button type="submit" variant="outline" size="sm" className="ml-1 gap-1.5 text-xs">
                 <LogOut className="h-3.5 w-3.5" /> Sign out

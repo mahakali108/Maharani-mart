@@ -1,3 +1,5 @@
+> **Historical runbook (0032–0036 only).** Its app-only rollback and APK instructions do **not** describe the current PWA-only 0070/0071 rollout. Before any production database or Vercel change, use [`UPGRADE_REVIEW.md`](UPGRADE_REVIEW.md) and obtain explicit approval of the exact target, SQL, backup and recovery plan. Do not assume an old app can still self-checkout after migration 0071.
+
 # Production Deployment Runbook — Migrations 0032–0036
 
 Verified against the merge checklist. Apply **in order** — the chain is

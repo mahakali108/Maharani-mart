@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 
 /**
  * Offer moderation/activation controls (Admin + Super Admin — the server
- * actions re-check `sellers.manage`). Offers are DEACTIVATED, never deleted.
+ * actions re-check `sellers.offers.manage`). Offers are DEACTIVATED, never deleted.
  */
 export function OfferRowActions({
   offerId,

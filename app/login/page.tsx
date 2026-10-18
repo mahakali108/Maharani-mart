@@ -21,15 +21,15 @@ export default function LoginPage({
       <p className="shop-eyebrow">Welcome to your wholesale store</p>
       <h1 className="shop-heading mt-2">Welcome back</h1>
       <p className="mb-7 mt-3 text-sm leading-6 text-slate-600">Sign in to continue shopping with Maharani Traders.</p>
-      <p className="mb-5 text-xs text-slate-500 lg:hidden">Based in {SERVICE_AREA_LABEL}</p>
+      <p className="mb-5 text-xs text-slate-500 lg:hidden">Initial district: {SERVICE_AREA_LABEL} · delivery PINs checked at checkout</p>
       {searchParams.error && errorMessages[searchParams.error] ? (
         <div role="alert" className="mb-5 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{errorMessages[searchParams.error]}</div>
       ) : null}
       <LoginForm redirectTo={searchParams.redirect} />
       <p className="mt-5 text-center text-xs text-slate-500">
-        Want to sell on Maharani Marketplace?{' '}
+        Marketplace seller?{' '}
         <Link href="/register-seller" className="font-semibold text-primary-600 hover:text-primary-700">
-          Register as a seller
+          Access is by invitation
         </Link>
       </p>
     </AuthFrame>

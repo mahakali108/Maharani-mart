@@ -57,7 +57,7 @@ async function loadSellerForUser(userId: string): Promise<{
  * Page-level guard for `/seller/*` routes. Redirects non-sellers or
  * profiles without a seller membership to `/unauthorized`.
  */
-export async function requireSellerPage(): Promise<SellerSessionContext> {
+export async function requireSellerPage({ allowInactive = false }: { allowInactive?: boolean } = {}): Promise<SellerSessionContext> {
   const user = await requireUser();
   if (user.role !== 'seller') {
     redirect('/unauthorized');
@@ -65,6 +65,9 @@ export async function requireSellerPage(): Promise<SellerSessionContext> {
   const loaded = await loadSellerForUser(user.id);
   if (!loaded) {
     redirect('/unauthorized');
+  }
+  if (!allowInactive && loaded.seller.status !== 'active') {
+    redirect('/seller/status');
   }
   return { user, ...loaded };
 }

@@ -70,10 +70,10 @@ function violationsFor(source: string): string[] {
 }
 
 describe('mobile safety of the premium upgrade surface', () => {
-  it('root viewport locks zoom and exposes safe-area insets', () => {
+  it('root viewport preserves safe-area without disabling browser zoom', () => {
     const layout = read('app/layout.tsx');
-    expect(layout).toContain('maximumScale: 1');
-    expect(layout).toContain('userScalable: false');
+    expect(layout).not.toContain('maximumScale: 1');
+    expect(layout).not.toContain('userScalable: false');
     expect(layout).toContain("viewportFit: 'cover'");
     expect(layout).toContain('initialScale: 1');
   });

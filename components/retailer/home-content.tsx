@@ -64,7 +64,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
             <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-card sm:p-5">
               <p className="shop-eyebrow">Your business, connected</p>
               {shop ? <p className="mt-2 break-words text-lg font-semibold text-slate-900">{shop}</p> : null}
-              {location ? <p className="mt-2 flex gap-2 text-xs leading-5 text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words"><span className="block text-[10px] font-semibold uppercase tracking-wide">{areaName ? 'Delivery area' : 'Shop location'}</span>{location}</span></p> : null}
+              {location ? <p className="mt-2 flex gap-2 text-xs leading-5 text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words"><span className="block text-[10px] font-semibold uppercase tracking-wide">{areaName ? 'Registered area (not delivery coverage)' : 'Shop location'}</span>{location}</span></p> : null}
               <Link href="/retailer/account/addresses" className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4">Manage delivery addresses <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -74,7 +74,7 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
           </div>
         </div>
         <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-lavender-200 bg-white/60 px-5 py-3 text-[11px] text-slate-600 sm:px-8" data-testid="service-area-selector">
-          <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{areaName ? `Your service area: ${areaName}` : `Based in ${SERVICE_AREA_LABEL}`}</span>
+          <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{areaName ? `Your registered area: ${areaName} · confirm delivery PIN at checkout` : `Initial district: ${SERVICE_AREA_LABEL} · confirm PIN at checkout`}</span>
           <Link href="/retailer/reports" className="inline-flex min-h-11 items-center gap-1.5 font-medium underline underline-offset-4"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Purchase reports</Link>
         </div>
       </section>

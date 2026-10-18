@@ -23,9 +23,8 @@
   html {
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
-    /* App viewport: kill double-tap zoom at the CSS level (pairs with
-       maximum-scale=1 / user-scalable=no in the viewport metadata). Panning
-       and swipe gestures (gallery, carousels) keep working. */
+    /* Avoid unintended double-tap activation while preserving browser pinch
+       zoom and accessibility text scaling. Panning/swipes still work. */
     touch-action: manipulation;
   }
   html,

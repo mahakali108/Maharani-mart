@@ -19,11 +19,12 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Maharani Traders',
     short_name: 'Maharani Traders',
     description:
-      'Maharani Traders — order everyday products by the piece, track deliveries, and reorder favourites.',
+      'Maharani Traders — B2B wholesale ordering, order status and retailer support.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    orientation: 'portrait',
+    // Let installed tablets/phones rotate; the site layouts support both.
+    orientation: 'any',
     background_color: '#FFFBF4',
     theme_color: '#5142B8',
     categories: ['business', 'shopping', 'productivity'],

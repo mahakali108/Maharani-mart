@@ -14,8 +14,8 @@ export const dynamic = 'force-dynamic';
 
 const quoteSchema = z.object({
   lines: z.array(z.object({ packId: z.string().uuid(), quantity: z.number().int().min(1).max(100000) }).strict()).min(1).max(200),
-  // The native JSON encoder omits null optional fields; absence means the
-  // authenticated retailer's registered profile/shop address.
+  // Older clients may omit this field; they receive a clear saved-address
+  // requirement rather than guessing coverage from shop profile text.
   addressId: z.string().uuid().nullable().default(null),
 }).strict();
 

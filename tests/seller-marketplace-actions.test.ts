@@ -1,12 +1,13 @@
 /**
  * Seller Marketplace admin actions (0062–0068 app layer).
- * Pins: sellers.* permissions are Admin+ only; every action re-checks its
+ * Pins: seller-account permissions are Super Admin only; every action re-checks its
  * permission server-side; transitions carry their status guards in the update
  * filter (the DB trigger is the real boundary); validation is fail-closed.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createSellerAction,
+  retrySellerInviteAction,
   reviewSellerAction,
   suspendSellerAction,
   reinstateSellerAction,
@@ -73,27 +74,67 @@ beforeEach(() => {
   });
 });
 
-describe('seller permission matrix (Admin + Super Admin only)', () => {
-  it('sellers.view / sellers.review / sellers.manage are admin+ — nobody else', () => {
+describe('seller permission matrix (Super Admin seller accounts, Admin offer moderation)', () => {
+  it('seller-account permissions are Super Admin only; Admin retains offer moderation', () => {
     for (const permission of ['sellers.view', 'sellers.review', 'sellers.manage'] as const) {
       expect(can('super_admin', permission)).toBe(true);
-      expect(can('admin', permission)).toBe(true);
+      expect(can('admin', permission)).toBe(false);
       expect(can('staff', permission)).toBe(false);
       expect(can('salesman', permission)).toBe(false);
       expect(can('retailer', permission)).toBe(false);
       expect(can('seller', permission)).toBe(false);
     }
+    expect(can('admin', 'sellers.offers.manage')).toBe(true);
   });
 
-  it('the seller role has NO web permissions (login surface is gated)', () => {
+  it('the seller portal has no shared retailer/admin web permissions', () => {
     expect(can('seller', 'products.view')).toBe(false);
     expect(can('seller', 'orders.view.own')).toBe(false);
   });
 });
 
+describe('trusted seller invitation feedback', () => {
+  it('does not report success when Auth accepted an email but linked no seller user', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://invite.test');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-server-only-key');
+    try {
+      mocks.permission.mockResolvedValue({ id: ADMIN, role: 'super_admin' });
+      const fixture = supabaseFixture({ seller_account_invites: [{ id: OFFER_ID, seller_id: SELLER_ID, auth_user_id: null }] });
+      const inviteUserByEmail = vi.fn().mockResolvedValue({ data: { user: { id: SELLER_ID } }, error: null });
+      const client = { ...fixture,
+        rpc: vi.fn().mockResolvedValue({ data: { email: 'seller@test.local', nonce: 'a'.repeat(64) }, error: null }),
+        auth: { admin: { inviteUserByEmail } },
+      };
+      mocks.client.mockReturnValue(client);
+      const result = await retrySellerInviteAction(SELLER_ID);
+      expect(result).toMatchObject({ ok: false, error: expect.stringContaining('could not be linked') });
+      expect(inviteUserByEmail).toHaveBeenCalledWith('seller@test.local', {
+        data: { seller_invite_nonce: 'a'.repeat(64) },
+        redirectTo: 'https://invite.test/auth/callback?next=/reset-password',
+      });
+      const stamp = fixture.queries.find((q) => q.table === 'seller_account_invites' && q.operation === 'update');
+      expect(stamp?.filters).toContainEqual({ op: 'eq', column: 'auth_user_id', value: SELLER_ID });
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it('reports an invitation request only after the reserved Auth user matches', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://invite.test');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-server-only-key');
+    try {
+      mocks.permission.mockResolvedValue({ id: ADMIN, role: 'super_admin' });
+      const fixture = supabaseFixture({ seller_account_invites: [{ id: OFFER_ID, seller_id: SELLER_ID, auth_user_id: SELLER_ID }] });
+      mocks.client.mockReturnValue({ ...fixture,
+        rpc: vi.fn().mockResolvedValue({ data: { email: 'seller@test.local', nonce: 'a'.repeat(64) }, error: null }),
+        auth: { admin: { inviteUserByEmail: vi.fn().mockResolvedValue({ data: { user: { id: SELLER_ID } }, error: null }) } },
+      });
+      expect(await retrySellerInviteAction(SELLER_ID)).toMatchObject({ ok: true, message: expect.stringContaining('Invitation requested') });
+    } finally { vi.unstubAllEnvs(); }
+  });
+});
+
 describe('seller review actions', () => {
   it('reviewSellerAction guards the pending state in the update filter', async () => {
-    const fixture = supabaseFixture({ sellers: [{ id: SELLER_ID, status: 'pending' }] });
+    const fixture = supabaseFixture({ sellers: [{ id: SELLER_ID, status: 'pending' }], seller_members: [{ seller_id: SELLER_ID, profile_id: SELLER_ID }] });
     mocks.client.mockReturnValue(fixture);
     const result = await reviewSellerAction(SELLER_ID, 'active');
     expect(result).toEqual({ ok: true });
@@ -144,12 +185,12 @@ describe('seller review actions', () => {
 });
 
 describe('offer moderation and floors', () => {
-  it('moderateOfferAction stamps moderation fields under sellers.manage', async () => {
+  it('moderateOfferAction stamps moderation fields under sellers.offers.manage', async () => {
     const fixture = supabaseFixture({ seller_offers: [{ id: OFFER_ID }] });
     mocks.client.mockReturnValue(fixture);
     const result = await moderateOfferAction(OFFER_ID, 'approved');
     expect(result).toEqual({ ok: true });
-    expect(mocks.permission).toHaveBeenCalledWith('sellers.manage');
+    expect(mocks.permission).toHaveBeenCalledWith('sellers.offers.manage');
     const update = fixture.queries.find((q) => q.operation === 'update');
     expect(update?.payload).toMatchObject({
       moderation_status: 'approved',
@@ -329,7 +370,7 @@ describe('seller portal self-service actions and tier pricing', () => {
     profileForm.set('businessName', 'Bazaar Traders Updated');
     profileForm.set('phone', '+91 98765 43210');
     expect(await updateSellerProfileAction(profileForm)).toEqual({ ok: true });
-    expect(mocks.sellerGuard).toHaveBeenCalled();
+    expect(mocks.activeSellerGuard).toHaveBeenCalled();
 
     const fixture = supabaseFixture({ seller_offers: [{ id: OFFER_ID, seller_id: SELLER_ID }] });
     mocks.client.mockReturnValue(fixture);

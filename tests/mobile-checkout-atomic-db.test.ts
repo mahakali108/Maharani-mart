@@ -30,7 +30,7 @@ type AtomicInput = {
   p_request_key: string;
   p_request_fingerprint: string;
   p_notes: string;
-  p_shipping_address: { line: string; label: string };
+  p_shipping_address: { line: string; label: string; district?: string; state?: string; pincode?: string };
   p_subtotal: number;
   p_gst_total: number;
   p_discount_total: number;
@@ -67,7 +67,7 @@ function orderInput(quantity = 2, overrides: Partial<AtomicInput> = {}): AtomicI
     p_request_key: randomUUID(),
     p_request_fingerprint: 'a'.repeat(64),
     p_notes: 'Native checkout test',
-    p_shipping_address: { line: '10 Test Road, Patna', label: 'Shop' },
+    p_shipping_address: { line: '10 Test Road, Gaya', label: 'Shop', district: 'Gaya', state: 'Bihar', pincode: '823001' },
     p_subtotal: Math.round((grandTotal - gstTotal) * 100) / 100,
     p_gst_total: gstTotal,
     p_discount_total: 0,
@@ -183,6 +183,11 @@ async function orderCount(requestKey: string): Promise<number> {
 beforeAll(async () => {
   db = await createMigratedDb();
   admin = await createUser(db, 'admin');
+  // Test-only verified PIN. Migration 0071 never seeds production coverage.
+  await as(db, admin, (tx) => tx.query(
+    `insert into delivery_service_areas (district, state, pincode, is_active, created_by, updated_by)
+     values ('Gaya', 'Bihar', '823001', true, $1, $1)`, [admin]
+  ));
   areaId = await createArea(db);
   retailer = await createRetailer(db, { areaId, creditLimitRupees: 0 });
   pack = await createPack(db, { gstPercent: 18, moq: 2, unitsPerCase: 10 });
@@ -215,6 +220,64 @@ beforeEach(async () => {
   await setPackStock(10);
 });
 
+describe('0071 verified delivery coverage in atomic checkout', () => {
+  it('rejects missing structure, wrong district and unconfigured PIN without touching cart, stock or orders', async () => {
+    await setCart(2);
+    const beforeStock = await packStock();
+    for (const address of [
+      { line: 'Unverified shop', label: 'Shop' },
+      { line: 'Wrong district', label: 'Shop', district: 'Saran', state: 'Bihar', pincode: '823001' },
+      { line: 'Wrong PIN', label: 'Shop', district: 'Gaya', state: 'Bihar', pincode: '823999' },
+    ]) {
+      const input = orderInput(2, { p_shipping_address: address });
+      expect(await atomicError(input)).toMatch(/DELIVERY_ADDRESS_REQUIRED|DELIVERY_AREA_UNAVAILABLE/);
+      expect(await orderCount(input.p_request_key)).toBe(0);
+      expect(await cartQuantity()).toBe(2);
+      expect(await packStock()).toBe(beforeStock);
+    }
+  });
+
+  it('blocks a deactivated PIN, raised minimum or nonzero fee, and keeps the exact cart on failure', async () => {
+    await setCart(2);
+    try {
+      await as(db, admin, (tx) => tx.query(
+        `update delivery_service_areas set is_active=false, updated_by=$1 where pincode='823001'`, [admin]
+      ));
+      expect(await atomicError(orderInput())).toMatch(/DELIVERY_AREA_UNAVAILABLE/);
+      await as(db, admin, (tx) => tx.query(
+        `update delivery_service_areas set is_active=true, minimum_order_paise=20100, updated_by=$1 where pincode='823001'`, [admin]
+      ));
+      expect(await atomicError(orderInput())).toMatch(/DELIVERY_MINIMUM_NOT_MET/);
+      await as(db, admin, (tx) => tx.query(
+        `update delivery_service_areas set minimum_order_paise=0, delivery_fee_paise=1000, updated_by=$1 where pincode='823001'`, [admin]
+      ));
+      expect(await atomicError(orderInput())).toMatch(/DELIVERY_FEE_NOT_SUPPORTED/);
+      expect(await cartQuantity()).toBe(2);
+    } finally {
+      await as(db, admin, (tx) => tx.query(
+        `update delivery_service_areas set is_active=true, minimum_order_paise=0, delivery_fee_paise=0, updated_by=$1 where pincode='823001'`, [admin]
+      ));
+    }
+  });
+
+  it('hides the delivery directory from retailers and denies anonymous/retailer writes', async () => {
+    expect((await as(db, retailer.id, (tx) => tx.query(`select id from delivery_service_areas`))).rows).toEqual([]);
+    const { rows } = await as(db, retailer.id, (tx) => tx.query<{ area_id: string }>(
+      `select area_id from public.check_delivery_serviceability(' GAYA ', 'bihar', '823001')`
+    ));
+    expect(rows).toHaveLength(1);
+    expect((await as(db, retailer.id, (tx) => tx.query(
+      `select * from public.check_delivery_serviceability('Gaya', 'Bihar', '823999')`
+    ))).rows).toHaveLength(0);
+    expect(await errorOf(db, retailer.id, (tx) => tx.query(
+      `insert into delivery_service_areas (district, state, pincode) values ('Gaya','Bihar','823999')`
+    ))).toMatch(/permission denied|row-level security/i);
+    expect(await errorOf(db, 'anon', (tx) => tx.query(
+      `select * from public.check_delivery_serviceability('Gaya','Bihar','823001')`
+    ))).toMatch(/permission denied/i);
+  });
+});
+
 describe('0056 atomic mobile checkout database contract', () => {
   it('commits order, exact cart clear and stock deduction together, then replays the original order', async () => {
     await setCart(2);
@@ -235,11 +298,15 @@ describe('0056 atomic mobile checkout database contract', () => {
     const { rows: snapshots } = await db.query<{
       request_fingerprint: string;
       request_completed_at: string | null;
-      shipping_address: { line: string };
+      shipping_address: { line: string; deliveryAreaId: string };
+      delivery_service_area_id: string;
+      delivery_minimum_order_paise: number;
+      delivery_fee_paise: number;
       line_total: string;
       stock_deducted_quantity: number;
     }>(
       `select o.request_fingerprint, o.request_completed_at, o.shipping_address,
+              o.delivery_service_area_id, o.delivery_minimum_order_paise, o.delivery_fee_paise,
               oi.line_total, oi.stock_deducted_quantity
          from orders o join order_items oi on oi.order_id = o.id
         where o.id = $1`,
@@ -247,9 +314,12 @@ describe('0056 atomic mobile checkout database contract', () => {
     );
     expect(snapshots[0]).toMatchObject({
       request_fingerprint: input.p_request_fingerprint,
-      shipping_address: { line: '10 Test Road, Patna' },
+      shipping_address: { line: '10 Test Road, Gaya' },
       stock_deducted_quantity: 2,
     });
+    expect(snapshots[0]!.delivery_service_area_id).toBe(snapshots[0]!.shipping_address.deliveryAreaId);
+    expect(Number(snapshots[0]!.delivery_minimum_order_paise)).toBe(0);
+    expect(Number(snapshots[0]!.delivery_fee_paise)).toBe(0);
     expect(Number(snapshots[0]!.line_total)).toBe(200);
     expect(snapshots[0]!.request_completed_at).toBeTruthy();
 

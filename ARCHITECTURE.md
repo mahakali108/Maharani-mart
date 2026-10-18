@@ -1,8 +1,8 @@
 # Maa Kali B2B Ultra Platform — Enterprise Architecture
 
-**Domain:** FMCG B2B Wholesale Distribution — Saran District, Bihar
+**Domain:** FMCG B2B Wholesale Distribution — Gaya, Bihar is the initial configuration default, not a district-wide coverage claim
 **Stack:** Next.js 14 (App Router) + Tailwind CSS + Supabase (Postgres, Auth, Storage, Edge Functions, Realtime) + Vercel
-**State:** Production-ready, zero seed/demo data. Database boots empty. All content entered via Admin Panel.
+**State:** Design reference, not a production-readiness claim for migrations 0070/0071. New delivery PIN rows are empty/inactive by default; public policies require operator/legal review. See `docs/UPGRADE_REVIEW.md`.
 
 ---
 
@@ -31,7 +31,7 @@
 | Route/Visit Planning | ✅ | ✅ | ✅ | ✅ (own route) | ❌ |
 | View Own Price List / Schemes | — | — | — | — | ✅ |
 
-This matrix maps directly to Postgres RLS policies in `schema.sql` — see Section 5.
+The table above is the earlier core-role matrix. Seller accounts/marketplace roles add a Super-Admin-only onboarding and review path, with ordinary Admin offer moderation; see `docs/SELLER_MARKETPLACE.md` and migration 0070. The current authority is the applied migrations and database RLS, not a static role table.
 
 ---
 
@@ -281,7 +281,7 @@ app/
     └── cron/ai-insights/          # Vercel Cron → triggers Edge Function
 ```
 
-- **Mobile-first**: Tailwind breakpoints designed bottom-up; retailer app is the primary mobile surface (Saran field usage, often on mid-range Android).
+- **Mobile-first**: Tailwind breakpoints designed bottom-up; retailer app is the primary mobile surface (field usage, often on mid-range Android).
 - **Theme**: premium pastel system — violet primary (`#5142B8`), ivory/white surfaces, navy/slate text, mint success, sky information, peach offers, amber warnings and neutral lavender/slate errors. `design/tokens.json` is canonical; web CSS and Android Compose palettes are generated from it.
 - **Charts**: Recharts for dashboard analytics (sales trend, top products, area performance).
 - **Empty states are first-class UI**, not an afterthought — every list component ships with a designed "No products yet — add your first product" / "No orders yet" state.
@@ -308,4 +308,4 @@ app/
 7. **Reports + AI Dashboard** — only meaningful once real order data exists.
 8. **Notifications** — WhatsApp/SMS integration.
 
-I'd recommend we build this phase-by-phase in code (starting with Phase 1) rather than all at once — that keeps every piece testable against your real Saran product/retailer data as it's entered, with nothing fake in between.
+I'd recommend we build this phase-by-phase in code (starting with Phase 1) rather than all at once — that keeps every piece testable against your verified product/retailer data as it's entered, with nothing fake in between.

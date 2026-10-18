@@ -3,7 +3,7 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 
 interface CheckoutAddressContextValue {
-  selectedAddressId: string | null; // null = registered shop address
+  selectedAddressId: string | null; // null = no saved delivery address selected
   setSelectedAddressId: (id: string | null) => void;
 }
 

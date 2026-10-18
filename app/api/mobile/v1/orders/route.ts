@@ -41,7 +41,8 @@ const ORDER: KeysetColumn[] = [
 
 const submitSchema = z.object({
   lines: z.array(z.object({ packId: z.string().uuid(), quantity: z.number().int().min(1).max(100000) }).strict()).min(1).max(200),
-  // Omitted/null selects the authenticated retailer's registered shop address.
+  // Omitted/null is parsed for old clients, then rejected by the address
+  // resolver: registered-shop free text cannot establish PIN coverage.
   addressId: z.string().uuid().nullable().default(null),
   notes: z.string().max(1000).default(''),
 }).strict();
@@ -50,7 +51,9 @@ const ORDER_SELECT = 'id, order_number, status, subtotal, gst_total, discount_to
 
 function orderErrorResponse(result: Exclude<Awaited<ReturnType<typeof createOrderForRetailer>>, { order: unknown }>, requestId: string): Response {
   const mapped = result.code ? result : mapAtomicOrderError(result.error);
-  const code = mapped.code ?? 'internal_error';
+  // Preserve the versioned mobile error vocabulary: older clients understand
+  // conflict (refresh checkout) but do not recognise a new coverage code.
+  const code = mapped.code === 'delivery_unavailable' ? 'conflict' : mapped.code ?? 'internal_error';
   const status = code === 'minimum_order_quantity' || code === 'coupon_invalid' || code === 'insufficient_stock'
     ? 422
     : code === 'warehouse_configuration_error' || code === 'database_unavailable' || code === 'internal_error'

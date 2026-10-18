@@ -1,8 +1,8 @@
 /* Maharani Traders — production-safe service worker.
  *
  * SECURITY MODEL (do not weaken):
- *   - Only STATIC, non-user-specific assets are cached (cache-first):
- *       /_next/static/*, public images, fonts, and other immutable files.
+ *   - Only allowlisted STATIC, non-user-specific assets are cached:
+ *       /_next/static/*, known public icons/art and local fonts.
  *     These are byte-identical for every user, so caching them is safe.
  *   - Everything dynamic / user-specific is NETWORK-ONLY and is NEVER cached:
  *       * navigations (HTML pages, including authenticated ones)
@@ -16,7 +16,7 @@
  *     separate from Capacitor's www/offline.html (Android WebView).
  */
 
-const STATIC_CACHE = 'mt-static-v1';
+const STATIC_CACHE = 'mt-static-v2';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [OFFLINE_URL];
 
@@ -36,7 +36,7 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const keys = await caches.keys();
       await Promise.all(
-        keys.filter((key) => key !== STATIC_CACHE).map((key) => caches.delete(key))
+        keys.filter((key) => key.startsWith('mt-static-') && key !== STATIC_CACHE).map((key) => caches.delete(key))
       );
       await self.clients.claim();
     })()
@@ -44,11 +44,15 @@ self.addEventListener('activate', (event) => {
 });
 
 function isStaticAsset(url) {
-  if (url.origin !== self.location.origin) return false;
-  if (url.pathname.startsWith('/_next/static')) return true;
-  return /\.(?:png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|css|js|json)$/i.test(
-    url.pathname
-  );
+  // A personalized URL can carry private query parameters even for a path
+  // shaped like an asset. Cache only the canonical, query-free public URL.
+  if (url.origin !== self.location.origin || url.search) return false;
+  const path = url.pathname;
+  // A file extension is NOT proof an endpoint is public: /_next/data/*.json
+  // or /orders/*.json may contain account data. Never cache those paths.
+  if (path.startsWith('/_next/static/')) return true;
+  if (path === '/favicon.ico' || path === '/apple-touch-icon.png') return true;
+  return /^\/(?:icons|logos|banners)\/[a-zA-Z0-9/_-]+\.(?:png|jpe?g|svg|webp|avif)$/.test(path);
 }
 
 function isApi(url) {
@@ -91,7 +95,13 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached;
         try {
           const res = await fetch(request);
-          if (res && res.ok && res.type === 'basic') {
+          const cacheControl = res?.headers?.get('cache-control') || '';
+          const contentType = res?.headers?.get('content-type') || '';
+          if (res && res.ok && res.type === 'basic' && !res.redirected
+              && !/private|no-store/i.test(cacheControl)
+              && !/text\/html|application\/json/i.test(contentType)) {
+            // A redirect or JSON/HTML behind a static-looking URL is still
+            // dynamic content. Never persist it in cross-session CacheStorage.
             cache.put(request, res.clone());
           }
           return res;
