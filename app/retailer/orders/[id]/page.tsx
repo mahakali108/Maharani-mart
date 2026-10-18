@@ -151,6 +151,25 @@ export default async function OrderDetailPage({
 
   if (!order) notFound();
 
+  const { data: subOrderRows } = await supabase.rpc(
+    'retailer_order_sub_orders' as never,
+    { p_order_id: params.id } as never
+  );
+  const subOrders = Array.isArray(subOrderRows)
+    ? (subOrderRows as {
+        sub_order_id: string;
+        seller_business_name: string;
+        seller_gstin: string | null;
+        fulfilment_type: 'seller' | 'maharani';
+        status: string;
+        gross_paise: number;
+        payable_paise: number;
+        shipment_status: string | null;
+        courier: string | null;
+        awb: string | null;
+      }[])
+    : [];
+
   const items = (itemData ?? []) as unknown as OrderItemRow[];
   const history = (historyData ?? []) as HistoryRow[];
   const meta = STATUS_META[order.status];
@@ -211,6 +230,52 @@ export default async function OrderDetailPage({
           estimate={deliveryEstimate ? { label: 'company service estimate', value: deliveryEstimate } : null}
           actuals={{ dispatchedAt: order.dispatched_at, deliveredAt: order.delivered_at }}
         />
+      ) : null}
+
+      {subOrders.length > 0 ? (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3.5 sm:px-5">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Fulfilment &amp; Sub-Orders ({subOrders.length})</h2>
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                Track each merchant shipment and COD / Coins settlement share
+              </p>
+            </div>
+            <Truck className="h-4 w-4 text-primary-600" />
+          </div>
+          <div className="divide-y divide-slate-100 px-4 py-2 sm:px-5">
+            {subOrders.map((sub) => (
+              <div key={sub.sub_order_id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-900">{sub.seller_business_name}</span>
+                    {sub.seller_gstin ? (
+                      <span className="font-mono text-[10px] text-slate-500">GSTIN {sub.seller_gstin}</span>
+                    ) : null}
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                      {sub.fulfilment_type === 'seller' ? 'Seller dispatch' : 'Maharani dispatch'}
+                    </span>
+                  </div>
+                  {sub.courier || sub.awb ? (
+                    <p className="text-[11px] text-slate-600">
+                      {sub.courier ? `Courier: ${sub.courier}` : ''}
+                      {sub.courier && sub.awb ? ' · ' : ''}
+                      {sub.awb ? `Tracking / AWB: ${sub.awb}` : ''}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-slate-900">
+                    {formatInr(paiseToRupees(Number(sub.payable_paise)))}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-700">
+                    {sub.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_350px] lg:gap-7">

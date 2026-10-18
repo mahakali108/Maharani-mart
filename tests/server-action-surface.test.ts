@@ -42,6 +42,8 @@ const GUARD_CALL = new RegExp(
     'requireSuperAdmin\\(',
     'requireUser\\(',
     'requireApprovedRetailer\\(',
+    'requireSeller\\(',
+    'requireActiveSeller\\(',
     'requireStaff\\(',
     'requireSalesman\\(',
     'requireAdmin\\(',
@@ -74,6 +76,7 @@ const PUBLIC_ALLOWLIST = new Set([
   'lib/auth/actions.ts::resendConfirmationAction',
   'lib/auth/actions.ts::logoutAction',
   'lib/auth/actions.ts::registerRetailerAction',
+  'lib/auth/actions.ts::registerSellerAction',
   // Supplier application submission is public BY DESIGN (V1 application-only,
   // owner-approved): it has no session to guard with. Its defences are the
   // honeypot + per-phone throttle in the action and, at the database layer,

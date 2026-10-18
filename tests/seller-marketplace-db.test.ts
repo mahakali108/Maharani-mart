@@ -14,6 +14,8 @@
  * Run locally/disposable only — never against a production project.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { as, createMigratedDb, createUser, errorOf, type Db, type Tx } from './helpers/pg-harness';
 
@@ -141,6 +143,12 @@ describe('0063 floors, moderation and deactivation-only', () => {
   });
 
   it('a seller member cannot change moderation state; offers are never deleted', async () => {
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
+      `insert into seller_offers
+         (seller_id, product_id, pack_id, fulfilment_type, unit_price_paise, moq, stock_quantity, moderation_status)
+       values ($1, $2, $3, 'seller', 10000, 1, 10, 'approved')`,
+      [sellerId, productId, packId]
+    ))).toMatch(/New offers start in pending moderation|row-level security/);
     expect(await errorOf(db, sellerProfile, (tx) => tx.query(
       `update seller_offers set moderation_status='rejected' where id=$1`,
       [offerId]
@@ -445,6 +453,92 @@ describe('0069 seller portal boundaries', () => {
     ));
   });
 
+  it('preserves text source_type and source-shape invariants on retailer_saved_cart_items', async () => {
+    const savedCartId = await as(db, retailer, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(
+        `insert into retailer_saved_carts (retailer_id, name) values ($1, 'Weekly list') returning id`,
+        [retailer]
+      );
+      return rows[0]!.id;
+    });
+
+    // Legacy insert (no source_type or seller_offer_id provided) defaults to 'maharani'.
+    const legacyRow = await as(db, retailer, async (tx) => {
+      const { rows } = await tx.query<{ id: string; source_type: string; seller_offer_id: string | null }>(
+        `insert into retailer_saved_cart_items (saved_cart_id, retailer_id, product_id, pack_id, quantity)
+         values ($1, $2, $3, $4, 2)
+         returning id, source_type, seller_offer_id`,
+        [savedCartId, retailer, productId, packId]
+      );
+      return rows[0]!;
+    });
+    expect(legacyRow).toMatchObject({ source_type: 'maharani', seller_offer_id: null });
+
+    // Seller-offer saved line requires both source_type = 'seller' and seller_offer_id.
+    const sellerRow = await as(db, retailer, async (tx) => {
+      const { rows } = await tx.query<{ id: string; source_type: string; seller_offer_id: string | null }>(
+        `insert into retailer_saved_cart_items
+           (saved_cart_id, retailer_id, product_id, pack_id, seller_offer_id, source_type, quantity)
+         values ($1, $2, $3, $4, $5, 'seller', 3)
+         returning id, source_type, seller_offer_id`,
+        [savedCartId, retailer, productId, packId, offerId]
+      );
+      return rows[0]!;
+    });
+    expect(sellerRow).toMatchObject({ source_type: 'seller', seller_offer_id: offerId });
+
+    // Mismatched source_type / seller_offer_id combinations fail the check constraint.
+    expect(await errorOf(db, retailer, (tx) => tx.query(
+      `insert into retailer_saved_cart_items
+         (saved_cart_id, retailer_id, product_id, pack_id, source_type, quantity)
+       values ($1, $2, $3, $4, 'seller', 1)`,
+      [savedCartId, retailer, productId, packId]
+    ))).toMatch(/retailer_saved_cart_items_source_shape|check constraint/);
+
+    expect(await errorOf(db, retailer, (tx) => tx.query(
+      `insert into retailer_saved_cart_items
+         (saved_cart_id, retailer_id, product_id, pack_id, seller_offer_id, source_type, quantity)
+       values ($1, $2, $3, $4, $5, 'maharani', 1)`,
+      [savedCartId, retailer, productId, packId, offerId]
+    ))).toMatch(/retailer_saved_cart_items_source_shape|check constraint/);
+
+    // Remove the seller-offer saved line so rollback 0069 is permitted, leaving
+    // the legacy saved line in place to verify pre-0069 data preservation and backfill.
+    await as(db, retailer, (tx) => tx.query(
+      `delete from retailer_saved_cart_items where id = $1`,
+      [sellerRow.id]
+    ));
+
+    const rollback0069 = readFileSync(
+      path.join(__dirname, '..', 'supabase', 'rollbacks', '0069_seller_portal_access.down.sql'),
+      'utf8'
+    );
+    const migration0069 = readFileSync(
+      path.join(__dirname, '..', 'supabase', 'migrations', '0069_seller_portal_access.sql'),
+      'utf8'
+    );
+    await db.exec(rollback0069);
+
+    // Re-apply 0069 over the existing legacy row and re-run 0069 to verify idempotency.
+    await db.exec(migration0069);
+    await db.exec(migration0069);
+
+    const { rows: preservedRows } = await db.query<{
+      id: string;
+      source_type: string;
+      seller_offer_id: string | null;
+      quantity: number;
+    }>(
+      `select id, source_type, seller_offer_id, quantity
+         from retailer_saved_cart_items
+        where id = $1`,
+      [legacyRow.id]
+    );
+    expect(preservedRows).toEqual([
+      { id: legacyRow.id, source_type: 'maharani', seller_offer_id: null, quantity: 2 },
+    ]);
+  });
+
   it('discloses only approved merchant terms to retailers and re-moderates seller price edits', async () => {
     const offers = await as(db, retailer, async (tx) => (
       await tx.query<{ offer_id: string; seller_business_name: string }>(
@@ -464,6 +558,11 @@ describe('0069 seller portal boundaries', () => {
       `select moderation_status from seller_offers where id=$1`, [offerId]
     );
     expect(pending[0]!.moderation_status).toBe('pending');
+
+    // A seller cannot self-approve a pending offer via UPDATE.
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
+      `update seller_offers set moderation_status='approved' where id=$1`, [offerId]
+    ))).toMatch(/Only an Admin can change the moderation state|row-level security/);
 
     await as(db, admin, (tx) => tx.query(
       `update seller_offers set moderation_status='approved' where id=$1`, [offerId]
@@ -498,6 +597,114 @@ describe('0069 seller portal boundaries', () => {
       `select stock_quantity from seller_offers where id=$1`, [offerId]
     );
     expect(afterRetry[0]!.stock_quantity).toBe(42);
+  });
+
+  it('allows a seller to update their own profile without touching status and enforces quantity-tier rules', async () => {
+    await as(db, sellerProfile, (tx) => tx.query(
+      `select seller_update_own_profile($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        'Bazaar Seller Co',
+        'Ramesh Owner',
+        '9876543210',
+        'owner@bazaar.local',
+        '10AABCU9603R1ZM',
+        'AABCU9603R',
+        'Station Road, Chapra',
+      ]
+    ));
+    const { rows: updatedSeller } = await db.query<{
+      status: string;
+      contact_name: string;
+      gstin: string;
+      pan: string;
+    }>(
+      `select status, contact_name, gstin, pan from sellers where id=$1`,
+      [sellerId]
+    );
+    expect(updatedSeller[0]).toEqual({
+      status: 'active',
+      contact_name: 'Ramesh Owner',
+      gstin: '10AABCU9603R1ZM',
+      pan: 'AABCU9603R',
+    });
+
+    // Below-floor tier is rejected (floor is 9500 paise on packId).
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
+      `select seller_replace_offer_tiers($1, $2::jsonb)`,
+      [offerId, JSON.stringify([{ min_quantity: 10, max_quantity: null, unit_price_paise: 9000 }])]
+    ))).toMatch(/PRICE_BELOW_FLOOR/);
+
+    // Above-base-price tier is rejected (base is 10100 paise on offerId).
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
+      `select seller_replace_offer_tiers($1, $2::jsonb)`,
+      [offerId, JSON.stringify([{ min_quantity: 10, max_quantity: null, unit_price_paise: 15000 }])]
+    ))).toMatch(/TIER_ABOVE_BASE_PRICE/);
+
+    // Valid quantity tiers succeed and reset offer moderation_status to 'pending'.
+    const count = await as(db, sellerProfile, async (tx) => {
+      const { rows } = await tx.query<{ count: number }>(
+        `select seller_replace_offer_tiers($1, $2::jsonb) as count`,
+        [
+          offerId,
+          JSON.stringify([
+            { min_quantity: 5, max_quantity: 11, unit_price_paise: 9900 },
+            { min_quantity: 12, max_quantity: null, unit_price_paise: 9600 },
+          ]),
+        ]
+      );
+      return rows[0]!.count;
+    });
+    expect(count).toBe(2);
+
+    const { rows: pendingAfterTier } = await db.query<{ moderation_status: string }>(
+      `select moderation_status from seller_offers where id=$1`,
+      [offerId]
+    );
+    expect(pendingAfterTier[0]!.moderation_status).toBe('pending');
+
+    await as(db, admin, (tx) => tx.query(
+      `update seller_offers set moderation_status='approved' where id=$1`,
+      [offerId]
+    ));
+
+    // Effective unit price resolves base price below 5, 9900 for 5..11, 9600 for 12+.
+    const { rows: effRows } = await db.query<{ p1: string; p6: string; p15: string }>(
+      `select effective_seller_offer_unit_price_paise($1, 1) as p1,
+              effective_seller_offer_unit_price_paise($1, 6) as p6,
+              effective_seller_offer_unit_price_paise($1, 15) as p15`,
+      [offerId]
+    );
+    expect({
+      p1: Number(effRows[0]!.p1),
+      p6: Number(effRows[0]!.p6),
+      p15: Number(effRows[0]!.p15),
+    }).toEqual({ p1: 10100, p6: 9900, p15: 9600 });
+
+    // Retailer can read approved tiers via marketplace_offer_tiers and sub-order projection via retailer_order_sub_orders.
+    const tierProjection = await as(db, retailer, async (tx) =>
+      (await tx.query<{ min_quantity: number; unit_price_paise: string }>(
+        `select min_quantity, unit_price_paise from marketplace_offer_tiers(array[$1]::uuid[])`,
+        [offerId]
+      )).rows
+    );
+    expect(tierProjection.map((r) => ({ min: r.min_quantity, price: Number(r.unit_price_paise) }))).toEqual([
+      { min: 5, price: 9900 },
+      { min: 12, price: 9600 },
+    ]);
+
+    const { rows: parentRow } = await db.query<{ parent_order_id: string }>(
+      `select parent_order_id from sub_orders where id=$1`,
+      [stockSubOrderId]
+    );
+    const subOrderProjection = await as(db, retailer, async (tx) =>
+      (await tx.query<{ sub_order_id: string; seller_business_name: string }>(
+        `select sub_order_id, seller_business_name from retailer_order_sub_orders($1)`,
+        [parentRow[0]!.parent_order_id]
+      )).rows
+    );
+    expect(subOrderProjection).toEqual([
+      { sub_order_id: stockSubOrderId, seller_business_name: 'Bazaar Seller Co' },
+    ]);
   });
 });
 

@@ -30,7 +30,10 @@ import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { coinBalancePaise, computeCoinPayment } from '@/lib/coins/math';
 import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
 import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
+import {
+  loadMarketplaceOfferQuotes,
+  resolveOfferUnitPricePaise,
+} from '@/lib/retailer/marketplace-offers';
 
 interface CartItemDetail {
   id: string;
@@ -151,7 +154,7 @@ export default async function CheckoutPage() {
       gstPercent,
       moq,
       derivedPiecePrice: marketplaceOffer
-        ? marketplaceOffer.unitPricePaise / 100
+        ? resolveOfferUnitPricePaise(marketplaceOffer, item.quantity) / 100
         : pack
           ? piecePriceFromCase(
               resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null),

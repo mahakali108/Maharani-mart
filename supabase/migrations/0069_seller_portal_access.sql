@@ -268,9 +268,9 @@ comment on function public.mutate_retailer_cart_line_ex(uuid, uuid, uuid, intege
 -- legacy Maharani source and no historical price is copied.
 alter table public.retailer_saved_cart_items
   add column if not exists seller_offer_id uuid references public.seller_offers(id) on delete restrict,
-  add column if not exists source_type public.cart_source_type;
+  add column if not exists source_type text;
 update public.retailer_saved_cart_items
-   set source_type = case when seller_offer_id is null then 'maharani'::public.cart_source_type else 'seller'::public.cart_source_type end
+   set source_type = case when seller_offer_id is null then 'maharani' else 'seller' end
  where source_type is null;
 alter table public.retailer_saved_cart_items
   alter column source_type set default 'maharani',
@@ -372,6 +372,12 @@ begin
     end if;
 
     if tg_op = 'INSERT' then
+      if coalesce(new.moderation_status, 'pending') <> 'pending'
+         or new.moderation_by is not null
+         or new.moderated_at is not null
+         or new.moderation_reason is not null then
+        raise exception 'New offers start in pending moderation.' using errcode = '42501';
+      end if;
       new.created_by := auth.uid();
       new.moderation_status := 'pending';
       new.moderation_by := null;
@@ -407,7 +413,8 @@ begin
 
     if new.unit_price_paise is distinct from old.unit_price_paise
        or new.moq is distinct from old.moq
-       or new.seller_sku is distinct from old.seller_sku then
+       or new.seller_sku is distinct from old.seller_sku
+       or coalesce(current_setting('app.remoderate_offer', true), '') = 'on' then
       new.moderation_status := 'pending';
       new.moderation_by := null;
       new.moderated_at := null;
@@ -712,7 +719,12 @@ begin
     cancelled_at = coalesce(seller_shipments.cancelled_at, excluded.cancelled_at),
     updated_at = now();
 
-  if p_status = 'cancelled' then
+  if p_status = 'shipped' then
+    update public.order_items
+       set shipped_quantity = quantity
+     where sub_order_id = p_sub_order_id
+       and shipped_quantity < quantity;
+  elsif p_status = 'cancelled' then
     -- Child is locked and cannot have shipped units on a legal pre-dispatch
     -- cancellation. Restore each line's exact remaining restorable quantity.
     for v_item in
@@ -759,6 +771,444 @@ comment on function public.seller_order_headers() is
   'Seller-scoped order projection. Never exposes another child or the parent aggregate totals; address only for seller fulfilment.';
 comment on function public.seller_update_sub_order(uuid, text, text, text) is
   'Tenant-checked seller fulfilment transition; delivered/returns/failures stay outside seller authority. Cancellation restores only the DB-computed restorable stock.';
+
+-- Allow Admin (checked inside both functions via is_admin_or_above()) to invoke
+-- sub-order status transitions and child-scoped stock restores from Server Actions.
+grant execute on function public.set_sub_order_status(uuid, text, text) to authenticated;
+grant execute on function public.restore_sub_order_stock(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 5. Seller self-service profile update (never touches status/review columns).
+-- ---------------------------------------------------------------------------
+create or replace function public.seller_update_own_profile(
+  p_business_name text,
+  p_contact_name text default null,
+  p_phone text default null,
+  p_email text default null,
+  p_gstin text default null,
+  p_pan text default null,
+  p_address_line text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_seller_id uuid;
+  v_business text := btrim(coalesce(p_business_name, ''));
+  v_contact text := nullif(btrim(coalesce(p_contact_name, '')), '');
+  v_phone text := nullif(regexp_replace(btrim(coalesce(p_phone, '')), '^\+?91[\s-]*|^0', ''), '');
+  v_email text := nullif(lower(btrim(coalesce(p_email, ''))), '');
+  v_gstin text := nullif(upper(regexp_replace(coalesce(p_gstin, ''), '\s+', '', 'g')), '');
+  v_pan text := nullif(upper(regexp_replace(coalesce(p_pan, ''), '\s+', '', 'g')), '');
+  v_address text := nullif(btrim(coalesce(p_address_line, '')), '');
+begin
+  if v_uid is null or public.current_user_role() is distinct from 'seller' then
+    raise exception 'A seller session is required.' using errcode = '42501';
+  end if;
+
+  select sm.seller_id into v_seller_id
+    from public.seller_members sm
+    join public.sellers s on s.id = sm.seller_id
+   where sm.profile_id = v_uid
+   for update of s;
+  if not found then
+    raise exception 'Seller membership not found.' using errcode = '42501';
+  end if;
+
+  if char_length(v_business) not between 2 and 160 then
+    raise exception 'Business name must be between 2 and 160 characters.' using errcode = '22023';
+  end if;
+  if v_contact is not null and char_length(v_contact) not between 2 and 120 then
+    raise exception 'Contact name must be between 2 and 120 characters.' using errcode = '22023';
+  end if;
+  if v_phone is not null and v_phone !~ '^[6-9][0-9]{9}$' then
+    raise exception 'Enter a valid 10-digit Indian mobile number.' using errcode = '22023';
+  end if;
+  if v_email is not null and (char_length(v_email) > 160 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+    raise exception 'Enter a valid email address.' using errcode = '22023';
+  end if;
+  if v_gstin is not null and v_gstin !~ '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$' then
+    raise exception 'Enter a valid 15-character GSTIN.' using errcode = '22023';
+  end if;
+  if v_pan is not null and v_pan !~ '^[A-Z]{5}[0-9]{4}[A-Z]$' then
+    raise exception 'Enter a valid 10-character PAN.' using errcode = '22023';
+  end if;
+  if v_address is not null and char_length(v_address) > 300 then
+    raise exception 'Address must be 300 characters or fewer.' using errcode = '22023';
+  end if;
+
+  update public.sellers
+     set business_name = v_business,
+         contact_name = coalesce(v_contact, contact_name),
+         phone = coalesce(v_phone, phone),
+         email = coalesce(v_email, email),
+         gstin = v_gstin,
+         pan = v_pan,
+         address_line = v_address,
+         updated_at = now()
+   where id = v_seller_id;
+
+  update public.profiles
+     set full_name = coalesce(v_contact, full_name),
+         phone = coalesce(v_phone, phone)
+   where id = v_uid;
+
+  return v_seller_id;
+end;
+$$;
+revoke all on function public.seller_update_own_profile(text, text, text, text, text, text, text) from public, anon;
+grant execute on function public.seller_update_own_profile(text, text, text, text, text, text, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 6. Seller-specific quantity-tier pricing (seller_offer_tiers).
+-- ---------------------------------------------------------------------------
+create table if not exists public.seller_offer_tiers (
+  id uuid primary key default uuid_generate_v4(),
+  seller_offer_id uuid not null references public.seller_offers(id) on delete cascade,
+  min_quantity integer not null check (min_quantity >= 1 and min_quantity <= 100000),
+  max_quantity integer check (max_quantity is null or (max_quantity >= min_quantity and max_quantity <= 100000)),
+  unit_price_paise bigint not null check (unit_price_paise > 0),
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (seller_offer_id, min_quantity)
+);
+
+create index if not exists idx_seller_offer_tiers_offer
+  on public.seller_offer_tiers (seller_offer_id, min_quantity)
+  where is_active;
+
+create or replace function public.enforce_seller_offer_tier_rules()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_offer public.seller_offers%rowtype;
+  v_floor bigint;
+begin
+  select * into v_offer from public.seller_offers where id = new.seller_offer_id;
+  if not found then
+    raise exception 'Unknown seller offer for this tier.' using errcode = '23503';
+  end if;
+
+  v_floor := public.current_offer_floor_paise(v_offer.pack_id);
+  if v_floor is not null and new.unit_price_paise < v_floor then
+    raise exception 'PRICE_BELOW_FLOOR: the tier price is below the admin minimum for this pack.'
+      using errcode = '23514';
+  end if;
+
+  if new.unit_price_paise > v_offer.unit_price_paise then
+    raise exception 'TIER_ABOVE_BASE_PRICE: a quantity tier cannot exceed the base offer price.'
+      using errcode = '23514';
+  end if;
+
+  if new.min_quantity < v_offer.moq then
+    raise exception 'TIER_BELOW_MOQ: tier minimum quantity must be at least the offer MOQ.'
+      using errcode = '23514';
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_seller_offer_tier_rules on public.seller_offer_tiers;
+create trigger trg_enforce_seller_offer_tier_rules
+  before insert or update on public.seller_offer_tiers
+  for each row execute function public.enforce_seller_offer_tier_rules();
+
+drop trigger if exists trg_audit_seller_offer_tiers on public.seller_offer_tiers;
+create trigger trg_audit_seller_offer_tiers
+  after insert or update or delete on public.seller_offer_tiers
+  for each row execute function log_audit();
+
+alter table public.seller_offer_tiers enable row level security;
+revoke all on public.seller_offer_tiers from anon, authenticated;
+grant select on public.seller_offer_tiers to authenticated;
+
+drop policy if exists "seller_offer_tiers_select" on public.seller_offer_tiers;
+create policy "seller_offer_tiers_select" on public.seller_offer_tiers
+  for select to authenticated
+  using (
+    public.is_admin_or_above()
+    or exists (
+      select 1 from public.seller_offers so
+       where so.id = seller_offer_tiers.seller_offer_id
+         and (
+           public.is_member_of_seller(so.seller_id)
+           or (
+             so.is_active
+             and so.moderation_status = 'approved'
+             and exists (
+               select 1 from public.sellers s
+                where s.id = so.seller_id and s.status = 'active'
+             )
+           )
+         )
+    )
+  );
+
+create or replace function public.effective_seller_offer_unit_price_paise(
+  p_offer_id uuid,
+  p_quantity integer
+) returns bigint
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_base_paise bigint;
+  v_tier_paise bigint;
+begin
+  select so.unit_price_paise into v_base_paise
+    from public.seller_offers so
+   where so.id = p_offer_id;
+  if not found then
+    return null;
+  end if;
+
+  select sot.unit_price_paise into v_tier_paise
+    from public.seller_offer_tiers sot
+   where sot.seller_offer_id = p_offer_id
+     and sot.is_active
+     and sot.min_quantity <= coalesce(p_quantity, 1)
+     and (sot.max_quantity is null or coalesce(p_quantity, 1) <= sot.max_quantity)
+   order by sot.min_quantity desc
+   limit 1;
+
+  return coalesce(v_tier_paise, v_base_paise);
+end;
+$$;
+revoke all on function public.effective_seller_offer_unit_price_paise(uuid, integer) from public, anon;
+grant execute on function public.effective_seller_offer_unit_price_paise(uuid, integer) to authenticated, service_role;
+
+create or replace function public.seller_replace_offer_tiers(
+  p_offer_id uuid,
+  p_tiers jsonb
+) returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_offer public.seller_offers%rowtype;
+  v_seller_status text;
+  v_is_admin boolean := public.is_admin_or_above();
+  v_tier record;
+  v_prev_max integer := 0;
+  v_prev_min integer := 0;
+  v_count integer := 0;
+begin
+  if p_offer_id is null then
+    raise exception 'Offer id is required.' using errcode = '22023';
+  end if;
+  if p_tiers is null or jsonb_typeof(p_tiers) <> 'array' or jsonb_array_length(p_tiers) > 20 then
+    raise exception 'Provide an array of up to 20 pricing tiers.' using errcode = '22023';
+  end if;
+
+  select so.*, s.status as seller_status
+    into v_offer
+    from public.seller_offers so
+    join public.sellers s on s.id = so.seller_id
+   where so.id = p_offer_id
+   for update of so;
+  if not found then
+    raise exception 'Seller offer not found.' using errcode = 'P0002';
+  end if;
+
+  select status into v_seller_status from public.sellers where id = v_offer.seller_id;
+
+  if not v_is_admin then
+    if public.current_user_role() is distinct from 'seller'
+       or not public.is_member_of_seller(v_offer.seller_id)
+       or v_seller_status is distinct from 'active' then
+      raise exception 'An active seller membership is required.' using errcode = '42501';
+    end if;
+  end if;
+
+  delete from public.seller_offer_tiers where seller_offer_id = p_offer_id;
+
+  for v_tier in
+    select *
+      from jsonb_to_recordset(p_tiers) as r(
+        min_quantity integer,
+        max_quantity integer,
+        unit_price_paise bigint
+      )
+     order by min_quantity asc
+  loop
+    if v_tier.min_quantity is null or v_tier.unit_price_paise is null then
+      raise exception 'Each tier requires min_quantity and unit_price_paise.' using errcode = '22023';
+    end if;
+    if v_prev_min > 0 and (v_tier.min_quantity <= v_prev_min or (v_prev_max is null or v_tier.min_quantity <= v_prev_max)) then
+      raise exception 'Pricing tiers must have strictly increasing, non-overlapping quantity ranges.' using errcode = '22023';
+    end if;
+
+    insert into public.seller_offer_tiers (
+      seller_offer_id, min_quantity, max_quantity, unit_price_paise, is_active
+    ) values (
+      p_offer_id, v_tier.min_quantity, v_tier.max_quantity, v_tier.unit_price_paise, true
+    );
+
+    v_prev_min := v_tier.min_quantity;
+    v_prev_max := v_tier.max_quantity;
+    v_count := v_count + 1;
+  end loop;
+
+  -- Changing commercial tier terms as a seller requires fresh admin moderation.
+  if not v_is_admin then
+    perform set_config('app.remoderate_offer', 'on', true);
+    update public.seller_offers
+       set updated_at = now()
+     where id = p_offer_id;
+    perform set_config('app.remoderate_offer', '', true);
+  end if;
+
+  return v_count;
+end;
+$$;
+revoke all on function public.seller_replace_offer_tiers(uuid, jsonb) from public, anon;
+grant execute on function public.seller_replace_offer_tiers(uuid, jsonb) to authenticated;
+
+create or replace function public.marketplace_offer_tiers(p_offer_ids uuid[])
+returns table (
+  offer_id uuid,
+  min_quantity integer,
+  max_quantity integer,
+  unit_price_paise bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required.' using errcode = '42501';
+  end if;
+  if coalesce(cardinality(p_offer_ids), 0) < 1
+     or cardinality(p_offer_ids) > 200
+     or array_position(p_offer_ids, null) is not null then
+    raise exception 'Request between 1 and 200 offer ids.' using errcode = '22023';
+  end if;
+
+  return query
+  select sot.seller_offer_id, sot.min_quantity, sot.max_quantity, sot.unit_price_paise
+    from public.seller_offer_tiers sot
+    join public.seller_offers so on so.id = sot.seller_offer_id
+    join public.sellers s on s.id = so.seller_id
+   where sot.seller_offer_id = any(p_offer_ids)
+     and sot.is_active
+     and (
+       public.is_admin_or_above()
+       or public.is_member_of_seller(so.seller_id)
+       or (so.is_active and so.moderation_status = 'approved' and s.status = 'active')
+     )
+   order by sot.seller_offer_id, sot.min_quantity asc;
+end;
+$$;
+revoke all on function public.marketplace_offer_tiers(uuid[]) from public, anon;
+grant execute on function public.marketplace_offer_tiers(uuid[]) to authenticated;
+
+-- Wire effective_seller_offer_unit_price_paise into create_order_atomic_v2 so
+-- split-order checkout validates quantity-tier unit prices when tiers exist.
+do $$
+declare
+  v_def text;
+  v_old text := 'v_expected_unit_price := round(v_offer_price_paise::numeric / 100, 2);';
+  v_new text := 'v_offer_price_paise := coalesce(public.effective_seller_offer_unit_price_paise(v_item.seller_offer_id, v_item.quantity), v_offer_price_paise);
+      v_expected_unit_price := round(v_offer_price_paise::numeric / 100, 2);';
+begin
+  select pg_get_functiondef('public.create_order_atomic_v2'::regproc) into v_def;
+  if v_def is not null and position('effective_seller_offer_unit_price_paise' in v_def) = 0 then
+    v_def := replace(v_def, v_old, v_new);
+    execute v_def;
+  end if;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 7. Retailer/Admin sub-order & shipment tracking projection.
+-- ---------------------------------------------------------------------------
+create or replace function public.retailer_order_sub_orders(p_order_id uuid)
+returns table (
+  sub_order_id uuid,
+  seller_id uuid,
+  seller_business_name text,
+  seller_gstin text,
+  fulfilment_type text,
+  status text,
+  gross_paise bigint,
+  gst_paise bigint,
+  coupon_share_paise bigint,
+  coins_share_paise bigint,
+  payable_paise bigint,
+  shipment_status text,
+  courier text,
+  awb text,
+  packed_at timestamptz,
+  dispatched_at timestamptz,
+  delivered_at timestamptz,
+  cancelled_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if auth.uid() is null or p_order_id is null then
+    raise exception 'Authentication required.' using errcode = '42501';
+  end if;
+
+  if not (
+    public.is_staff_or_above()
+    or exists (
+      select 1 from public.orders o
+       where o.id = p_order_id
+         and (
+           o.retailer_id = auth.uid()
+           or o.collected_by = auth.uid()
+           or public.is_retailer_assigned_to_current_salesman(o.retailer_id)
+         )
+    )
+  ) then
+    raise exception 'Access denied for this order.' using errcode = '42501';
+  end if;
+
+  return query
+  select so.id,
+         so.seller_id,
+         coalesce(s.business_name, 'Maharani Traders'),
+         s.gstin,
+         so.fulfilment_type,
+         so.status,
+         so.gross_paise,
+         so.gst_paise,
+         so.coupon_share_paise,
+         so.coins_share_paise,
+         so.payable_paise,
+         sh.status,
+         sh.courier,
+         sh.awb,
+         sh.packed_at,
+         sh.dispatched_at,
+         sh.delivered_at,
+         sh.cancelled_at
+    from public.sub_orders so
+    left join public.sellers s on s.id = so.seller_id
+    left join public.seller_shipments sh on sh.sub_order_id = so.id
+   where so.parent_order_id = p_order_id
+   order by so.sort_index asc, so.created_at asc;
+end;
+$$;
+revoke all on function public.retailer_order_sub_orders(uuid) from public, anon;
+grant execute on function public.retailer_order_sub_orders(uuid) to authenticated;
 
 -- ============================================================================
 -- END OF 0069

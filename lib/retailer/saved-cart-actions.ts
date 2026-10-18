@@ -283,26 +283,23 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
     const pack = packById.get(item.pack_id);
     // Re-price by the preserved source identity. Seller lines never fall back
     // to Maharani pack pricing when an offer disappears.
-    if (!pack || !pack.is_active || !pack.products?.is_active) {
-      skippedCount += 1;
-      continue;
-    }
-    if (item.seller_offer_id) {
-      const offer = offerById.get(item.seller_offer_id);
-      if (marketplace.error || !offer || offer.packId !== item.pack_id
-          || item.quantity < offer.moq
-          || !offer.inStock
-          || (offer.stockQuantity ?? 0) < item.quantity) {
-        skippedCount += 1;
-        continue;
-      }
-    } else {
-      if (item.quantity < pack.moq) {
+    if (!item.seller_offer_id) {
+      if (!pack || !pack.is_active || !pack.products?.is_active || item.quantity < pack.moq) {
         skippedCount += 1;
         continue;
       }
       const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
       if (validationError) {
+        skippedCount += 1;
+        continue;
+      }
+    } else {
+      const offer = offerById.get(item.seller_offer_id);
+      if (!pack || !pack.is_active || !pack.products?.is_active
+          || marketplace.error || !offer || offer.packId !== item.pack_id
+          || item.quantity < offer.moq
+          || !offer.inStock
+          || (offer.stockQuantity ?? 0) < item.quantity) {
         skippedCount += 1;
         continue;
       }

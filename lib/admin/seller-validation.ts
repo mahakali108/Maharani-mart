@@ -103,3 +103,11 @@ export function parsePositiveInt(value: unknown, max = 100_000): number | null {
   const n = parseWholeQuantity(value, max);
   return n !== null && n >= 1 ? n : null;
 }
+
+export function isUuid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  );
+}
+

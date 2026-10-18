@@ -5,6 +5,7 @@ import { requireUser } from '@/lib/auth/session';
 import { can } from '@/lib/permissions/permissions';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminOrderActions } from '@/components/admin/order-actions-panel';
+import { AdminSubOrderPanel, type SubOrderSummaryRow } from '@/components/admin/sub-order-panel';
 import { DeliveryAssignmentPanel } from '@/components/admin/delivery-assignment-panel';
 import { DeliveryStatusBadge } from '@/components/delivery/delivery-status-badge';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
@@ -77,6 +78,12 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
 
   if (!order) notFound();
 
+  const { data: subOrderData } = await supabase.rpc(
+    'retailer_order_sub_orders' as never,
+    { p_order_id: params.id } as never
+  );
+  const subOrders = Array.isArray(subOrderData) ? (subOrderData as SubOrderSummaryRow[]) : [];
+
   const items = (itemData ?? []) as unknown as OrderItemRow[];
   // One row per ordered pack: a cases row and its loose-piece row are folded
   // together, and the amount shown is the sum of the stored row totals.
@@ -92,6 +99,12 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
       </div>
 
       <AdminOrderActions orderId={order.id} status={order.status} />
+
+      <AdminSubOrderPanel
+        orderId={order.id}
+        subOrders={subOrders}
+        canManage={can(user.role, 'sellers.manage')}
+      />
 
       {deliveryData ? (
         <DeliveryAssignmentPanel

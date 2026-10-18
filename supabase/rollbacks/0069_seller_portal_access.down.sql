@@ -14,6 +14,45 @@ begin
 end;
 $$;
 
+do $$
+declare
+  v_def text;
+  v_new text := 'v_offer_price_paise := coalesce(public.effective_seller_offer_unit_price_paise(v_item.seller_offer_id, v_item.quantity), v_offer_price_paise);
+      v_expected_unit_price := round(v_offer_price_paise::numeric / 100, 2);';
+  v_old text := 'v_expected_unit_price := round(v_offer_price_paise::numeric / 100, 2);';
+begin
+  select pg_get_functiondef('public.create_order_atomic_v2'::regproc) into v_def;
+  if v_def is not null and position('effective_seller_offer_unit_price_paise' in v_def) > 0 then
+    v_def := replace(v_def, v_new, v_old);
+    execute v_def;
+  end if;
+end;
+$$;
+
+revoke all on function public.retailer_order_sub_orders(uuid) from public, anon, authenticated, service_role;
+drop function if exists public.retailer_order_sub_orders(uuid);
+
+revoke all on function public.marketplace_offer_tiers(uuid[]) from public, anon, authenticated, service_role;
+drop function if exists public.marketplace_offer_tiers(uuid[]);
+
+revoke all on function public.seller_replace_offer_tiers(uuid, jsonb) from public, anon, authenticated, service_role;
+drop function if exists public.seller_replace_offer_tiers(uuid, jsonb);
+
+revoke all on function public.effective_seller_offer_unit_price_paise(uuid, integer) from public, anon, authenticated, service_role;
+drop function if exists public.effective_seller_offer_unit_price_paise(uuid, integer);
+
+drop policy if exists "seller_offer_tiers_select" on public.seller_offer_tiers;
+drop trigger if exists trg_audit_seller_offer_tiers on public.seller_offer_tiers;
+drop trigger if exists trg_enforce_seller_offer_tier_rules on public.seller_offer_tiers;
+drop function if exists public.enforce_seller_offer_tier_rules();
+drop table if exists public.seller_offer_tiers;
+
+revoke all on function public.seller_update_own_profile(text, text, text, text, text, text, text) from public, anon, authenticated, service_role;
+drop function if exists public.seller_update_own_profile(text, text, text, text, text, text, text);
+
+revoke execute on function public.set_sub_order_status(uuid, text, text) from authenticated;
+revoke execute on function public.restore_sub_order_stock(uuid) from authenticated;
+
 revoke all on function public.seller_update_sub_order(uuid, text, text, text) from public, anon, authenticated, service_role;
 drop function if exists public.seller_update_sub_order(uuid, text, text, text);
 

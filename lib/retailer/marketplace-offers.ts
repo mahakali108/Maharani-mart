@@ -2,6 +2,12 @@ import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
 
+export interface MarketplaceOfferTier {
+  minQuantity: number;
+  maxQuantity: number | null;
+  unitPricePaise: number;
+}
+
 export interface MarketplaceOfferQuote {
   offerId: string;
   sellerId: string;
@@ -14,10 +20,29 @@ export interface MarketplaceOfferQuote {
   moq: number;
   stockQuantity: number | null;
   inStock: boolean;
+  tiers?: MarketplaceOfferTier[];
 }
 
 export interface MarketplaceProductOffer extends Omit<MarketplaceOfferQuote, 'productId' | 'stockQuantity'> {
   packName: string;
+}
+
+export function resolveOfferUnitPricePaise(
+  offer: { unitPricePaise: number; tiers?: MarketplaceOfferTier[] },
+  quantity: number
+): number {
+  const tiers = offer.tiers ?? [];
+  if (tiers.length === 0) return offer.unitPricePaise;
+  const qty = Math.max(1, Math.trunc(quantity));
+  let matched: MarketplaceOfferTier | null = null;
+  for (const tier of tiers) {
+    if (tier.minQuantity <= qty && (tier.maxQuantity === null || qty <= tier.maxQuantity)) {
+      if (!matched || tier.minQuantity > matched.minQuantity) {
+        matched = tier;
+      }
+    }
+  }
+  return matched ? matched.unitPricePaise : offer.unitPricePaise;
 }
 
 interface RpcError {
@@ -56,6 +81,46 @@ function isFulfilmentType(value: string): value is 'seller' | 'maharani' {
   return value === 'seller' || value === 'maharani';
 }
 
+async function loadOfferTiersMap(
+  supabase: ReturnType<typeof createClient>,
+  offerIds: string[]
+): Promise<Map<string, MarketplaceOfferTier[]>> {
+  const map = new Map<string, MarketplaceOfferTier[]>();
+  if (offerIds.length === 0 || typeof (supabase as { rpc?: unknown }).rpc !== 'function') {
+    return map;
+  }
+  try {
+    const caller = supabase as unknown as {
+      rpc: (
+        name: 'marketplace_offer_tiers',
+        args: { p_offer_ids: string[] }
+      ) => PromiseLike<{
+        data: {
+          offer_id: string;
+          min_quantity: number;
+          max_quantity: number | null;
+          unit_price_paise: number | string;
+        }[] | null;
+        error: RpcError | null;
+      }>;
+    };
+    const { data, error } = await caller.rpc('marketplace_offer_tiers', { p_offer_ids: offerIds });
+    if (error || !Array.isArray(data)) return map;
+    for (const row of data) {
+      const list = map.get(row.offer_id) ?? [];
+      list.push({
+        minQuantity: Number(row.min_quantity),
+        maxQuantity: row.max_quantity === null ? null : Number(row.max_quantity),
+        unitPricePaise: Number(row.unit_price_paise),
+      });
+      map.set(row.offer_id, list);
+    }
+  } catch {
+    // Graceful fallback when tiers RPC is unmocked in lightweight unit fixtures.
+  }
+  return map;
+}
+
 /**
  * Reads the narrow 0069 retailer projection for offer identities already held
  * by the caller's cart/order intent. The base seller and seller_offers tables
@@ -79,6 +144,10 @@ export async function loadMarketplaceOfferQuotes(
   const { data, error } = await caller.rpc('marketplace_offer_quotes', { p_offer_ids: ids });
   if (error) return { offers: [], error };
 
+  const tiersMap = await loadOfferTiersMap(
+    supabase,
+    (data ?? []).map((r) => r.offer_id)
+  );
   const offers: MarketplaceOfferQuote[] = [];
   for (const row of data ?? []) {
     const unitPricePaise = Number(row.unit_price_paise);
@@ -97,6 +166,7 @@ export async function loadMarketplaceOfferQuotes(
       moq: row.moq,
       stockQuantity: row.stock_quantity,
       inStock: row.in_stock,
+      tiers: tiersMap.get(row.offer_id) ?? [],
     });
   }
   return { offers, error: null };
@@ -116,6 +186,10 @@ export async function loadMarketplaceOffersForProduct(
   const { data, error } = await caller.rpc('marketplace_offers_for_product', { p_product_id: productId });
   if (error) return { offers: [], error };
 
+  const tiersMap = await loadOfferTiersMap(
+    supabase,
+    (data ?? []).map((r) => r.offer_id)
+  );
   const offers: MarketplaceProductOffer[] = [];
   for (const row of data ?? []) {
     const unitPricePaise = Number(row.unit_price_paise);
@@ -133,6 +207,7 @@ export async function loadMarketplaceOffersForProduct(
       unitPricePaise,
       moq: row.moq,
       inStock: row.in_stock,
+      tiers: tiersMap.get(row.offer_id) ?? [],
     });
   }
   return { offers, error: null };
