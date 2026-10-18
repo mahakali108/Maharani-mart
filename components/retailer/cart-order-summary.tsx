@@ -23,6 +23,7 @@ export function CartOrderSummary({
   savings,
   grandTotal,
   orderableCount,
+  checkoutBlocked = false,
   coupon = null,
 }: {
   subtotal: number;
@@ -30,6 +31,8 @@ export function CartOrderSummary({
   savings: number;
   grandTotal: number;
   orderableCount: number;
+  /** Atomic checkout cannot silently skip a stale/unavailable cart line. */
+  checkoutBlocked?: boolean;
   /** Server-validated applied coupon (0051); null when none applies. */
   coupon?: { code: string; discount: number } | null;
 }) {
@@ -87,7 +90,7 @@ export function CartOrderSummary({
           </span>
         </div>
 
-        {orderableCount > 0 ? (
+        {orderableCount > 0 && !checkoutBlocked ? (
           <Link
             href="/retailer/checkout"
             className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
@@ -96,7 +99,7 @@ export function CartOrderSummary({
           </Link>
         ) : (
           <span className="flex h-12 w-full cursor-not-allowed items-center justify-center rounded-xl bg-slate-200 px-4 text-xs font-bold text-slate-500">
-            No items ready to order
+            {checkoutBlocked ? 'Review unavailable items' : 'No items ready to order'}
           </span>
         )}
 

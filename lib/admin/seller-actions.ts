@@ -70,7 +70,7 @@ export async function reviewSellerAction(
   decision: 'active' | 'rejected',
   reason?: string
 ): Promise<SellerActionResult> {
-  const user = await requirePermission('sellers.review');
+  await requirePermission('sellers.review');
   if (!UUID_RE.test(sellerId)) return { ok: false, error: 'Invalid seller record.' };
   if (decision !== 'active' && decision !== 'rejected') {
     return { ok: false, error: 'Invalid review decision.' };

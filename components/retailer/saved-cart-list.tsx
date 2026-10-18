@@ -24,6 +24,7 @@ export interface SavedCartItemView {
   packName: string;
   brandName: string | null;
   imageUrl: string | null;
+  sellerName: string | null;
 }
 
 export interface SavedCartView {
@@ -124,6 +125,9 @@ function SavedCartCard({ cart }: { cart: SavedCartView }) {
               <p className="mt-0.5 truncate text-[10px] text-slate-500">
                 {item.brandName ? `${item.brandName} · ` : ''}{item.packName} · Qty {item.quantity}
               </p>
+              {item.sellerName ? (
+                <p className="mt-0.5 truncate text-[9px] font-semibold text-slate-600">Sold by {item.sellerName}</p>
+              ) : null}
             </div>
             <button
               type="button"

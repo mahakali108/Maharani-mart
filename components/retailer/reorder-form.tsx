@@ -15,7 +15,11 @@ import { Input } from '@/components/ui/input';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 
 export interface ReorderLineInput {
+  /** Stable source-aware identity; the same pack may appear from two sellers. */
+  lineKey: string;
   packId: string;
+  sellerOfferId: string | null;
+  sellerName: string | null;
   productName: string;
   packName: string;
   imageUrl?: string;
@@ -57,14 +61,14 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
   const router = useRouter();
   const [state, setState] = useState<Record<string, LineState>>(() =>
     Object.fromEntries(
-      lines.map((line) => [line.packId, { included: !line.unavailable, quantity: line.suggestedQuantity }])
+      lines.map((line) => [line.lineKey, { included: !line.unavailable, quantity: line.suggestedQuantity }])
     )
   );
   const [error, setError] = useState<string | null>(null);
   const [skippedCount, setSkippedCount] = useState(0);
   const [isPending, startTransition] = useTransition();
 
-  const selected = lines.filter((line) => state[line.packId]?.included);
+  const selected = lines.filter((line) => state[line.lineKey]?.included);
 
   /**
    * Repriced through the canonical retailer engine (current terms, quantities
@@ -88,23 +92,23 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
   let subtotal = 0;
   let gstTotal = 0;
   for (const line of selected) {
-    const pricing = priceLine(line, Math.max(line.moq, state[line.packId]?.quantity ?? line.moq));
+    const pricing = priceLine(line, Math.max(line.moq, state[line.lineKey]?.quantity ?? line.moq));
     subtotal += pricing.subtotal;
     gstTotal += pricing.gst;
   }
   const grandTotal = subtotal + gstTotal;
 
-  function setQuantity(packId: string, quantity: number, moq: number) {
+  function setQuantity(lineKey: string, quantity: number, moq: number) {
     setState((prev) => ({
       ...prev,
-      [packId]: { included: true, quantity: Math.max(moq, quantity) },
+      [lineKey]: { included: true, quantity: Math.max(moq, quantity) },
     }));
   }
 
-  function toggleIncluded(packId: string, checked: boolean, suggestedQuantity: number) {
+  function toggleIncluded(lineKey: string, checked: boolean, suggestedQuantity: number) {
     setState((prev) => ({
       ...prev,
-      [packId]: { included: checked, quantity: prev[packId]?.quantity ?? suggestedQuantity },
+      [lineKey]: { included: checked, quantity: prev[lineKey]?.quantity ?? suggestedQuantity },
     }));
   }
 
@@ -115,7 +119,8 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
         orderId,
         selected.map((line) => ({
           packId: line.packId,
-          quantity: Math.max(line.moq, state[line.packId]?.quantity ?? line.moq),
+          sellerOfferId: line.sellerOfferId,
+          quantity: Math.max(line.moq, state[line.lineKey]?.quantity ?? line.moq),
         }))
       );
       if ('error' in result && result.error) {
@@ -139,14 +144,14 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
     <div className="space-y-4">
       <div className="space-y-3">
         {lines.map((line) => {
-          const lineState = state[line.packId];
+          const lineState = state[line.lineKey];
           const quantity = Math.max(line.moq, lineState?.quantity ?? line.moq);
           const pricing = priceLine(line, quantity);
           const lineTotal = pricing.lineTotal;
           const stockBadge = availabilityBadge(line.availability);
           return (
             <Card
-              key={line.packId}
+              key={line.lineKey}
               className={`flex items-center gap-3 p-3 ${line.unavailable ? 'opacity-60' : ''}`}
             >
               <input
@@ -154,7 +159,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                 aria-label={`Include ${line.productName}`}
                 checked={lineState?.included ?? false}
                 disabled={line.unavailable || isPending}
-                onChange={(e) => toggleIncluded(line.packId, e.target.checked, line.suggestedQuantity)}
+                onChange={(e) => toggleIncluded(line.lineKey, e.target.checked, line.suggestedQuantity)}
                 className="h-5 w-5 shrink-0 accent-primary-600"
               />
               <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-ink-50">
@@ -177,6 +182,9 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                   {line.packName} · ₹{pricing.unitPrice.toFixed(2)}/pc ·{' '}
                   {line.gstPercent}% GST included
                 </p>
+                {line.sellerName ? (
+                  <p className="text-[11px] font-semibold text-ink-500">Sold by {line.sellerName}</p>
+                ) : null}
                 <p className="text-xs text-ink-400">
                   Previously {formatQuantitySummary({ ...summarizeQuantityRows([]), pieces: line.previousQuantity })} · MOQ
                   now {line.moq} pcs
@@ -215,7 +223,7 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                   step={1}
                   value={lineState?.quantity ?? line.suggestedQuantity}
                   disabled={line.unavailable || isPending || !lineState?.included}
-                  onChange={(e) => setQuantity(line.packId, Number(e.target.value) || line.moq, line.moq)}
+                  onChange={(e) => setQuantity(line.lineKey, Number(e.target.value) || line.moq, line.moq)}
                   className="h-8 px-2 text-center"
                 />
                 {lineState?.included && !line.unavailable ? (

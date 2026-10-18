@@ -8,17 +8,25 @@ import { addCartLines, clearRetailerCart, removeCartLine, updateCartLine } from 
 
 export type CartActionResult = { error?: string } | { success: true };
 
-export async function addToCartAction(packId: string, quantity: number): Promise<CartActionResult> {
+export async function addToCartAction(
+  packId: string,
+  quantity: number,
+  sellerOfferId?: string | null
+): Promise<CartActionResult> {
   const user = await requirePermission('orders.create');
-  const result = await addCartLines(createClient(), user.id, [{ packId, quantity }]);
+  const result = await addCartLines(createClient(), user.id, [{ packId, quantity, sellerOfferId }]);
   if ('error' in result) return result;
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer', 'layout');
   return { success: true };
 }
 
-export async function buyNowAction(packId: string, quantity: number): Promise<CartActionResult> {
-  const result = await addToCartAction(packId, quantity);
+export async function buyNowAction(
+  packId: string,
+  quantity: number,
+  sellerOfferId?: string | null
+): Promise<CartActionResult> {
+  const result = await addToCartAction(packId, quantity, sellerOfferId);
   if ('error' in result) return result;
   redirect('/retailer/checkout');
 }

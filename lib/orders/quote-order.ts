@@ -8,6 +8,7 @@ import { calculateRetailerPiecePrice, type RetailerPiecePricing } from '@/lib/re
 import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { getRetailerWalletPosition, rupeesToPaise } from '@/lib/retailer/wallet';
+import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import { computeCoinPayment, coinBalancePaise, type CoinPayment } from '@/lib/coins/math';
 
 export interface RequestedQuoteLine {
@@ -464,18 +465,22 @@ export async function quoteSplitOrderForRetailer({
     .filter((id): id is string => Boolean(id));
   let offerById = new Map<string, OfferForQuote>();
   if (offerIds.length > 0) {
-    const { data: offerData, error: offersError } = await supabase
-      .from('seller_offers' as never)
-      .select(
-        'id, seller_id, pack_id, product_id, fulfilment_type, unit_price_paise, moq, stock_quantity, is_active, moderation_status, sellers!inner(status)'
-      )
-      .in('id', offerIds);
+    // Retailers cannot read seller_offers/sellers directly. 0069 exposes only
+    // the live trading fields required to quote these persisted offer ids.
+    const { offers, error: offersError } = await loadMarketplaceOfferQuotes(supabase, offerIds);
     if (offersError) return { error: 'The seller offers could not be loaded. Please try again.' };
-    offerById = new Map(
-      ((offerData ?? []) as unknown as (OfferForQuote & { sellers: { status: string } })[])
-        .filter((row) => row.is_active && row.moderation_status === 'approved' && row.sellers.status === 'active')
-        .map((row) => [row.id, row])
-    );
+    offerById = new Map(offers.map((row) => [row.offerId, {
+      id: row.offerId,
+      seller_id: row.sellerId,
+      pack_id: row.packId,
+      product_id: row.productId,
+      fulfilment_type: row.fulfilmentType,
+      unit_price_paise: row.unitPricePaise,
+      moq: row.moq,
+      stock_quantity: row.stockQuantity,
+      is_active: true,
+      moderation_status: 'approved' as const,
+    }]));
     for (const entry of identities.values()) {
       if (!entry.sellerOfferId) continue;
       const offer = offerById.get(entry.sellerOfferId);
@@ -511,6 +516,11 @@ export async function quoteSplitOrderForRetailer({
     if (quantity < moq) {
       return {
         error: `Minimum order quantity for ${product.name} (${pack.pack_name}) is ${moq} pcs.`,
+      };
+    }
+    if (offer && (offer.stock_quantity ?? 0) < quantity) {
+      return {
+        error: `Only ${Math.max(offer.stock_quantity ?? 0, 0)} pcs are currently available for ${product.name} (${pack.pack_name}).`,
       };
     }
 

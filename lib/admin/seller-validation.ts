@@ -4,6 +4,8 @@
  * Keep this module free of I/O so it stays trivially unit-testable.
  */
 
+import { normalizePhone } from '@/lib/utils/phone';
+
 export interface SellerInput {
   businessName: string;
   gstin: string;
@@ -32,12 +34,17 @@ export function normalizeSellerInput(raw: {
 }): SellerInput {
   const text = (value: unknown): string =>
     typeof value === 'string' ? value.trim().slice(0, 300) : '';
+  const phone = text(raw.phone);
   return {
     businessName: text(raw.businessName),
     gstin: text(raw.gstin).toUpperCase().replace(/\s+/g, ''),
     pan: text(raw.pan).toUpperCase().replace(/\s+/g, ''),
     contactName: text(raw.contactName),
-    phone: text(raw.phone).replace(/\D/g, ''),
+    // Keep all application entry points on the same canonical India-phone
+    // rule: optional +91/91 prefixes are removed, storage is always 10 digits.
+    // Preserve invalid digits when normalisation fails so validation can report
+    // the field rather than silently turning bad input into an optional blank.
+    phone: normalizePhone(phone) ?? phone.replace(/\D/g, ''),
     email: text(raw.email).toLowerCase(),
     addressLine: text(raw.addressLine),
   };

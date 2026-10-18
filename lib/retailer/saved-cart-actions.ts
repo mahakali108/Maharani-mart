@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 import { validatePackForCart } from '@/lib/retailer/cart-service';
+import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import {
   isSaveForLaterCartName,
   MAX_LINES_PER_SAVED_CART,
@@ -13,6 +14,18 @@ import {
 } from '@/lib/retailer/saved-cart-constants';
 
 export type SavedCartActionResult = { error?: string } | { success: true; savedCartId?: string };
+
+type SourceType = 'maharani' | 'seller';
+interface SavedSourceLine {
+  pack_id: string;
+  seller_offer_id: string | null;
+  source_type: SourceType;
+  quantity: number;
+}
+
+function sourceKey(line: Pick<SavedSourceLine, 'pack_id' | 'seller_offer_id'>): string {
+  return `${line.pack_id}|${line.seller_offer_id ?? 'maharani'}`;
+}
 
 function sanitizeName(raw: string): string {
   return raw.replace(/\s+/g, ' ').trim().slice(0, 60);
@@ -45,9 +58,15 @@ export async function saveCurrentCartAction(rawName: string): Promise<SavedCartA
 
   const { data: cartItems } = await supabase
     .from('cart_items')
-    .select('pack_id, quantity, product_id')
+    .select('pack_id, seller_offer_id, source_type, quantity, product_id')
     .eq('retailer_id', user.id);
-  const items = (cartItems ?? []) as unknown as { pack_id: string; quantity: number; product_id: string }[];
+  const items = (cartItems ?? []) as unknown as {
+    pack_id: string;
+    seller_offer_id: string | null;
+    source_type: 'maharani' | 'seller';
+    quantity: number;
+    product_id: string;
+  }[];
   if (items.length === 0) return { error: 'Your cart is empty — there is nothing to save yet.' };
 
   // Reuse an existing saved cart with the same name instead of duplicating.
@@ -80,26 +99,42 @@ export async function saveCurrentCartAction(rawName: string): Promise<SavedCartA
   // appended. Item counts stay bounded.
   const { data: existingItems } = await supabase
     .from('retailer_saved_cart_items')
-    .select('id, pack_id, quantity')
+    .select('id, pack_id, seller_offer_id, source_type, quantity')
     .eq('saved_cart_id', savedCartId)
     .eq('retailer_id', user.id);
-  const typedExistingItems = (existingItems ?? []) as unknown as { id: string; pack_id: string; quantity: number }[];
-  const existingByPack = new Map(typedExistingItems.map((item) => [item.pack_id, item]));
+  const typedExistingItems = (existingItems ?? []) as unknown as (SavedSourceLine & { id: string })[];
+  const existingBySource = new Map(typedExistingItems.map((item) => [sourceKey(item), item]));
 
-  const rowsToInsert: { saved_cart_id: string; retailer_id: string; product_id: string; pack_id: string; quantity: number }[] = [];
+  const rowsToInsert: {
+    saved_cart_id: string;
+    retailer_id: string;
+    product_id: string;
+    pack_id: string;
+    seller_offer_id: string | null;
+    source_type: SourceType;
+    quantity: number;
+  }[] = [];
   for (const item of items) {
-    const existingItem = existingByPack.get(item.pack_id);
+    const existingItem = existingBySource.get(sourceKey(item));
     if (existingItem) {
       if (item.quantity > existingItem.quantity) {
-        await supabase
+        const { error } = await supabase
           .from('retailer_saved_cart_items')
-          .delete()
+          .update({ quantity: item.quantity } as unknown as never)
           .eq('id', existingItem.id)
           .eq('retailer_id', user.id);
-        rowsToInsert.push({ saved_cart_id: savedCartId, retailer_id: user.id, product_id: item.product_id, pack_id: item.pack_id, quantity: item.quantity });
+        if (error) return { error: 'The cart could not be saved.' };
       }
     } else if (typedExistingItems.length + rowsToInsert.length < MAX_LINES_PER_SAVED_CART) {
-      rowsToInsert.push({ saved_cart_id: savedCartId, retailer_id: user.id, product_id: item.product_id, pack_id: item.pack_id, quantity: item.quantity });
+      rowsToInsert.push({
+        saved_cart_id: savedCartId,
+        retailer_id: user.id,
+        product_id: item.product_id,
+        pack_id: item.pack_id,
+        seller_offer_id: item.seller_offer_id,
+        source_type: item.source_type,
+        quantity: item.quantity,
+      });
     }
   }
   if (rowsToInsert.length > 0) {
@@ -124,10 +159,17 @@ export async function saveCartItemForLaterAction(cartItemId: string): Promise<Sa
 
   const { data: item } = await supabase
     .from('cart_items')
-    .select('id, pack_id, product_id, quantity')
+    .select('id, pack_id, product_id, seller_offer_id, source_type, quantity')
     .eq('id', cartItemId)
     .eq('retailer_id', user.id)
-    .maybeSingle<{ id: string; pack_id: string; product_id: string; quantity: number } | never>();
+    .maybeSingle<{
+      id: string;
+      pack_id: string;
+      product_id: string;
+      seller_offer_id: string | null;
+      source_type: SourceType;
+      quantity: number;
+    } | never>();
   if (!item) return { error: 'Cart item not found.' };
 
   // Find or create the dedicated cart.
@@ -149,26 +191,32 @@ export async function saveCartItemForLaterAction(cartItemId: string): Promise<Sa
     savedCartId = created.id;
   }
 
-  const { data: existingItem } = await supabase
+  let existingItemQuery = supabase
     .from('retailer_saved_cart_items')
     .select('id, quantity')
     .eq('saved_cart_id', savedCartId)
     .eq('pack_id', item.pack_id)
-    .eq('retailer_id', user.id)
-    .maybeSingle<{ id: string; quantity: number }>();
+    .eq('retailer_id', user.id);
+  existingItemQuery = item.seller_offer_id
+    ? existingItemQuery.eq('seller_offer_id' as never, item.seller_offer_id)
+    : existingItemQuery.is('seller_offer_id' as never, null);
+  const { data: existingItem } = await existingItemQuery.maybeSingle<{ id: string; quantity: number }>();
 
   if (existingItem) {
-    await supabase
+    const { error } = await supabase
       .from('retailer_saved_cart_items')
       .update({ quantity: Math.max(existingItem.quantity, item.quantity) } as unknown as never)
       .eq('id', existingItem.id)
       .eq('retailer_id', user.id);
+    if (error) return { error: 'The item could not be saved for later.' };
   } else {
     const { error } = await supabase.from('retailer_saved_cart_items').insert({
       saved_cart_id: savedCartId,
       retailer_id: user.id,
       product_id: item.product_id,
       pack_id: item.pack_id,
+      seller_offer_id: item.seller_offer_id,
+      source_type: item.source_type,
       quantity: item.quantity,
     } as unknown as never);
     if (error) return { error: 'The item could not be saved for later.' };
@@ -206,10 +254,10 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
 
   const { data: savedItems } = await supabase
     .from('retailer_saved_cart_items')
-    .select('pack_id, quantity')
+    .select('pack_id, seller_offer_id, source_type, quantity')
     .eq('saved_cart_id', savedCartId)
     .eq('retailer_id', user.id);
-  const typedSavedItems = (savedItems ?? []) as unknown as { pack_id: string; quantity: number }[];
+  const typedSavedItems = (savedItems ?? []) as unknown as SavedSourceLine[];
   if (typedSavedItems.length === 0) return { error: 'This saved cart is empty.' };
 
   interface PackForRestore {
@@ -223,26 +271,47 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
     .select('id, moq, is_active, products ( is_active )')
     .in('id', [...new Set(typedSavedItems.map((item) => item.pack_id))]);
   const packById = new Map(((packRows ?? []) as unknown as PackForRestore[]).map((pack) => [pack.id, pack]));
+  const marketplace = await loadMarketplaceOfferQuotes(
+    supabase,
+    typedSavedItems.map((item) => item.seller_offer_id).filter((id): id is string => Boolean(id))
+  );
+  const offerById = new Map(marketplace.offers.map((offer) => [offer.offerId, offer]));
 
-  const validLines: { packId: string; quantity: number }[] = [];
+  const validLines: { packId: string; sellerOfferId: string | null; quantity: number }[] = [];
   let skippedCount = 0;
   for (const item of typedSavedItems) {
     const pack = packById.get(item.pack_id);
-    // Cheap pre-filter (avoids an RPC round-trip per dead line), then the
-    // FULL validation every add path uses: active pack/product, CURRENT MOQ,
-    // and the retailer piece-pricing engine. A line that fails is counted and
-    // reported back — never silently dropped and never carried into the
-    // cart as an unorderable quantity.
-    if (!pack || !pack.is_active || !pack.products?.is_active || item.quantity < pack.moq) {
+    // Re-price by the preserved source identity. Seller lines never fall back
+    // to Maharani pack pricing when an offer disappears.
+    if (!pack || !pack.is_active || !pack.products?.is_active) {
       skippedCount += 1;
       continue;
     }
-    const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
-    if (validationError) {
-      skippedCount += 1;
-      continue;
+    if (item.seller_offer_id) {
+      const offer = offerById.get(item.seller_offer_id);
+      if (marketplace.error || !offer || offer.packId !== item.pack_id
+          || item.quantity < offer.moq
+          || !offer.inStock
+          || (offer.stockQuantity ?? 0) < item.quantity) {
+        skippedCount += 1;
+        continue;
+      }
+    } else {
+      if (item.quantity < pack.moq) {
+        skippedCount += 1;
+        continue;
+      }
+      const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
+      if (validationError) {
+        skippedCount += 1;
+        continue;
+      }
     }
-    validLines.push({ packId: item.pack_id, quantity: item.quantity });
+    validLines.push({
+      packId: item.pack_id,
+      sellerOfferId: item.seller_offer_id,
+      quantity: item.quantity,
+    });
   }
   if (validLines.length === 0) {
     return { error: 'None of these items are currently orderable — availability and minimums may have changed.' };
@@ -264,10 +333,10 @@ export async function restoreSavedCartItemAction(itemId: string): Promise<SavedC
   const supabase = createClient();
   const { data: item } = await supabase
     .from('retailer_saved_cart_items')
-    .select('pack_id, quantity')
+    .select('pack_id, seller_offer_id, source_type, quantity')
     .eq('id', itemId)
     .eq('retailer_id', user.id)
-    .maybeSingle<{ pack_id: string; quantity: number } | never>();
+    .maybeSingle<SavedSourceLine | never>();
   if (!item) return { error: 'Saved item not found.' };
 
   const { data: pack } = await supabase
@@ -275,11 +344,28 @@ export async function restoreSavedCartItemAction(itemId: string): Promise<SavedC
     .select('id, moq, is_active, products ( is_active )')
     .eq('id', item.pack_id)
     .maybeSingle<{ id: string; moq: number; is_active: boolean; products: { is_active: boolean } | null }>();
-  if (!pack || !pack.is_active || !pack.products?.is_active || item.quantity < pack.moq) {
+  if (!pack || !pack.is_active || !pack.products?.is_active) {
     return { error: 'This item is not currently orderable.' };
   }
+  if (item.seller_offer_id) {
+    const marketplace = await loadMarketplaceOfferQuotes(supabase, [item.seller_offer_id]);
+    const offer = marketplace.offers[0];
+    if (marketplace.error || !offer || offer.packId !== item.pack_id
+        || item.quantity < offer.moq || !offer.inStock
+        || (offer.stockQuantity ?? 0) < item.quantity) {
+      return { error: 'This seller offer is not currently orderable.' };
+    }
+  } else {
+    if (item.quantity < pack.moq) return { error: 'This item is not currently orderable.' };
+    const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
+    if (validationError) return { error: validationError };
+  }
 
-  await mergeLinesIntoCart(supabase, user.id, [{ packId: item.pack_id, quantity: item.quantity }]);
+  await mergeLinesIntoCart(supabase, user.id, [{
+    packId: item.pack_id,
+    sellerOfferId: item.seller_offer_id,
+    quantity: item.quantity,
+  }]);
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer/cart/saved');
   revalidatePath('/retailer', 'layout');

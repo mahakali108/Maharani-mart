@@ -8,7 +8,15 @@ import { formatInr } from '@/lib/retailer/format';
  * nothing overlaps. Total and CTA come from the server-computed values; the
  * checkout link uses the existing checkout flow.
  */
-export function CartCheckoutBar({ grandTotal, orderableCount }: { grandTotal: number; orderableCount: number }) {
+export function CartCheckoutBar({
+  grandTotal,
+  orderableCount,
+  checkoutBlocked = false,
+}: {
+  grandTotal: number;
+  orderableCount: number;
+  checkoutBlocked?: boolean;
+}) {
   return (
     <div
       role="region"
@@ -20,7 +28,7 @@ export function CartCheckoutBar({ grandTotal, orderableCount }: { grandTotal: nu
           <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600">Grand total</p>
           <p className="truncate text-lg font-bold tracking-tight text-slate-950">{formatInr(grandTotal)}</p>
         </div>
-        {orderableCount > 0 ? (
+        {orderableCount > 0 && !checkoutBlocked ? (
           <Link
             href="/retailer/checkout"
             className="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
@@ -29,7 +37,7 @@ export function CartCheckoutBar({ grandTotal, orderableCount }: { grandTotal: nu
           </Link>
         ) : (
           <span className="inline-flex h-12 shrink-0 cursor-not-allowed items-center rounded-xl bg-slate-200 px-5 text-xs font-bold text-slate-500">
-            No orderable items
+            {checkoutBlocked ? 'Review cart items' : 'No orderable items'}
           </span>
         )}
       </div>

@@ -37,10 +37,10 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/admin/guard', () => ({ requirePermission: mocks.permission }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
 
-const ADMIN = 'aaaaaa-0000-4000-8000-000000000001';
-const SELLER_ID = 'bbbbbb-0000-4000-8000-000000000002';
-const OFFER_ID = 'cccccc-0000-4000-8000-000000000003';
-const PACK_ID = 'dddddd-0000-4000-8000-000000000004';
+const ADMIN = 'aaaaaaaa-0000-4000-8000-000000000001';
+const SELLER_ID = 'bbbbbbbb-0000-4000-8000-000000000002';
+const OFFER_ID = 'cccccccc-0000-4000-8000-000000000003';
+const PACK_ID = 'dddddddd-0000-4000-8000-000000000004';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -154,7 +154,7 @@ describe('offer moderation and floors', () => {
 
   it('createOfferAction derives the product identity from the pack, never the client', async () => {
     const fixture = supabaseFixture({
-      product_packs: [{ id: PACK_ID, product_id: 'eeeeee-0000-4000-8000-000000000005', is_active: true }],
+      product_packs: [{ id: PACK_ID, product_id: 'eeeeeeee-0000-4000-8000-000000000005', is_active: true }],
       seller_offers: [{ id: OFFER_ID }],
     });
     mocks.client.mockReturnValue(fixture);
@@ -172,7 +172,7 @@ describe('offer moderation and floors', () => {
     expect(insert?.payload).toMatchObject({
       seller_id: SELLER_ID,
       pack_id: PACK_ID,
-      product_id: 'eeeeee-0000-4000-8000-000000000005',
+      product_id: 'eeeeeeee-0000-4000-8000-000000000005',
       unit_price_paise: 12000,
       moq: 2,
       stock_quantity: 40,

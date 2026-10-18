@@ -13,6 +13,7 @@ export type CheckoutResult = { error?: string } | { success: true; orderId: stri
 
 interface CartItemForCheckout {
   pack_id: string;
+  seller_offer_id: string | null;
   quantity: number;
 }
 
@@ -40,7 +41,7 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
   // re-adds a cart beside an order that may already have committed.
   const { data: cart, error: cartError } = await supabase
     .from('cart_items')
-    .select('pack_id, quantity')
+    .select('pack_id, seller_offer_id, quantity')
     .eq('retailer_id', user.id);
 
   if (cartError) return { error: 'Your cart could not be prepared for checkout. Please try again.' };
@@ -101,7 +102,11 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
   const result = await createOrderForRetailer({
     retailerId: user.id,
     collectedBy: null,
-    lines: items.map((item) => ({ packId: item.pack_id, quantity: item.quantity })),
+    lines: items.map((item) => ({
+      packId: item.pack_id,
+      sellerOfferId: item.seller_offer_id,
+      quantity: item.quantity,
+    })),
     notes,
     shippingAddress,
     couponCode: activeCoupon.coupon?.code ?? null,

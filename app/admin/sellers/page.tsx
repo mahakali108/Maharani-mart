@@ -77,9 +77,12 @@ export default async function SellersPage({
           Search
         </Button>
         {query.q || query.status !== 'all' ? (
-          <Button type="button" variant="ghost" size="sm" asChild={false} onClick={undefined}>
-            <Link href="/admin/sellers">Clear</Link>
-          </Button>
+          <Link
+            href="/admin/sellers"
+            className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
+          >
+            Clear
+          </Link>
         ) : null}
       </form>
 

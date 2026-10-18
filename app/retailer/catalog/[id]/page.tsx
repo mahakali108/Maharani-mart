@@ -42,6 +42,11 @@ import { ProductIssueReport, StockAlertButton } from '@/components/retailer/prod
 import { isOutOfStock } from '@/lib/retailer/availability';
 import { formatIndiaDate } from '@/lib/datetime/india';
 import { buildCanonicalProductName, buildBreadcrumbProductName } from '@/lib/retailer/product-name';
+import {
+  loadMarketplaceOfferQuotes,
+  loadMarketplaceOffersForProduct,
+} from '@/lib/retailer/marketplace-offers';
+import { MarketplaceOfferList } from '@/components/retailer/marketplace-offer-list';
 
 interface ProductDetailRow {
   id: string;
@@ -88,6 +93,8 @@ interface PackImageRow {
 interface CartItemRow {
   id: string;
   pack_id: string;
+  seller_offer_id: string | null;
+  source_type: 'maharani' | 'seller';
   quantity: number;
   product_id: string;
   product_packs: {
@@ -175,7 +182,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     supabase
       .from('cart_items')
       .select(
-        'id, pack_id, quantity, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, is_active ), products ( gst_percent, is_active )'
+        'id, pack_id, seller_offer_id, source_type, quantity, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, is_active ), products ( gst_percent, is_active )'
       )
       .eq('retailer_id', user.id)
       .returns<CartItemRow[]>(),
@@ -183,7 +190,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
 
   if (!product) notFound();
 
-  const [{ data: schemeRows }, override, similar, together] = await Promise.all([
+  const [{ data: schemeRows }, override, similar, together, marketplaceOffers] = await Promise.all([
     supabase
       .from('price_lists')
       .select('id, schemes ( name, description, ends_at, is_festival, is_active )')
@@ -201,17 +208,25 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       favoriteIds
     ),
     getCoPurchasedCards(supabase, user.id, retailer?.area_id ?? null, product.id, favoriteIds),
+    loadMarketplaceOffersForProduct(supabase, productId),
   ]);
 
   // Compute cart summary using existing authoritative pricing & tax rules
   const cartItems = (cartData ?? []) as CartItemRow[];
   const cartProductIds = [...new Set(cartItems.map((item) => item.product_id))];
-  const cartOverrides = await getProductPriceOverrides(
-    supabase,
-    cartProductIds,
-    user.id,
-    retailer?.area_id ?? null
-  );
+  const [cartOverrides, cartMarketplace] = await Promise.all([
+    getProductPriceOverrides(
+      supabase,
+      cartProductIds,
+      user.id,
+      retailer?.area_id ?? null
+    ),
+    loadMarketplaceOfferQuotes(
+      supabase,
+      cartItems.map((item) => item.seller_offer_id).filter((id): id is string => Boolean(id))
+    ),
+  ]);
+  const cartOfferById = new Map(cartMarketplace.offers.map((offer) => [offer.offerId, offer]));
 
   // Map product packs with authoritative case prices, tiers and existing cart items.
   // Only ACTIVE packs are orderable — they feed the PackSelector exactly as before.
@@ -268,21 +283,27 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const cartItemByPackId = new Map<string, { id: string; quantity: number }>();
 
   for (const item of cartItems) {
-    cartItemByPackId.set(item.pack_id, { id: item.id, quantity: item.quantity });
+    if (!item.seller_offer_id) {
+      cartItemByPackId.set(item.pack_id, { id: item.id, quantity: item.quantity });
+    }
     cartTotalPacks += item.quantity;
     const p = item.product_packs;
     const pr = item.products;
     if (p && pr) {
-      // `item.quantity` is a PIECE count. Same retailer piece-pricing call the
-      // server quote makes — quantity Q is billed at Q × (applicable tier rate).
+      const offer = item.seller_offer_id ? cartOfferById.get(item.seller_offer_id) : null;
+      const marketplaceLine = Boolean(item.seller_offer_id);
+      // `item.quantity` is a PIECE count. Seller lines use their approved offer
+      // snapshot; Maharani lines retain the canonical tier price.
       const pricing = calculateRetailerPiecePrice({
         quantity: item.quantity,
         unitsPerCase: p.units_per_case ?? 1,
         casePrice: 0,
-        tiers: packTiers.get(item.pack_id) ?? [],
+        tiers: marketplaceLine ? [] : packTiers.get(item.pack_id) ?? [],
         gstPercent: pr.gst_percent ?? 0,
-        moq: p.moq ?? 1,
-        derivedPiecePrice: piecePriceFromCase(resolvePackPrice(p, cartOverrides.get(item.product_id) ?? null), p.units_per_case ?? 1),
+        moq: offer?.moq ?? (marketplaceLine ? 1 : p.moq ?? 1),
+        derivedPiecePrice: offer
+          ? offer.unitPricePaise / 100
+          : piecePriceFromCase(resolvePackPrice(p, cartOverrides.get(item.product_id) ?? null), p.units_per_case ?? 1),
       });
       cartSubtotal += pricing.subtotal;
       cartGstTotal += pricing.gst;
@@ -449,6 +470,17 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const galleryAlt = canonicalProductName;
 
   const hasCartItems = (cartSummary?.itemCount ?? 0) > 0;
+  const cartQuantityByOffer = new Map(
+    cartItems
+      .filter((item): item is CartItemRow & { seller_offer_id: string } => Boolean(item.seller_offer_id))
+      .map((item) => [item.seller_offer_id, item.quantity])
+  );
+  const retailerMarketplaceOffers = marketplaceOffers.error
+    ? []
+    : marketplaceOffers.offers.map((offer) => ({
+        ...offer,
+        initialQuantity: cartQuantityByOffer.get(offer.offerId) ?? 0,
+      }));
 
   return (
     <div
@@ -681,6 +713,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
             cartSummary={cartSummary}
             selectedPackId={selectedPack?.id ?? null}
           />
+
+          <MarketplaceOfferList offers={retailerMarketplaceOffers} />
 
           {/* Availability status, availability request and problem report — real data only. */}
           <section
