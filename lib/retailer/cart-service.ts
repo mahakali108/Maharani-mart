@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { mergeLinesIntoCart, type CartMergeLine } from '@/lib/retailer/cart-merge';
-import { mutateRetailerCartLineEx } from '@/lib/retailer/cart-rpc';
+import { mutateRetailerCartLine, mutateRetailerCartLineEx } from '@/lib/retailer/cart-rpc';
 import { validatePackForCart } from '@/lib/retailer/cart-validation';
 
 export { validatePackForCart } from '@/lib/retailer/cart-validation';
@@ -47,13 +47,20 @@ export async function updateCartLine(
     if (validationError) return { error: validationError };
   }
 
-  const { error } = await mutateRetailerCartLineEx(supabase, {
-    p_pack_id: item.pack_id,
-    p_seller_offer_id: item.seller_offer_id,
-    p_cart_item_id: cartItemId,
-    p_expected_quantity: item.quantity,
-    p_quantity: quantity,
-  });
+  const { error } = item.seller_offer_id
+    ? await mutateRetailerCartLineEx(supabase, {
+        p_pack_id: item.pack_id,
+        p_seller_offer_id: item.seller_offer_id,
+        p_cart_item_id: cartItemId,
+        p_expected_quantity: item.quantity,
+        p_quantity: quantity,
+      })
+    : await mutateRetailerCartLine(supabase, {
+        p_pack_id: item.pack_id,
+        p_cart_item_id: cartItemId,
+        p_expected_quantity: item.quantity,
+        p_quantity: quantity,
+      });
   if (!error) return { success: true };
   if (/CART_CHANGED/i.test(error.message)) return { error: 'Your cart changed in another request. Refresh it and try again.' };
   if (/minimum[ _]order[ _]quantity/i.test(error.message)) return { error: error.message };

@@ -8,7 +8,11 @@ import { calculateRetailerPiecePrice, type RetailerPiecePricing } from '@/lib/re
 import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { getRetailerWalletPosition, rupeesToPaise } from '@/lib/retailer/wallet';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
+import {
+  loadMarketplaceOfferQuotes,
+  resolveOfferUnitPricePaise,
+  type MarketplaceOfferTier,
+} from '@/lib/retailer/marketplace-offers';
 import { computeCoinPayment, coinBalancePaise, type CoinPayment } from '@/lib/coins/math';
 
 export interface RequestedQuoteLine {
@@ -459,6 +463,7 @@ export async function quoteSplitOrderForRetailer({
     stock_quantity: number | null;
     is_active: boolean;
     moderation_status: 'pending' | 'approved' | 'rejected';
+    tiers?: MarketplaceOfferTier[];
   }
   const offerIds = [...identities.values()]
     .map((entry) => entry.sellerOfferId)
@@ -480,6 +485,7 @@ export async function quoteSplitOrderForRetailer({
       stock_quantity: row.stockQuantity,
       is_active: true,
       moderation_status: 'approved' as const,
+      tiers: row.tiers ?? [],
     }]));
     for (const entry of identities.values()) {
       if (!entry.sellerOfferId) continue;
@@ -529,6 +535,10 @@ export async function quoteSplitOrderForRetailer({
       if (offer.product_id !== pack.product_id) {
         return { error: 'One of the selected seller offers no longer matches this pack.' };
       }
+      const effectiveOfferPaise = resolveOfferUnitPricePaise(
+        { unitPricePaise: offer.unit_price_paise, tiers: offer.tiers },
+        quantity
+      );
       pricing = calculateRetailerPiecePrice({
         quantity,
         unitsPerCase: pack.units_per_case,
@@ -536,7 +546,7 @@ export async function quoteSplitOrderForRetailer({
         tiers: [],
         gstPercent: product.gst_percent,
         moq,
-        derivedPiecePrice: offer.unit_price_paise / 100,
+        derivedPiecePrice: effectiveOfferPaise / 100,
       });
     } else {
       const casePrice = roundMoney(resolvePackCasePrice(pack, overrides.get(pack.product_id) ?? null));

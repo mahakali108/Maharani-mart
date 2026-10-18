@@ -32,7 +32,10 @@ import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { getFrequentlyOrderedCards } from '@/lib/retailer/personalization';
 import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
 import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
+import {
+  loadMarketplaceOfferQuotes,
+  resolveOfferUnitPricePaise,
+} from '@/lib/retailer/marketplace-offers';
 
 interface CartItemDetail {
   id: string;
@@ -167,7 +170,7 @@ export default async function CartPage() {
     // Marketplace lines use the approved offer's integer-paise piece price;
     // Maharani lines retain the canonical case/tier engine.
     const derivedPiecePrice = marketplaceOffer
-      ? marketplaceOffer.unitPricePaise / 100
+      ? resolveOfferUnitPricePaise(marketplaceOffer, item.quantity) / 100
       : pack ? piecePriceFromCase(casePrice, pack.units_per_case) : 0;
     const pricing = calculateRetailerPiecePrice({
       quantity: item.quantity,

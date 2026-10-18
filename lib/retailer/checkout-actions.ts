@@ -102,11 +102,9 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
   const result = await createOrderForRetailer({
     retailerId: user.id,
     collectedBy: null,
-    lines: items.map((item) => ({
-      packId: item.pack_id,
-      sellerOfferId: item.seller_offer_id,
-      quantity: item.quantity,
-    })),
+    lines: items.map((item) => ({ packId: item.pack_id, quantity: item.quantity })).map((line, i) =>
+      items[i]?.seller_offer_id ? { ...line, sellerOfferId: items[i]!.seller_offer_id } : line
+    ),
     notes,
     shippingAddress,
     couponCode: activeCoupon.coupon?.code ?? null,

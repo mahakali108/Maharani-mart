@@ -143,7 +143,11 @@ export function groupOrderLines<T extends GroupableOrderItemRow>(rows: T[]): Gro
   for (const row of rows) {
     // Single-row lines fall back to the row id, which keeps the React key stable.
     const baseKey = row.pack_id ?? row.product_id ?? `row:${row.id}`;
-    const key = `${baseKey}|${row.seller_offer_id ?? row.source_type ?? 'legacy'}`;
+    const key = row.seller_offer_id
+      ? `${baseKey}|${row.seller_offer_id}`
+      : row.source_type && row.source_type !== 'maharani'
+        ? `${baseKey}|${row.source_type}`
+        : baseKey;
     const bucket = groups.get(key);
     if (bucket) bucket.push(row);
     else groups.set(key, [row]);
@@ -201,7 +205,11 @@ export function describeOrderTotals(
   const groups = new Map<string, OrderItemQuantityRow[]>();
   for (const row of rows) {
     const baseKey = row.pack_id ?? row.product_id ?? `row:${row.id ?? ''}`;
-    const key = `${baseKey}|${row.seller_offer_id ?? row.source_type ?? 'legacy'}`;
+    const key = row.seller_offer_id
+      ? `${baseKey}|${row.seller_offer_id}`
+      : row.source_type && row.source_type !== 'maharani'
+        ? `${baseKey}|${row.source_type}`
+        : baseKey;
     const bucket = groups.get(key);
     if (bucket) bucket.push(row);
     else groups.set(key, [row]);

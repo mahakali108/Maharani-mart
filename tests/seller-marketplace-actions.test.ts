@@ -22,12 +22,24 @@ import {
   parsePaise,
   validateSellerInput,
 } from '@/lib/admin/seller-validation';
+import {
+  sellerCreateOfferAction,
+  sellerReplaceOfferTiersAction,
+  sellerSetOfferActiveAction,
+  sellerSetOfferStockAction,
+  sellerUpdateOfferTermsAction,
+  sellerUpdateSubOrderAction,
+  updateSellerProfileAction,
+} from '@/lib/seller/actions';
+import { resolveOfferUnitPricePaise } from '@/lib/retailer/marketplace-offers';
 import { can } from '@/lib/permissions/permissions';
 import { supabaseFixture } from './helpers/supabase-fixture';
 
 const mocks = vi.hoisted(() => ({
   client: vi.fn(),
   permission: vi.fn(),
+  sellerGuard: vi.fn(),
+  activeSellerGuard: vi.fn(),
   revalidate: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -35,6 +47,10 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceRoleClient: mocks.client,
 }));
 vi.mock('@/lib/admin/guard', () => ({ requirePermission: mocks.permission }));
+vi.mock('@/lib/seller/guard', () => ({
+  requireSeller: mocks.sellerGuard,
+  requireActiveSeller: mocks.activeSellerGuard,
+}));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
 
 const ADMIN = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -45,6 +61,16 @@ const PACK_ID = 'dddddddd-0000-4000-8000-000000000004';
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.permission.mockResolvedValue({ id: ADMIN, role: 'admin', fullName: 'Fixture admin', email: null });
+  mocks.sellerGuard.mockResolvedValue({
+    user: { id: SELLER_ID, role: 'seller', fullName: 'Seller Owner', email: 'seller@test.local' },
+    seller: { id: SELLER_ID, business_name: 'Bazaar Traders', status: 'active' },
+    memberRole: 'owner',
+  });
+  mocks.activeSellerGuard.mockResolvedValue({
+    user: { id: SELLER_ID, role: 'seller', fullName: 'Seller Owner', email: 'seller@test.local' },
+    seller: { id: SELLER_ID, business_name: 'Bazaar Traders', status: 'active' },
+    memberRole: 'owner',
+  });
 });
 
 describe('seller permission matrix (Admin + Super Admin only)', () => {
@@ -206,5 +232,122 @@ describe('seller input validation (fail-closed)', () => {
     expect(parsePaise('1.234')).toBeNull();
     expect(parsePaise('abc')).toBeNull();
     expect(parsePaise('')).toBeNull();
+  });
+});
+
+describe('seller portal self-service actions and tier pricing', () => {
+  it('sellerCreateOfferAction derives product_id from pack and starts in pending moderation', async () => {
+    const fixture = supabaseFixture({
+      product_packs: [{ id: PACK_ID, product_id: 'eeeeeeee-0000-4000-8000-000000000005', is_active: true }],
+      seller_offers: [],
+    });
+    mocks.client.mockReturnValue(fixture);
+    const formData = new FormData();
+    formData.set('packId', PACK_ID);
+    formData.set('fulfilmentType', 'seller');
+    formData.set('unitPrice', '110');
+    formData.set('moq', '3');
+    formData.set('stockQuantity', '25');
+    formData.set('sellerSku', 'SKU-1');
+    const result = await sellerCreateOfferAction(formData);
+    expect(result).toEqual({ ok: true });
+    expect(mocks.activeSellerGuard).toHaveBeenCalled();
+    const insert = fixture.queries.find((q) => q.operation === 'insert' && q.table === 'seller_offers');
+    expect(insert?.payload).toMatchObject({
+      seller_id: SELLER_ID,
+      pack_id: PACK_ID,
+      product_id: 'eeeeeeee-0000-4000-8000-000000000005',
+      unit_price_paise: 11000,
+      moq: 3,
+      stock_quantity: 25,
+      moderation_status: 'pending',
+    });
+  });
+
+  it('sellerUpdateOfferTermsAction never sends moderation_status and scopes to seller_id', async () => {
+    const fixture = supabaseFixture({
+      seller_offers: [{ id: OFFER_ID, seller_id: SELLER_ID }],
+    });
+    mocks.client.mockReturnValue(fixture);
+    const formData = new FormData();
+    formData.set('offerId', OFFER_ID);
+    formData.set('unitPrice', '105.50');
+    formData.set('moq', '2');
+    formData.set('sellerSku', 'SKU-2');
+    const result = await sellerUpdateOfferTermsAction(formData);
+    expect(result).toEqual({ ok: true });
+    const update = fixture.queries.find((q) => q.operation === 'update' && q.table === 'seller_offers');
+    expect(update?.payload).toEqual({
+      unit_price_paise: 10550,
+      moq: 2,
+      seller_sku: 'SKU-2',
+    });
+    expect(update?.filters).toContainEqual({ op: 'eq', column: 'seller_id', value: SELLER_ID });
+  });
+
+  it('sellerReplaceOfferTiersAction validates non-overlapping slabs and calls RPC', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: 2, error: null });
+    mocks.client.mockReturnValue({ rpc });
+
+    const invalid = await sellerReplaceOfferTiersAction(OFFER_ID, [
+      { minQuantity: 5, maxQuantity: 12, unitPriceRupees: '98' },
+      { minQuantity: 10, maxQuantity: null, unitPriceRupees: '95' },
+    ]);
+    expect(invalid.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+
+    const valid = await sellerReplaceOfferTiersAction(OFFER_ID, [
+      { minQuantity: 5, maxQuantity: 11, unitPriceRupees: '98' },
+      { minQuantity: 12, maxQuantity: null, unitPriceRupees: '95.50' },
+    ]);
+    expect(valid).toEqual({ ok: true });
+    expect(rpc).toHaveBeenCalledWith('seller_replace_offer_tiers', {
+      p_offer_id: OFFER_ID,
+      p_tiers: [
+        { min_quantity: 5, max_quantity: 11, unit_price_paise: 9800 },
+        { min_quantity: 12, max_quantity: null, unit_price_paise: 9550 },
+      ],
+    });
+  });
+
+  it('sellerSetOfferStockAction, sellerSetOfferActiveAction, sellerUpdateSubOrderAction and updateSellerProfileAction enforce guards', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: 30, error: null });
+    mocks.client.mockReturnValue({ rpc });
+    expect(await sellerSetOfferStockAction(OFFER_ID, 30)).toEqual({ ok: true });
+    expect(rpc).toHaveBeenCalledWith('seller_set_offer_stock', { p_offer_id: OFFER_ID, p_stock_quantity: 30 });
+
+    const subId = 'ffffffff-0000-4000-8000-000000000006';
+    expect(await sellerUpdateSubOrderAction(subId, 'shipped', 'Delhivery', 'AWB123')).toEqual({ ok: true });
+    expect(rpc).toHaveBeenCalledWith('seller_update_sub_order', {
+      p_sub_order_id: subId,
+      p_status: 'shipped',
+      p_courier: 'Delhivery',
+      p_awb: 'AWB123',
+    });
+
+    const profileForm = new FormData();
+    profileForm.set('businessName', 'Bazaar Traders Updated');
+    profileForm.set('phone', '+91 98765 43210');
+    expect(await updateSellerProfileAction(profileForm)).toEqual({ ok: true });
+    expect(mocks.sellerGuard).toHaveBeenCalled();
+
+    const fixture = supabaseFixture({ seller_offers: [{ id: OFFER_ID, seller_id: SELLER_ID }] });
+    mocks.client.mockReturnValue(fixture);
+    expect(await sellerSetOfferActiveAction(OFFER_ID, false)).toEqual({ ok: true });
+  });
+
+  it('resolveOfferUnitPricePaise selects the matching quantity slab or base price', () => {
+    const offer = {
+      unitPricePaise: 10000,
+      tiers: [
+        { minQuantity: 6, maxQuantity: 11, unitPricePaise: 9700 },
+        { minQuantity: 12, maxQuantity: null, unitPricePaise: 9400 },
+      ],
+    };
+    expect(resolveOfferUnitPricePaise(offer, 2)).toBe(10000);
+    expect(resolveOfferUnitPricePaise(offer, 6)).toBe(9700);
+    expect(resolveOfferUnitPricePaise(offer, 11)).toBe(9700);
+    expect(resolveOfferUnitPricePaise(offer, 12)).toBe(9400);
+    expect(resolveOfferUnitPricePaise(offer, 50)).toBe(9400);
   });
 });

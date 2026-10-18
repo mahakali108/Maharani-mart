@@ -13,9 +13,7 @@ export const ROLE_HOME: Record<UserRole, string> = {
   staff: '/staff/dashboard',
   salesman: '/salesman/dashboard',
   retailer: '/retailer/home',
-  // Marketplace sellers (0062) have no login surface yet (owner decision
-  // pending): routing fails closed to the login page.
-  seller: '/login',
+  seller: '/seller/dashboard',
 };
 
 /**
@@ -27,6 +25,7 @@ export const ROLE_ROUTE_PREFIXES: { prefix: string; roles: UserRole[] }[] = [
   { prefix: '/staff', roles: ['staff', 'admin', 'super_admin'] },
   { prefix: '/salesman', roles: ['salesman', 'admin', 'super_admin'] },
   { prefix: '/retailer', roles: ['retailer'] },
+  { prefix: '/seller', roles: ['seller'] },
 ];
 
 export function isRoleAllowedForPath(role: UserRole, pathname: string): boolean {

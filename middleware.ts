@@ -17,8 +17,8 @@ interface AccessPeriodRow {
   expires_at: string | null;
 }
 
-const PUBLIC_PATHS = ['/login', '/register-retailer', '/auth/callback', '/unauthorized', '/access-expired'];
-const PROTECTED_PREFIXES = ['/admin', '/staff', '/salesman', '/retailer', '/pending-approval'];
+const PUBLIC_PATHS = ['/login', '/register-retailer', '/register-seller', '/auth/callback', '/unauthorized', '/access-expired'];
+const PROTECTED_PREFIXES = ['/admin', '/staff', '/salesman', '/retailer', '/seller', '/pending-approval'];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -113,7 +113,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // Already logged in, don't let them sit on login/register screens.
-    if (pathname === '/login' || pathname === '/register-retailer') {
+    if (pathname === '/login' || pathname === '/register-retailer' || pathname === '/register-seller') {
       return NextResponse.redirect(new URL(homeForRole(role), request.url));
     }
 

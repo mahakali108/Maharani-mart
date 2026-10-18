@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Store, Truck } from 'lucide-react';
-import { addToCartAction } from '@/lib/retailer/cart-actions';
+import { addSellerOfferToCartAction } from '@/lib/retailer/cart-actions';
 import { formatInr } from '@/lib/retailer/format';
 
 export interface RetailerMarketplaceOffer {
@@ -17,6 +17,27 @@ export interface RetailerMarketplaceOffer {
   moq: number;
   inStock: boolean;
   initialQuantity: number;
+  tiers?: {
+    minQuantity: number;
+    maxQuantity: number | null;
+    unitPricePaise: number;
+  }[];
+}
+
+function resolveClientOfferPaise(offer: RetailerMarketplaceOffer, quantity: number): number {
+  const tiers = offer.tiers ?? [];
+  if (tiers.length === 0) return offer.unitPricePaise;
+  let matchedPaise: number | null = null;
+  let matchedMin = -1;
+  for (const tier of tiers) {
+    if (tier.minQuantity <= quantity && (tier.maxQuantity === null || quantity <= tier.maxQuantity)) {
+      if (tier.minQuantity > matchedMin) {
+        matchedMin = tier.minQuantity;
+        matchedPaise = tier.unitPricePaise;
+      }
+    }
+  }
+  return matchedPaise ?? offer.unitPricePaise;
 }
 
 export function MarketplaceOfferList({ offers }: { offers: RetailerMarketplaceOffer[] }) {
@@ -36,7 +57,7 @@ export function MarketplaceOfferList({ offers }: { offers: RetailerMarketplaceOf
     setActiveOffer(offer.offerId);
     setMessage(null);
     startTransition(async () => {
-      const result = await addToCartAction(offer.packId, quantity, offer.offerId);
+      const result = await addSellerOfferToCartAction(offer.packId, quantity, offer.offerId);
       if ('error' in result && result.error) {
         setMessage({ offerId: offer.offerId, error: result.error });
       } else {
@@ -61,6 +82,8 @@ export function MarketplaceOfferList({ offers }: { offers: RetailerMarketplaceOf
       <ul className="divide-y divide-slate-100">
         {offers.map((offer) => {
           const quantity = Math.max(offer.moq, quantities[offer.offerId] ?? offer.moq);
+          const effectivePaise = resolveClientOfferPaise(offer, quantity);
+          const tiers = offer.tiers ?? [];
           const busy = isPending && activeOffer === offer.offerId;
           return (
             <li key={offer.offerId} className="space-y-3 px-4 py-4 sm:px-5">
@@ -77,9 +100,24 @@ export function MarketplaceOfferList({ offers }: { offers: RetailerMarketplaceOf
                   {offer.sellerGstin ? (
                     <p className="mt-0.5 text-[9px] text-slate-500">Seller GSTIN {offer.sellerGstin}</p>
                   ) : null}
+                  {tiers.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[9px] font-semibold text-slate-500">Quantity tiers:</span>
+                      {tiers.map((tier, idx) => (
+                        <span
+                          key={idx}
+                          className="rounded-md border border-primary-200 bg-primary-50/70 px-1.5 py-0.5 text-[9px] font-medium text-primary-800"
+                        >
+                          {tier.minQuantity}
+                          {tier.maxQuantity ? `–${tier.maxQuantity}` : '+'} pcs:{' '}
+                          {formatInr(tier.unitPricePaise / 100)}/pc
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="text-right">
-                  <p className="text-base font-bold text-primary-700">{formatInr(offer.unitPricePaise / 100)}<span className="text-[9px] font-medium text-slate-500"> /pc</span></p>
+                  <p className="text-base font-bold text-primary-700">{formatInr(effectivePaise / 100)}<span className="text-[9px] font-medium text-slate-500"> /pc</span></p>
                   <p className={`mt-1 text-[9px] font-bold ${offer.inStock ? 'text-mint-700' : 'text-slate-500'}`}>
                     {offer.inStock ? 'In stock' : 'Out of stock'}
                   </p>

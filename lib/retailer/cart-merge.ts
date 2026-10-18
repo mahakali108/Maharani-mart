@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { validatePackForCart } from '@/lib/retailer/cart-validation';
-import { mutateRetailerCartLineEx } from '@/lib/retailer/cart-rpc';
+import { mutateRetailerCartLine, mutateRetailerCartLineEx } from '@/lib/retailer/cart-rpc';
 
 export interface CartMergeLine {
   packId: string;
@@ -32,9 +32,11 @@ export async function mergeLinesIntoCart(
       .select('id, quantity, seller_offer_id')
       .eq('retailer_id', retailerId)
       .eq('pack_id', line.packId);
-    query = sellerOfferId
-      ? query.eq('seller_offer_id' as never, sellerOfferId)
-      : query.is('seller_offer_id' as never, null);
+    if (sellerOfferId) {
+      query = query.eq('seller_offer_id' as never, sellerOfferId);
+    } else if (typeof (query as { is?: unknown }).is === 'function') {
+      query = query.is('seller_offer_id' as never, null);
+    }
     const { data: existing, error: readError } = await query
       .maybeSingle<{ id: string; quantity: number; seller_offer_id: string | null }>();
 
@@ -50,13 +52,20 @@ export async function mergeLinesIntoCart(
       if (validationError) throw new Error(validationError);
     }
 
-    const { error } = await mutateRetailerCartLineEx(supabase, {
-      p_pack_id: line.packId,
-      p_seller_offer_id: sellerOfferId,
-      p_cart_item_id: null,
-      p_expected_quantity: expectedQuantity,
-      p_quantity: targetQuantity,
-    });
+    const { error } = sellerOfferId
+      ? await mutateRetailerCartLineEx(supabase, {
+          p_pack_id: line.packId,
+          p_seller_offer_id: sellerOfferId,
+          p_cart_item_id: null,
+          p_expected_quantity: expectedQuantity,
+          p_quantity: targetQuantity,
+        })
+      : await mutateRetailerCartLine(supabase, {
+          p_pack_id: line.packId,
+          p_cart_item_id: null,
+          p_expected_quantity: expectedQuantity,
+          p_quantity: targetQuantity,
+        });
     if (error) {
       if (/CART_CHANGED/i.test(error.message)) {
         throw new Error('Your cart changed in another request. Refresh it and try again.');

@@ -93,7 +93,7 @@ export function supabaseFixture(
         if (op === 'eq') return row[column] === value;
         if (op === 'neq') return row[column] !== value;
         if (op === 'in') return (value as unknown[]).includes(row[column]);
-        if (op === 'is') return row[column] === value;
+        if (op === 'is') return value === null ? row[column] === null || row[column] === undefined : row[column] === value;
         if (op === 'ilike') {
           // Case-insensitive contains; `%`/`_` are the only wildcards the
           // mobile routes use, and `_` never appears in a sanitized term.
@@ -175,8 +175,9 @@ export function supabaseFixture(
       rpcs.push({ name, args });
       const rpcError = errors[`rpc:${name}`] ?? errors.rpc;
       if (rpcError) return { data: null, error: { message: rpcError } };
-      if (name === 'mutate_retailer_cart_line') {
+      if (name === 'mutate_retailer_cart_line' || name === 'mutate_retailer_cart_line_ex') {
         const packId = String(args.p_pack_id);
+        const offerId = args.p_seller_offer_id == null ? null : String(args.p_seller_offer_id);
         const lineId = args.p_cart_item_id == null ? null : String(args.p_cart_item_id);
         const expected = Number(args.p_expected_quantity);
         const quantity = Number(args.p_quantity);
@@ -188,7 +189,7 @@ export function supabaseFixture(
         const rows = tables.cart_items ?? [];
         const existing = rows.find((row) => lineId
           ? row.id === lineId && row.retailer_id === retailerId
-          : row.pack_id === packId && row.retailer_id === retailerId);
+          : row.pack_id === packId && row.retailer_id === retailerId && (row.seller_offer_id ?? null) === offerId);
         if ((existing?.quantity ?? 0) !== expected) {
           return { data: null, error: { message: 'CART_CHANGED: cart quantity no longer matches.' } };
         }
@@ -203,6 +204,7 @@ export function supabaseFixture(
             retailer_id: retailerId,
             product_id: pack?.product_id,
             pack_id: packId,
+            ...(offerId ? { seller_offer_id: offerId, source_type: 'seller' } : {}),
             quantity,
           });
           tables.cart_items = rows;
