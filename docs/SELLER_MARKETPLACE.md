@@ -119,14 +119,31 @@ downstream merchants; suppliers are upstream vendors.
 | `0066_fulfilment_and_delivery.sql` | behaviour | `seller_shipments`, delivery link column, `set_sub_order_status`, `apply_parent_order_status`, `restore_sub_order_stock` |
 | `0067_seller_settlement.sql` | behaviour | `collection_allocations`, `seller_ledger`, `seller_payouts` (table only), `allocate_payment_collection`, `refund_sub_order_coins` |
 | `0068_seller_governance.sql` | behaviour | drain-mode suspension trigger, admin-only offer column guard, audit triggers |
-| `supabase/rollbacks/0062–0068_*.down.sql` | rollback | fail-safe, data-guarded; reverse order; financial/shipment history never erased silently |
+| `0069_seller_portal_access.sql` | behaviour | seller portal access, source-aware cart fix, seller tiers and seller-scoped projections; saved-cart source is `text` + CHECK (no `cart_source_type` enum dependency) |
+| `0070_seller_invite_only.sql` | security | seller profiles require a single-use service-role invitation; public seller metadata cannot create a seller; invite actor recorded as tenant creator |
+| `0071_gaya_default_district.sql` | config | new admin-created service areas default to Gaya; does not rewrite existing rows or declare PINs serviceable |
+| `supabase/rollbacks/0062–0069_*.down.sql` | rollback | fail-safe, data-guarded; reverse order; financial/shipment history never erased silently; do not execute to repair forward migrations |
 
 The prompt's split labels `0064a/0064b/0065/0066/0067/0068` map to the
 repository's 4-digit convention as `0064/0065/0066/0067/0068` (plus `0062/
 0063`). The planned `0064c` cleanup (dropping the legacy constraints) is
 **deferred** until the split path has production history.
 
-## 4. Application map (this PR)
+## 4. Seller onboarding (invite-only)
+
+Public seller signup is disabled in the PWA. Super Admin uses `/admin/sellers` to
+send a Supabase Auth email invitation; the account is created from a one-time,
+15-minute server-created invite and starts `pending`. The seller follows the
+email link, sets a password through Supabase's invite flow, and signs in through
+the existing `/login` page. Pending sellers are not approved to trade; approval
+remains a separate review action. No password is stored by Maharani Traders.
+
+Required server configuration: `SUPABASE_SERVICE_ROLE_KEY` (server only),
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SITE_URL`, and working Supabase Auth
+SMTP/invite templates plus a redirect URL that includes `/auth/callback`.
+Never add the service-role key to `NEXT_PUBLIC_*` variables.
+
+## 5. Application map (this PR)
 
 - `types/marketplace.types.ts` — local types (generated `database.types.ts`
   absorbs them at the next pipeline refresh; call sites use the established

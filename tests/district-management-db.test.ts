@@ -18,9 +18,9 @@ beforeAll(async () => {
 afterAll(async () => { await db?.close(); });
 
 describe('district persistence and real PostgreSQL boundaries', () => {
-  it('creates new areas in Saran without rewriting legacy districts', async () => {
+  it('creates new areas in Gaya without rewriting legacy districts', async () => {
     const { rows } = await as(db, admin, (tx) => tx.query<{ id: string; district: string }>('select id, district from areas where id in ($1, $2)', [saran, legacy]));
-    expect(rows.find((r) => r.id === saran)?.district).toBe('Saran');
+    expect(rows.find((r) => r.id === saran)?.district).toBe('Gaya');
     expect(rows.find((r) => r.id === legacy)?.district).toBe('Khagaria');
   });
   it('registration derives district from the selected active area, not client metadata', async () => {
@@ -33,10 +33,10 @@ describe('district persistence and real PostgreSQL boundaries', () => {
     await as(db, admin, (tx) => tx.query('update retailers set area_id=$1 where id=$2', [saran, owner]));
     const read = () => as(db, owner, (tx) => tx.query<{ district: string }>(
       'select a.district from retailers r join areas a on a.id=r.area_id where r.id=$1', [owner]));
-    expect((await read()).rows[0]?.district).toBe('Saran');
-    expect((await read()).rows[0]?.district).toBe('Saran');
+    expect((await read()).rows[0]?.district).toBe('Gaya');
+    expect((await read()).rows[0]?.district).toBe('Gaya');
     const filtered = await as(db, admin, (tx) => tx.query<{ id: string }>(
-      'select r.id from retailers r join areas a on a.id=r.area_id where a.district=$1', ['Saran']));
+      'select r.id from retailers r join areas a on a.id=r.area_id where a.district=$1', ['Gaya']));
     expect(filtered.rows.map((r) => r.id)).toContain(owner);
   });
   it('retailers cannot self-reassign service areas', async () => {

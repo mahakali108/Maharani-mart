@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { LoginForm } from '@/components/auth/login-form';
 import { AuthFrame } from '@/components/auth/auth-frame';
 import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
@@ -26,12 +25,6 @@ export default function LoginPage({
         <div role="alert" className="mb-5 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">{errorMessages[searchParams.error]}</div>
       ) : null}
       <LoginForm redirectTo={searchParams.redirect} />
-      <p className="mt-5 text-center text-xs text-slate-500">
-        Want to sell on Maharani Marketplace?{' '}
-        <Link href="/register-seller" className="font-semibold text-primary-600 hover:text-primary-700">
-          Register as a seller
-        </Link>
-      </p>
     </AuthFrame>
   );
 }

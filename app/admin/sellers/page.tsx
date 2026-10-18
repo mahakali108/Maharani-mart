@@ -32,7 +32,7 @@ export default async function SellersPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  await requirePagePermission('sellers.view');
+  const viewer = await requirePagePermission('sellers.view');
   const query = parseSellerListParams(searchParams);
   const { sellers, total } = await listSellers(query);
   const pages = Math.max(1, Math.ceil(total / SELLERS_PER_PAGE));
@@ -51,13 +51,15 @@ export default async function SellersPage({
         </div>
       </header>
 
-      <Card className="p-5">
-        <h2 className="text-sm font-semibold text-ink-800">Add a seller</h2>
-        <p className="mb-3 mt-1 text-xs text-ink-500">
-          New sellers start in <strong>pending</strong> and need review before they can trade.
-        </p>
-        <CreateSellerForm />
-      </Card>
+      {viewer.role === 'super_admin' ? (
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-ink-800">Invite a seller</h2>
+          <p className="mb-3 mt-1 text-xs text-ink-500">
+            Only Super Admin can send an email invitation. Accounts start <strong>pending</strong> and cannot trade until approved.
+          </p>
+          <CreateSellerForm />
+        </Card>
+      ) : null}
 
       <form className="flex flex-wrap items-end gap-3" method="get">
         <Input
