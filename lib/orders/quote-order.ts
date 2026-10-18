@@ -19,6 +19,12 @@ export interface RequestedQuoteLine {
    * (46 pcs = 1 case + 6 loose).
    */
   quantity: number;
+  /**
+   * Seller offer identity for split-order lines (0064 line_key 's:<offer>').
+   * Omitted/null means the legacy Maharani pack line ('m'). The SAME pack may
+   * appear once as a Maharani line AND once per seller offer.
+   */
+  sellerOfferId?: string | null;
 }
 
 /**
@@ -81,6 +87,8 @@ export interface QuotedOrderLine {
   looseTier: PricingTier | null;
   /** Exactly one piece-backed row is persisted for this current retailer quote. */
   items: QuotedOrderItem[];
+  /** Split-order identity: the seller offer behind this line, or null (legacy pack line). */
+  sellerOfferId?: string | null;
 }
 
 export interface QuotedCoupon {
@@ -104,6 +112,12 @@ export interface OrderQuote {
   coins: CoinPayment;
   /** Set when a valid coupon was revalidated and applied (0051). */
   coupon: QuotedCoupon | null;
+  /**
+   * Fulfilment profile derived from the quoted lines (0064): all_seller means
+   * no pack-stock lines — checkout needs no Maharani warehouse. Omitted for
+   * legacy quotes (always all_maharani).
+   */
+  fulfilmentProfile?: 'all_maharani' | 'mixed' | 'all_seller';
 }
 
 export type QuoteOrderResult =
@@ -198,6 +212,12 @@ export async function quoteOrderForRetailer({
    */
   couponCode?: string | null;
 }): Promise<QuoteOrderResult> {
+  // Split-order lines (same pack via a seller offer) need line-identity
+  // normalisation and offer pricing; legacy callers take the original path
+  // unchanged below.
+  if (lines.some((line) => Boolean(line.sellerOfferId))) {
+    return quoteSplitOrderForRetailer({ retailerId, lines, supabase, couponCode });
+  }
   const normalizedResult = normalizeQuoteLines(lines);
   if ('error' in normalizedResult) return normalizedResult;
   const normalized = normalizedResult.lines;
@@ -368,6 +388,261 @@ export async function quoteOrderForRetailer({
       lines: quotedLines,
       coins,
       coupon: quotedCoupon,
+    },
+  };
+}
+
+/**
+ * Split-order quote (0064 line identity): the same authoritative rules as
+ * quoteOrderForRetailer, extended so one pack can appear BOTH as a Maharani
+ * line and as seller-offer lines. Seller lines are priced from the offer
+ * snapshot (integer paise) through the SAME GST-inclusive engine; MOQ comes
+ * from the offer. Offer state (active/moderation/seller) is revalidated here
+ * and again at cart mutation and inside create_order_atomic_v2.
+ */
+export async function quoteSplitOrderForRetailer({
+  retailerId,
+  lines,
+  supabase = createClient(),
+  couponCode,
+}: {
+  retailerId: string;
+  lines: RequestedQuoteLine[];
+  supabase?: ReturnType<typeof createClient>;
+  couponCode?: string | null;
+}): Promise<QuoteOrderResult> {
+  const identities = new Map<string, { packId: string; sellerOfferId: string | null; quantity: number }>();
+  if (lines.length === 0) return { error: 'Add at least one product to the order.' };
+  if (lines.length > 200) return { error: 'An order can contain at most 200 different packs.' };
+  for (const line of lines) {
+    if (!line.packId || !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 100000) {
+      return { error: 'Every order line must have a valid whole number of pieces.' };
+    }
+    const sellerOfferId = line.sellerOfferId ?? null;
+    const key = `${line.packId}|${sellerOfferId ?? 'm'}`;
+    if (identities.has(key)) {
+      return { error: 'The same pack cannot be added more than once.' };
+    }
+    identities.set(key, { packId: line.packId, sellerOfferId, quantity: line.quantity });
+  }
+
+  const { data: retailer, error: retailerError } = await supabase
+    .from('retailers')
+    .select('id, area_id, status')
+    .eq('id', retailerId)
+    .maybeSingle<RetailerForQuote>();
+  if (retailerError || !retailer) return { error: 'Retailer not found or not assigned to you.' };
+  if (retailer.status !== 'active') return { error: 'Orders can only be created for an active retailer.' };
+
+  const walletPosition = await getRetailerWalletPosition(supabase, retailer.id);
+
+  const packIds = [...new Set([...identities.values()].map((entry) => entry.packId))];
+  const { data: packData, error: packError } = await supabase
+    .from('product_packs')
+    .select(
+      'id, product_id, pack_name, base_price, ptr, case_price, units_per_case, moq, is_active, products ( id, name, gst_percent, is_active, category_id, brand_id )'
+    )
+    .in('id', packIds);
+  if (packError) return { error: 'The product catalog could not be loaded. Please try again.' };
+  const packs = (packData ?? []) as unknown as PackForQuote[];
+  const packById = new Map(packs.map((pack) => [pack.id, pack]));
+
+  interface OfferForQuote {
+    id: string;
+    seller_id: string;
+    pack_id: string;
+    product_id: string;
+    fulfilment_type: 'seller' | 'maharani';
+    unit_price_paise: number;
+    moq: number;
+    stock_quantity: number | null;
+    is_active: boolean;
+    moderation_status: 'pending' | 'approved' | 'rejected';
+  }
+  const offerIds = [...identities.values()]
+    .map((entry) => entry.sellerOfferId)
+    .filter((id): id is string => Boolean(id));
+  let offerById = new Map<string, OfferForQuote>();
+  if (offerIds.length > 0) {
+    const { data: offerData, error: offersError } = await supabase
+      .from('seller_offers' as never)
+      .select(
+        'id, seller_id, pack_id, product_id, fulfilment_type, unit_price_paise, moq, stock_quantity, is_active, moderation_status, sellers!inner(status)'
+      )
+      .in('id', offerIds);
+    if (offersError) return { error: 'The seller offers could not be loaded. Please try again.' };
+    offerById = new Map(
+      ((offerData ?? []) as unknown as (OfferForQuote & { sellers: { status: string } })[])
+        .filter((row) => row.is_active && row.moderation_status === 'approved' && row.sellers.status === 'active')
+        .map((row) => [row.id, row])
+    );
+    for (const entry of identities.values()) {
+      if (!entry.sellerOfferId) continue;
+      const offer = offerById.get(entry.sellerOfferId);
+      if (!offer || offer.pack_id !== entry.packId) {
+        return { error: 'One of the selected seller offers is no longer available.' };
+      }
+    }
+  }
+
+  const productIds = [...new Set(packs.map((pack) => pack.product_id))];
+  const overrides = await getProductPriceOverrides(supabase, productIds, retailer.id, retailer.area_id);
+  const tierMap = await loadPackTiers(supabase, packIds);
+
+  let subtotal = 0;
+  let gstTotal = 0;
+  let packStockLines = 0;
+  let sellerStockLines = 0;
+  const quotedLines: QuotedOrderLine[] = [];
+  for (const entry of identities.values()) {
+    const pack = packById.get(entry.packId);
+    if (!pack?.products) return { error: 'One of the selected packs no longer exists.' };
+    const product = pack.products;
+    const offer = entry.sellerOfferId ? offerById.get(entry.sellerOfferId) : undefined;
+
+    if (!offer) {
+      if (!pack.is_active || !product.is_active) {
+        return { error: `${product.name} (${pack.pack_name}) is no longer available.` };
+      }
+    }
+
+    const quantity = entry.quantity;
+    const moq = offer ? Math.max(offer.moq, 1) : pack.moq;
+    if (quantity < moq) {
+      return {
+        error: `Minimum order quantity for ${product.name} (${pack.pack_name}) is ${moq} pcs.`,
+      };
+    }
+
+    let pricing: RetailerPiecePricing;
+    if (offer) {
+      if (offer.product_id !== pack.product_id) {
+        return { error: 'One of the selected seller offers no longer matches this pack.' };
+      }
+      pricing = calculateRetailerPiecePrice({
+        quantity,
+        unitsPerCase: pack.units_per_case,
+        casePrice: 0,
+        tiers: [],
+        gstPercent: product.gst_percent,
+        moq,
+        derivedPiecePrice: offer.unit_price_paise / 100,
+      });
+    } else {
+      const casePrice = roundMoney(resolvePackCasePrice(pack, overrides.get(pack.product_id) ?? null));
+      pricing = calculateRetailerPiecePrice({
+        quantity,
+        unitsPerCase: pack.units_per_case,
+        casePrice,
+        tiers: tierMap.get(pack.id) ?? [],
+        gstPercent: product.gst_percent,
+        moq,
+      });
+    }
+
+    if (!pricing.orderable) {
+      return {
+        error: `${product.name} (${pack.pack_name}): ${pricing.message ?? 'That quantity cannot be ordered right now.'}`,
+      };
+    }
+
+    if (offer) {
+      if (offer.fulfilment_type === 'seller') {
+        sellerStockLines += 1;
+      } else {
+        packStockLines += 1;
+      }
+    } else {
+      packStockLines += 1;
+    }
+
+    const item: QuotedOrderItem = {
+      quantity,
+      quantityUnit: 'pieces',
+      quantityPieces: quantity,
+      unitsPerCase: pack.units_per_case,
+      unitPrice: pricing.unitPrice,
+      lineTotal: pricing.lineTotal,
+      subtotal: pricing.subtotal,
+      gst: pricing.gst,
+    };
+    subtotal = roundMoney(subtotal + pricing.subtotal);
+    gstTotal = roundMoney(gstTotal + pricing.gst);
+
+    quotedLines.push({
+      productId: pack.product_id,
+      productName: product.name,
+      categoryId: product.category_id,
+      brandId: product.brand_id,
+      packId: entry.packId,
+      packName: pack.pack_name,
+      quantity,
+      moq,
+      unitsPerCase: pack.units_per_case,
+      pieces: pricing.quantity,
+      cases: 0,
+      loosePieces: 0,
+      piecePrice: pricing.unitPrice,
+      casePrice: 0,
+      unitPrice: pricing.unitPrice,
+      gstPercent: product.gst_percent,
+      subtotal: pricing.subtotal,
+      gst: pricing.gst,
+      lineTotal: pricing.lineTotal,
+      looseUnitPrice: pricing.unitPrice,
+      loosePriceSource: pricing.priceSource,
+      looseTier: pricing.tier,
+      items: [item],
+      sellerOfferId: entry.sellerOfferId,
+    });
+  }
+
+  let discountTotal = 0;
+  let quotedCoupon: QuotedCoupon | null = null;
+  const code = (couponCode ?? '').trim().toUpperCase();
+  if (code) {
+    const couponLines = quotedLines.map((line) => ({
+      productId: line.productId,
+      categoryId: line.categoryId,
+      brandId: line.brandId,
+      subtotal: line.subtotal,
+    }));
+    const validation = await validateCouponForOrder(supabase, {
+      retailerId: retailer.id,
+      code,
+      lines: couponLines,
+    });
+    if (!validation.valid) {
+      return { error: validation.message, code: 'coupon_invalid' };
+    }
+    discountTotal = validation.discount;
+    quotedCoupon = { id: validation.coupon.id, code: validation.coupon.code, discount: validation.discount };
+  }
+
+  const grandTotal = roundMoney(subtotal + gstTotal - discountTotal);
+  const coins = computeCoinPayment({
+    orderTotalPaise: rupeesToPaise(grandTotal),
+    balancePaise: coinBalancePaise(walletPosition.creditLimitPaise, walletPosition.outstandingPaise),
+  });
+
+  const fulfilmentProfile =
+    packStockLines > 0 && sellerStockLines > 0
+      ? 'mixed'
+      : sellerStockLines > 0
+        ? 'all_seller'
+        : 'all_maharani';
+
+  return {
+    quote: {
+      retailerId: retailer.id,
+      subtotal,
+      gstTotal,
+      discountTotal,
+      grandTotal,
+      lines: quotedLines,
+      coins,
+      coupon: quotedCoupon,
+      fulfilmentProfile,
     },
   };
 }

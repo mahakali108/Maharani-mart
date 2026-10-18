@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto';
 export interface FingerprintLine {
   packId: string;
   quantity: number;
+  /** Seller offer identity for split-order lines (0064 line_key). Omitted for legacy pack lines so their canonical form is unchanged. */
+  sellerOfferId?: string | null;
 }
 
 export interface OrderRequestFingerprintInput {
@@ -38,8 +40,19 @@ export function createOrderRequestFingerprint(input: OrderRequestFingerprintInpu
     retailerId: input.retailerId.trim().toLowerCase(),
     collectedBy: input.collectedBy?.trim().toLowerCase() ?? null,
     lines: input.lines
-      .map((line) => ({ packId: line.packId.trim().toLowerCase(), quantity: line.quantity }))
-      .sort((left, right) => left.packId.localeCompare(right.packId)),
+      .map((line) => {
+        const base = { packId: line.packId.trim().toLowerCase(), quantity: line.quantity };
+        // Legacy lines keep the exact pre-split canonical shape (no extra key).
+        return line.sellerOfferId
+          ? { ...base, sellerOfferId: line.sellerOfferId.trim().toLowerCase() }
+          : base;
+      })
+      .sort((left, right) =>
+        left.packId.localeCompare(right.packId)
+        || String('sellerOfferId' in left ? left.sellerOfferId : '').localeCompare(
+             String('sellerOfferId' in right ? right.sellerOfferId : '')
+           )
+      ),
     notes: (input.notes ?? '').replace(/\r\n/g, '\n').trim(),
     context: input.context?.trim() ?? null,
     shippingAddress: input.shippingAddress

@@ -5,7 +5,7 @@
  * user should import from here rather than hardcoding strings.
  */
 
-export type UserRole = 'super_admin' | 'admin' | 'staff' | 'salesman' | 'retailer';
+export type UserRole = 'super_admin' | 'admin' | 'staff' | 'salesman' | 'retailer' | 'seller';
 
 export const ROLE_HOME: Record<UserRole, string> = {
   super_admin: '/admin/dashboard',
@@ -13,6 +13,9 @@ export const ROLE_HOME: Record<UserRole, string> = {
   staff: '/staff/dashboard',
   salesman: '/salesman/dashboard',
   retailer: '/retailer/home',
+  // Marketplace sellers (0062) have no login surface yet (owner decision
+  // pending): routing fails closed to the login page.
+  seller: '/login',
 };
 
 /**
@@ -42,4 +45,5 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   staff: 'Staff',
   salesman: 'Salesman',
   retailer: 'Retailer',
+  seller: 'Seller',
 };
