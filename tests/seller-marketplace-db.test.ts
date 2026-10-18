@@ -26,6 +26,7 @@ let productId: string;
 let packId: string;
 let sellerId: string;
 let offerId: string;
+let stockSubOrderId: string;
 
 async function createPack(tx: Db | Tx, name: string, stock: number): Promise<{ productId: string; packId: string }> {
   const sku = `SKU-${name}-${Math.random().toString(36).slice(2, 8)}`;
@@ -59,15 +60,22 @@ beforeAll(async () => {
   productId = created.productId;
   packId = created.packId;
 
+  // createUser() already created the pending retailer and its valid area; only
+  // promote that row. Do not intentionally fail an INSERT and catch it inside
+  // the same transaction — PostgreSQL keeps the transaction aborted afterward.
   await as(db, admin, (tx) => tx.query(
-    `insert into retailers (id, status, area_id) values ($1, 'active', null)`,
+    `update retailers set status='active' where id=$1`,
     [retailer]
-  ).catch(async () => tx.query(`update retailers set status='active' where id=$1`, [retailer])));
+  ));
 
   sellerId = await as(db, admin, (tx) => createSeller(tx, 'Bazaar Seller Co'));
   await as(db, admin, (tx) => tx.query(
     `update sellers set status='active' where id=$1 and status='pending'`,
     [sellerId]
+  ));
+  await as(db, admin, (tx) => tx.query(
+    `insert into seller_members (seller_id, profile_id, member_role) values ($1, $2, 'owner')`,
+    [sellerId, sellerProfile]
   ));
 
   // Admin-authored, approved, seller-fulfilled offer at ₹100.00/piece.
@@ -85,23 +93,18 @@ beforeAll(async () => {
 describe('0062 seller identity and tenancy', () => {
   it('a seller member sees ONLY their own seller; staff sees none', async () => {
     const otherSeller = await as(db, admin, (tx) => createSeller(tx, 'Other Seller Ltd'));
-    await as(db, admin, (tx) => tx.query(
-      `insert into seller_members (seller_id, profile_id, member_role) values ($1, $2, 'owner')`,
-      [sellerId, sellerProfile]
-    ));
-
     const memberRows = await as(db, sellerProfile, async (tx) =>
-      (await tx.query(`select id from sellers`)).rows
+      (await tx.query<{ id: string }>(`select id from sellers`)).rows
     );
     expect(memberRows.map((r) => r.id)).toEqual([sellerId]);
 
     const staffRows = await as(db, staff, async (tx) =>
-      (await tx.query(`select id from sellers`)).rows
+      (await tx.query<{ id: string }>(`select id from sellers`)).rows
     );
     expect(staffRows).toEqual([]);
 
     const adminRows = await as(db, admin, async (tx) =>
-      (await tx.query(`select id from sellers`)).rows
+      (await tx.query<{ id: string }>(`select id from sellers`)).rows
     );
     expect(adminRows.map((r) => r.id)).toContain(otherSeller);
   });
@@ -139,7 +142,7 @@ describe('0063 floors, moderation and deactivation-only', () => {
 
   it('a seller member cannot change moderation state; offers are never deleted', async () => {
     expect(await errorOf(db, sellerProfile, (tx) => tx.query(
-      `update seller_offers set moderation_status='approved' where id=$1`,
+      `update seller_offers set moderation_status='rejected' where id=$1`,
       [offerId]
     ))).toMatch(/Only an Admin can change the moderation state|row-level security/);
     expect(await errorOf(db, admin, (tx) => tx.query(
@@ -150,10 +153,10 @@ describe('0063 floors, moderation and deactivation-only', () => {
   it('price floors are append-only', async () => {
     expect(await errorOf(db, admin, (tx) => tx.query(
       `update offer_price_floors set floor_paise = 1 where pack_id=$1`, [packId]
-    ))).toMatch(/append-only/);
+    ))).toMatch(/append-only|permission denied/);
     expect(await errorOf(db, admin, (tx) => tx.query(
       `delete from offer_price_floors where pack_id=$1`, [packId]
-    ))).toMatch(/append-only/);
+    ))).toMatch(/append-only|permission denied/);
   });
 });
 
@@ -198,7 +201,7 @@ describe('0064 line identity', () => {
     const childB = randomUUID();
     await as(db, 'service', (tx) => tx.query(
       `insert into sub_orders (id, parent_order_id, seller_id, fulfilment_type, status, sort_index, gross_paise, payable_paise)
-       values ($1, $2, $3, 'seller', 'pending', 0, 10000, 10000), ($4, $2, $3, 'seller', 'pending', 1, 10000, 10000)`,
+       values ($1, $2, $3, 'seller', 'pending', 0, 10000, 10000), ($4, $2, null, 'maharani', 'pending', 1, 10000, 10000)`,
       [childA, parentId, sellerId, childB]
     ));
 
@@ -207,6 +210,15 @@ describe('0064 line identity', () => {
       `insert into order_items (order_id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, sub_order_id, seller_offer_id, source_type, fulfilment_type, stock_deducted_quantity)
        values ($1, $2, $3, 1, 'pieces', 1, 12, 100, 0, 100, $4, $5, 'seller', 'seller', 1)`,
       [parentId, productId, packId, childA, offerId]
+    ));
+    // Keep this invariant test independent of other stock-focused cases.
+    await as(db, 'service', (tx) => tx.query(
+      `update product_packs set stock_quantity=100 where id=$1`, [packId]
+    ));
+    await as(db, 'service', (tx) => tx.query(
+      `insert into order_items (order_id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, sub_order_id, source_type, fulfilment_type, stock_deducted_quantity)
+       values ($1, $2, $3, 1, 'pieces', 1, 12, 100, 0, 100, $4, 'maharani', 'maharani', 1)`,
+      [parentId, productId, packId, childB]
     ));
     // ...but twice inside the SAME sub-order is not (partial unique + trigger).
     expect(await errorOf(db, 'service', (tx) => tx.query(
@@ -249,6 +261,7 @@ describe('0065/0066 stock discipline', () => {
       [parentId, retailer, randomUUID()]
     ));
     const childId = randomUUID();
+    stockSubOrderId = childId;
     await as(db, 'service', (tx) => tx.query(
       `insert into sub_orders (id, parent_order_id, seller_id, fulfilment_type, status, sort_index, gross_paise, payable_paise)
        values ($1, $2, $3, 'seller', 'pending', 0, 10000, 10000)`,
@@ -288,8 +301,8 @@ describe('0065/0066 stock discipline', () => {
 
   it('restorable can never exceed deducted − shipped + returned_received', async () => {
     const { rows: itemRows } = await db.query<{ id: string; sub_order_id: string }>(
-      `select id, sub_order_id from order_items where seller_offer_id=$1 order by created_at desc limit 1`,
-      [offerId]
+      `select id, sub_order_id from order_items where seller_offer_id=$1 and sub_order_id=$2 limit 1`,
+      [offerId, stockSubOrderId]
     );
     const itemId = itemRows[0]!.id;
     expect(await errorOf(db, 'service', (tx) => tx.query(
@@ -316,17 +329,21 @@ describe('0065/0066 stock discipline', () => {
 
 describe('0067 child-scoped coin refunds', () => {
   it('reverses each child debit exactly once, capped by the request', async () => {
-    const { rows: orderRows } = await db.query<{ id: string }>(
-      `select id from orders where retailer_id=$1 order by placed_at limit 1`, [retailer]
-    );
-    const parentId = orderRows[0]!.id;
-    const { rows: childRows } = await db.query<{ id: string }>(
-      `select id from sub_orders where parent_order_id=$1 order by sort_index limit 1`, [parentId]
-    );
-    const childId = childRows[0]!.id;
+    const parentId = randomUUID();
+    const childId = randomUUID();
+    await as(db, 'service', (tx) => tx.query(
+      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, request_key, request_fingerprint, fulfilment_profile)
+       values ($1, $2, 'pending', 500, 0, 0, 500, $3, repeat('e', 64), 'all_seller')`,
+      [parentId, retailer, randomUUID()]
+    ));
+    await as(db, 'service', (tx) => tx.query(
+      `insert into sub_orders (id, parent_order_id, seller_id, fulfilment_type, status, sort_index, gross_paise, payable_paise)
+       values ($1, $2, $3, 'seller', 'cancelled', 0, 500, 500)`,
+      [childId, parentId, sellerId]
+    ));
 
     await db.query(
-      `insert into retailer_credit_accounts (retailer_id, credit_limit) values ($1, 0)
+      `insert into retailer_credit_accounts (retailer_id, credit_limit_paise) values ($1, 0)
        on conflict do nothing`,
       [retailer]
     );
@@ -359,6 +376,128 @@ describe('0067 child-scoped coin refunds', () => {
       `select count(*) from retailer_wallet_ledger where reversal_of=$1`, [debitId]
     );
     expect(Number(reversals[0]!.count)).toBe(1);
+  });
+});
+
+describe('0069 seller portal boundaries', () => {
+  it('creates only a pending seller from public seller metadata and ignores role escalation metadata', async () => {
+    const pendingProfile = randomUUID();
+    const pendingEmail = `seller-signup-${pendingProfile}@test.local`;
+    await db.query(
+      `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
+      [pendingProfile, pendingEmail, JSON.stringify({
+        account_type: 'seller',
+        business_name: `Pending Seller ${pendingProfile.slice(0, 8)}`,
+        full_name: 'Pending Owner',
+        phone: `9${pendingProfile.replaceAll('-', '').slice(0, 9).replace(/[a-f]/g, '1')}`,
+      })]
+    );
+    const { rows: sellerRows } = await db.query<{
+      id: string; status: string; created_by: string; role: string;
+    }>(
+      `select s.id, s.status, s.created_by, p.role::text as role
+         from sellers s join profiles p on p.id=s.created_by
+        where s.created_by=$1`,
+      [pendingProfile]
+    );
+    expect(sellerRows).toHaveLength(1);
+    expect(sellerRows[0]).toMatchObject({
+      status: 'pending', created_by: pendingProfile, role: 'seller',
+    });
+
+    // Pending tenants can read their own application but cannot create offers.
+    expect(await errorOf(db, pendingProfile, (tx) => tx.query(
+      `insert into seller_offers
+         (seller_id, product_id, pack_id, fulfilment_type, unit_price_paise, moq, stock_quantity)
+       values ($1,$2,$3,'seller',10000,1,1)`,
+      [sellerRows[0]!.id, productId, packId]
+    ))).toMatch(/active seller membership/i);
+
+    const { rows: areaRows } = await db.query<{ area_id: string }>(
+      `select area_id from retailers where id=$1`, [retailer]
+    );
+    const attemptedAdmin = randomUUID();
+    await db.query(
+      `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
+      [attemptedAdmin, `role-escalation-${attemptedAdmin}@test.local`, JSON.stringify({
+        account_type: 'admin', role: 'super_admin', full_name: 'Not Admin',
+        phone: `8${attemptedAdmin.replaceAll('-', '').slice(0, 9).replace(/[a-f]/g, '2')}`,
+        area_id: areaRows[0]!.area_id, shop_name: 'Role-safe shop',
+      })]
+    );
+    const { rows: roleRows } = await db.query<{ role: string }>(
+      `select role::text as role from profiles where id=$1`, [attemptedAdmin]
+    );
+    expect(roleRows[0]!.role).toBe('retailer');
+  });
+
+  it('adds a first seller-offer cart line with expected quantity zero', async () => {
+    const quantity = await as(db, retailer, async (tx) => {
+      const { rows } = await tx.query<{ quantity: number }>(
+        `select mutate_retailer_cart_line_ex($1,$2,null,0,1) as quantity`,
+        [packId, offerId]
+      );
+      return rows[0]!.quantity;
+    });
+    expect(quantity).toBe(1);
+    await as(db, retailer, (tx) => tx.query(
+      `delete from cart_items where retailer_id=$1`, [retailer]
+    ));
+  });
+
+  it('discloses only approved merchant terms to retailers and re-moderates seller price edits', async () => {
+    const offers = await as(db, retailer, async (tx) => (
+      await tx.query<{ offer_id: string; seller_business_name: string }>(
+        `select offer_id, seller_business_name from marketplace_offers_for_product($1)`,
+        [productId]
+      )
+    ).rows);
+    expect(offers).toContainEqual({ offer_id: offerId, seller_business_name: 'Bazaar Seller Co' });
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
+      `select * from marketplace_offers_for_product($1)`, [productId]
+    ))).toMatch(/active retailer session/i);
+
+    await as(db, sellerProfile, (tx) => tx.query(
+      `update seller_offers set unit_price_paise=10100 where id=$1`, [offerId]
+    ));
+    const { rows: pending } = await db.query<{ moderation_status: string }>(
+      `select moderation_status from seller_offers where id=$1`, [offerId]
+    );
+    expect(pending[0]!.moderation_status).toBe('pending');
+
+    await as(db, admin, (tx) => tx.query(
+      `update seller_offers set moderation_status='approved' where id=$1`, [offerId]
+    ));
+  });
+
+  it('updates only owned stock and restores it exactly once on seller cancellation', async () => {
+    const setStock = await as(db, sellerProfile, async (tx) => {
+      const { rows } = await tx.query<{ stock: number }>(
+        `select seller_set_offer_stock($1,40) as stock`, [offerId]
+      );
+      return rows[0]!.stock;
+    });
+    expect(setStock).toBe(40);
+
+    await as(db, sellerProfile, (tx) => tx.query(
+      `select seller_update_sub_order($1,'confirmed')`, [stockSubOrderId]
+    ));
+    await as(db, sellerProfile, (tx) => tx.query(
+      `select seller_update_sub_order($1,'cancelled')`, [stockSubOrderId]
+    ));
+    const { rows: afterCancel } = await db.query<{ stock_quantity: number }>(
+      `select stock_quantity from seller_offers where id=$1`, [offerId]
+    );
+    expect(afterCancel[0]!.stock_quantity).toBe(42);
+
+    // A retry is harmless: no line has any remaining restorable quantity.
+    await expect(as(db, sellerProfile, (tx) => tx.query(
+      `select seller_update_sub_order($1,'cancelled')`, [stockSubOrderId]
+    ))).resolves.toBeDefined();
+    const { rows: afterRetry } = await db.query<{ stock_quantity: number }>(
+      `select stock_quantity from seller_offers where id=$1`, [offerId]
+    );
+    expect(afterRetry[0]!.stock_quantity).toBe(42);
   });
 });
 

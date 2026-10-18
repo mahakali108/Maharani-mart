@@ -145,7 +145,7 @@ export async function errorOf(db: Db, who: string, fn: (tx: Tx) => Promise<unkno
 // Fixture builders — run as the database owner (like a migration/seed would).
 // ---------------------------------------------------------------------------
 
-type Role = 'super_admin' | 'admin' | 'staff' | 'salesman' | 'retailer';
+type Role = 'super_admin' | 'admin' | 'staff' | 'salesman' | 'retailer' | 'seller';
 
 /**
  * Creates an auth user the way production does after migration 0052:
@@ -153,9 +153,10 @@ type Role = 'super_admin' | 'admin' | 'staff' | 'salesman' | 'retailer';
  *                       a real area; the trigger creates a pending retailer.
  *   - staff/salesman  → a server-side staff_account_invites row first (what
  *                       lib/admin/team-actions.ts does with the service role).
- *   - admin/super_admin → created as a retailer signup, then promoted by the
- *                       database owner (stand-in for the Super Admin / owner
- *                       path; no signup can ever produce these roles).
+ *   - admin/super_admin/seller → created as a retailer signup, then promoted
+ *                       by the database owner. Admin roles are invitation-only;
+ *                       the marketplace's pending seller business/membership
+ *                       is created separately by the seller test fixture.
  */
 export async function createUser(
   db: Db,
@@ -180,7 +181,7 @@ export async function createUser(
     email,
     JSON.stringify(meta),
   ]);
-  if (role === 'admin' || role === 'super_admin') {
+  if (role === 'admin' || role === 'super_admin' || role === 'seller') {
     await db.query(`delete from retailers where id = $1`, [id]);
     await db.query(`update profiles set role = $2 where id = $1`, [id, role]);
   }

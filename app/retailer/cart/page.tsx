@@ -32,12 +32,15 @@ import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { getFrequentlyOrderedCards } from '@/lib/retailer/personalization';
 import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
 import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
+import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 
 interface CartItemDetail {
   id: string;
   quantity: number;
   pack_id: string;
   product_id: string;
+  seller_offer_id: string | null;
+  source_type: 'maharani' | 'seller';
   product_packs: {
     id: string;
     pack_name: string;
@@ -85,7 +88,7 @@ export default async function CartPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, pack_id, product_id, seller_offer_id, source_type, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -136,8 +139,15 @@ export default async function CartPage() {
   }
 
   const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
-  const overrideByProduct = await getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null);
-  const tierMap = await loadPackTiers(supabase, items.map((item) => item.pack_id));
+  const sellerOfferIds = items
+    .map((item) => item.seller_offer_id)
+    .filter((id): id is string => Boolean(id));
+  const [overrideByProduct, tierMap, marketplaceResult] = await Promise.all([
+    getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null),
+    loadPackTiers(supabase, items.map((item) => item.pack_id)),
+    loadMarketplaceOfferQuotes(supabase, sellerOfferIds),
+  ]);
+  const offerById = new Map(marketplaceResult.offers.map((offer) => [offer.offerId, offer]));
 
   let subtotal = 0;
   let gstTotal = 0;
@@ -147,23 +157,32 @@ export default async function CartPage() {
     const pack = item.product_packs;
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
-    const casePrice = pack ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null) : 0;
-    // `item.quantity` is the number of PIECES in the cart. Quantity Q is priced
-    // at Q × (applicable per-piece tier rate) by the one canonical retailer
-    // engine — the same call `quoteOrderForRetailer` makes before an order is
-    // written. The case price is internal only and is NOT sent to the browser;
-    // the server resolves the per-piece fallback here instead.
+    const marketplaceOffer = item.seller_offer_id ? offerById.get(item.seller_offer_id) : null;
+    const marketplaceLine = Boolean(item.seller_offer_id);
+    const casePrice = !marketplaceLine && pack
+      ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null)
+      : 0;
+    const moq = marketplaceOffer?.moq ?? (marketplaceLine ? 1 : pack?.moq ?? 1);
+    const tiers = marketplaceLine ? [] : pack ? tierMap.get(pack.id) ?? [] : [];
+    // Marketplace lines use the approved offer's integer-paise piece price;
+    // Maharani lines retain the canonical case/tier engine.
+    const derivedPiecePrice = marketplaceOffer
+      ? marketplaceOffer.unitPricePaise / 100
+      : pack ? piecePriceFromCase(casePrice, pack.units_per_case) : 0;
     const pricing = calculateRetailerPiecePrice({
       quantity: item.quantity,
       unitsPerCase: pack?.units_per_case ?? 1,
       casePrice,
-      tiers: pack ? tierMap.get(pack.id) ?? [] : [],
+      tiers,
       gstPercent,
-      moq: pack?.moq ?? 1,
+      moq,
+      derivedPiecePrice,
     });
-    // Server-resolved per-piece fallback for a variant without selling tiers, so
-    // the client row never has to receive the internal case price.
-    const derivedPiecePrice = pack ? piecePriceFromCase(casePrice, pack.units_per_case) : 0;
+    const marketplaceUnavailable = marketplaceLine && (
+      !marketplaceOffer
+      || !marketplaceOffer.inStock
+      || (marketplaceOffer.stockQuantity ?? 0) < item.quantity
+    );
     subtotal += pricing.subtotal;
     gstTotal += pricing.gst;
     gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + pricing.gst);
@@ -184,14 +203,17 @@ export default async function CartPage() {
       brandName: product?.brands?.name ?? null,
       imageUrl: lineImage,
       gstPercent,
-      moq: pack?.moq ?? 1,
+      moq,
       mrp: pack?.mrp,
       unitsPerCase: pack?.units_per_case ?? 1,
       derivedPiecePrice,
-      tiers: pack ? tierMap.get(pack.id) ?? [] : [],
-      allowLoosePieces: pack?.allow_loose_pieces !== false,
-      isUnavailable: !pack?.is_active || !product?.is_active,
+      tiers,
+      allowLoosePieces: marketplaceLine || pack?.allow_loose_pieces !== false,
+      isUnavailable: !pack?.is_active || !product?.is_active || marketplaceUnavailable,
       isFavorite: favoriteIds.has(item.product_id),
+      sellerName: marketplaceOffer?.sellerBusinessName ?? null,
+      sellerGstin: marketplaceOffer?.sellerGstin ?? null,
+      fulfilmentType: marketplaceOffer?.fulfilmentType ?? null,
     };
   });
 
@@ -225,6 +247,7 @@ export default async function CartPage() {
   // here rather than silently re-priced.
   const blockedLines = lines.filter((line) => !line.isUnavailable && !line.isOrderable);
   const availableCount = lines.filter((line) => !line.isUnavailable && line.isOrderable).length;
+  const checkoutBlocked = hasUnavailable || blockedLines.length > 0 || Boolean(marketplaceResult.error);
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
 
   return (
@@ -259,7 +282,7 @@ export default async function CartPage() {
         >
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
-            <span className="font-bold">Heads up.</span> Unavailable items are clearly marked and will be skipped when the order is validated.
+            <span className="font-bold">Heads up.</span> Unavailable items are clearly marked. Remove them or choose an available seller before checkout.
           </p>
         </div>
       ) : null}
@@ -311,6 +334,7 @@ export default async function CartPage() {
             savings={savings}
             grandTotal={grandTotal}
             orderableCount={availableCount}
+            checkoutBlocked={checkoutBlocked}
             coupon={appliedCoupon}
           />
 
@@ -341,7 +365,7 @@ export default async function CartPage() {
         </aside>
       </div>
 
-      <CartCheckoutBar grandTotal={grandTotal} orderableCount={availableCount} />
+      <CartCheckoutBar grandTotal={grandTotal} orderableCount={availableCount} checkoutBlocked={checkoutBlocked} />
 
       <ProductRail eyebrow="Add more" title="Frequently bought products" products={recommended} href="/retailer/catalog" />
     </div>

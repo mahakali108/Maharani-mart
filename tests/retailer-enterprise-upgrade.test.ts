@@ -642,12 +642,19 @@ describe('migration hygiene', () => {
   const migrationsDir = join(root, 'supabase/migrations');
   const migrations = readdirSync(migrationsDir).filter((file) => file.endsWith('.sql')).sort();
 
-  it('is sequentially numbered with no duplicate or skipped prefix', () => {
-    const prefixes = migrations.map((file) => file.slice(0, 4));
-    expect(new Set(prefixes).size).toBe(prefixes.length);
-    prefixes.forEach((prefix, index) => {
-      expect(Number(prefix)).toBe(index + 1);
-    });
+  it('is strictly ordered with unique prefixes and only the documented 0061 reservation', () => {
+    const numbers = migrations.map((file) => Number(file.slice(0, 4)));
+    expect(new Set(numbers).size).toBe(numbers.length);
+    expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
+
+    const present = new Set(numbers);
+    const missing = Array.from(
+      { length: Math.max(...numbers) },
+      (_, index) => index + 1
+    ).filter((number) => !present.has(number));
+    // 0061 was deliberately never shipped; deployed 0062–0068 identities
+    // cannot be renumbered without corrupting migration history.
+    expect(missing).toEqual([61]);
   });
 
   it('keeps the case/loose pricing migration and adds Powder catalog integrity plus variant gallery plus wallet ledger plus security hardening as the latest migrations', () => {

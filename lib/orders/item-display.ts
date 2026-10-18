@@ -118,6 +118,8 @@ export interface GroupableOrderItemRow extends OrderItemQuantityRow {
   id?: string;
   product_id?: string | null;
   pack_id?: string | null;
+  seller_offer_id?: string | null;
+  source_type?: string | null;
   line_total?: number;
 }
 
@@ -140,7 +142,8 @@ export function groupOrderLines<T extends GroupableOrderItemRow>(rows: T[]): Gro
   const groups = new Map<string, T[]>();
   for (const row of rows) {
     // Single-row lines fall back to the row id, which keeps the React key stable.
-    const key = row.pack_id ?? row.product_id ?? `row:${row.id}`;
+    const baseKey = row.pack_id ?? row.product_id ?? `row:${row.id}`;
+    const key = `${baseKey}|${row.seller_offer_id ?? row.source_type ?? 'legacy'}`;
     const bucket = groups.get(key);
     if (bucket) bucket.push(row);
     else groups.set(key, [row]);
@@ -187,6 +190,8 @@ export function describeOrderTotals(
     id?: string;
     pack_id?: string | null;
     product_id?: string | null;
+    seller_offer_id?: string | null;
+    source_type?: string | null;
   })[]
 ): OrderTotalsSummary {
   if (rows.length === 0) return { lineCount: 0, totalPieces: 0 };
@@ -195,7 +200,8 @@ export function describeOrderTotals(
   // the full GroupableOrderItemRow shape.
   const groups = new Map<string, OrderItemQuantityRow[]>();
   for (const row of rows) {
-    const key = row.pack_id ?? row.product_id ?? `row:${row.id ?? ''}`;
+    const baseKey = row.pack_id ?? row.product_id ?? `row:${row.id ?? ''}`;
+    const key = `${baseKey}|${row.seller_offer_id ?? row.source_type ?? 'legacy'}`;
     const bucket = groups.get(key);
     if (bucket) bucket.push(row);
     else groups.set(key, [row]);
