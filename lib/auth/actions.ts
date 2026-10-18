@@ -421,132 +421,13 @@ export async function registerRetailerAction(
   redirect('/pending-approval');
 }
 
-const registerSellerSchema = z.object({
-  businessName: z
-    .string()
-    .transform((v) => v.trim())
-    .pipe(z.string().min(2, 'Enter your business / firm name.').max(160, 'Business name is too long.')),
-  fullName: z
-    .string()
-    .transform((v) => v.trim())
-    .pipe(z.string().min(2, 'Enter contact person name.').max(120, 'Contact name is too long.')),
-  phone: z
-    .string()
-    .transform((v) => normalizePhone(v) ?? v)
-    .pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number.')),
-  email: z.string().email('Enter a valid email address.'),
-  gstin: z
-    .string()
-    .optional()
-    .transform((v) => (v ?? '').replace(/\s+/g, '').toUpperCase())
-    .refine((v) => v === '' || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/.test(v), {
-      message: 'Enter a valid 15-character GSTIN.',
-    }),
-  pan: z
-    .string()
-    .optional()
-    .transform((v) => (v ?? '').replace(/\s+/g, '').toUpperCase())
-    .refine((v) => v === '' || /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v), {
-      message: 'Enter a valid 10-character PAN.',
-    }),
-  address: z
-    .string()
-    .optional()
-    .transform((v) => (v ?? '').trim())
-    .refine((v) => v.length <= 300, { message: 'Address must be 300 characters or fewer.' }),
-  password: z.string().min(8, 'Password must be at least 8 characters.'),
-});
-
+/** Public seller signup is deliberately disabled. Seller identities are created
+ * only by the Super Admin invitation flow in lib/admin/seller-actions.ts. */
 export async function registerSellerAction(
-  _prevState: FormState,
+  prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
-  const parsed = registerSellerSchema.safeParse({
-    businessName: formData.get('businessName') ?? '',
-    fullName: formData.get('fullName') ?? '',
-    phone: formData.get('phone') ?? '',
-    email: formData.get('email') ?? '',
-    gstin: formData.get('gstin') ?? '',
-    pan: formData.get('pan') ?? '',
-    address: formData.get('address') ?? '',
-    password: formData.get('password') ?? '',
-  });
-
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
-    }
-    return { fieldErrors };
-  }
-
-  const { businessName, fullName, phone, email, gstin, pan, address, password } = parsed.data;
-  const supabase = createClient();
-
-  const { data: phoneTaken } = await supabase.rpc('is_phone_registered' as never, { p_phone: phone } as never);
-  if (phoneTaken) {
-    return {
-      code: 'duplicate_phone',
-      fieldErrors: { phone: 'This phone number is already registered.' },
-    };
-  }
-
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        account_type: 'seller',
-        business_name: businessName,
-        full_name: fullName,
-        phone,
-        ...(gstin ? { gstin } : {}),
-        ...(pan ? { pan } : {}),
-        ...(address ? { address } : {}),
-      },
-    },
-  });
-
-  if (signUpError) {
-    const msg = signUpError.message.toLowerCase();
-    if (msg.includes('already registered')) {
-      return {
-        code: 'duplicate_email',
-        error: 'An account with this email already exists. Please log in instead.',
-      };
-    }
-    if (msg.includes('phone_already_registered')) {
-      return {
-        code: 'duplicate_phone',
-        fieldErrors: { phone: 'This phone number is already registered.' },
-      };
-    }
-    if (msg.includes('seller_business_already_registered')) {
-      return {
-        fieldErrors: { businessName: 'A seller with this business name is already registered.' },
-      };
-    }
-    if (msg.includes('invalid_seller_gstin')) {
-      return { fieldErrors: { gstin: 'Enter a valid 15-character GSTIN.' } };
-    }
-    if (msg.includes('invalid_seller_pan')) {
-      return { fieldErrors: { pan: 'Enter a valid 10-character PAN.' } };
-    }
-    return { error: signUpError.message };
-  }
-
-  if (isDuplicateSignup(signUpData.user)) {
-    return {
-      code: 'duplicate_email',
-      error: 'An account with this email already exists. Please log in instead.',
-    };
-  }
-
-  if (!signUpData.session) {
-    return {
-      success: 'Seller account created. Please check your email to confirm your address, then log in.',
-    };
-  }
-
-  redirect('/seller/dashboard');
+  void prevState;
+  void formData;
+  return { error: 'Seller accounts are invite-only. Please contact Maharani Traders for onboarding.' };
 }

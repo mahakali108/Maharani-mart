@@ -388,30 +388,51 @@ describe('0067 child-scoped coin refunds', () => {
 });
 
 describe('0069 seller portal boundaries', () => {
-  it('creates only a pending seller from public seller metadata and ignores role escalation metadata', async () => {
+  it('blocks public seller signup and creates a pending tenant only from an invitation', async () => {
     const pendingProfile = randomUUID();
     const pendingEmail = `seller-signup-${pendingProfile}@test.local`;
+    const pendingMeta = {
+      account_type: 'seller',
+      business_name: `Pending Seller ${pendingProfile.slice(0, 8)}`,
+      full_name: 'Pending Owner',
+      phone: `9${pendingProfile.replaceAll('-', '').slice(0, 9).replace(/[a-f]/g, '1')}`,
+    };
+    let publicSignupError = '';
+    try {
+      await db.query(
+        `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
+        [pendingProfile, pendingEmail, JSON.stringify(pendingMeta)]
+      );
+    } catch (error) {
+      publicSignupError = (error as Error).message;
+    }
+    expect(publicSignupError).toMatch(/seller_invitation_required/i);
+
+    await as(db, 'service', (tx) => tx.query(
+      `insert into staff_account_invites (email, role, created_by, expires_at)
+       values ($1, 'seller', $2, now() + interval '15 minutes')`,
+      [pendingEmail, admin]
+    ));
     await db.query(
       `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
-      [pendingProfile, pendingEmail, JSON.stringify({
-        account_type: 'seller',
-        business_name: `Pending Seller ${pendingProfile.slice(0, 8)}`,
-        full_name: 'Pending Owner',
-        phone: `9${pendingProfile.replaceAll('-', '').slice(0, 9).replace(/[a-f]/g, '1')}`,
-      })]
+      [pendingProfile, pendingEmail, JSON.stringify(pendingMeta)]
     );
     const { rows: sellerRows } = await db.query<{
       id: string; status: string; created_by: string; role: string;
     }>(
       `select s.id, s.status, s.created_by, p.role::text as role
          from sellers s join profiles p on p.id=s.created_by
-        where s.created_by=$1`,
-      [pendingProfile]
+        where s.email=$1`,
+      [pendingEmail]
     );
     expect(sellerRows).toHaveLength(1);
     expect(sellerRows[0]).toMatchObject({
-      status: 'pending', created_by: pendingProfile, role: 'seller',
+      status: 'pending', created_by: admin, role: 'admin',
     });
+    const { rows: invitedProfileRows } = await db.query<{ role: string }>(
+      `select role::text as role from profiles where id=$1`, [pendingProfile]
+    );
+    expect(invitedProfileRows[0]!.role).toBe('seller');
 
     // Pending tenants can read their own application but cannot create offers.
     expect(await errorOf(db, pendingProfile, (tx) => tx.query(

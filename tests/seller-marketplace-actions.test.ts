@@ -38,6 +38,7 @@ import { supabaseFixture } from './helpers/supabase-fixture';
 const mocks = vi.hoisted(() => ({
   client: vi.fn(),
   permission: vi.fn(),
+  superAdminGuard: vi.fn(),
   sellerGuard: vi.fn(),
   activeSellerGuard: vi.fn(),
   revalidate: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceRoleClient: mocks.client,
 }));
 vi.mock('@/lib/admin/guard', () => ({ requirePermission: mocks.permission }));
+vi.mock('@/lib/admin/control-center/guard', () => ({ requireSuperAdmin: mocks.superAdminGuard }));
 vi.mock('@/lib/seller/guard', () => ({
   requireSeller: mocks.sellerGuard,
   requireActiveSeller: mocks.activeSellerGuard,
@@ -61,6 +63,7 @@ const PACK_ID = 'dddddddd-0000-4000-8000-000000000004';
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.permission.mockResolvedValue({ id: ADMIN, role: 'admin', fullName: 'Fixture admin', email: null });
+  mocks.superAdminGuard.mockResolvedValue({ id: ADMIN, role: 'super_admin', fullName: 'Fixture owner', email: null });
   mocks.sellerGuard.mockResolvedValue({
     user: { id: SELLER_ID, role: 'seller', fullName: 'Seller Owner', email: 'seller@test.local' },
     seller: { id: SELLER_ID, business_name: 'Bazaar Traders', status: 'active' },
@@ -88,6 +91,24 @@ describe('seller permission matrix (Admin + Super Admin only)', () => {
   it('the seller role has NO web permissions (login surface is gated)', () => {
     expect(can('seller', 'products.view')).toBe(false);
     expect(can('seller', 'orders.view.own')).toBe(false);
+  });
+});
+
+describe('seller account invitations', () => {
+  it('requires the Super Admin guard and requires an email for Auth invitation', async () => {
+    const form = new FormData();
+    form.set('businessName', 'Example Wholesale');
+    expect(await createSellerAction(form)).toEqual({
+      ok: false,
+      error: 'Seller email is required for the secure account invitation.',
+    });
+    expect(mocks.superAdminGuard).toHaveBeenCalledOnce();
+    expect(mocks.permission).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when Super Admin authorization is denied', async () => {
+    mocks.superAdminGuard.mockRejectedValueOnce(new Error('Access denied'));
+    await expect(createSellerAction(new FormData())).rejects.toThrow('Access denied');
   });
 });
 

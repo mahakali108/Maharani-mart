@@ -17,6 +17,7 @@ const root = process.cwd();
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 const MIGRATION = 'supabase/migrations/0058_saran_default_district.sql';
 const ROLLBACK = 'supabase/rollbacks/0058_saran_default_district.down.sql';
+const GAYA_MIGRATION = 'supabase/migrations/0071_gaya_default_district.sql';
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -28,11 +29,19 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-describe('Saran — configuration constant', () => {
-  it('is Saran, Bihar and the label is exactly "Saran District, Bihar"', () => {
-    expect(SERVICE_DISTRICT).toBe('Saran');
+describe('Gaya — current default district configuration', () => {
+  const gayaSql = read(GAYA_MIGRATION);
+
+  it('updates only the default for newly added areas and does not claim coverage', () => {
+    expect(gayaSql).toMatch(/alter table public\.areas alter column district set default 'Gaya';/);
+    const statements = gayaSql.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
+    expect(statements).not.toMatch(/\bupdate\b|\binsert\b|\bdelete\b|pin\s*code|pincode/i);
+  });
+
+  it('is Gaya, Bihar and does not assert that every PIN is serviceable', () => {
+    expect(SERVICE_DISTRICT).toBe('Gaya');
     expect(SERVICE_STATE).toBe('Bihar');
-    expect(SERVICE_AREA_LABEL).toBe('Saran District, Bihar');
+    expect(SERVICE_AREA_LABEL).toBe('Gaya District, Bihar');
     expect(SERVICE_DISTRICT).not.toBe('Khagaria');
   });
 });
@@ -70,11 +79,11 @@ describe('Saran — migration 0058 is a reviewed, reversible default change', ()
   });
 });
 
-describe('Saran — no Khagaria default in active application source', () => {
+describe('Gaya — no Khagaria default in active application source', () => {
   const dirs = ['app', 'components', 'lib', 'middleware.ts'];
   const files = dirs.flatMap((d) => (d.endsWith('.ts') ? [d] : sourceFiles(d)));
 
-  it('admin area form defaults to Saran (not Khagaria)', () => {
+  it('admin area form defaults to Gaya (not Khagaria)', () => {
     const form = read('components/admin/area-form.tsx');
     expect(form).toMatch(/defaultValue=\{SERVICE_DISTRICT\}/);
     expect(form).not.toMatch(/Khagaria/);
@@ -85,40 +94,40 @@ describe('Saran — no Khagaria default in active application source', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('login, sidebar and admin areas use the shared Saran label', () => {
+  it('login, sidebar and admin areas use the shared Gaya label', () => {
     expect(read('app/login/page.tsx')).toContain('SERVICE_AREA_LABEL');
     expect(read('components/layout/sidebar.tsx')).toContain('SERVICE_AREA_LABEL');
     expect(read('app/admin/areas/page.tsx')).toContain('SERVICE_AREA_LABEL');
     expect(read('app/register-retailer/page.tsx')).toContain('SERVICE_AREA_LABEL');
   });
 
-  it('home shows the service-area selector with the Saran label', () => {
+  it('home shows the service-area selector with the Gaya label', () => {
     const home = read('components/retailer/home-content.tsx');
     expect(home).toContain('data-testid="service-area-selector"');
     expect(home).toContain('SERVICE_AREA_LABEL');
   });
 });
 
-describe('Saran — executed against PostgreSQL (PGlite) with all migrations', () => {
+describe('Gaya — executed against PostgreSQL (PGlite) with all migrations', () => {
   let db: Db;
   beforeAll(async () => {
     db = await createMigratedDb();
   }, 120_000);
 
-  it('the column default is Saran', async () => {
+  it('the column default is Gaya', async () => {
     const { rows } = await db.query<{ column_default: string }>(
       `select column_default from information_schema.columns
         where table_schema = 'public' and table_name = 'areas' and column_name = 'district'`
     );
-    expect(rows[0]?.column_default).toContain("'Saran'");
+    expect(rows[0]?.column_default).toContain("'Gaya'");
   });
 
-  it('a new area without an explicit district is recorded as Saran', async () => {
-    await db.query(`insert into public.areas (name) values ('Fixture Area Saran Default')`);
+  it('a new area without an explicit district is recorded as Gaya', async () => {
+    await db.query(`insert into public.areas (name) values ('Fixture Area Gaya Default')`);
     const { rows } = await db.query<{ district: string }>(
-      `select district from public.areas where name = 'Fixture Area Saran Default'`
+      `select district from public.areas where name = 'Fixture Area Gaya Default'`
     );
-    expect(rows[0]?.district).toBe('Saran');
+    expect(rows[0]?.district).toBe('Gaya');
   });
 
   it('an explicitly recorded district is kept as entered', async () => {

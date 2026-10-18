@@ -1,8 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { requireSuperAdmin } from '@/lib/admin/control-center/guard';
 import {
   normalizeSellerInput,
   validateSellerInput,
@@ -24,7 +25,7 @@ function revalidateSellerPages(sellerId?: string) {
  * stamps every later transition with the actual reviewer.
  */
 export async function createSellerAction(formData: FormData): Promise<SellerActionResult> {
-  await requirePermission('sellers.manage');
+  const actor = await requireSuperAdmin();
   const input = normalizeSellerInput({
     businessName: formData.get('businessName'),
     gstin: formData.get('gstin'),
@@ -38,25 +39,60 @@ export async function createSellerAction(formData: FormData): Promise<SellerActi
   const first = Object.values(errors)[0];
   if (first) return { ok: false, error: first };
 
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('sellers' as never)
-    .insert({
-      business_name: input.businessName,
-      gstin: input.gstin || null,
-      pan: input.pan || null,
-      contact_name: input.contactName || null,
-      phone: input.phone || null,
-      email: input.email || null,
-      address_line: input.addressLine || null,
-      status: 'pending',
-    } as never)
-    .select('id')
-    .maybeSingle<{ id: string }>();
-  if (error) return { ok: false, error: error.message };
-  if (!data) return { ok: false, error: 'The seller could not be created.' };
+  if (!input.email) return { ok: false, error: 'Seller email is required for the secure account invitation.' };
+  if (!input.phone) return { ok: false, error: 'Seller mobile number is required.' };
+  if (!input.contactName) return { ok: false, error: 'Seller contact name is required.' };
 
-  revalidateSellerPages(data.id);
+  const supabase = createClient();
+  const { data: phoneTaken, error: phoneCheckError } = await supabase.rpc(
+    'is_phone_registered' as never,
+    { p_phone: input.phone } as never
+  );
+  if (phoneCheckError) return { ok: false, error: 'Could not verify the seller phone number. Please try again.' };
+  if (phoneTaken) return { ok: false, error: 'This phone number is already registered.' };
+
+  const adminClient = createServiceRoleClient();
+  const inviteEmail = input.email.toLowerCase();
+  const { error: inviteRowError } = await adminClient.from('staff_account_invites' as never).upsert({
+    email: inviteEmail,
+    role: 'seller',
+    created_by: actor.id,
+    expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+  } as never, { onConflict: 'email' });
+  if (inviteRowError) return { ok: false, error: 'Could not securely prepare the seller invitation.' };
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!siteUrl) {
+    await adminClient.from('staff_account_invites' as never).delete().eq('email', inviteEmail);
+    return { ok: false, error: 'Seller invitations are not configured: NEXT_PUBLIC_SITE_URL is missing.' };
+  }
+  const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(inviteEmail, {
+    data: {
+      account_type: 'seller',
+      business_name: input.businessName,
+      full_name: input.contactName,
+      phone: input.phone,
+      ...(input.gstin ? { gstin: input.gstin } : {}),
+      ...(input.pan ? { pan: input.pan } : {}),
+      ...(input.addressLine ? { address: input.addressLine } : {}),
+    },
+    redirectTo: `${siteUrl.replace(/\/$/, '')}/auth/callback?next=%2Fseller%2Fdashboard`,
+  });
+  if (inviteError || !invited.user) {
+    await adminClient.from('staff_account_invites' as never).delete().eq('email', inviteEmail);
+    const duplicate = inviteError?.message.toLowerCase().includes('already') ?? false;
+    return { ok: false, error: duplicate ? 'An account with this email already exists.' : 'Could not send the secure seller invitation. Check Supabase Auth email settings.' };
+  }
+
+  const { data: seller, error: sellerError } = await supabase
+    .from('sellers' as never)
+    .select('id')
+    .eq('email', inviteEmail)
+    .maybeSingle<{ id: string }>();
+  if (sellerError || !seller) {
+    return { ok: false, error: 'Invitation was sent, but seller provisioning is not confirmed. Do not retry yet; check Auth and database logs.' };
+  }
+  revalidateSellerPages(seller.id);
   return { ok: true };
 }
 

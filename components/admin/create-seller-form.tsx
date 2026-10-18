@@ -18,7 +18,7 @@ export function CreateSellerForm() {
     startTransition(async () => {
       const result = await createSellerAction(formData);
       if (result.ok) {
-        setMessage('Seller created and queued for review.');
+        setMessage('Invitation sent. The seller account is pending Super Admin review until approval.');
         formRef.current?.reset();
         router.refresh();
       } else {
@@ -30,9 +30,9 @@ export function CreateSellerForm() {
   return (
     <form ref={formRef} action={submit} className="grid gap-3 sm:grid-cols-2">
       <Input name="businessName" placeholder="Business name *" required maxLength={160} />
-      <Input name="contactName" placeholder="Contact name" maxLength={120} />
-      <Input name="phone" placeholder="Phone (10-digit mobile)" inputMode="numeric" maxLength={20} />
-      <Input name="email" placeholder="Email" type="email" maxLength={160} />
+      <Input name="contactName" placeholder="Contact name *" required maxLength={120} />
+      <Input name="phone" placeholder="Phone (10-digit mobile) *" required inputMode="numeric" maxLength={20} />
+      <Input name="email" placeholder="Email *" required type="email" maxLength={160} />
       <Input name="gstin" placeholder="GSTIN" maxLength={20} />
       <Input name="pan" placeholder="PAN" maxLength={12} />
       <Input name="addressLine" placeholder="Address" maxLength={300} className="sm:col-span-2" />
