@@ -32,7 +32,7 @@ export default async function AreasPage({ searchParams }: { searchParams: { dist
       .select('id, district, state, pincode, is_active, minimum_order_paise, delivery_fee_paise')
       .order('district').order('pincode')
     : null;
-  if (deliveryResult?.error) throw new Error('Delivery PIN configuration could not be loaded. Check migration 0071.');
+  if (deliveryResult?.error) throw new Error('Delivery PIN configuration could not be loaded. Check migration 0073.');
   const deliveryPins = (deliveryResult?.data ?? []) as DeliveryPinRow[];
   const district = searchParams.district ?? '';
   const districts = districtOptions(directory);

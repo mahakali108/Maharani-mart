@@ -1,11 +1,10 @@
--- 0071: Gaya is the NEW default geography, not blanket delivery coverage.
+-- 0073: Configured delivery coverage AFTER main's 0071 sets the Gaya default.
 -- Existing areas/retailers/addresses/orders remain unchanged. No PINs are
 -- seeded: verified PINs must be explicitly activated by an admin. Pricing /
 -- inventory areas remain separate from actual delivery serviceability.
 -- DB-first rollout is required; a self-checkout with an unstructured address
 -- will be refused until the web/mobile clients select a saved, PIN-coded one.
-
-alter table public.areas alter column district set default 'Gaya';
+-- Do not reapply the existing 0071 migration or rewrite its history.
 
 create table if not exists public.delivery_service_areas (
   id uuid primary key default uuid_generate_v4(),

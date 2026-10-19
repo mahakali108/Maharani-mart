@@ -183,7 +183,7 @@ async function orderCount(requestKey: string): Promise<number> {
 beforeAll(async () => {
   db = await createMigratedDb();
   admin = await createUser(db, 'admin');
-  // Test-only verified PIN. Migration 0071 never seeds production coverage.
+  // Test-only verified PIN. Migration 0073 never seeds production coverage.
   await as(db, admin, (tx) => tx.query(
     `insert into delivery_service_areas (district, state, pincode, is_active, created_by, updated_by)
      values ('Gaya', 'Bihar', '823001', true, $1, $1)`, [admin]
@@ -220,7 +220,7 @@ beforeEach(async () => {
   await setPackStock(10);
 });
 
-describe('0071 verified delivery coverage in atomic checkout', () => {
+describe('0073 verified delivery coverage in atomic checkout', () => {
   it('rejects missing structure, wrong district and unconfigured PIN without touching cart, stock or orders', async () => {
     await setCart(2);
     const beforeStock = await packStock();

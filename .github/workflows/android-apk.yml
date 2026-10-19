@@ -87,6 +87,11 @@ jobs:
 
   android:
     name: Android unit tests, lint, and debug APK
+    # Historical native diagnostic only. This product ships as a web PWA:
+    # web/health jobs above and below MUST still run for web-only PRs/pushes,
+    # but those events must not build an APK or unsigned release artifact.
+    # A separate manual dispatch is required for any native investigation.
+    if: github.event_name == 'workflow_dispatch'
     needs: web
     runs-on: ubuntu-latest
     timeout-minutes: 45

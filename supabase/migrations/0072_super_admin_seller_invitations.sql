@@ -1,10 +1,12 @@
--- 0070: Forward-only seller onboarding correction (0069 is already tracked in
--- at least one connected project). NO historical migration is rewritten.
--- No existing auth users, sellers, orders or offers are removed or promoted.
--- Apply only after verifying the target schema and taking a recoverable backup.
--- Public account_type=seller is refused by the Auth trigger; only an unexpired,
--- one-use invitation reserved by an active Super Admin can assign seller role.
--- The server, NOT the browser, calls Supabase Auth Admin inviteUserByEmail.
+-- 0072: Forward-only seller onboarding hardening after main's
+-- 0070_seller_invite_only.sql and 0071_gaya_default_district.sql. NO historical
+-- migration is rewritten. No existing auth users, sellers, orders or offers
+-- are removed or promoted. Apply only after verifying actual migration history
+-- and a recoverable backup. Public account_type=seller AND a legacy 0070
+-- staff_account_invites seller row are refused by the Auth trigger; only an
+-- unexpired, one-use, nonce-bound invitation reserved by an active Super Admin
+-- can assign seller role. Audit any outstanding 0070 invitations before rollout.
+-- The trusted server, NOT the browser, calls Auth Admin inviteUserByEmail.
 
 create table if not exists public.seller_account_invites (
   id uuid primary key default uuid_generate_v4(),
@@ -225,6 +227,14 @@ begin
     end if;
   end if;
 
+  -- Main's 0070 permitted seller rows in the general staff-invites table.
+  -- That legacy path is not nonce-bound: never accept it as a seller login.
+  -- Raising rolls back the DELETE above, preserving the record for operator
+  -- review instead of consuming or silently converting an old invitation.
+  if v_staff_role = 'seller' then
+    raise exception 'seller_invite_required' using errcode = '42501';
+  end if;
+
   if v_staff_role is not null then
     v_role := v_staff_role;
   elsif v_invited_seller_id is not null then
@@ -240,9 +250,9 @@ begin
     values (
       new.id, v_role,
       case when v_role = 'seller' then coalesce(v_seller.contact_name, '')
-           else coalesce(new.raw_user_meta_data->>'full_name', '') end,
+           else btrim(coalesce(new.raw_user_meta_data->>'full_name', '')) end,
       case when v_role = 'seller' then coalesce(v_seller.phone, '')
-           else coalesce(new.raw_user_meta_data->>'phone', '') end
+           else btrim(coalesce(new.raw_user_meta_data->>'phone', '')) end
     );
   exception when unique_violation then
     raise exception 'phone_already_registered';

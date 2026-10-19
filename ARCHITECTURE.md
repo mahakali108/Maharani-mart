@@ -2,7 +2,7 @@
 
 **Domain:** FMCG B2B Wholesale Distribution — Gaya, Bihar is the initial configuration default, not a district-wide coverage claim
 **Stack:** Next.js 14 (App Router) + Tailwind CSS + Supabase (Postgres, Auth, Storage, Edge Functions, Realtime) + Vercel
-**State:** Design reference, not a production-readiness claim for migrations 0070/0071. New delivery PIN rows are empty/inactive by default; public policies require operator/legal review. See `docs/UPGRADE_REVIEW.md`.
+**State:** Design reference, not a production-readiness claim for main's 0070/0071 or this PR's 0072/0073. The actual applied database history is unverified; 0073 seeds no delivery PINs. Public policies require operator/legal review. See `docs/UPGRADE_REVIEW.md`.
 
 ---
 
@@ -31,7 +31,7 @@
 | Route/Visit Planning | ✅ | ✅ | ✅ | ✅ (own route) | ❌ |
 | View Own Price List / Schemes | — | — | — | — | ✅ |
 
-The table above is the earlier core-role matrix. Seller accounts/marketplace roles add a Super-Admin-only onboarding and review path, with ordinary Admin offer moderation; see `docs/SELLER_MARKETPLACE.md` and migration 0070. The current authority is the applied migrations and database RLS, not a static role table.
+The table above is the earlier core-role matrix. Seller accounts/marketplace roles add a Super-Admin-only onboarding and review path, with ordinary Admin offer moderation; see `docs/SELLER_MARKETPLACE.md` and main's 0070 plus the proposed 0072 hardening. The current authority is the applied migrations and database RLS, not a static role table.
 
 ---
 

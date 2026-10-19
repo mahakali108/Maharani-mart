@@ -8,10 +8,13 @@ Seller accounts are created by **Super Admin invitation only** and remain
 pending until separately verified and approved. The existing native files, if
 present in the repository, are not changed or built for this PWA upgrade.
 
-**This branch is review-only until the owner approves a target project, a
+**This PR is review-only until the owner approves a target project, a
 restorable backup/recovery plan, and the exact production SQL/app deployment.**
-Forward migrations 0070 and 0071 have not been applied remotely. Public legal
-pages are visibly labelled drafts pending verified business details and Indian
+Main includes migrations 0070 (seller invitation) and 0071 (Gaya new-row default),
+but their remote application is **unverified**. This PR's 0072 (nonce-bound
+Super Admin invitation) and 0073 (configured delivery PINs) have **not** been
+applied remotely by this work. Public legal pages are visibly labelled drafts
+pending verified business details and Indian
 legal/tax review. See [upgrade/release gate](docs/UPGRADE_REVIEW.md),
 [delivery configuration](docs/SERVICE_AREA_GAYA.md),
 [seller marketplace](docs/SELLER_MARKETPLACE.md) and
@@ -32,9 +35,11 @@ legal/tax review. See [upgrade/release gate](docs/UPGRADE_REVIEW.md),
    allow-list and invitation email delivery. Never expose a service-role key
    in a client bundle or a support message.
 2. Establish the actual migration history **for the identified project** before
-   applying anything. Apply missing reviewed migrations in order with the normal
-   migration runner, then 0070 (seller invitations) and 0071 (delivery PINs)
-   **on a staging clone first**. Confirm backward compatibility and a tested
+   applying anything. On a disposable staging clone, apply any missing reviewed
+   migrations in order with the normal migration runner: main's 0070 (older
+   invite-only path) and 0071 (Gaya default), **then this PR's 0072 (secure
+   invitation) and 0073 (verified PINs)**. Audit pending legacy invitations;
+   never replay an applied migration. Confirm compatibility and a tested
    backup/restore plan; do not run rollback scripts, destructive SQL, the legacy
    `scripts/production-validate.sh` (it writes fixtures), `supabase db push`,
    or SQL Editor steps against production without explicit owner approval.

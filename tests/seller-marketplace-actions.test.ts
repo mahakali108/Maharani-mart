@@ -39,6 +39,7 @@ import { supabaseFixture } from './helpers/supabase-fixture';
 const mocks = vi.hoisted(() => ({
   client: vi.fn(),
   permission: vi.fn(),
+  superAdminGuard: vi.fn(),
   sellerGuard: vi.fn(),
   activeSellerGuard: vi.fn(),
   revalidate: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceRoleClient: mocks.client,
 }));
 vi.mock('@/lib/admin/guard', () => ({ requirePermission: mocks.permission }));
+vi.mock('@/lib/admin/control-center/guard', () => ({ requireSuperAdmin: mocks.superAdminGuard }));
 vi.mock('@/lib/seller/guard', () => ({
   requireSeller: mocks.sellerGuard,
   requireActiveSeller: mocks.activeSellerGuard,
@@ -62,6 +64,7 @@ const PACK_ID = 'dddddddd-0000-4000-8000-000000000004';
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.permission.mockResolvedValue({ id: ADMIN, role: 'admin', fullName: 'Fixture admin', email: null });
+  mocks.superAdminGuard.mockResolvedValue({ id: ADMIN, role: 'super_admin', fullName: 'Fixture owner', email: null });
   mocks.sellerGuard.mockResolvedValue({
     user: { id: SELLER_ID, role: 'seller', fullName: 'Seller Owner', email: 'seller@test.local' },
     seller: { id: SELLER_ID, business_name: 'Bazaar Traders', status: 'active' },
@@ -94,6 +97,20 @@ describe('seller permission matrix (Super Admin seller accounts, Admin offer mod
 });
 
 describe('trusted seller invitation feedback', () => {
+  it('blocks ordinary Admin before reading input or creating an invitation', async () => {
+    expect(await createSellerAction(new FormData())).toMatchObject({
+      ok: false, error: 'Only Super Admin can invite sellers.',
+    });
+    expect(mocks.permission).toHaveBeenCalledWith('sellers.manage');
+    expect(mocks.client).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when server-side authorization is denied', async () => {
+    mocks.permission.mockRejectedValueOnce(new Error('Access denied'));
+    await expect(createSellerAction(new FormData())).rejects.toThrow('Access denied');
+    expect(mocks.client).not.toHaveBeenCalled();
+  });
+
   it('does not report success when Auth accepted an email but linked no seller user', async () => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://invite.test');
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-server-only-key');

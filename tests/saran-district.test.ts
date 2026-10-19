@@ -17,6 +17,7 @@ const root = process.cwd();
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 const MIGRATION = 'supabase/migrations/0058_saran_default_district.sql';
 const ROLLBACK = 'supabase/rollbacks/0058_saran_default_district.down.sql';
+const GAYA_MIGRATION = 'supabase/migrations/0071_gaya_default_district.sql';
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -28,8 +29,16 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-describe('Gaya — configuration constant', () => {
-  it('is Gaya, Bihar and the label is exactly "Gaya District, Bihar"', () => {
+describe('Gaya — current default district configuration', () => {
+  const gayaSql = read(GAYA_MIGRATION);
+
+  it('updates only the default for newly added areas and does not claim coverage', () => {
+    expect(gayaSql).toMatch(/alter table public\.areas alter column district set default 'Gaya';/);
+    const statements = gayaSql.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
+    expect(statements).not.toMatch(/\bupdate\b|\binsert\b|\bdelete\b|pin\s*code|pincode/i);
+  });
+
+  it('is Gaya, Bihar and does not assert that every PIN is serviceable', () => {
     expect(SERVICE_DISTRICT).toBe('Gaya');
     expect(SERVICE_STATE).toBe('Bihar');
     expect(SERVICE_AREA_LABEL).toBe('Gaya District, Bihar');
@@ -70,7 +79,7 @@ describe('Saran — migration 0058 is a reviewed, reversible default change', ()
   });
 });
 
-describe('Current district — no Khagaria default in active application source', () => {
+describe('Gaya — no Khagaria default in active application source', () => {
   const dirs = ['app', 'components', 'lib', 'middleware.ts'];
   const files = dirs.flatMap((d) => (d.endsWith('.ts') ? [d] : sourceFiles(d)));
 

@@ -55,7 +55,7 @@ async function createSeller(tx: Db | Tx, name: string): Promise<string> {
 beforeAll(async () => {
   db = await createMigratedDb();
   admin = await createUser(db, 'super_admin');
-  // Explicit fixture coverage: 0071 does NOT seed any real delivery PINs.
+  // Explicit fixture coverage: 0073 does NOT seed any real delivery PINs.
   await as(db, admin, (tx) => tx.query(
     `insert into delivery_service_areas (district, state, pincode, is_active, created_by, updated_by)
      values ('Gaya', 'Bihar', '823001', true, $1, $1)`, [admin]
@@ -392,7 +392,7 @@ describe('0067 child-scoped coin refunds', () => {
   });
 });
 
-describe('0069/0070 seller portal boundaries', () => {
+describe('0069/0072 seller portal boundaries after main 0070', () => {
   it('rejects public seller signup; only a Super-Admin-reserved email creates a pending seller', async () => {
     const pendingProfile = randomUUID();
     const pendingEmail = `seller-invite-${pendingProfile}@test.local`;
@@ -514,6 +514,32 @@ describe('0069/0070 seller portal boundaries', () => {
     expect(roleRows[0]!.role).toBe('retailer');
   });
 
+  it('rejects the older 0070 staff-invite seller path without consuming it or creating an Auth user', async () => {
+    const pendingProfile = randomUUID();
+    const pendingEmail = `legacy-seller-invite-${pendingProfile}@test.local`;
+    // Main's 0070 permitted 'seller' in staff_account_invites. A public signup
+    // with that email must not bypass 0072's Super-Admin nonce-bound flow.
+    await as(db, 'service', (tx) => tx.query(
+      `insert into staff_account_invites (email, role, created_by, expires_at)
+       values ($1, 'seller', $2, now() + interval '15 minutes')`,
+      [pendingEmail, admin]
+    ));
+    let blocked = '';
+    try {
+      await db.query(
+        `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
+        [pendingProfile, pendingEmail, JSON.stringify({
+          account_type: 'seller', business_name: 'Forged legacy invite',
+          full_name: 'Unknown', phone: '9765432188',
+        })]
+      );
+    } catch (cause) { blocked = (cause as Error).message; }
+    expect(blocked).toMatch(/seller_invite_required/);
+    expect((await db.query(`select id from auth.users where id=$1`, [pendingProfile])).rows).toHaveLength(0);
+    expect((await db.query(`select email from staff_account_invites where email=$1`, [pendingEmail])).rows).toHaveLength(1);
+    expect((await db.query(`select id from sellers where email=$1`, [pendingEmail])).rows).toHaveLength(0);
+  });
+
   it('adds a first seller-offer cart line with expected quantity zero', async () => {
     const quantity = await as(db, retailer, async (tx) => {
       const { rows } = await tx.query<{ quantity: number }>(
@@ -591,7 +617,7 @@ describe('0069/0070 seller portal boundaries', () => {
 
     // Historical 0069 rollback/reapply is tested on its OWN disposable 0069
     // schema. Never roll back or reapply an older migration over the shared
-    // 0070/0071 schema: that would silently replace hardened function bodies.
+    // 0070–0073 schema: that would silently replace hardened function bodies.
     const oldDb = await createMigratedDb({ lastMigration: '0069_seller_portal_access.sql' });
     try {
       const oldRetailer = await createUser(oldDb, 'retailer');
@@ -795,7 +821,7 @@ describe('0069/0070 seller portal boundaries', () => {
   });
 });
 
-describe('0070 invitation retries and tenant boundaries', () => {
+describe('0072 invitation retries and tenant boundaries', () => {
   it('bounds repeated invitation attempts and can attach one eligible legacy pending business', async () => {
     const email = `legacy-${randomUUID()}@test.local`;
     const legacySeller = await as(db, admin, async (tx) => {
@@ -883,7 +909,7 @@ describe('0070 invitation retries and tenant boundaries', () => {
   });
 });
 
-describe('0068/0070 drain-mode suspension', () => {
+describe('0068/0072 drain-mode suspension', () => {
   it('suspending a seller hides operational/ledger data without erasing history', async () => {
     const ledgerId = randomUUID();
     await db.query(

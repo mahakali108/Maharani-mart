@@ -1,6 +1,6 @@
-# Seller Marketplace — historical design and forward fixes (0062–0071)
+# Seller Marketplace — historical design and forward fixes (0062–0073)
 
-Status: **historical design record, updated for this branch**. Migrations 0062–0069 are unchanged; one connected Supabase project lists them as applied, but the production target has not been confirmed. Forward-only migrations **0070 and 0071 exist locally only**; no remote SQL or deployment was performed in this review. Before any rollout follow [UPGRADE_REVIEW.md](UPGRADE_REVIEW.md).
+Status: **historical design record, updated for this PR**. Migrations 0062–0069 are unchanged. Main now includes `0070_seller_invite_only.sql` and `0071_gaya_default_district.sql`; their application to any target database is **not verified**. This PR adds forward-only `0072_super_admin_seller_invitations.sql` and `0073_configured_delivery_pins.sql`; neither was run against a remote database. An authorised branch push created a Vercel **preview**, not a production deployment. Before any rollout follow [UPGRADE_REVIEW.md](UPGRADE_REVIEW.md).
 
 This record carries forward the Phase 1.2/1.3 review findings, the approved
 design, what Stage 2 built, and every decision that remains open (those stay
@@ -22,7 +22,7 @@ parent order. Merchant/supplier-of-record and tax-invoice responsibility remain 
 |---|---|---|
 | Supplier Registration V1 (upstream vendor applications) | `suppliers`, 0059–0060 | merged (PR #110) |
 | Supplier Suspend (Feature B) | 0059 transition | historical, separate supplier feature |
-| **Seller Marketplace** | `sellers`, `seller_offers`, `sub_orders`, 0062–0070 | 0070 forward fix in this branch |
+| **Seller Marketplace** | `sellers`, `seller_offers`, `sub_orders`, 0062–0073 | 0072/0073 forward fixes in this PR; remote status unverified |
 
 Sellers ≠ suppliers: no shared records, transitions, roles or UI. Sellers provide downstream marketplace offers; suppliers are upstream vendors. Tax and legal seller-of-record classifications are still pending review.
 
@@ -30,9 +30,11 @@ Sellers ≠ suppliers: no shared records, transitions, roles or UI. Sellers prov
 
 1. **Identity & moderation (0062, 0063)** — `sellers` + `seller_members`
    (V1: one seller per profile) + `seller` enum role. Migration 0069 added
-   a seller portal. Migration 0070 restricts business creation and membership
-   to Super Admin, reserves one-use Auth invitations and restricts pending/
-   suspended trading; ordinary Admin retains offer moderation. Sellers never
+   a seller portal. Main's 0070 added invite-only seller sign-up; 0072 further
+   restricts business creation and membership to Super Admin and requires a
+   nonce-bound one-use Auth invitation instead of trusting the older staff invite
+   path. Pending/suspended trading is blocked; ordinary Admin retains offer
+   moderation. Sellers never
    see another seller's private terms. Status machine `pending → active | rejected`,
    `active ↔ suspended` with mandatory review stamps and reasons.
 2. **Offers on the central catalogue (0063)** — no duplicate catalogue.
@@ -101,7 +103,7 @@ Sellers ≠ suppliers: no shared records, transitions, roles or UI. Sellers prov
    seller-status UPDATEs serialise on the same offer rows (shared row locks),
    not on a second advisory layer (advisory + row pairs would ABBA against
    single-row admin updates).
-8. **RLS/grants (0062–0070)** — per-table policies at creation, allowlist
+8. **RLS/grants (0062–0072)** — per-table policies at creation, allowlist
    grants; sellers read own rows only; admin+ moderate; ledger append-only
    (`prevent_seller_ledger_mutation`); admin-only column guards mirror 0052;
    every SECURITY DEFINER function pins `search_path = public, pg_temp`.
@@ -117,17 +119,35 @@ Sellers ≠ suppliers: no shared records, transitions, roles or UI. Sellers prov
 | `0066_fulfilment_and_delivery.sql` | behaviour | `seller_shipments`, delivery link column, `set_sub_order_status`, `apply_parent_order_status`, `restore_sub_order_stock` |
 | `0067_seller_settlement.sql` | behaviour | `collection_allocations`, `seller_ledger`, `seller_payouts` (table only), `allocate_payment_collection`, `refund_sub_order_coins` |
 | `0068_seller_governance.sql` | behaviour | drain-mode suspension trigger, admin-only offer column guard, audit triggers |
-| `0069_seller_portal_access.sql` | behaviour | seller portal RPCs, tiers, marketplace projections and saved-cart source shape |
-| `0070_super_admin_seller_invitations.sql` | **local only** | Super-Admin-only reservations and Auth invite nonce, fail-closed public signup, inactive status and tenant isolation fixes |
-| `0071_configured_delivery_pins.sql` | **local only** | Gaya new-area default, admin-verified PIN directory and self-checkout insert guard |
-| `supabase/rollbacks/0062–0069_*.down.sql` | historical rollback files | Do not use to repair a 0070/0071 schema; restoring old functions would remove forward security fixes |
+| `0069_seller_portal_access.sql` | behaviour | seller portal RPCs, tiers and seller-scoped projections; saved-cart source stays `text` + CHECK |
+| `0070_seller_invite_only.sql` | merged into main; target status unknown | service-role invite-only seller signup; public metadata cannot create a seller profile |
+| `0071_gaya_default_district.sql` | merged into main; target status unknown | Gaya default for NEW area rows only; no data or coverage rewrite |
+| `0072_super_admin_seller_invitations.sql` | **PR source only** | Super Admin-only seller reservation, nonce-bound Auth invitation, fail-closed legacy invite and tenant/isolation guards |
+| `0073_configured_delivery_pins.sql` | **PR source only** | admin-verified district/state/PIN directory and new self-checkout insert guard; no PINs seeded |
+| `supabase/rollbacks/0062–0069_*.down.sql` | historical rollback files | Never use to repair 0070–0073; older functions can remove forward security fixes |
 
 The prompt's split labels `0064a/0064b/0065/0066/0067/0068` map to the
 repository's 4-digit convention as `0064/0065/0066/0067/0068` (plus `0062/
 0063`). The planned `0064c` cleanup (dropping the legacy constraints) is
 **deferred** until the split path has production history.
 
-## 4. Application map (current branch)
+## 4. Seller onboarding (invite-only)
+
+Public seller signup is disabled in the PWA. Only Super Admin may reserve a
+pending business and request a Supabase Auth Admin invitation. Migration 0072
+replaces the older 0070 staff-invite seller path with an unexpired, one-use
+**hashed nonce** tied to that reservation; existing 0070 seller invites must be
+audited before rollout, never silently promoted. The seller follows the email
+link, sets a password through Supabase Auth, and signs in at `/login`. A linked
+login and a separate Super Admin review are required before trading. Neither the
+browser nor the application stores or sets plaintext seller passwords.
+
+Required trusted-server configuration: `SUPABASE_SERVICE_ROLE_KEY` (server only),
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SITE_URL`, working Supabase Auth email
+and a redirect allowing `/auth/callback`. Never expose the service-role key in
+`NEXT_PUBLIC_*` variables or logs.
+
+## 5. Application map (this PR)
 
 - `types/marketplace.types.ts` — local types (generated `database.types.ts`
   absorbs them at the next pipeline refresh; call sites use the established
@@ -157,7 +177,7 @@ repository's 4-digit convention as `0064/0065/0066/0067/0068` (plus `0062/
   for split lines only (legacy fingerprints unchanged).
 - `lib/retailer/cart-rpc.ts` — `mutateRetailerCartLineEx` wrapper.
 
-## 5. Phase 1.3 findings carried forward (PASS WITH CONDITIONS)
+## 6. Phase 1.3 findings carried forward (PASS WITH CONDITIONS)
 
 All F-1…F-4 conditions are implemented as described above. Notable specifics:
 
@@ -179,7 +199,7 @@ All F-1…F-4 conditions are implemented as described above. Notable specifics:
   allocation; `refund_sub_order_coins` child-scoped with per-debit
   `reversal:` keys; `collection_allocations`/`seller_ledger` on `alloc:` keys.
 
-## 6. Open decisions (UNCHANGED — do not infer)
+## 7. Open decisions (UNCHANGED — do not infer)
 
 Owner decisions (features stay gated):
 
@@ -201,9 +221,9 @@ Runtime verification still open (recorded, not claimed): target Postgres
 version (PGlite tests run on PG16 WASM; `security_invoker` implies ≥ 15 on
 the real project — unverified), and true multi-connection concurrency tests.
 
-## 7. Rollout, verification and recovery (current branch)
+## 8. Rollout, verification and recovery (current PR)
 
-- **Order:** after the owner confirms the project is already at 0069, rehearse 0070 then 0071 on a disposable staging clone. Take and rehearse a restorable backup; then obtain separate explicit production approval before applying migrations DB-first or deploying the new app. See [UPGRADE_REVIEW.md](UPGRADE_REVIEW.md) for the exact gates.
-- **No transparent old-client checkout after 0071:** v1 and v2 atomic RPCs keep their signatures, legacy carts/order history survive, and manual salesman captures remain unchanged. But retailer self-checkout from clients lacking a structured saved address is intentionally rejected. Coordinate a checkout freeze or client rollout; do not claim the old app works unchanged against the new order guard.
-- **No rollback-script repairs:** reapplying 0069 over 0070 would restore vulnerable function bodies. Recover using a reviewed forward migration or verified backup, preserving ledger and orders. The historical 0069 rollback/reapply check is confined to its own disposable 0069 PGlite database.
+- **Order:** verify the exact target project and whether main's 0070 and 0071 have already been applied. On a disposable clone, apply any missing main migrations **once in order**, audit outstanding 0070 seller invitations, then rehearse this PR's 0072 and 0073. Take and rehearse a restorable backup; obtain separate explicit production approval before remote SQL or production deployment. See [UPGRADE_REVIEW.md](UPGRADE_REVIEW.md) for the exact gates.
+- **No transparent old-client checkout after 0073:** v1 and v2 atomic RPCs keep their signatures, legacy carts/order history survive, and manual salesman captures remain unchanged. Retailer self-checkout from clients lacking a structured saved address is intentionally rejected. Coordinate a checkout freeze or client rollout; do not claim the old app works unchanged against the new order guard.
+- **No rollback-script repairs:** reapplying 0069 over 0072 would restore vulnerable function bodies. Recover using a reviewed forward migration or verified backup, preserving ledger and orders. The historical 0069 rollback/reapply check is confined to its own disposable 0069 PGlite database.
 - **Verification limits:** PGlite test evidence does not verify Supabase Auth mail delivery, actual production schema drift, or real multi-connection locking. No remote migration, deploy or live seller activation was performed here. Commission, tax-credit-note and invoice decisions above remain gated.
