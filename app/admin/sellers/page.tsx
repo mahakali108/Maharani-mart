@@ -55,7 +55,8 @@ export default async function SellersPage({
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-ink-800">Invite a seller</h2>
           <p className="mb-3 mt-1 text-xs text-ink-500">
-            Only Super Admin can send an email invitation. Accounts start <strong>pending</strong> and cannot trade until approved.
+            Only Super Admin can reserve a business and request an Auth password-setup invitation.
+            Accounts remain <strong>pending</strong> until the login is linked and separately approved.
           </p>
           <CreateSellerForm />
         </Card>
@@ -92,7 +93,7 @@ export default async function SellersPage({
         <AdminEmptyState
           icon={Users}
           title="No sellers yet"
-          body="Create the first marketplace seller above. Sellers stay invisible to trading until an admin approves them."
+          body="Invite your first seller above. Offers cannot trade until Super Admin approves the account."
         />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-white">

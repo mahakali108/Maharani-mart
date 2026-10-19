@@ -40,6 +40,7 @@ import { POST as quoteCheckout } from '@/app/api/mobile/v1/checkout/quote/route'
 import { GET as listOrders, POST as submitOrder } from '@/app/api/mobile/v1/orders/route';
 import { GET as recoverOrderRequest } from '@/app/api/mobile/v1/orders/requests/[requestKey]/route';
 import { resetRateLimits } from '@/lib/mobile/rate-limit';
+import { MobileCommerceError } from '@/lib/mobile/commerce-service';
 
 const RETAILER = '11111111-1111-4111-8111-111111111111';
 const STAFF = '22222222-2222-4222-8222-222222222222';
@@ -47,6 +48,7 @@ const PRODUCT = '33333333-3333-4333-8333-333333333333';
 const PACK = '44444444-4444-4444-8444-444444444444';
 const LINE = '55555555-5555-4555-8555-555555555555';
 const REQUEST_KEY = '66666666-6666-4666-8666-666666666666';
+const ADDRESS = '99999999-9999-4999-8999-999999999998';
 
 function baseTables(overrides: Record<string, object[]> = {}) {
   return {
@@ -180,7 +182,7 @@ const serverQuote = {
   coinsUsedPaise: 15000,
   balanceAfterCoinsPaise: 0,
   couponCode: null,
-  address: { id: null, label: 'Shop address', line: 'Shop Road', receiverName: 'Shop Owner', phone: '9876543210', isDefault: true },
+  address: { id: ADDRESS, label: 'Saved shop', line: 'Shop Road, Gaya, Bihar, 823001', district: 'Gaya', state: 'Bihar', pincode: '823001', receiverName: 'Shop Owner', phone: '9876543210', isDefault: true },
 };
 
 beforeEach(() => {
@@ -201,12 +203,18 @@ beforeEach(() => {
   client.auth.getUser = (...args: unknown[]) => mocks.getUser(...args);
   mocks.loadMobileCart.mockResolvedValue(serverCart);
   mocks.loadRetailerCartRows.mockResolvedValue(savedLines);
-  mocks.resolveMobileAddress.mockResolvedValue({
-    id: null,
-    display: serverQuote.address,
-    snapshot: { line: 'Shop Road', label: 'Shop address', receiverName: 'Shop Owner', phone: '9876543210' },
+  mocks.resolveMobileAddress.mockImplementation(async (_session: unknown, id: unknown) => {
+    if (id !== ADDRESS) throw new MobileCommerceError('invalid_request', 400, 'Select a saved delivery address.');
+    return {
+      id: ADDRESS,
+      display: serverQuote.address,
+      snapshot: { line: 'Shop Road, Gaya, Bihar, 823001', label: 'Saved shop', receiverName: 'Shop Owner', phone: '9876543210', district: 'Gaya', state: 'Bihar', pincode: '823001' },
+    };
   });
-  mocks.quoteMobileCheckout.mockResolvedValue(serverQuote);
+  mocks.quoteMobileCheckout.mockImplementation(async (_session: unknown, _lines: unknown, id: unknown) => {
+    if (id !== ADDRESS) throw new MobileCommerceError('invalid_request', 400, 'Select a saved delivery address.');
+    return serverQuote;
+  });
   mocks.loadActiveCoupon.mockResolvedValue({ coupon: null, error: false });
   mocks.replayOrder.mockResolvedValue(null);
   mocks.createOrder.mockResolvedValue({
@@ -310,16 +318,15 @@ describe('mobile cart and quote endpoints', () => {
   it('returns the authoritative paise quote for the exact saved cart and rejects untrusted totals', async () => {
     const response = await quoteCheckout(apiRequest('/api/mobile/v1/checkout/quote', {
       method: 'POST',
-      // Kotlinx serialization omits nulls; omitted addressId resolves to the
-      // registered profile address rather than blocking native checkout.
-      body: { lines: [{ packId: PACK, quantity: 6 }], },
+      // Saved PIN-coded address is required; profile text is reference only.
+      body: { lines: [{ packId: PACK, quantity: 6 }], addressId: ADDRESS },
     }));
     expect(response.status).toBe(200);
     expect((await json(response)).data).toEqual(serverQuote);
     expect(mocks.quoteMobileCheckout).toHaveBeenCalledWith(
       expect.objectContaining({ userId: RETAILER }),
       [{ packId: PACK, quantity: 6 }],
-      null,
+      ADDRESS,
     );
 
     const forged = await quoteCheckout(apiRequest('/api/mobile/v1/checkout/quote', {
@@ -328,13 +335,18 @@ describe('mobile cart and quote endpoints', () => {
     }));
     expect(forged.status).toBe(400);
     expect(mocks.quoteMobileCheckout).toHaveBeenCalledTimes(1);
+    const missing = await quoteCheckout(apiRequest('/api/mobile/v1/checkout/quote', {
+      method: 'POST', body: { lines: [{ packId: PACK, quantity: 6 }] },
+    }));
+    expect(missing.status).toBe(400);
+    expect((await json(missing)).error).toMatchObject({ code: 'invalid_request' });
   });
 });
 
 describe('mobile order submit, retry and actual history', () => {
   const body = {
     lines: [{ packId: PACK, quantity: 6 }],
-    // Nullable fields are omitted by the Android JSON encoder.
+    addressId: ADDRESS,
     notes: 'Ring the bell',
   };
 
@@ -381,15 +393,25 @@ describe('mobile order submit, retry and actual history', () => {
       lines: body.lines,
       notes: body.notes,
       requestKey: REQUEST_KEY,
-      requestContext: 'profile-address',
-      shippingAddress: { line: 'Shop Road' },
+      requestContext: `saved-address:${ADDRESS}`,
+      shippingAddress: { line: 'Shop Road, Gaya, Bihar, 823001', district: 'Gaya', state: 'Bihar', pincode: '823001' },
       couponCode: 'SPRING',
       clearCartAfterOrder: true,
     });
     expect(args).not.toHaveProperty('grandTotal');
     expect(args).not.toHaveProperty('gstTotal');
     expect(mocks.loadRetailerCartRows).toHaveBeenCalledTimes(1);
-    expect(mocks.resolveMobileAddress).toHaveBeenCalledWith(expect.anything(), null);
+    expect(mocks.resolveMobileAddress).toHaveBeenCalledWith(expect.anything(), ADDRESS);
+  });
+
+  it('rejects legacy null/profile addresses instead of accepting an unverified delivery PIN', async () => {
+    const response = await submitOrder(apiRequest('/api/mobile/v1/orders', {
+      method: 'POST', idempotencyKey: REQUEST_KEY,
+      body: { lines: body.lines, notes: body.notes },
+    }));
+    expect(response.status).toBe(400);
+    expect((await json(response)).error).toMatchObject({ code: 'invalid_request' });
+    expect(mocks.createOrder).not.toHaveBeenCalled();
   });
 
   it('returns the original order on same-key retry before cart/address reads and never writes twice', async () => {
@@ -457,6 +479,20 @@ describe('mobile order submit, retry and actual history', () => {
     const payload = await json(shortage);
     expect(shortage.status).toBe(422);
     expect(payload.error).toMatchObject({ code: 'insufficient_stock', details: { available: 1 } });
+  });
+
+  it('returns an existing v1 conflict code if delivery terms changed, without exposing internal schema errors', async () => {
+    mocks.createOrder.mockResolvedValue({
+      error: 'Delivery is no longer confirmed for this address/PIN. Choose another address.',
+      code: 'delivery_unavailable',
+    });
+    const response = await submitOrder(apiRequest('/api/mobile/v1/orders', {
+      method: 'POST', idempotencyKey: REQUEST_KEY, body,
+    }));
+    expect(response.status).toBe(409);
+    expect((await json(response)).error).toMatchObject({
+      code: 'conflict', message: expect.stringContaining('no longer confirmed'),
+    });
   });
 
   it('rejects a request if the shared cart changed and does not call the atomic writer', async () => {

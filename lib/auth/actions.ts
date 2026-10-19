@@ -421,13 +421,15 @@ export async function registerRetailerAction(
   redirect('/pending-approval');
 }
 
-/** Public seller signup is deliberately disabled. Seller identities are created
- * only by the Super Admin invitation flow in lib/admin/seller-actions.ts. */
+/** Compatibility endpoint for older clients/bookmarks. There is no public
+ * seller signup: only a server-side Super Admin invitation can create a seller
+ * Auth user. Never call auth.signUp with client-supplied seller metadata. */
 export async function registerSellerAction(
-  prevState: FormState,
-  formData: FormData
+  _prevState: FormState,
+  _formData: FormData
 ): Promise<FormState> {
-  void prevState;
-  void formData;
-  return { error: 'Seller accounts are invite-only. Please contact Maharani Traders for onboarding.' };
+  // Retain the legacy Server Action signature without processing client input.
+  void _prevState;
+  void _formData;
+  return { error: 'Seller registration is by Super Admin invitation only. Ask your marketplace administrator for an invite.' };
 }

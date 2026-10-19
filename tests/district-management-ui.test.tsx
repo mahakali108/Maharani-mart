@@ -27,7 +27,7 @@ describe('district registration/edit selector', () => {
   it('filters by district and clears stale area selection before save', async () => {
     render(<form data-testid="form"><ServiceAreaSelect areas={areas} currentAreaId="saran" /></form>);
     const user = userEvent.setup();
-    expect((screen.getByLabelText('Service district') as HTMLSelectElement).value).toBe('Saran');
+    expect((screen.getByLabelText('Service district') as HTMLSelectElement).value).toBe('Saran'); // Existing assignment survives the new default.
     await user.selectOptions(screen.getByLabelText('Service district'), 'Patna');
     expect((screen.getByLabelText('Service area') as HTMLSelectElement).value).toBe('');
     expect(screen.queryByRole('option', { name: 'Market — Saran' })).toBeNull();

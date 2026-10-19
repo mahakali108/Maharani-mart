@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { CheckCircle2, Loader2, LockKeyhole, MapPin } from 'lucide-react';
 import { placeOrderAction } from '@/lib/retailer/checkout-actions';
 import { useCheckoutAddress } from '@/components/retailer/checkout-address-context';
+import type { AddressCoverage } from '@/components/retailer/checkout-address-selector';
 
 export interface CheckoutFormProps {
   grandTotal: number;
@@ -15,6 +16,7 @@ export interface CheckoutFormProps {
   itemCount?: number;
   /** True when a cart line cannot be priced (e.g. an unpriced loose remainder). */
   disabled?: boolean;
+  coverage: Record<string, AddressCoverage>;
 }
 
 export function CheckoutForm({
@@ -25,16 +27,21 @@ export function CheckoutForm({
   couponCode = null,
   itemCount,
   disabled = false,
+  coverage,
 }: CheckoutFormProps) {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  // Selected address-book id (null = registered shop address). Resolved and
-  // snapshotted server-side — see placeOrderAction.
+  // Selected saved-address id (null = no approved delivery address selected).
+  // The server re-resolves and snapshots it in placeOrderAction.
   const { selectedAddressId } = useCheckoutAddress();
+  const selectedCoverage = selectedAddressId ? coverage[selectedAddressId] : undefined;
+  const deliveryBlocker = selectedCoverage
+    ? selectedCoverage.blocker
+    : 'Add and select a saved delivery address with an approved district, state and PIN.';
 
   function handlePlaceOrder() {
-    if (disabled) return;
+    if (disabled || deliveryBlocker) return;
     setError(null);
     startTransition(async () => {
       const result = await placeOrderAction(notes, selectedAddressId ?? undefined);
@@ -100,6 +107,10 @@ export function CheckoutForm({
           </div>
         ) : null}
 
+        {deliveryBlocker ? (
+          <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900">{deliveryBlocker}</p>
+        ) : null}
+
         {error ? (
           <div
             role="alert"
@@ -112,7 +123,7 @@ export function CheckoutForm({
         <button
           type="button"
           onClick={handlePlaceOrder}
-          disabled={isPending || disabled}
+          disabled={isPending || disabled || Boolean(deliveryBlocker)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 disabled:opacity-60"
         >
           {isPending ? (
@@ -125,7 +136,7 @@ export function CheckoutForm({
         <p className="flex items-start justify-center gap-1.5 text-center text-[9px] leading-4 text-slate-400">
           <LockKeyhole className="mt-0.5 h-3 w-3 shrink-0 text-mint-600" aria-hidden="true" />
           <span>
-            By placing this order, prices, MOQ, GST, coins and availability will be securely rechecked on the server.
+            By placing this order, prices, MOQ, GST, coins, delivery coverage and availability will be securely rechecked on the server.
           </span>
         </p>
       </div>

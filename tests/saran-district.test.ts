@@ -1,10 +1,10 @@
 /**
- * Saran District, Bihar — the active service district.
+ * Historical 0058 Saran-default migration + current 0071 Gaya default.
  *
  * Covers: the single config constant, the reviewed migration (default only, no
  * data rewrite, reversible), the admin default, that no UI/config source still
  * presents Khagaria as the active area, and — executed on PGlite with every
- * migration applied — that new areas default to Saran while existing rows keep
+ * migration applied — that new areas default to Gaya while existing rows keep
  * their recorded district.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -114,7 +114,7 @@ describe('Gaya — executed against PostgreSQL (PGlite) with all migrations', ()
     db = await createMigratedDb();
   }, 120_000);
 
-  it('the column default is Gaya', async () => {
+  it('the column default is Gaya after 0071', async () => {
     const { rows } = await db.query<{ column_default: string }>(
       `select column_default from information_schema.columns
         where table_schema = 'public' and table_name = 'areas' and column_name = 'district'`

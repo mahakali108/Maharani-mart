@@ -8,6 +8,7 @@ import { toPaise } from '@/lib/retailer/case-pricing';
 import { loadActiveCouponForRetailer } from '@/lib/coupons/validate';
 import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
 import { formatAddressLine, type AddressPayload } from '@/lib/retailer/address-shared';
+import { checkDeliveryTerms, deliveryOrderBlocker } from '@/lib/config/delivery-serviceability';
 import { loadCatalogAvailability } from '@/lib/retailer/catalog';
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -97,7 +98,7 @@ export interface MobileAddressOption {
 export interface ResolvedMobileAddress {
   id: string | null;
   display: MobileAddressOption;
-  snapshot: { line: string; label?: string; receiverName?: string; phone?: string };
+  snapshot: { line: string; label?: string; receiverName?: string; phone?: string; district: string | null; state: string | null; pincode: string };
 }
 
 export interface MobileCheckoutQuote {
@@ -303,26 +304,13 @@ export async function loadMobileAddresses(session: MobileSession): Promise<Mobil
   return options;
 }
 
-/** Resolve and freeze only a saved address owned by this retailer or their profile address. */
+/** Resolve and freeze only a structured saved address owned by this retailer. */
 export async function resolveMobileAddress(
   session: MobileSession,
   addressId: string | null
 ): Promise<ResolvedMobileAddress> {
   if (!addressId) {
-    const profileAddress = (await loadMobileAddresses(session)).find((address) => address.id === null);
-    if (!profileAddress) {
-      throw new MobileCommerceError('invalid_request', 400, 'Add a saved delivery address or a registered shop address before continuing.');
-    }
-    return {
-      id: null,
-      display: profileAddress,
-      snapshot: {
-        line: profileAddress.line,
-        label: profileAddress.label,
-        receiverName: profileAddress.receiverName ?? undefined,
-        phone: profileAddress.phone ?? undefined,
-      },
-    };
+    throw new MobileCommerceError('invalid_request', 400, 'Select a saved delivery address with a district, state and PIN. Registered shop text alone cannot establish coverage.');
   }
 
   const supabase = callerClient(session);
@@ -342,6 +330,10 @@ export async function resolveMobileAddress(
     receiverName: data.receiver_name,
     phone: data.phone,
     isDefault: data.is_default,
+    city: data.city,
+    district: data.district,
+    state: data.state,
+    pincode: data.pincode,
   };
   return {
     id: data.id,
@@ -351,6 +343,9 @@ export async function resolveMobileAddress(
       label: display.label,
       receiverName: display.receiverName ?? undefined,
       phone: display.phone ?? undefined,
+      district: data.district,
+      state: data.state,
+      pincode: data.pincode,
     },
   };
 }
@@ -359,8 +354,8 @@ export async function resolveMobileAddress(
  * The column payload for one saved address.
  *
  * `state` defaults to Bihar exactly like the web form's writer: the shop is a
- * wholesaler in the Saran district service area, so an address without a state would be
- * incomplete for delivery.
+ * initially configured for Bihar. This is a form default, NOT proof that
+ * any district or PIN is serviceable; checkout verifies the saved fields.
  */
 function addressColumns(
   retailerId: string,
@@ -579,6 +574,13 @@ export async function quoteMobileCheckout(
   }
 
   const quote = result.quote;
+  const delivery = await checkDeliveryTerms(supabase, address.snapshot);
+  if (!delivery.ok) {
+    throw new MobileCommerceError(delivery.code === 'database_unavailable' ? 'database_unavailable' : 'conflict',
+      delivery.code === 'database_unavailable' ? 503 : 409, delivery.message);
+  }
+  const deliveryBlocker = deliveryOrderBlocker(delivery, toPaise(quote.grandTotal));
+  if (deliveryBlocker) throw new MobileCommerceError('conflict', 409, deliveryBlocker);
   const availability = await loadCatalogAvailability(supabase, quote.lines.map((line) => line.packId));
   return {
     lines: quote.lines.map((line) => {

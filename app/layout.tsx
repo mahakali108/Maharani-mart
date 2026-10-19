@@ -9,9 +9,9 @@ import InstallPrompt from '@/components/pwa/InstallPrompt';
 // needs next/font/google, which requires network access at build time.
 
 export const metadata: Metadata = {
-  title: 'Maharani Traders — Order everyday products by the piece',
+  title: 'Maharani Traders — wholesale ordering for retailers',
   description:
-    'Maharani Traders is the simple, mobile-first ordering app for small retailers. Browse products, place orders and reorder essentials — all in pieces.',
+    'Maharani Traders is a wholesale ordering PWA for approved retailers. Browse catalogue offers and place orders at configured serviceable addresses.',
   applicationName: 'Maharani Traders',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
@@ -28,13 +28,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // App behavior: the APK/WebView must never pinch-zoom, double-tap-zoom or
-  // re-scale. Text stays readable via rem-based sizing, never via zoom.
-  maximumScale: 1,
-  userScalable: false,
-  // Expose the notch/home-indicator insets so the sticky header and the
-  // bottom navigation can pad with env(safe-area-inset-*) on Android /
-  // Capacitor (no visual change on web where the insets are 0).
+  // Browser PWA: respect pinch zoom and text magnification for accessibility.
+  // Keep safe-area padding for mobile browser chrome/notches.
   viewportFit: 'cover',
   themeColor: '#5142B8',
 };
@@ -45,8 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans">
         {children}
         <Analytics />
-        {/* PWA: registers the service worker (browser only) and shows an
-            optional, dismissible install prompt. No effect on Capacitor. */}
+        {/* PWA: browser-only service worker and optional install prompt. */}
         <ServiceWorkerRegister />
         <InstallPrompt />
       </body>

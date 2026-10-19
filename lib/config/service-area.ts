@@ -2,13 +2,11 @@
  * Active business / service district — the single source of truth for any
  * UI copy, form default or config that names the district.
  *
- * Gaya District, Bihar is the default for newly configured service areas
- * (migration 0071). Existing `areas` rows, retailer assignments, addresses and
- * orders are NOT rewritten. This does not imply any PIN code/locality is
- * serviceable; serviceability is limited to explicitly configured active areas.
- *
- * Do not add delivery areas, pincodes or coordinates here. Areas are created by
- * an admin in the Admin Panel (/admin/areas) from real, verified information.
+ * Gaya District, Bihar is the form and new-row database default (main's 0071).
+ * Migration 0058 set the former Saran default; neither migration rewrites
+ * existing areas, retailer assignments, addresses or orders. This label does
+ * NOT imply delivery coverage: the separate directory added by 0073 starts
+ * empty and admins must activate verified district/state/PIN rows in /admin/areas.
  */
 export const SERVICE_DISTRICT = 'Gaya' as const;
 export const SERVICE_STATE = 'Bihar' as const;

@@ -1,25 +1,8 @@
 import { MapPin, Phone, UserRound } from 'lucide-react';
 
-/**
- * The delivery address an order goes to.
- *
- * SCHEMA REALITY (audited): a retailer has exactly ONE address — the
- * `retailers.address` text column — plus their assigned `areas` row and the
- * contact name/phone on `profiles`. There is no address book, no per-order
- * address snapshot and no `orders.delivery_*` column anywhere in the 25
- * migrations.
- *
- * So this card renders the retailer's real registered shop address and says
- * plainly that it is the registered address. It does NOT pretend to be a
- * selectable address book, and on a historical order it does not claim the
- * value was captured at order time — because it was not. The safest path to a
- * real address book + per-order snapshot is documented in
- * docs/retailer-enterprise-upgrade.md §4.
- *
- * Presentational only: every value is read server-side from the caller's own
- * RLS-scoped row and passed in. Nothing is editable here, so no client state
- * can influence what an order is charged or where it is recorded as going.
- */
+/** Presentational address card. For a new order the saved address is frozen
+ * at placement; a registered-shop fallback on historical orders is NOT proof
+ * of the original delivery location or current PIN coverage. */
 export interface DeliveryAddress {
   shopName: string | null;
   contactName: string | null;
@@ -31,7 +14,7 @@ export interface DeliveryAddress {
 export function DeliveryAddressCard({
   address,
   title = 'Delivery address',
-  note = 'Orders are delivered to your registered shop address. Contact your distributor to update it.',
+  note = 'Delivery coverage is checked for a saved address at checkout; shop profile text is not a delivery promise.',
 }: {
   address: DeliveryAddress;
   title?: string;
@@ -62,8 +45,7 @@ export function DeliveryAddressCard({
           </address>
         ) : (
           <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-[11px] leading-4 text-amber-800">
-            No delivery address is recorded on your account yet. Your distributor can add one — orders are still
-            delivered to your assigned service area.
+            No delivery address is recorded here. Add and select a saved address to check configured delivery coverage.
           </p>
         )}
 

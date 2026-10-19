@@ -17,11 +17,18 @@ export function AuthFrame({ children, wide = false }: { children: React.ReactNod
           <div className="rounded-2xl border border-mint-200 bg-mint-100 p-5"><Boxes className="h-6 w-6 text-mint-700" aria-hidden="true" /><h3 className="mt-4 text-sm font-semibold">Stock up your way</h3><p className="mt-2 text-xs leading-5 text-slate-600">Pack sizes and minimum quantities, clearly shown.</p></div>
           <div className="rounded-2xl border border-lavender-200 bg-lavender-100 p-5"><RotateCcw className="h-6 w-6 text-lavender-700" aria-hidden="true" /><h3 className="mt-4 text-sm font-semibold">Make restocking easier</h3><p className="mt-2 text-xs leading-5 text-slate-600">Find your past orders and review a reorder.</p></div>
         </div>
-        <p className="mt-6 flex items-center gap-2 text-xs text-slate-500"><PackageCheck className="h-4 w-4" aria-hidden="true" /> Based in {SERVICE_AREA_LABEL}</p>
+        <p className="mt-6 flex items-center gap-2 text-xs text-slate-500"><PackageCheck className="h-4 w-4" aria-hidden="true" /> Initial district default: {SERVICE_AREA_LABEL} · PIN coverage verified at checkout</p>
       </aside>
       <section className={`mx-auto w-full rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-premium sm:p-8 ${wide ? 'max-w-2xl' : 'max-w-md'}`}>
         {children}
-        <p className="mt-8 flex items-center justify-center gap-1 border-t border-slate-100 pt-5 text-[11px] text-slate-500">Maharani Traders <ArrowUpRight className="h-3 w-3" aria-hidden="true" /></p>
+        <nav aria-label="Public information" className="mt-8 flex flex-wrap justify-center gap-x-4 gap-y-1 border-t border-slate-100 pt-5 text-[11px] text-slate-600">
+          <Link href="/about" className="min-h-11 inline-flex items-center">About</Link>
+          <Link href="/legal/terms" className="min-h-11 inline-flex items-center">Terms</Link>
+          <Link href="/legal/privacy" className="min-h-11 inline-flex items-center">Privacy</Link>
+          <Link href="/legal/shipping" className="min-h-11 inline-flex items-center">Delivery</Link>
+          <Link href="/legal/returns" className="min-h-11 inline-flex items-center">Returns</Link>
+          <Link href="/contact" className="min-h-11 inline-flex items-center gap-1">Contact <ArrowUpRight className="h-3 w-3" aria-hidden="true" /></Link>
+        </nav>
       </section>
     </div>
   </main>;

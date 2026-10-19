@@ -54,7 +54,12 @@ async function createSeller(tx: Db | Tx, name: string): Promise<string> {
 
 beforeAll(async () => {
   db = await createMigratedDb();
-  admin = await createUser(db, 'admin');
+  admin = await createUser(db, 'super_admin');
+  // Explicit fixture coverage: 0073 does NOT seed any real delivery PINs.
+  await as(db, admin, (tx) => tx.query(
+    `insert into delivery_service_areas (district, state, pincode, is_active, created_by, updated_by)
+     values ('Gaya', 'Bihar', '823001', true, $1, $1)`, [admin]
+  ));
   staff = await createUser(db, 'staff');
   retailer = await createUser(db, 'retailer');
   sellerProfile = await createUser(db, 'seller');
@@ -201,8 +206,8 @@ describe('0064 line identity', () => {
   it('order lines: legacy one-pack-per-order; split one-pack-per-sub-order', async () => {
     const parentId = randomUUID();
     await as(db, 'service', (tx) => tx.query(
-      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, request_key, request_fingerprint, fulfilment_profile)
-       values ($1, $2, 'pending', 100, 0, 0, 100, $3, repeat('a', 64), 'all_seller')`,
+      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, shipping_address, request_key, request_fingerprint, fulfilment_profile)
+       values ($1, $2, 'pending', 100, 0, 0, 100, '{"line":"Fixture street, Gaya, Bihar, 823001","district":"Gaya","state":"Bihar","pincode":"823001"}'::jsonb, $3, repeat('a', 64), 'all_seller')`,
       [parentId, retailer, randomUUID()]
     ));
     const childA = randomUUID();
@@ -238,8 +243,8 @@ describe('0064 line identity', () => {
     // Legacy unsplit rows: one pack per order (non-null key set).
     const legacyOrder = randomUUID();
     await as(db, 'service', (tx) => tx.query(
-      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, request_key, request_fingerprint, fulfilment_profile)
-       values ($1, $2, 'pending', 100, 0, 0, 100, $3, repeat('b', 64), 'all_seller')`,
+      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, shipping_address, request_key, request_fingerprint, fulfilment_profile)
+       values ($1, $2, 'pending', 100, 0, 0, 100, '{"line":"Fixture street, Gaya, Bihar, 823001","district":"Gaya","state":"Bihar","pincode":"823001"}'::jsonb, $3, repeat('b', 64), 'all_seller')`,
       [legacyOrder, retailer, randomUUID()]
     ));
     await as(db, 'service', (tx) => tx.query(
@@ -264,8 +269,8 @@ describe('0065/0066 stock discipline', () => {
 
     const parentId = randomUUID();
     await as(db, 'service', (tx) => tx.query(
-      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, request_key, request_fingerprint, fulfilment_profile)
-       values ($1, $2, 'pending', 100, 0, 0, 100, $3, repeat('c', 64), 'all_seller')`,
+      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, shipping_address, request_key, request_fingerprint, fulfilment_profile)
+       values ($1, $2, 'pending', 100, 0, 0, 100, '{"line":"Fixture street, Gaya, Bihar, 823001","district":"Gaya","state":"Bihar","pincode":"823001"}'::jsonb, $3, repeat('c', 64), 'all_seller')`,
       [parentId, retailer, randomUUID()]
     ));
     const childId = randomUUID();
@@ -290,8 +295,8 @@ describe('0065/0066 stock discipline', () => {
     // Asking for more than remains fails INSUFFICIENT_STOCK — never oversells.
     const parent2 = randomUUID();
     await as(db, 'service', (tx) => tx.query(
-      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, request_key, request_fingerprint, fulfilment_profile)
-       values ($1, $2, 'pending', 100, 0, 0, 100, $3, repeat('d', 64), 'all_seller')`,
+      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, shipping_address, request_key, request_fingerprint, fulfilment_profile)
+       values ($1, $2, 'pending', 100, 0, 0, 100, '{"line":"Fixture street, Gaya, Bihar, 823001","district":"Gaya","state":"Bihar","pincode":"823001"}'::jsonb, $3, repeat('d', 64), 'all_seller')`,
       [parent2, retailer, randomUUID()]
     ));
     const child2 = randomUUID();
@@ -340,8 +345,8 @@ describe('0067 child-scoped coin refunds', () => {
     const parentId = randomUUID();
     const childId = randomUUID();
     await as(db, 'service', (tx) => tx.query(
-      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, request_key, request_fingerprint, fulfilment_profile)
-       values ($1, $2, 'pending', 500, 0, 0, 500, $3, repeat('e', 64), 'all_seller')`,
+      `insert into orders (id, retailer_id, status, subtotal, gst_total, discount_total, grand_total, shipping_address, request_key, request_fingerprint, fulfilment_profile)
+       values ($1, $2, 'pending', 500, 0, 0, 500, '{"line":"Fixture street, Gaya, Bihar, 823001","district":"Gaya","state":"Bihar","pincode":"823001"}'::jsonb, $3, repeat('e', 64), 'all_seller')`,
       [parentId, retailer, randomUUID()]
     ));
     await as(db, 'service', (tx) => tx.query(
@@ -387,60 +392,109 @@ describe('0067 child-scoped coin refunds', () => {
   });
 });
 
-describe('0069 seller portal boundaries', () => {
-  it('blocks public seller signup and creates a pending tenant only from an invitation', async () => {
+describe('0069/0072 seller portal boundaries after main 0070', () => {
+  it('rejects public seller signup; only a Super-Admin-reserved email creates a pending seller', async () => {
     const pendingProfile = randomUUID();
-    const pendingEmail = `seller-signup-${pendingProfile}@test.local`;
-    const pendingMeta = {
-      account_type: 'seller',
-      business_name: `Pending Seller ${pendingProfile.slice(0, 8)}`,
-      full_name: 'Pending Owner',
-      phone: `9${pendingProfile.replaceAll('-', '').slice(0, 9).replace(/[a-f]/g, '1')}`,
-    };
-    let publicSignupError = '';
+    const pendingEmail = `seller-invite-${pendingProfile}@test.local`;
+    // GoTrue inserts auth.users as its privileged DB owner after receiving
+    // public signup metadata; anon has no SQL privilege on auth.users itself.
+    let signupError = '';
     try {
       await db.query(
         `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
-        [pendingProfile, pendingEmail, JSON.stringify(pendingMeta)]
+        [pendingProfile, pendingEmail, JSON.stringify({
+          account_type: 'seller', business_name: 'Forged business', role: 'super_admin',
+          full_name: 'Forged owner', phone: '9876543210',
+        })]
       );
-    } catch (error) {
-      publicSignupError = (error as Error).message;
-    }
-    expect(publicSignupError).toMatch(/seller_invitation_required/i);
+    } catch (cause) { signupError = (cause as Error).message; }
+    expect(signupError).toMatch(/seller_invite_required/);
+    expect((await db.query(`select id from auth.users where id=$1`, [pendingProfile])).rows).toHaveLength(0);
 
-    await as(db, 'service', (tx) => tx.query(
-      `insert into staff_account_invites (email, role, created_by, expires_at)
-       values ($1, 'seller', $2, now() + interval '15 minutes')`,
-      [pendingEmail, admin]
+    const ordinaryAdmin = await createUser(db, 'admin');
+    const reserveSql = `select public.reserve_seller_invite($1, $2, $3, $4, null, null, null) as id`;
+    expect(await errorOf(db, ordinaryAdmin, (tx) => tx.query(
+      reserveSql, [pendingEmail, 'Admin forged seller', 'Test Owner', '9765432188']
+    ))).toMatch(/Super Admin authorization required/);
+    const { rows: reservation } = await as(db, admin, (tx) => tx.query<{ id: string }>(
+      reserveSql, [pendingEmail, `Pending Seller ${pendingProfile.slice(0, 8)}`, 'Pending Owner', '9765432188']
     ));
+    const sellerRecord = reservation[0]!.id;
+    // A public signup cannot claim a reserved email, whether it submits
+    // seller or retailer metadata. Auth Admin supplies a separate one-use
+    // nonce (held only by trusted server code) in the invitation metadata.
+    let impersonationError = '';
+    try {
+      await db.query(
+        `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
+        [pendingProfile, pendingEmail, JSON.stringify({ account_type: 'retailer', seller_invite_nonce: 'guessed' })]
+      );
+    } catch (cause) { impersonationError = (cause as Error).message; }
+    expect(impersonationError).toMatch(/seller_invite_required/);
+    const { rows: claims } = await as(db, admin, (tx) => tx.query<{ claim: { email: string; nonce: string } }>(
+      `select public.claim_seller_invite_attempt($1) as claim`, [sellerRecord]
+    ));
+    const claim = claims[0]!.claim;
+    expect(claim.email).toBe(pendingEmail);
+    expect(claim.nonce).toMatch(/^[0-9a-f]{64}$/);
+    const { rows: rawInvites } = await db.query<{ invite_nonce_hash: string }>(
+      `select invite_nonce_hash from seller_account_invites where seller_id=$1`, [sellerRecord]
+    );
+    expect(rawInvites[0]!.invite_nonce_hash).not.toBe(claim.nonce);
+    // This privileged SQL insert simulates inviteUserByEmail, not public SQL
+    // access. Fake role/account_type metadata is ignored for identity.
     await db.query(
       `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
-      [pendingProfile, pendingEmail, JSON.stringify(pendingMeta)]
+      [pendingProfile, pendingEmail, JSON.stringify({ account_type: 'admin', role: 'super_admin', area_id: 'forged', seller_invite_nonce: claim.nonce })]
     );
-    const { rows: sellerRows } = await db.query<{
-      id: string; status: string; created_by: string; role: string;
-    }>(
+    const { rows: sellerRows } = await db.query<{ id: string; status: string; created_by: string; role: string }>(
       `select s.id, s.status, s.created_by, p.role::text as role
-         from sellers s join profiles p on p.id=s.created_by
-        where s.email=$1`,
-      [pendingEmail]
+         from sellers s join seller_members sm on sm.seller_id=s.id
+         join profiles p on p.id=sm.profile_id where sm.profile_id=$1`, [pendingProfile]
     );
-    expect(sellerRows).toHaveLength(1);
-    expect(sellerRows[0]).toMatchObject({
-      status: 'pending', created_by: admin, role: 'admin',
-    });
-    const { rows: invitedProfileRows } = await db.query<{ role: string }>(
-      `select role::text as role from profiles where id=$1`, [pendingProfile]
+    expect(sellerRows).toMatchObject([{ id: sellerRecord, status: 'pending', created_by: admin, role: 'seller' }]);
+    expect(await errorOf(db, pendingProfile, (tx) => tx.query(
+      `select * from public.seller_order_headers()`
+    ))).toMatch(/active seller session/);
+    expect((await as(db, pendingProfile, (tx) => tx.query(
+      `select id from seller_offers where seller_id=$1`, [sellerId]
+    ))).rows).toEqual([]);
+    const { rows: inviteRows } = await db.query<{ consumed_at: string | null; auth_user_id: string | null }>(
+      `select consumed_at, auth_user_id, invite_nonce_hash from seller_account_invites where seller_id=$1`, [sellerRecord]
     );
-    expect(invitedProfileRows[0]!.role).toBe('seller');
+    expect(inviteRows[0]?.consumed_at).toBeTruthy();
+    expect(inviteRows[0]?.auth_user_id).toBe(pendingProfile);
+    expect((inviteRows[0] as typeof inviteRows[number] & { invite_nonce_hash: string | null })?.invite_nonce_hash).toBeNull();
+    expect(await errorOf(db, admin, (tx) => tx.query(
+      `select public.claim_seller_invite_attempt($1)`, [sellerRecord]
+    ))).toMatch(/has an Auth account/);
 
-    // Pending tenants can read their own application but cannot create offers.
     expect(await errorOf(db, pendingProfile, (tx) => tx.query(
       `insert into seller_offers
          (seller_id, product_id, pack_id, fulfilment_type, unit_price_paise, moq, stock_quantity)
-       values ($1,$2,$3,'seller',10000,1,1)`,
-      [sellerRows[0]!.id, productId, packId]
-    ))).toMatch(/active seller membership/i);
+       values ($1,$2,$3,'seller',10000,1,1)`, [sellerRecord, productId, packId]
+    ))).toMatch(/active seller membership|row-level security/i);
+    const { rows: blockedUpdate } = await as(db, ordinaryAdmin, (tx) => tx.query(
+      `update sellers set status='active' where id=$1 returning id`, [sellerRecord]
+    ));
+    expect(blockedUpdate).toHaveLength(0); // RLS hides the row instead of erroring.
+    expect((await db.query<{ status: string }>(`select status from sellers where id=$1`, [sellerRecord])).rows[0]?.status).toBe('pending');
+    expect(await errorOf(db, pendingProfile, (tx) => tx.query(
+      `select public.claim_seller_invite_attempt($1)`, [sellerRecord]
+    ))).toMatch(/Super Admin authorization required/);
+    await as(db, admin, (tx) => tx.query(
+      `update sellers set status='active' where id=$1 and status='pending'`, [sellerRecord]
+    ));
+    expect((await as(db, pendingProfile, (tx) => tx.query(
+      `select id from sellers where id=$1`, [sellerRecord]
+    ))).rows).toHaveLength(1);
+    await as(db, admin, (tx) => tx.query(
+      `update sellers set status='suspended', suspension_reason='fixture hold' where id=$1`, [sellerRecord]
+    ));
+    expect(await errorOf(db, pendingProfile, (tx) => tx.query(
+      `select public.seller_update_own_profile($1,$2,$3,$4,$5,$6,$7)`,
+      [`Pending Seller ${pendingProfile.slice(0, 8)}`, 'Pending Owner', '9765432188', pendingEmail, null, null, null]
+    ))).toMatch(/active seller membership/);
 
     const { rows: areaRows } = await db.query<{ area_id: string }>(
       `select area_id from retailers where id=$1`, [retailer]
@@ -449,7 +503,7 @@ describe('0069 seller portal boundaries', () => {
     await db.query(
       `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
       [attemptedAdmin, `role-escalation-${attemptedAdmin}@test.local`, JSON.stringify({
-        account_type: 'admin', role: 'super_admin', full_name: 'Not Admin',
+        account_type: 'retailer', role: 'super_admin', full_name: 'Not Admin',
         phone: `8${attemptedAdmin.replaceAll('-', '').slice(0, 9).replace(/[a-f]/g, '2')}`,
         area_id: areaRows[0]!.area_id, shop_name: 'Role-safe shop',
       })]
@@ -458,6 +512,32 @@ describe('0069 seller portal boundaries', () => {
       `select role::text as role from profiles where id=$1`, [attemptedAdmin]
     );
     expect(roleRows[0]!.role).toBe('retailer');
+  });
+
+  it('rejects the older 0070 staff-invite seller path without consuming it or creating an Auth user', async () => {
+    const pendingProfile = randomUUID();
+    const pendingEmail = `legacy-seller-invite-${pendingProfile}@test.local`;
+    // Main's 0070 permitted 'seller' in staff_account_invites. A public signup
+    // with that email must not bypass 0072's Super-Admin nonce-bound flow.
+    await as(db, 'service', (tx) => tx.query(
+      `insert into staff_account_invites (email, role, created_by, expires_at)
+       values ($1, 'seller', $2, now() + interval '15 minutes')`,
+      [pendingEmail, admin]
+    ));
+    let blocked = '';
+    try {
+      await db.query(
+        `insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`,
+        [pendingProfile, pendingEmail, JSON.stringify({
+          account_type: 'seller', business_name: 'Forged legacy invite',
+          full_name: 'Unknown', phone: '9765432188',
+        })]
+      );
+    } catch (cause) { blocked = (cause as Error).message; }
+    expect(blocked).toMatch(/seller_invite_required/);
+    expect((await db.query(`select id from auth.users where id=$1`, [pendingProfile])).rows).toHaveLength(0);
+    expect((await db.query(`select email from staff_account_invites where email=$1`, [pendingEmail])).rows).toHaveLength(1);
+    expect((await db.query(`select id from sellers where email=$1`, [pendingEmail])).rows).toHaveLength(0);
   });
 
   it('adds a first seller-offer cart line with expected quantity zero', async () => {
@@ -530,34 +610,42 @@ describe('0069 seller portal boundaries', () => {
       [sellerRow.id]
     ));
 
-    const rollback0069 = readFileSync(
-      path.join(__dirname, '..', 'supabase', 'rollbacks', '0069_seller_portal_access.down.sql'),
-      'utf8'
+    const { rows: currentRows } = await db.query<{ id: string; source_type: string; quantity: number }>(
+      `select id, source_type, quantity from retailer_saved_cart_items where id=$1`, [legacyRow.id]
     );
-    const migration0069 = readFileSync(
-      path.join(__dirname, '..', 'supabase', 'migrations', '0069_seller_portal_access.sql'),
-      'utf8'
-    );
-    await db.exec(rollback0069);
+    expect(currentRows).toEqual([{ id: legacyRow.id, source_type: 'maharani', quantity: 2 }]);
 
-    // Re-apply 0069 over the existing legacy row and re-run 0069 to verify idempotency.
-    await db.exec(migration0069);
-    await db.exec(migration0069);
-
-    const { rows: preservedRows } = await db.query<{
-      id: string;
-      source_type: string;
-      seller_offer_id: string | null;
-      quantity: number;
-    }>(
-      `select id, source_type, seller_offer_id, quantity
-         from retailer_saved_cart_items
-        where id = $1`,
-      [legacyRow.id]
-    );
-    expect(preservedRows).toEqual([
-      { id: legacyRow.id, source_type: 'maharani', seller_offer_id: null, quantity: 2 },
-    ]);
+    // Historical 0069 rollback/reapply is tested on its OWN disposable 0069
+    // schema. Never roll back or reapply an older migration over the shared
+    // 0070–0073 schema: that would silently replace hardened function bodies.
+    const oldDb = await createMigratedDb({ lastMigration: '0069_seller_portal_access.sql' });
+    try {
+      const oldRetailer = await createUser(oldDb, 'retailer');
+      const oldPack = await createPack(oldDb, 'Historic saved line', 10);
+      const { rows: oldCart } = await oldDb.query<{ id: string }>(
+        `insert into retailer_saved_carts (retailer_id, name) values ($1,'Historic list') returning id`, [oldRetailer]
+      );
+      const { rows: oldLine } = await oldDb.query<{ id: string }>(
+        `insert into retailer_saved_cart_items (saved_cart_id, retailer_id, product_id, pack_id, quantity)
+         values ($1,$2,$3,$4,2) returning id`,
+        [oldCart[0]!.id, oldRetailer, oldPack.productId, oldPack.packId]
+      );
+      const rollback0069 = readFileSync(
+        path.join(__dirname, '..', 'supabase', 'rollbacks', '0069_seller_portal_access.down.sql'), 'utf8'
+      );
+      const migration0069 = readFileSync(
+        path.join(__dirname, '..', 'supabase', 'migrations', '0069_seller_portal_access.sql'), 'utf8'
+      );
+      await oldDb.exec(rollback0069);
+      await oldDb.exec(migration0069);
+      await oldDb.exec(migration0069);
+      const { rows: preservedRows } = await oldDb.query<{
+        id: string; source_type: string; seller_offer_id: string | null; quantity: number;
+      }>(`select id, source_type, seller_offer_id, quantity from retailer_saved_cart_items where id=$1`, [oldLine[0]!.id]);
+      expect(preservedRows).toEqual([{
+        id: oldLine[0]!.id, source_type: 'maharani', seller_offer_id: null, quantity: 2,
+      }]);
+    } finally { await oldDb.close(); }
   });
 
   it('discloses only approved merchant terms to retailers and re-moderates seller price edits', async () => {
@@ -620,16 +708,20 @@ describe('0069 seller portal boundaries', () => {
     expect(afterRetry[0]!.stock_quantity).toBe(42);
   });
 
-  it('allows a seller to update their own profile without touching status and enforces quantity-tier rules', async () => {
+  it('allows contact changes only, protects business identity and enforces quantity-tier rules', async () => {
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
+      `select seller_update_own_profile($1, $2, $3, $4, $5, $6, $7)`,
+      ['Forged Seller Co', 'Ramesh Owner', '9876543210', null, null, null, null]
+    ))).toMatch(/Business identity changes require Super Admin verification/);
     await as(db, sellerProfile, (tx) => tx.query(
       `select seller_update_own_profile($1, $2, $3, $4, $5, $6, $7)`,
       [
         'Bazaar Seller Co',
         'Ramesh Owner',
         '9876543210',
-        'owner@bazaar.local',
-        '10AABCU9603R1ZM',
-        'AABCU9603R',
+        null,
+        null,
+        null,
         'Station Road, Chapra',
       ]
     ));
@@ -645,8 +737,8 @@ describe('0069 seller portal boundaries', () => {
     expect(updatedSeller[0]).toEqual({
       status: 'active',
       contact_name: 'Ramesh Owner',
-      gstin: '10AABCU9603R1ZM',
-      pan: 'AABCU9603R',
+      gstin: null,
+      pan: null,
     });
 
     // Below-floor tier is rejected (floor is 9500 paise on packId).
@@ -689,12 +781,12 @@ describe('0069 seller portal boundaries', () => {
     ));
 
     // Effective unit price resolves base price below 5, 9900 for 5..11, 9600 for 12+.
-    const { rows: effRows } = await db.query<{ p1: string; p6: string; p15: string }>(
+    const { rows: effRows } = await as(db, retailer, (tx) => tx.query<{ p1: string; p6: string; p15: string }>(
       `select effective_seller_offer_unit_price_paise($1, 1) as p1,
               effective_seller_offer_unit_price_paise($1, 6) as p6,
               effective_seller_offer_unit_price_paise($1, 15) as p15`,
       [offerId]
-    );
+    ));
     expect({
       p1: Number(effRows[0]!.p1),
       p6: Number(effRows[0]!.p6),
@@ -729,16 +821,132 @@ describe('0069 seller portal boundaries', () => {
   });
 });
 
-describe('0068 drain-mode suspension', () => {
-  it('suspending a seller deactivates their offers; history is preserved', async () => {
+describe('0072 invitation retries and tenant boundaries', () => {
+  it('bounds repeated invitation attempts and can attach one eligible legacy pending business', async () => {
+    const email = `legacy-${randomUUID()}@test.local`;
+    const legacySeller = await as(db, admin, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(
+        `insert into sellers (business_name, email, phone, contact_name, status)
+         values ($1, $2, '9765432187', 'Legacy Owner', 'pending') returning id`,
+        [`Legacy pending ${randomUUID().slice(0, 8)}`, email]
+      );
+      return rows[0]!.id;
+    });
+    const ordinary = await createUser(db, 'admin');
+    expect(await errorOf(db, ordinary, (tx) => tx.query(
+      `select public.attach_existing_seller_invite($1)`, [legacySeller]
+    ))).toMatch(/Super Admin authorization required/);
+    await as(db, admin, (tx) => tx.query(`select public.attach_existing_seller_invite($1)`, [legacySeller]));
+    expect(await errorOf(db, admin, (tx) => tx.query(
+      `select public.attach_existing_seller_invite($1)`, [legacySeller]
+    ))).toMatch(/duplicate key/);
+
+    const first = await as(db, admin, (tx) => tx.query<{ claim: { nonce: string } }>(
+      `select public.claim_seller_invite_attempt($1) as claim`, [legacySeller]
+    ));
+    expect(first.rows[0]!.claim.nonce).toMatch(/^[0-9a-f]{64}$/);
+    expect(await errorOf(db, admin, (tx) => tx.query(
+      `select public.claim_seller_invite_attempt($1)`, [legacySeller]
+    ))).toMatch(/Wait before retrying/);
+    for (const count of [2, 3]) {
+      await db.query(`update seller_account_invites set last_attempt_at=now()-interval '3 minutes' where seller_id=$1`, [legacySeller]);
+      const claimed = await as(db, admin, (tx) => tx.query<{ claim: { nonce: string } }>(
+        `select public.claim_seller_invite_attempt($1) as claim`, [legacySeller]
+      ));
+      expect(claimed.rows[0]!.claim.nonce).not.toBe(first.rows[0]!.claim.nonce);
+      expect((await db.query<{ attempt_count: number }>(
+        `select attempt_count from seller_account_invites where seller_id=$1`, [legacySeller]
+      )).rows[0]!.attempt_count).toBe(count);
+    }
+    await db.query(`update seller_account_invites set last_attempt_at=now()-interval '3 minutes' where seller_id=$1`, [legacySeller]);
+    expect(await errorOf(db, admin, (tx) => tx.query(
+      `select public.claim_seller_invite_attempt($1)`, [legacySeller]
+    ))).toMatch(/attempt limit reached/);
+    await db.query(`update seller_account_invites set last_attempt_at=now()-interval '25 hours' where seller_id=$1`, [legacySeller]);
+    await as(db, admin, (tx) => tx.query(`select public.claim_seller_invite_attempt($1)`, [legacySeller]));
+    expect((await db.query<{ attempt_count: number }>(
+      `select attempt_count from seller_account_invites where seller_id=$1`, [legacySeller]
+    )).rows[0]!.attempt_count).toBe(1);
+  });
+
+  it('keeps private offer rates and tiers within the active seller tenant', async () => {
+    const otherProfile = await createUser(db, 'seller');
+    const otherSeller = await as(db, admin, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(
+        `insert into sellers (business_name, status) values ($1, 'pending') returning id`,
+        [`Second merchant ${randomUUID().slice(0, 8)}`]
+      );
+      return rows[0]!.id;
+    });
+    await as(db, admin, (tx) => tx.query(`update sellers set status='active' where id=$1`, [otherSeller]));
+    await as(db, admin, (tx) => tx.query(
+      `insert into seller_members (seller_id, profile_id, member_role) values ($1,$2,'owner')`, [otherSeller, otherProfile]
+    ));
+    const { rows: otherOffer } = await as(db, admin, (tx) => tx.query<{ id: string }>(
+      `insert into seller_offers (seller_id, product_id, pack_id, fulfilment_type, unit_price_paise, moq, stock_quantity, is_active, moderation_status)
+       values ($1,$2,$3,'seller',10300,1,2,false,'pending') returning id`,
+      [otherSeller, productId, packId]
+    ));
+    const privateId = otherOffer[0]!.id;
+    expect((await as(db, sellerProfile, (tx) => tx.query(
+      `select id from seller_offers where id=$1`, [privateId]
+    ))).rows).toEqual([]);
+    expect((await as(db, sellerProfile, (tx) => tx.query<{ price: string | null }>(
+      `select public.effective_seller_offer_unit_price_paise($1,1) as price`, [privateId]
+    ))).rows[0]!.price).toBeNull();
+    expect((await as(db, retailer, (tx) => tx.query<{ price: string | null }>(
+      `select public.effective_seller_offer_unit_price_paise($1,1) as price`, [privateId]
+    ))).rows[0]!.price).toBeNull();
+    expect((await as(db, otherProfile, (tx) => tx.query(
+      `select id from seller_offers where id=$1`, [privateId]
+    ))).rows).toHaveLength(1);
+    expect((await as(db, sellerProfile, (tx) => tx.query(
+      `select * from public.marketplace_offer_tiers(array[$1]::uuid[])`, [privateId]
+    ))).rows).toEqual([]);
+    expect(await errorOf(db, otherProfile, (tx) => tx.query(
+      `select public.seller_set_offer_stock($1,2)`, [offerId]
+    ))).toMatch(/not found for this active seller/);
+  });
+});
+
+describe('0068/0072 drain-mode suspension', () => {
+  it('suspending a seller hides operational/ledger data without erasing history', async () => {
+    const ledgerId = randomUUID();
+    await db.query(
+      `insert into seller_ledger (id, seller_id, entry_type, amount_paise, idempotency_key)
+       values ($1,$2,'ADJUSTMENT',1,$3)`,
+      [ledgerId, sellerId, `fixture:${ledgerId}`]
+    );
+    expect((await as(db, sellerProfile, (tx) => tx.query(
+      `select id from seller_ledger where id=$1`, [ledgerId]
+    ))).rows).toHaveLength(1);
+    expect((await as(db, sellerProfile, (tx) => tx.query(
+      `select id from seller_shipments where sub_order_id=$1`, [stockSubOrderId]
+    ))).rows).toHaveLength(1);
+
     await as(db, admin, (tx) => tx.query(
       `update sellers set status='suspended', suspension_reason='compliance hold' where id=$1 and status='active'`,
       [sellerId]
     ));
+    expect((await as(db, sellerProfile, (tx) => tx.query(
+      `select id from seller_ledger where id=$1`, [ledgerId]
+    ))).rows).toEqual([]);
+    expect((await as(db, sellerProfile, (tx) => tx.query(
+      `select id from seller_shipments where sub_order_id=$1`, [stockSubOrderId]
+    ))).rows).toEqual([]);
+    expect((await as(db, admin, (tx) => tx.query(
+      `select id from seller_ledger where id=$1`, [ledgerId]
+    ))).rows).toHaveLength(1);
     const { rows } = await db.query<{ is_active: boolean }>(
       `select is_active from seller_offers where id=$1`, [offerId]
     );
     expect(rows[0]!.is_active).toBe(false);
+    expect((await as(db, sellerProfile, (tx) => tx.query(
+      `select id from seller_offers where id=$1`, [offerId]
+    ))).rows).toEqual([]);
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
+      `select public.seller_set_offer_stock($1,5)`, [offerId]
+    ))).toMatch(/not found for this active seller/);
 
     // The row itself survives (deactivate, never delete).
     const { rows: kept } = await db.query<{ id: string }>(

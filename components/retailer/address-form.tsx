@@ -102,13 +102,13 @@ export function AddressForm({
           <input id={`${formId}-city`} name="city" defaultValue={address?.city ?? ''} maxLength={120} required className={inputClass} />
         </div>
         <div>
-          <label htmlFor={`${formId}-district`} className={labelClass}>District (optional)</label>
-          <input id={`${formId}-district`} name="district" defaultValue={address?.district ?? ''} maxLength={120} autoComplete="address-level2" className={inputClass} />
-          <p className="mt-1.5 text-[11px] leading-5 text-slate-500">Enter the actual district. This delivery address does not change your verified service area.</p>
+          <label htmlFor={`${formId}-district`} className={labelClass}>District (required for checkout)</label>
+          <input id={`${formId}-district`} name="district" defaultValue={address?.district ?? ''} maxLength={120} required autoComplete="address-level2" className={inputClass} />
+          <p className="mt-1.5 text-[11px] leading-5 text-slate-500">Enter the actual district. Delivery is available only at explicitly configured district/state/PIN combinations; your registration area does not guarantee coverage.</p>
         </div>
         <div>
           <label htmlFor={`${formId}-state`} className={labelClass}>State</label>
-          <input id={`${formId}-state`} name="state" defaultValue={address?.state ?? 'Bihar'} maxLength={120} className={inputClass} />
+          <input id={`${formId}-state`} name="state" defaultValue={address?.state ?? 'Bihar'} maxLength={120} required className={inputClass} />
         </div>
       </div>
       <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">

@@ -25,7 +25,7 @@ export async function adminTransitionSubOrderAction(
   nextStatus: AdminSubOrderStatus,
   reason?: string
 ): Promise<SubOrderActionResult> {
-  await requirePermission('sellers.manage');
+  await requirePermission('sellers.offers.manage');
   if (!isUuid(orderId) || !isUuid(subOrderId)) {
     return { ok: false, error: 'Invalid order or sub-order identifier.' };
   }

@@ -23,10 +23,9 @@ interface CartItemForCheckout {
  * re-reads and validates every pack, MOQ, price, GST rate, retailer
  * status and Coins balance; no client-supplied money value is trusted.
  *
- * `addressId` (when provided) is resolved server-side through the
- * RLS-scoped session, so the frozen order snapshot is ALWAYS one of the
- * retailer's own saved addresses or the profile address — never a
- * client-typed string.
+ * `addressId` must select an owned saved address. The RLS-scoped server
+ * freezes its structured district/state/PIN at checkout; free-form registered
+ * shop text never establishes delivery coverage.
  */
 export async function placeOrderAction(notes: string, addressId?: string): Promise<CheckoutResult> {
   const user = await requirePermission('orders.create');
@@ -50,10 +49,9 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
     return { error: 'Your cart is empty — add products before placing an order.' };
   }
 
-  // Resolve the delivery address server-side: a saved address book entry
-  // when an id is given, otherwise the profile address. Both flows freeze
-  // the one-line address onto the order (0036) for invoice/delivery truth.
-  let shippingAddress: { line: string; label?: string; receiverName?: string; phone?: string } | null = null;
+  // Resolve an OWNED saved address. The unstructured registered-shop text
+  // cannot establish district/PIN coverage and cannot be used for checkout.
+  let shippingAddress: { line: string; label?: string; receiverName?: string; phone?: string; district?: string | null; state?: string | null; pincode?: string } | null = null;
   if (addressId) {
     const { data: address } = await supabase
       .from('retailer_addresses')
@@ -77,17 +75,15 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
     }
     shippingAddress = {
       line: formatAddressLine(address),
+      district: address.district,
+      state: address.state,
+      pincode: address.pincode,
       label: address.label,
       receiverName: address.receiver_name,
       phone: address.phone,
     };
   } else {
-    const { data: retailer } = await supabase
-      .from('retailers')
-      .select('address')
-      .eq('id', user.id)
-      .maybeSingle<{ address: string | null }>();
-    if (retailer?.address) shippingAddress = { line: retailer.address, label: 'Shop' };
+    return { error: 'Add and select a saved delivery address with district, state and PIN to check coverage.' };
   }
 
   // The applied coupon is read from the retailer's OWN active-coupon row via

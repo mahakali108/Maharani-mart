@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { requireActiveSeller, requireSeller } from '@/lib/seller/guard';
+import { requireActiveSeller } from '@/lib/seller/guard';
 import {
   isUuid,
   normalizeSellerInput,
@@ -49,7 +49,7 @@ function mapOfferWriteError(message: string): string {
 }
 
 export async function updateSellerProfileAction(formData: FormData): Promise<SellerActionResult> {
-  await requireSeller();
+  await requireActiveSeller();
   const input = normalizeSellerInput({
     businessName: String(formData.get('businessName') ?? ''),
     contactName: String(formData.get('contactName') ?? ''),

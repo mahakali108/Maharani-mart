@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 /**
- * Seller review controls (Admin + Super Admin — the server actions re-check
+ * Seller review controls (Super Admin only — the server actions re-check
  * `sellers.review`; hiding these buttons is not authorization).
  *
  * - `pending`   → Approve / Reject (reason required for rejection).
@@ -22,8 +22,10 @@ import { Input } from '@/components/ui/input';
 export function SellerReviewActions({
   sellerId,
   status,
+  canApprove = true,
 }: {
   sellerId: string;
+  canApprove?: boolean;
   status: 'pending' | 'active' | 'suspended';
 }) {
   const router = useRouter();
@@ -32,6 +34,7 @@ export function SellerReviewActions({
   const [isPending, startTransition] = useTransition();
 
   const review = (decision: 'active' | 'rejected') => {
+    if (!window.confirm(decision === 'active' ? 'Approve and activate this seller account?' : 'Reject this pending seller account?')) return;
     startTransition(async () => {
       const result = await reviewSellerAction(sellerId, decision, reason);
       if (result.ok) {
@@ -44,6 +47,7 @@ export function SellerReviewActions({
   };
 
   const suspend = () => {
+    if (!window.confirm('Suspend this seller and deactivate its offers? Existing sub-orders remain in history.')) return;
     startTransition(async () => {
       const result = await suspendSellerAction(sellerId, reason);
       if (result.ok) {
@@ -56,6 +60,7 @@ export function SellerReviewActions({
   };
 
   const reinstate = () => {
+    if (!window.confirm('Reactivate this seller? Offers will remain deactivated.')) return;
     startTransition(async () => {
       const result = await reinstateSellerAction(sellerId);
       if (result.ok) {
@@ -72,13 +77,14 @@ export function SellerReviewActions({
       {status === 'pending' ? (
         <>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={isPending} onClick={() => review('active')}>
+            <Button size="sm" disabled={isPending || !canApprove} onClick={() => review('active')}>
               <CheckCircle2 className="h-4 w-4" aria-hidden /> Approve
             </Button>
             <Button size="sm" variant="outline" disabled={isPending} onClick={() => review('rejected')}>
               <XCircle className="h-4 w-4" aria-hidden /> Reject
             </Button>
           </div>
+          {!canApprove ? <p className="text-xs text-amber-800">Link a seller login before approval.</p> : null}
           <label htmlFor="seller-review-reason" className="mb-1 block text-xs font-medium text-ink-600">
             Reason (required for rejection)
           </label>

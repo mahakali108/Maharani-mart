@@ -8,6 +8,7 @@ import { formatIndiaDateTime } from '@/lib/datetime/india';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/admin/status-badge';
+import { SellerInvitePanel } from '@/components/admin/seller-invite-panel';
 import { SellerReviewActions } from '@/components/admin/seller-review-actions';
 import { OfferRowActions } from '@/components/admin/offer-row-actions';
 import { EditOfferForm, CreateOfferForm, type PackOption } from '@/components/admin/offer-forms';
@@ -20,7 +21,8 @@ const inr = (paise: number) =>
 /**
  * Seller review detail (/admin/sellers/[id]): identity, review controls,
  * membership and the seller's offers with moderation actions. All data is
- * RLS-scoped; a seller JWT can only ever see their own record here.
+ * RLS-scoped and restricted to Super Admin. Sellers use the separate
+ * tenant-guarded portal; they cannot access this admin page.
  */
 export default async function SellerDetailPage({
   params,
@@ -28,7 +30,7 @@ export default async function SellerDetailPage({
   params: { id: string };
 }) {
   await requirePagePermission('sellers.view');
-  const { seller, members, offers } = await getSellerDetail(params.id);
+  const { seller, members, offers, invite } = await getSellerDetail(params.id);
   if (!seller) notFound();
 
   // Active packs for the admin-managed offer form (server-fetched; the pack
@@ -112,11 +114,14 @@ export default async function SellerDetailPage({
         </Card>
 
         <Card className="p-5">
-          <h2 className="text-sm font-semibold text-ink-800">Review</h2>
+          <h2 className="text-sm font-semibold text-ink-800">Account invitation &amp; review</h2>
+          <SellerInvitePanel sellerId={seller.id} sellerStatus={seller.status} invite={invite} hasMember={members.length > 0} />
+          <p className="my-3 text-xs leading-5 text-ink-600">Confirm the business name, contact, tax identity (if provided) and email ownership against your own verification documents before approving. Submitted identifiers are not independently verified by this site.</p>
           <div className="mt-3">
             {seller.status === 'pending' || seller.status === 'active' || seller.status === 'suspended' ? (
               <SellerReviewActions
                 sellerId={seller.id}
+                canApprove={members.length > 0}
                 status={seller.status as 'pending' | 'active' | 'suspended'}
               />
             ) : (
@@ -131,8 +136,7 @@ export default async function SellerDetailPage({
           </h2>
           {members.length === 0 ? (
             <p className="mt-2 text-sm text-ink-500">
-              No app profiles are linked yet. Members are added from the database until the seller
-              portal ships (V1: one seller per profile).
+              No seller login is linked. Only Super Admin can invite and link an account. Do not approve until the invitation has created a member.
             </p>
           ) : (
             <ul className="mt-2 space-y-1 text-sm text-ink-700">

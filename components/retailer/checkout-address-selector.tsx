@@ -8,17 +8,18 @@ import { useCheckoutAddress } from '@/components/retailer/checkout-address-conte
 import { AddressForm, addressLine, type SavedAddress } from '@/components/retailer/address-form';
 import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card';
 
-/**
- * Checkout address picker: saved address-book entries, the registered shop
- * address as fallback, and an inline add-address form. The SELECTION is only
- * an id — the snapshot is resolved server-side in placeOrderAction, so a
- * tampered client can never inject an arbitrary delivery string.
- */
+/** Last server-rendered serviceability preview; order placement rechecks it. */
+export interface AddressCoverage { blocker: string | null; minimumOrderPaise: number | null }
+
+/** The selection is ONLY a saved id, resolved server-side and checked again
+ * inside the order transaction. Registered shop free text is reference only. */
 export function CheckoutAddressSelector({
   addresses,
+  coverage,
   shop,
 }: {
   addresses: SavedAddress[];
+  coverage: Record<string, AddressCoverage>;
   shop: {
     shopName: string | null;
     contactName: string;
@@ -35,29 +36,13 @@ export function CheckoutAddressSelector({
 
   return (
     <div className="space-y-3">
-      {/* Registered shop address fallback — always available. */}
-      <button
-        type="button"
-        onClick={() => setSelectedAddressId(null)}
-        aria-pressed={!selectedSaved}
-        className={
-          !selectedSaved
-            ? 'flex w-full items-start gap-3 rounded-2xl border-2 border-primary-500 bg-primary-50/50 p-3.5 text-left transition'
-            : 'flex w-full items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 text-left transition hover:border-slate-300'
-        }
+      {/* Shop profile text is reference only; it cannot establish PIN coverage. */}
+      <div
+        className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-left opacity-80"
       >
-        <span
-          className={
-            !selectedSaved
-              ? 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-600 text-white'
-              : 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white'
-          }
-        >
-          {!selectedSaved ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
-        </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-            <MapPin className="h-3.5 w-3.5 text-primary-600" aria-hidden="true" /> Registered shop address
+            <MapPin className="h-3.5 w-3.5 text-primary-600" aria-hidden="true" /> Registered shop address (reference only)
           </span>
           <DeliveryAddressCard
             address={{
@@ -68,8 +53,9 @@ export function CheckoutAddressSelector({
               phone: shop.phone,
             }}
           />
+          <span className="mt-2 block text-[11px] leading-4 text-amber-800">Add and select a saved address with district, state and PIN to check online delivery.</span>
         </span>
-      </button>
+      </div>
 
       {/* Saved address book entries. */}
       {addresses.map((address) => {
@@ -107,6 +93,9 @@ export function CheckoutAddressSelector({
                 {address.receiver_name} · {address.phone}
               </span>
               <span className="mt-0.5 block break-words text-[11px] leading-4 text-slate-500">{addressLine(address)}</span>
+              <span className={`mt-1 block text-[11px] font-semibold ${coverage[address.id]?.blocker ? 'text-amber-800' : 'text-mint-700'}`}>
+                {coverage[address.id]?.blocker ?? 'Configured delivery PIN · rechecked when you place the order'}
+              </span>
             </span>
           </button>
         );

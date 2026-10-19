@@ -1,84 +1,60 @@
-# Maa Kali B2B Ultra Platform — Phase 1
+# Maharani Traders — B2B wholesale PWA
 
-FMCG B2B distribution platform based in Saran District, Bihar, with configurable service areas across districts.
-**Phase 1 scope:** project foundation — Supabase schema, authentication,
-role-based routing, and layout shells for all five roles. No demo data,
-no placeholder products. The app is fully functional but intentionally
-empty until real data is entered through the (upcoming) admin panel.
+A Next.js 14 + TypeScript + Supabase + Vercel wholesale web app for retailers,
+marketplace sellers and admins. Gaya, Bihar is the **initial district default**,
+not district-wide delivery coverage. New orders are allowed only to individually
+configured, active district/state/PIN combinations; no real PINs are seeded.
+Seller accounts are created by **Super Admin invitation only** and remain
+pending until separately verified and approved. The existing native files, if
+present in the repository, are not changed or built for this PWA upgrade.
 
-Full system design lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
-
----
+**This PR is review-only until the owner approves a target project, a
+restorable backup/recovery plan, and the exact production SQL/app deployment.**
+Main includes migrations 0070 (seller invitation) and 0071 (Gaya new-row default),
+but their remote application is **unverified**. This PR's 0072 (nonce-bound
+Super Admin invitation) and 0073 (configured delivery PINs) have **not** been
+applied remotely by this work. Public legal pages are visibly labelled drafts
+pending verified business details and Indian
+legal/tax review. See [upgrade/release gate](docs/UPGRADE_REVIEW.md),
+[delivery configuration](docs/SERVICE_AREA_GAYA.md),
+[seller marketplace](docs/SELLER_MARKETPLACE.md) and
+[legal review](docs/LEGAL_REVIEW.md).
 
 ## Stack
 
-- **Next.js 14** (App Router, Server Actions, Server Components)
-- **Tailwind CSS** — Premium Red / White / Black theme
-- **Supabase** — Postgres, Auth, Row Level Security
-- **TypeScript**, **Zod** validation
-- **Vercel** deployment target
+- **Next.js 14** App Router (browser-installable PWA), Tailwind CSS, TypeScript and Zod
+- **Supabase** Auth, PostgreSQL/RLS and Storage; trusted server-only Auth Admin for seller invitations
+- **Vercel** deployment target; no APK, native app or separate mobile app is built in this upgrade
 
----
+## 1. Setup and migration safety
 
-## 1. Supabase project setup
-
-1. Create a new project at [supabase.com](https://supabase.com).
-2. In the SQL Editor, run the migrations **in order** — every file in
-   `supabase/migrations/` (currently `0001`–`0047`), not just the first few.
-   Migrations `0037`–`0046` (staff scope, targets/commissions, follow-ups,
-   schemes audit, area stock view, order state machine, deliveries module,
-   payment collections, private proof buckets, smoke-test fixture table)
-   belong to the Phase 2–4 upgrade — apply them before deploying code that
-   uses those features.
-   The ones that matter most:
-   - `supabase/migrations/0001_init.sql` — full schema, enums, RLS policies (no seed data)
-   - `supabase/migrations/0002_auth_trigger.sql` — auto-creates `profiles` rows on signup, adds retailer self-registration policy
-   - `supabase/migrations/0003_storage_buckets.sql` — creates the `product-images`, `banners`, `avatars`, `brand-logos` storage buckets with RLS
-   - `supabase/migrations/0006_retailer_documents.sql` — private `retailer-documents` bucket
-   - `supabase/migrations/0013_rls_and_storage_hardening.sql` — storage policy hardening
-   - `supabase/migrations/0016_storage_paths_category_bucket.sql` — creates the public `category-images` bucket (category image uploads fail with “Bucket not found” without it)
-   - `supabase/migrations/0021_ensure_category_images_bucket.sql` — idempotent ensure-safe re-check of `category-images`; applies cleanly whether or not 0016 ran
-   - `supabase/migrations/0042`–`0045` — order-status state-machine trigger, deliveries module (`order_deliveries`), payment collections, private `delivery-proofs`/`payment-proofs` buckets. **0045 must run after 0043/0044** (its storage policies reference their tables).
-   - `supabase/migrations/0046_smoke_fixture.sql` — private, API-invisible `smoke_fixture` schema + the single-row `smoke_fixture.smoke_personas` fixture table that `supabase/smoke-test.sql` writes and rolls back. Without it the live smoke test aborts with an actionable message (never `relation "smoke_personas" does not exist`).
-
-   - `supabase/migrations/0047_banner_content.sql` — optional, nullable banner subtitle and CTA label for the retailer homepage. Existing banner records and RLS are unchanged. Apply before editing the new fields; see `docs/retailer-homepage-audit.md` for service configuration and verification.
-
-   Skipping any of these leaves the deployed schema behind the code — e.g.
-   applying only 0001–0003 is exactly why a category image upload can fail with
-   `Upload failed: Bucket not found`.
-
-   One-command check + apply + live smoke test (idempotent, skips what is
-   already applied, rolls its test fixture back):
-   ```bash
-   DATABASE_URL="<Supabase connection string>" ./scripts/production-validate.sh
-   ```
-   See `docs/PRODUCTION_VERIFICATION_CHECKLIST.md` for the full live
-   validation checklist (RLS role matrix, private buckets, delivery
-   transitions).
-
-   Or, if you use the Supabase CLI locally:
-   ```bash
-   supabase link --project-ref <your-project-ref>
-   supabase db push
-   ```
-
-   Verify storage end-to-end against the project you just migrated:
-   ```bash
-   node scripts/verify-storage-bucket.mjs   # bucket check + upload/read/delete round-trip
-   ```
-
-3. **Auth settings** (Authentication → Settings):
-   - For Phase 1 to work end-to-end without an email step, turn **off** "Confirm email" during development. For production, keep it on and the register flow will show a "check your email" message — the retailer completes their shop profile after their first login (see `lib/auth/actions.ts` for the exact fallback behavior).
-   - Set **Site URL** and **Redirect URLs** to your deployed URL (and `http://localhost:3000` for local dev), matching `NEXT_PUBLIC_SITE_URL`.
-
-4. **Create the first Super Admin** (there is no public sign-up for staff roles by design — only retailers self-register):
-   - Sign up any account manually via Supabase Auth (dashboard → Authentication → Users → Add user), or hit `/register-retailer` once and then promote it.
-   - In the SQL Editor, run:
-     ```sql
-     update profiles set role = 'super_admin' where id = '<user-uuid>';
-     ```
-   - Log in at `/login` — you'll land on `/admin/dashboard`.
-   - Staff/Salesman account creation via the Admin Panel UI is a Phase 2 deliverable (uses the service-role client already scaffolded in `lib/supabase/server.ts`).
+1. In a local or disposable/staging Supabase project, configure environment
+   variables from `.env.local.example`: public Supabase URL/anon key, **server-only**
+   service-role key and `NEXT_PUBLIC_SITE_URL` (canonical HTTPS origin in
+   staging/production). Configure matching Auth Site URL, callback redirect
+   allow-list and invitation email delivery. Never expose a service-role key
+   in a client bundle or a support message.
+2. Establish the actual migration history **for the identified project** before
+   applying anything. On a disposable staging clone, apply any missing reviewed
+   migrations in order with the normal migration runner: main's 0070 (older
+   invite-only path) and 0071 (Gaya default), **then this PR's 0072 (secure
+   invitation) and 0073 (verified PINs)**. Audit pending legacy invitations;
+   never replay an applied migration. Confirm compatibility and a tested
+   backup/restore plan; do not run rollback scripts, destructive SQL, the legacy
+   `scripts/production-validate.sh` (it writes fixtures), `supabase db push`,
+   or SQL Editor steps against production without explicit owner approval.
+   Historic guidance for migrations 0032–0036 in
+   [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYMENT.md) does not
+   cover this security/checkout rollout.
+3. Use an existing authorised Super Admin to create/review sellers at
+   `/admin/sellers`. There is **no public seller registration**. Any initial
+   Super Admin bootstrap needs a separately reviewed and audited operator
+   process; do not self-promote a public account on a live project.
+4. In `/admin/areas`, add verified PIN rows **inactive** first; activate only
+   operator-confirmed district/state/PIN combinations with terms that support
+   online ordering. A nonzero configured delivery fee blocks new online
+   self-checkout until fee accounting is implemented. Existing inventory areas
+   and retailer addresses are not relabelled automatically.
 
 ---
 
@@ -90,7 +66,7 @@ cp .env.local.example .env.local   # fill in your Supabase project values
 npm run dev
 ```
 
-Visit `http://localhost:3000`. You'll be redirected to `/login`. Retailers can self-register at `/register-retailer` — note the Area dropdown will be empty until an admin adds Areas (Phase 2 admin panel; the default district for new areas is **Saran, Bihar** (migration 0058). Areas are added in the Admin Panel (`/admin/areas`) using verified names; see `docs/SERVICE_AREA_SARAN.md`).
+Visit `http://localhost:3000` for the sign-in page. Retailers can self-register at `/register-retailer`, then await admin approval before ordering. The inventory-area dropdown requires an active area; registration never proves delivery coverage. Seller accounts are Super-Admin-invited; checkout needs an owned saved address and an active configured PIN (see `docs/SERVICE_AREA_GAYA.md`).
 
 ---
 

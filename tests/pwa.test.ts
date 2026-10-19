@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import manifest from '../app/manifest';
 
 const root = join(__dirname, '..');
@@ -18,7 +19,7 @@ describe('PWA manifest (app/manifest.ts)', () => {
     expect(m.display).toBe('standalone');
     expect(m.start_url).toBe('/');
     expect(m.scope).toBe('/');
-    expect(m.orientation).toBe('portrait');
+    expect(m.orientation).toBe('any'); // installed PWA must allow landscape/tablet use
     expect(m.theme_color).toBe('#5142B8');
     expect(m.background_color).toBe('#FFFBF4');
     expect(Array.isArray(m.categories)).toBe(true);
@@ -51,6 +52,57 @@ describe('PWA icons exist on disk', () => {
 
 describe('Service worker security (public/sw.js)', () => {
   const sw = read('public/sw.js');
+
+  it('ignores dynamic JSON and account paths even when their names look like static files', () => {
+    const listeners: Record<string, (event: { request: { method: string; url: string; mode: string }; respondWith: (p: unknown) => void }) => void> = {};
+    runInNewContext(sw, {
+      self: { location: { origin: 'https://pwa.test' }, addEventListener: (name: string, fn: typeof listeners[string]) => { listeners[name] = fn; } },
+      URL, Promise,
+      caches: { open: async () => ({ match: async () => ({ ok: true }) }) },
+    });
+    const handles = (url: string) => {
+      let handled = false;
+      listeners.fetch!({ request: { method: 'GET', url: `https://pwa.test${url}`, mode: 'same-origin' }, respondWith: () => { handled = true; } });
+      return handled;
+    };
+    expect(handles('/_next/data/build-id/retailer/orders.json')).toBe(false);
+    expect(handles('/retailer/profile.json')).toBe(false);
+    expect(handles('/orders/customer-invoice.png')).toBe(false);
+    expect(handles('/api/mobile/v1/orders/abc.json')).toBe(false);
+    expect(handles('/icons/icon-192.png')).toBe(true);
+    expect(handles('/_next/static/chunks/app-123.js')).toBe(true);
+    expect(handles('/_next/static/chunks/app-123.js?session=private')).toBe(false);
+  });
+
+  it('never stores private, redirected or HTML responses behind a static-looking URL', async () => {
+    const listeners: Record<string, (event: { request: { method: string; url: string; mode: string }; respondWith: (p: Promise<unknown>) => void }) => void> = {};
+    const put = vi.fn();
+    const cache = { match: async () => null, put };
+    let response: { ok: boolean; type: string; redirected: boolean; headers: { get: (header: string) => string }; clone: () => unknown } = {
+      ok: true, type: 'basic', redirected: false,
+      headers: { get: (header: string) => header === 'content-type' ? 'application/javascript' : 'public, max-age=31536000' },
+      clone: () => response,
+    };
+    runInNewContext(sw, {
+      self: { location: { origin: 'https://pwa.test' }, addEventListener: (name: string, fn: typeof listeners[string]) => { listeners[name] = fn; } },
+      URL, Promise, caches: { open: async () => cache }, fetch: async () => response,
+    });
+    async function check() {
+      let pending: Promise<unknown> | undefined;
+      listeners.fetch!({ request: { method: 'GET', url: 'https://pwa.test/_next/static/chunks/app-123.js', mode: 'same-origin' }, respondWith: (p) => { pending = p; } });
+      await pending;
+    }
+    response = { ...response, redirected: true };
+    await check();
+    response = { ...response, redirected: false, headers: { get: (header: string) => header === 'content-type' ? 'text/html' : 'public, max-age=31536000' } };
+    await check();
+    response = { ...response, headers: { get: (header: string) => header === 'content-type' ? 'application/javascript' : 'private, no-store' } };
+    await check();
+    expect(put).not.toHaveBeenCalled();
+    response = { ...response, headers: { get: (header: string) => header === 'content-type' ? 'application/javascript' : 'public, max-age=31536000' } };
+    await check();
+    expect(put).toHaveBeenCalledTimes(1);
+  });
 
   it('never caches non-GET (mutating) requests', () => {
     expect(sw).toContain("if (request.method !== 'GET') return;");

@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import { requireSuperAdmin } from '@/lib/admin/control-center/guard';
 import {
   normalizeSellerInput,
   validateSellerInput,
@@ -12,7 +11,7 @@ import {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type SellerActionResult = { ok: true } | { ok: false; error: string };
+export type SellerActionResult = { ok: true; message?: string; sellerId?: string } | { ok: false; error: string; sellerId?: string };
 
 function revalidateSellerPages(sellerId?: string) {
   revalidatePath('/admin/sellers');
@@ -20,12 +19,14 @@ function revalidateSellerPages(sellerId?: string) {
 }
 
 /**
- * Admin-created marketplace seller (V1: no seller self-registration — an owner
- * decision). Status always starts 'pending' and the review trigger (0062)
- * stamps every later transition with the actual reviewer.
+ * Super Admin reserves a pending business + one-use email invitation in a
+ * single DB RPC, then calls Supabase Auth Admin from trusted server code.
+ * The JWT role comes only from the Auth DB trigger consuming that invitation;
+ * neither a browser role/tenant id nor client metadata is authoritative.
  */
 export async function createSellerAction(formData: FormData): Promise<SellerActionResult> {
-  const actor = await requireSuperAdmin();
+  const actor = await requirePermission('sellers.manage');
+  if (actor.role !== 'super_admin') return { ok: false, error: 'Only Super Admin can invite sellers.' };
   const input = normalizeSellerInput({
     businessName: formData.get('businessName'),
     gstin: formData.get('gstin'),
@@ -38,62 +39,126 @@ export async function createSellerAction(formData: FormData): Promise<SellerActi
   const errors = validateSellerInput(input);
   const first = Object.values(errors)[0];
   if (first) return { ok: false, error: first };
-
-  if (!input.email) return { ok: false, error: 'Seller email is required for the secure account invitation.' };
-  if (!input.phone) return { ok: false, error: 'Seller mobile number is required.' };
-  if (!input.contactName) return { ok: false, error: 'Seller contact name is required.' };
+  if (!input.email || !input.contactName || !input.phone) {
+    return { ok: false, error: 'Seller email, contact name and mobile number are required for an invitation.' };
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, error: 'Seller invitations are not configured on this server.' };
+  }
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '');
+  if (!siteUrl || !/^https:\/\/[^\s/]+$/.test(siteUrl) &&
+      !(process.env.NODE_ENV !== 'production' && /^http:\/\/localhost:\d+$/.test(siteUrl))) {
+    return { ok: false, error: 'Configure NEXT_PUBLIC_SITE_URL before inviting a seller.' };
+  }
 
   const supabase = createClient();
-  const { data: phoneTaken, error: phoneCheckError } = await supabase.rpc(
-    'is_phone_registered' as never,
-    { p_phone: input.phone } as never
+  const { data, error } = await supabase.rpc('reserve_seller_invite' as never, {
+    p_email: input.email,
+    p_business_name: input.businessName,
+    p_contact_name: input.contactName,
+    p_phone: input.phone,
+    p_gstin: input.gstin || null,
+    p_pan: input.pan || null,
+    p_address_line: input.addressLine || null,
+  } as never);
+  if (error) {
+    if (error.code === '23505' || /already|duplicate/i.test(error.message)) {
+      return { ok: false, error: 'This email or business is already registered or reserved. Check the seller directory before retrying.' };
+    }
+    return { ok: false, error: 'Seller invitation could not be reserved. No invitation was sent.' };
+  }
+  if (typeof data !== 'string' || !UUID_RE.test(data)) {
+    return { ok: false, error: 'Seller reservation could not be verified. No invitation was sent.' };
+  }
+
+  revalidateSellerPages(data);
+  const invited = await sendSellerInvite(data, siteUrl, supabase);
+  return { ...invited, sellerId: data };
+}
+
+/** No returned secret, password, or auth token. Retrying is rate-limited by
+ * claim_seller_invite_attempt (row lock + 2-minute cooldown + 3/day). */
+async function sendSellerInvite(
+  sellerId: string,
+  siteUrl: string,
+  supabase: ReturnType<typeof createClient>
+): Promise<SellerActionResult> {
+  const { data: claim, error: claimError } = await supabase.rpc(
+    'claim_seller_invite_attempt' as never, { p_seller_id: sellerId } as never
   );
-  if (phoneCheckError) return { ok: false, error: 'Could not verify the seller phone number. Please try again.' };
-  if (phoneTaken) return { ok: false, error: 'This phone number is already registered.' };
-
-  const adminClient = createServiceRoleClient();
-  const inviteEmail = input.email.toLowerCase();
-  const { error: inviteRowError } = await adminClient.from('staff_account_invites' as never).upsert({
-    email: inviteEmail,
-    role: 'seller',
-    created_by: actor.id,
-    expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-  } as never, { onConflict: 'email' });
-  if (inviteRowError) return { ok: false, error: 'Could not securely prepare the seller invitation.' };
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (!siteUrl) {
-    await adminClient.from('staff_account_invites' as never).delete().eq('email', inviteEmail);
-    return { ok: false, error: 'Seller invitations are not configured: NEXT_PUBLIC_SITE_URL is missing.' };
-  }
-  const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(inviteEmail, {
-    data: {
-      account_type: 'seller',
-      business_name: input.businessName,
-      full_name: input.contactName,
-      phone: input.phone,
-      ...(input.gstin ? { gstin: input.gstin } : {}),
-      ...(input.pan ? { pan: input.pan } : {}),
-      ...(input.addressLine ? { address: input.addressLine } : {}),
-    },
-    redirectTo: `${siteUrl.replace(/\/$/, '')}/auth/callback?next=%2Fseller%2Fdashboard`,
-  });
-  if (inviteError || !invited.user) {
-    await adminClient.from('staff_account_invites' as never).delete().eq('email', inviteEmail);
-    const duplicate = inviteError?.message.toLowerCase().includes('already') ?? false;
-    return { ok: false, error: duplicate ? 'An account with this email already exists.' : 'Could not send the secure seller invitation. Check Supabase Auth email settings.' };
+  const invitation = claim as unknown as { email?: string; nonce?: string } | null;
+  if (claimError || !invitation || typeof invitation.email !== 'string'
+      || typeof invitation.nonce !== 'string' || !/^[0-9a-f]{64}$/.test(invitation.nonce)) {
+    return { ok: false, error: claimError?.message ?? 'This invitation is no longer available.' };
   }
 
-  const { data: seller, error: sellerError } = await supabase
-    .from('sellers' as never)
-    .select('id')
-    .eq('email', inviteEmail)
-    .maybeSingle<{ id: string }>();
-  if (sellerError || !seller) {
-    return { ok: false, error: 'Invitation was sent, but seller provisioning is not confirmed. Do not retry yet; check Auth and database logs.' };
+  try {
+    // Auth creates its own user and sends the *password-setup* invitation. The
+    // trigger consumes the reserved email and assigns seller role/pending tenant.
+    const { data: invited, error } = await createServiceRoleClient().auth.admin.inviteUserByEmail(invitation.email, {
+      data: { seller_invite_nonce: invitation.nonce },
+      redirectTo: `${siteUrl}/auth/callback?next=/reset-password`,
+    });
+    if (error || !invited?.user?.id) {
+      if (/already registered|already exists/i.test(error?.message ?? '')) {
+        return { ok: false, error: 'That email already has a login. The pending seller record was kept; verify the account before linking it.' };
+      }
+      return { ok: false, error: 'The pending seller was saved, but email invitation could not be confirmed. Check Auth email delivery before retrying.' };
+    }
+    // Confirm the Auth user was actually linked to THIS reservation by the
+    // trusted insert trigger. A zero-row update is NOT an error in PostgREST:
+    // it can signal a conflicting staff invite or an unverified Auth outcome.
+    // The stamp is only feedback, never the authorization predicate.
+    const { data: stamped, error: stampError } = await supabase
+      .from('seller_account_invites' as never)
+      .update({ invitation_sent_at: new Date().toISOString() } as never)
+      .eq('seller_id', sellerId)
+      .eq('auth_user_id', invited.user.id)
+      .select('id')
+      .maybeSingle();
+    revalidateSellerPages(sellerId);
+    if (stampError || !stamped) {
+      return { ok: false, error: 'Auth accepted the email request, but the seller login could not be linked and verified. Check the Auth user and invitation record before approval; do not retry blindly.' };
+    }
+    return {
+      ok: true,
+      message: 'Invitation requested. The seller must set a password and Super Admin must verify and approve the pending account.',
+    };
+  } catch {
+    return { ok: false, error: 'The pending seller was saved, but invitation delivery is unverified. Check Supabase Auth before retrying.' };
   }
-  revalidateSellerPages(seller.id);
-  return { ok: true };
+}
+
+export async function retrySellerInviteAction(sellerId: string): Promise<SellerActionResult> {
+  const actor = await requirePermission('sellers.manage');
+  if (actor.role !== 'super_admin' || !UUID_RE.test(sellerId)) {
+    return { ok: false, error: 'Only Super Admin can retry an invitation.' };
+  }
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '');
+  if (!siteUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, error: 'Auth invitation settings are not configured.' };
+  }
+  return sendSellerInvite(sellerId, siteUrl, createClient());
+}
+
+export async function inviteExistingSellerAction(sellerId: string): Promise<SellerActionResult> {
+  const actor = await requirePermission('sellers.manage');
+  if (actor.role !== 'super_admin' || !UUID_RE.test(sellerId)) {
+    return { ok: false, error: 'Only Super Admin can invite an existing seller.' };
+  }
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '');
+  if (!siteUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, error: 'Auth invitation settings are not configured.' };
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc(
+    'attach_existing_seller_invite' as never, { p_seller_id: sellerId } as never
+  );
+  if (error || data !== sellerId) {
+    return { ok: false, error: 'This pending business could not be reserved for invitation. Check its email and membership.' };
+  }
+  const invited = await sendSellerInvite(sellerId, siteUrl, supabase);
+  return { ...invited, sellerId };
 }
 
 /**
@@ -117,6 +182,16 @@ export async function reviewSellerAction(
   }
 
   const supabase = createClient();
+  if (decision === 'active') {
+    const { data: member, error: memberError } = await supabase
+      .from('seller_members' as never)
+      .select('profile_id')
+      .eq('seller_id', sellerId)
+      .limit(1);
+    if (memberError || !member || member.length === 0) {
+      return { ok: false, error: 'Link and verify a seller login before activating this business.' };
+    }
+  }
   const { data, error } = await supabase
     .from('sellers' as never)
     .update({

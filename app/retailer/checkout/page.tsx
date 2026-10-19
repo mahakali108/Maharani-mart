@@ -22,7 +22,8 @@ import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import { CheckoutForm } from '@/components/retailer/checkout-form';
 import { CoinsCheckoutSummary } from '@/components/retailer/coins-checkout-summary';
 import { CheckoutAddressProvider } from '@/components/retailer/checkout-address-context';
-import { CheckoutAddressSelector } from '@/components/retailer/checkout-address-selector';
+import { CheckoutAddressSelector, type AddressCoverage } from '@/components/retailer/checkout-address-selector';
+import { checkDeliveryTerms, deliveryOrderBlocker } from '@/lib/config/delivery-serviceability';
 import type { SavedAddress } from '@/components/retailer/address-form';
 import { calcSavings, formatInr } from '@/lib/retailer/format';
 import { buildCanonicalProductName } from '@/lib/retailer/product-name';
@@ -223,6 +224,14 @@ export default async function CheckoutPage() {
   const discountTotal = appliedCoupon?.discount ?? 0;
   const grandTotal = subtotal + gstTotal - discountTotal;
   const totalPieces = lines.reduce((sum, line) => sum + line.pieces, 0);
+  const coverageEntries = await Promise.all(savedAddresses.map(async (address) => {
+    const terms = await checkDeliveryTerms(supabase, address);
+    return [address.id, {
+      blocker: deliveryOrderBlocker(terms, Math.round(grandTotal * 100)),
+      minimumOrderPaise: terms.ok ? terms.minimumOrderPaise : null,
+    }] as const;
+  }));
+  const addressCoverage: Record<string, AddressCoverage> = Object.fromEntries(coverageEntries);
 
   // 🪙 Coins, computed once from the SAME authoritative wallet position the
   // order service re-reads before it debits. The browser never contributes an
@@ -295,6 +304,7 @@ export default async function CheckoutPage() {
               <div className="p-4 sm:p-5">
                 <CheckoutAddressSelector
                   addresses={savedAddresses}
+                  coverage={addressCoverage}
                   shop={{
                     shopName: retailer.shop_name ?? null,
                     contactName: profile?.full_name ?? user.fullName,
@@ -486,6 +496,7 @@ export default async function CheckoutPage() {
             couponDiscount={discountTotal}
             couponCode={appliedCoupon?.code ?? null}
             itemCount={lines.length}
+            coverage={addressCoverage}
             disabled={lines.some((line) => !line.orderable)}
           />
         </aside>

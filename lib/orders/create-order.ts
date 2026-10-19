@@ -6,6 +6,7 @@ import { quoteOrderForRetailer } from '@/lib/orders/quote-order';
 import { getOrderCoinMovement } from '@/lib/coins/server';
 import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 import { createOrderRequestFingerprint } from '@/lib/orders/request-fingerprint';
+import { checkDeliveryTerms, deliveryOrderBlocker, type DeliveryDestination } from '@/lib/config/delivery-serviceability';
 import type { Database } from '@/types/database.types';
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -41,6 +42,7 @@ export type CreateOrderErrorCode =
   | 'coupon_invalid'
   | 'warehouse_configuration_error'
   | 'database_unavailable'
+  | 'delivery_unavailable'
   | 'internal_error';
 
 export type CreateOrderResult =
@@ -243,6 +245,18 @@ export function mapAtomicOrderError(message: string): Exclude<CreateOrderResult,
       minQuantity: Number.isFinite(quantity) ? quantity : undefined,
     };
   }
+  if (/DELIVERY_ADDRESS_REQUIRED/i.test(message)) {
+    return { error: 'Select a saved delivery address with district, state and a 6-digit PIN.', code: 'delivery_unavailable' };
+  }
+  if (/DELIVERY_AREA_UNAVAILABLE/i.test(message)) {
+    return { error: 'Delivery is no longer confirmed for this address/PIN. Choose another address or contact the team.', code: 'delivery_unavailable' };
+  }
+  if (/DELIVERY_MINIMUM_NOT_MET/i.test(message)) {
+    return { error: 'The order is below this PIN’s current delivery minimum. Refresh checkout before retrying.', code: 'delivery_unavailable' };
+  }
+  if (/DELIVERY_FEE_NOT_SUPPORTED/i.test(message)) {
+    return { error: 'Online ordering is not available for this PIN while its delivery fee is being configured.', code: 'delivery_unavailable' };
+  }
   if (/COUPON_INVALID/i.test(message)) {
     return { error: 'The applied coupon is no longer valid. Remove it or choose another coupon, then review the order again.', code: 'coupon_invalid' };
   }
@@ -288,8 +302,8 @@ export async function createOrderForRetailer({
   requestFingerprint?: string;
   /** Non-sensitive context included in the hash, e.g. a verified address id. */
   requestContext?: string | null;
-  /** Server-verified delivery-address snapshot (0036); optional for legacy callers. */
-  shippingAddress?: { line: string; label?: string; receiverName?: string; phone?: string } | null;
+  /** Server-verified address; structured fields required for retailer self-checkout. */
+  shippingAddress?: ({ line: string; label?: string; receiverName?: string; phone?: string } & DeliveryDestination) | null;
   /** Coupon code loaded from the retailer's own active-coupon row, never trusted from the app. */
   couponCode?: string | null;
   /** Clear a verified retailer cart in the same transaction for self-checkout. */
@@ -324,6 +338,14 @@ export async function createOrderForRetailer({
   );
   if (previous) return previous;
 
+  // Salesman captures are a separately supervised, manual delivery workflow.
+  // Retailer web + mobile self-checkout MUST pass verified structured address
+  // fields and confirm live coverage before the service-role atomic RPC.
+  const delivery = collectedBy === null ? await checkDeliveryTerms(supabase, shippingAddress) : null;
+  if (delivery && !delivery.ok) {
+    return { error: delivery.message, code: delivery.code === 'database_unavailable' ? 'database_unavailable' : 'delivery_unavailable' };
+  }
+
   const quoted = await quoteOrderForRetailer({
     retailerId,
     lines,
@@ -337,6 +359,10 @@ export async function createOrderForRetailer({
     };
   }
   const { quote } = quoted;
+  if (delivery) {
+    const blocker = deliveryOrderBlocker(delivery, Math.round(quote.grandTotal * 100));
+    if (blocker) return { error: blocker, code: 'delivery_unavailable' };
+  }
 
   // Split orders that touch pack stock keep the warehouse rule; seller-stock
   // only orders need no warehouse (0065 profile-conditional trigger agrees).

@@ -27,7 +27,7 @@ const inr = (paise: number) =>
 /**
  * Seller offer moderation & price floors (/admin/offers).
  *
- * Authorization: `sellers.manage` server-side (requirePagePermission) on top
+ * Authorization: `sellers.offers.manage` server-side (requirePagePermission) on top
  * of admin/super_admin middleware. Price floors are append-only commercial
  * configuration (0063) — never derived from cost_price, never shown to sellers.
  */
@@ -36,7 +36,7 @@ export default async function AdminOffersPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  await requirePagePermission('sellers.manage');
+  await requirePagePermission('sellers.offers.manage');
   const query = parseOfferListParams(searchParams);
   const sellerId = typeof searchParams.seller === 'string' ? searchParams.seller : null;
   const { offers, total } = await listOffers({ ...query, sellerId });

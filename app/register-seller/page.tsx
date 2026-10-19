@@ -1,19 +1,25 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { MailCheck } from 'lucide-react';
 import { AuthFrame } from '@/components/auth/auth-frame';
-import { Button } from '@/components/ui/button';
 
-export const metadata: Metadata = { title: 'Seller access — Maharani Traders' };
+export const metadata: Metadata = { title: 'Seller access by invitation — Maharani Traders' };
 
 export default function RegisterSellerPage() {
   return (
     <AuthFrame>
-      <h1 className="shop-heading">Seller accounts are invite-only</h1>
-      <p className="mb-7 mt-3 text-sm leading-6 text-ink-600">
-        A Maharani Traders Super Admin must create and invite each seller. If you already received an invitation,
-        use its secure link to set up your password and then sign in.
+      <MailCheck className="mb-5 h-9 w-9 text-primary-600" aria-hidden="true" />
+      <h1 className="shop-heading">Seller access is by invitation</h1>
+      <p className="mt-4 text-sm leading-6 text-slate-600">
+        Only a Maharani Traders Super Admin can create a marketplace seller account.
+        There is no public seller registration. If you have been invited, use the link
+        in your email to set a password. Your business remains pending until Super
+        Admin verifies and activates it.
       </p>
-      <Link href="/login"><Button className="w-full">Go to sign in</Button></Link>
+      <div className="mt-7 flex flex-wrap gap-3 text-sm font-semibold">
+        <Link href="/login" className="rounded-xl bg-primary-600 px-5 py-3 text-white hover:bg-primary-700">Seller sign in</Link>
+        <Link href="/forgot-password" className="rounded-xl border border-slate-200 px-5 py-3 text-slate-800 hover:bg-slate-50">Reset password</Link>
+      </div>
     </AuthFrame>
   );
 }

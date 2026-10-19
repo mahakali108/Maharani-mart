@@ -9,6 +9,8 @@ import { AreaForm } from '@/components/admin/area-form';
 import { AreaRowActions } from '@/components/admin/area-row-actions';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
+import { requireUser } from '@/lib/auth/session';
+import { DeliveryPinActions, DeliveryPinForm, type DeliveryPinRow } from '@/components/admin/delivery-pin-form';
 
 interface AreaRow {
   id: string;
@@ -19,10 +21,19 @@ interface AreaRow {
 }
 
 export default async function AreasPage({ searchParams }: { searchParams: { district?: string } }) {
+  const user = await requireUser();
+  const canManageDelivery = user.role === 'admin' || user.role === 'super_admin';
   const supabase = createClient();
   const { data, error } = await supabase.from('areas').select('id, name, district, is_active, created_at').order('name');
   if (error) throw new Error('Service areas could not be loaded. Please retry.');
   const directory = (data ?? []) as AreaRow[];
+  const deliveryResult = canManageDelivery
+    ? await supabase.from('delivery_service_areas' as never)
+      .select('id, district, state, pincode, is_active, minimum_order_paise, delivery_fee_paise')
+      .order('district').order('pincode')
+    : null;
+  if (deliveryResult?.error) throw new Error('Delivery PIN configuration could not be loaded. Check migration 0073.');
+  const deliveryPins = (deliveryResult?.data ?? []) as DeliveryPinRow[];
   const district = searchParams.district ?? '';
   const districts = districtOptions(directory);
   const areas = areasInDistrict(directory, district);
@@ -32,9 +43,39 @@ export default async function AreasPage({ searchParams }: { searchParams: { dist
       <div>
         <h1 className="text-2xl font-semibold text-ink-950">Areas</h1>
         <p className="mt-1 text-sm text-ink-500">
-          Default for new areas: {SERVICE_AREA_LABEL}. All configured districts remain supported. Retailers select a verified area at registration.
+          New inventory/pricing areas default to {SERVICE_AREA_LABEL}. Existing areas stay unchanged. Selecting an area at registration does not confirm delivery to its PIN.
         </p>
       </div>
+
+      {canManageDelivery ? (
+        <section aria-labelledby="delivery-pins-title" className="space-y-4 rounded-2xl border border-ink-100 bg-white p-4 sm:p-6">
+          <div>
+            <h2 id="delivery-pins-title" className="text-lg font-semibold text-ink-950">Verified delivery PINs</h2>
+            <p className="mt-1 max-w-3xl text-sm text-ink-600">
+              Only active, explicitly verified district/state/PIN combinations can be ordered to online. No PIN is enabled by default; Gaya does not imply district-wide coverage. Changes are checked again in the order transaction. Existing orders are not rewritten.
+            </p>
+            <p className="mt-2 text-xs font-medium text-amber-800">
+              A non-zero delivery fee intentionally blocks online checkout for that PIN until fee accounting across seller sub-orders is implemented; it will never be silently omitted from a bill.
+            </p>
+          </div>
+          <DeliveryPinForm />
+          {deliveryPins.length ? (
+            <ul className="space-y-3">
+              {deliveryPins.map((pin) => (
+                <li key={pin.id} className="space-y-2 rounded-xl border border-ink-100 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-ink-900">{pin.pincode} · {pin.district}, {pin.state}</p>
+                      <p className="mt-1 text-xs text-ink-600">Minimum ₹{(pin.minimum_order_paise / 100).toFixed(2)} · Fee ₹{(pin.delivery_fee_paise / 100).toFixed(2)} · {pin.is_active ? 'Active' : 'Inactive'}</p>
+                    </div>
+                    <DeliveryPinActions row={pin} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">No verified delivery PINs are configured. Online retailer checkout remains unavailable until coverage is added and activated.</p>}
+        </section>
+      ) : null}
 
       <Card>
         <CardHeader>

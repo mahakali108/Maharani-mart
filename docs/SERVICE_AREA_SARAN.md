@@ -1,3 +1,9 @@
+# Historical note (migration 0058)
+
+This records the earlier Saran-default rollout. Migration 0071 supersedes its **new-row default** with Gaya; it does not rewrite 0058 or any existing area. See [SERVICE_AREA_GAYA.md](SERVICE_AREA_GAYA.md) for current operational guidance.
+
+---
+
 # Service area: Saran District, Bihar
 
 ## What changed

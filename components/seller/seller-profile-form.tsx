@@ -49,7 +49,7 @@ export function SellerProfileForm({ seller }: { seller: SellerTenant }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="businessName">Business / firm name *</Label>
-          <Input id="businessName" name="businessName" defaultValue={seller.business_name} required />
+          <Input id="businessName" name="businessName" readOnly defaultValue={seller.business_name} required />
           {fieldErrors.businessName ? (
             <p className="mt-1 text-xs text-primary-600">{fieldErrors.businessName}</p>
           ) : null}
@@ -68,17 +68,17 @@ export function SellerProfileForm({ seller }: { seller: SellerTenant }) {
         </div>
         <div>
           <Label htmlFor="email">Business email</Label>
-          <Input id="email" name="email" type="email" defaultValue={seller.email ?? ''} />
+          <Input id="email" name="email" readOnly type="email" defaultValue={seller.email ?? ''} />
           {fieldErrors.email ? <p className="mt-1 text-xs text-primary-600">{fieldErrors.email}</p> : null}
         </div>
         <div>
           <Label htmlFor="gstin">GSTIN</Label>
-          <Input id="gstin" name="gstin" defaultValue={seller.gstin ?? ''} placeholder="15-character GSTIN" />
+          <Input id="gstin" name="gstin" readOnly defaultValue={seller.gstin ?? ''} placeholder="15-character GSTIN" />
           {fieldErrors.gstin ? <p className="mt-1 text-xs text-primary-600">{fieldErrors.gstin}</p> : null}
         </div>
         <div>
           <Label htmlFor="pan">PAN</Label>
-          <Input id="pan" name="pan" defaultValue={seller.pan ?? ''} placeholder="10-character PAN" />
+          <Input id="pan" name="pan" readOnly defaultValue={seller.pan ?? ''} placeholder="10-character PAN" />
           {fieldErrors.pan ? <p className="mt-1 text-xs text-primary-600">{fieldErrors.pan}</p> : null}
         </div>
         <div className="sm:col-span-2">
@@ -90,6 +90,7 @@ export function SellerProfileForm({ seller }: { seller: SellerTenant }) {
         </div>
       </div>
 
+      <p className="text-xs leading-5 text-slate-600">Business name, login email, GSTIN and PAN require Super Admin verification to change. You can update your contact and dispatch details here.</p>
       <Button type="submit" disabled={pending}>
         {pending ? 'Saving…' : 'Save business profile'}
       </Button>
