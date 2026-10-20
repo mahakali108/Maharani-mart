@@ -897,6 +897,7 @@ describe('GET /api/mobile/v1/home', () => {
     cta_label: 'Shop now',
     link_url: '/retailer/catalog',
     is_active: true,
+    status: 'published',
     area_id: null,
     starts_at: null,
     ends_at: null,
@@ -1233,7 +1234,7 @@ describe('the Android DTOs and the mobile catalogue payloads agree field for fie
     const tables = threeProductTables();
     tables.banners = [{
       id: 'b1', title: 'T', subtitle: 'S', image_url: IMAGE, cta_label: 'C',
-      link_url: '/retailer/catalog', is_active: true, area_id: null,
+      link_url: '/retailer/catalog', is_active: true, status: 'published', area_id: null,
       starts_at: null, ends_at: null, sort_order: 0,
     }];
     install(tables);

@@ -255,9 +255,16 @@ describe('prohibited-colour audit', () => {
     const redRgb = /\b(?:rgba?)\(\s*(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})(?:\s*,\s*|\s+)(\d{1,3})/gi;
     const redHsl = /\b(?:hsla?)\(\s*([0-9.]+)(?:deg)?\s*[, ]\s*([0-9.]+)%\s*[, ]\s*([0-9.]+)%/gi;
 
+    // Exact, documented exception: the generated web-only marketing palette
+    // carries the berry hexes the owner approved for storefront marketing.
+    // Every other source file remains fully audited.
+    const marketingPaletteFile = 'app/marketing-tokens.generated.css';
+
     for (const file of uiSources) {
+      const relativePath = relative(ROOT, file);
       const source = readFileSync(file, 'utf8');
-      if (forbiddenUtility.test(source)) violations.push(`${relative(ROOT, file)}: prohibited colour utility/name or red marker`);
+      if (relativePath === marketingPaletteFile) continue;
+      if (forbiddenUtility.test(source)) violations.push(`${relativePath}: prohibited colour utility/name or red marker`);
       for (const match of source.matchAll(/#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})\b/gi)) {
         const encoded = match[1]!;
         const hex = encoded.length <= 4 ? [...encoded.slice(0, 3)].map((channel) => channel + channel).join('') : encoded.slice(0, 6);
@@ -301,6 +308,47 @@ describe('prohibited-colour audit', () => {
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it('keeps the web-only berry palette in sync and scoped to storefront marketing', () => {
+    const marketing = JSON.parse(read('design/marketing-tokens.json')) as {
+      families: Record<string, { tokens: Record<string, string> }>;
+      semantic: Record<string, { ref: string }>;
+    };
+    const css = read('app/marketing-tokens.generated.css');
+
+    for (const [family, definition] of Object.entries(marketing.families)) {
+      for (const [shade, hex] of Object.entries(definition.tokens)) {
+        expect(css, `marketing CSS is missing ${family}.${shade}`).toContain(
+          `--marketing-${family}-${shade}: ${hex};`,
+        );
+      }
+    }
+    for (const [name, definition] of Object.entries(marketing.semantic)) {
+      const [family, shade] = definition.ref.split('.');
+      expect(css, `marketing CSS is missing alias ${name}`).toContain(
+        `--marketing-${name}: var(--marketing-${family}-${shade});`,
+      );
+    }
+
+    // Berry is approved for the home hero, promotional banners and carousel
+    // chrome only. Any other file using a marketing-* utility fails here.
+    const marketingAllowlist = new Set([
+      'components/retailer/home-content.tsx',
+      'components/retailer/promo-banner.tsx',
+      'components/retailer/promo-carousel.tsx',
+    ]);
+    const marketingUtility = /\b(?:bg|text|border|ring|outline|fill|stroke|from|via|to)-marketing-[\w-]+/g;
+    const violations: string[] = [];
+    for (const file of uiSources) {
+      const relativePath = relative(ROOT, file);
+      if (marketingAllowlist.has(relativePath)) continue;
+      for (const match of readFileSync(file, 'utf8').matchAll(marketingUtility)) {
+        violations.push(`${relativePath}: ${match[0]}`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(read('components/retailer/home-content.tsx')).toContain('bg-marketing-surface');
   });
 
   it('keeps pastel-pink utility use out of action, navigation, brand and status surfaces', () => {
@@ -348,8 +396,9 @@ describe('visual role mappings', () => {
     expect(productCard).toContain('bg-slate-100 text-slate-700');
     expect(productCard).toContain('bg-action-600');
     expect(productCard).toContain('text-error-700');
-    expect(promoBanner).toContain('bg-peach-50');
-    expect(promoBanner).toContain('bg-action-600');
+    // Banners are a marketing surface: berry is deliberate here and nowhere else.
+    expect(promoBanner).toContain('bg-marketing-surface');
+    expect(promoBanner).toContain('bg-marketing-action');
     expect(adminStatus).toContain("confirmed: 'bg-mint-50 text-mint-700'");
     expect(adminStatus).toContain("pending: 'bg-amber-50 text-amber-700'");
     expect(adminStatus).toContain("cancelled: 'bg-primary-50 text-primary-700'");

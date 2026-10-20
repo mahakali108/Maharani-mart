@@ -139,3 +139,14 @@ export const BANNER_STANDARD = {
   aspectRatio: '3 / 1',
   guidance: 'Use a 1080 × 360 px image (3:1). Other sizes are cropped to fit — never stretched.',
 } as const;
+
+/**
+ * Optional art-directed rendition shown below 768 px. When a banner has no
+ * mobile image the desktop artwork is used, so the standard stays optional.
+ */
+export const MOBILE_BANNER_STANDARD = {
+  width: 1200,
+  height: 900,
+  aspectRatio: '4 / 3',
+  guidance: 'Use a 1200 × 900 px image (4:3). Other sizes are cropped to fit — never stretched.',
+} as const;

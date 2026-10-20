@@ -9,6 +9,8 @@ export interface PromoBannerData {
   id: string;
   title: string;
   image_url: string;
+  /** Optional 4:3 mobile rendition; the desktop artwork is the fallback. */
+  image_url_mobile?: string | null;
   link_url: string | null;
   subtitle?: string | null;
   cta_label?: string | null;
@@ -82,25 +84,26 @@ export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
       onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       onFocusCapture={(event) => { if (!(event.target as HTMLElement).closest('[data-rotation-control]')) setPaused(true); }}
-      className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      className="min-w-0 overflow-hidden rounded-2xl border border-marketing-border bg-marketing-paper-50 shadow-sm">
       <div className="grid" aria-live={rotating ? 'off' : 'polite'}>
         {banners.map((banner, slideIndex) => (
           <div key={banner.id} role="group" aria-roledescription="slide" aria-label={`${slideIndex + 1} of ${banners.length}`}
             aria-hidden={slideIndex !== activeIndex}
             className={cn('col-start-1 row-start-1 min-w-0', slideIndex !== activeIndex && 'invisible pointer-events-none')}>
             <PromoBanner title={banner.title} subtitle={banner.subtitle} imageUrl={banner.image_url}
-              linkUrl={banner.link_url} ctaLabel={banner.cta_label} priority={slideIndex === 0} />
+              imageUrlMobile={banner.image_url_mobile} linkUrl={banner.link_url} ctaLabel={banner.cta_label}
+              priority={slideIndex === 0} />
           </div>
         ))}
       </div>
       {hasMultiple ? (
-        <div className="flex min-w-0 items-center justify-between gap-1 border-t border-slate-100 px-2 py-1 sm:px-4">
+        <div className="flex min-w-0 items-center justify-between gap-1 border-t border-marketing-border px-2 py-1 sm:px-4">
           <button type="button" aria-label="Previous promotion" onClick={() => show(activeIndex - 1)} className={controlClass}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>
           <div className="flex min-w-0 flex-wrap items-center justify-center">
             {banners.map((banner, slideIndex) => <button key={banner.id} type="button"
               aria-label={`Show promotion ${slideIndex + 1}`} aria-current={slideIndex === activeIndex ? 'true' : undefined}
               onClick={() => show(slideIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500">
-              <span className={cn('h-1.5 rounded-full', slideIndex === activeIndex ? 'w-4 bg-action-600' : 'w-1.5 bg-slate-500')} />
+              <span className={cn('h-1.5 rounded-full', slideIndex === activeIndex ? 'w-4 bg-marketing-action' : 'w-1.5 bg-marketing-ink-600')} />
             </button>)}
           </div>
           <div className="flex shrink-0">

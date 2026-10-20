@@ -1,4 +1,6 @@
 @import './design-tokens.generated.css';
+/* Web-only berry palette, scoped to storefront marketing surfaces. */
+@import './marketing-tokens.generated.css';
 
 /* Self-hosted Poppins (via @fontsource) — identical weights to the previous
    next/font/google setup, but bundled from node_modules so builds work in

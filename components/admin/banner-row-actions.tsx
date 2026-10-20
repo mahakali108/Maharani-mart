@@ -2,18 +2,25 @@
 
 import Link from 'next/link';
 import { useTransition } from 'react';
-import { ChevronUp, ChevronDown, Pencil, Trash2 } from 'lucide-react';
-import { reorderBannerAction, toggleBannerActiveAction, deleteBannerAction } from '@/lib/admin/banners-actions';
+import { ChevronUp, ChevronDown, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
+import {
+  reorderBannerAction,
+  setBannerStatusAction,
+  toggleBannerActiveAction,
+  deleteBannerAction,
+} from '@/lib/admin/banners-actions';
 import { ToggleActiveButton } from '@/components/admin/toggle-active-button';
 
 export function BannerRowActions({
   bannerId,
   isActive,
+  status,
   isFirst,
   isLast,
 }: {
   bannerId: string;
   isActive: boolean;
+  status: 'draft' | 'published';
   isFirst: boolean;
   isLast: boolean;
 }) {
@@ -38,6 +45,22 @@ export function BannerRowActions({
         aria-label="Move banner later"
       >
         <ChevronDown className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() =>
+          startTransition(() =>
+            setBannerStatusAction(bannerId, status === 'published' ? 'draft' : 'published').catch((err) =>
+              alert(err instanceof Error ? err.message : 'Failed to update visibility.')
+            )
+          )
+        }
+        className="rounded-lg p-1.5 text-ink-400 hover:bg-primary-50 hover:text-primary-600 disabled:opacity-50"
+        aria-label={status === 'published' ? 'Unpublish banner (move to draft)' : 'Publish banner'}
+        title={status === 'published' ? 'Move to draft' : 'Publish'}
+      >
+        {status === 'published' ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
       </button>
       <ToggleActiveButton isActive={isActive} onToggle={() => toggleBannerActiveAction(bannerId, !isActive)} />
       <Link

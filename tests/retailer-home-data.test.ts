@@ -20,7 +20,7 @@ function tables() {
     cart_items: [{ ...line, retailer_id: RETAILER }],
     categories: [{ id: CATEGORY, name: 'Fixture category', image_url: null, parent_id: null, is_active: true }],
     brands: [{ id: BRAND, name: 'Fixture brand', logo_url: null, is_active: true }],
-    banners: [{ id: 'banner', title: 'Configured promotion', image_url: '/test.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 0 }],
+    banners: [{ id: 'banner', title: 'Configured promotion', image_url: '/test.png', link_url: '/retailer/catalog', is_active: true, status: 'published', area_id: AREA, starts_at: null, ends_at: null, sort_order: 0 }],
     retailer_favorites: [{ retailer_id: RETAILER, product_id: PRODUCT }],
   };
 }
@@ -210,15 +210,25 @@ describe('home Supabase query contracts (mocked, not live RLS)', () => {
   it('shows multiple scheduled active banners in admin priority order', async () => {
     const rows = tables();
     rows.banners = [
-      { id: 'priority-20', title: 'Second', image_url: '/second.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 20 },
-      { id: 'priority-3', title: 'First', image_url: '/first.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 3 },
-      { id: 'priority-3-b', title: 'Tie breaker', image_url: '/third.png', link_url: '/retailer/catalog', is_active: true, area_id: AREA, starts_at: null, ends_at: null, sort_order: 3 },
+      { id: 'priority-20', title: 'Second', image_url: '/second.png', link_url: '/retailer/catalog', is_active: true, status: 'published', area_id: AREA, starts_at: null, ends_at: null, sort_order: 20 },
+      { id: 'priority-3', title: 'First', image_url: '/first.png', link_url: '/retailer/catalog', is_active: true, status: 'published', area_id: AREA, starts_at: null, ends_at: null, sort_order: 3 },
+      { id: 'priority-3-b', title: 'Tie breaker', image_url: '/third.png', link_url: '/retailer/catalog', is_active: true, status: 'published', area_id: AREA, starts_at: null, ends_at: null, sort_order: 3 },
     ];
     const db = supabaseFixture(rows);
     const home = await loadRetailerHome(db as never, RETAILER, AREA);
     expect(home.banners.map((item) => item.id)).toEqual(['priority-3', 'priority-3-b', 'priority-20']);
     const query = db.queries.find((item) => item.table === 'banners');
     expect(query?.filters).toContainEqual({ op: 'eq', column: 'is_active', value: true });
+    expect(query?.filters).toContainEqual({ op: 'eq', column: 'status', value: 'published' });
+  });
+  it('never returns a draft, even when it is active and in schedule', async () => {
+    const rows = tables();
+    rows.banners = [
+      { id: 'live', title: 'Live', image_url: '/live.png', link_url: '/retailer/catalog', is_active: true, status: 'published', area_id: AREA, starts_at: null, ends_at: null, sort_order: 0 },
+      { id: 'draft', title: 'Draft', image_url: '/draft.png', link_url: '/retailer/catalog', is_active: true, status: 'draft', area_id: AREA, starts_at: null, ends_at: null, sort_order: 1 },
+    ] as unknown as typeof rows.banners;
+    const home = await loadRetailerHome(supabaseFixture(rows) as never, RETAILER, AREA);
+    expect(home.banners.map((item) => item.id)).toEqual(['live']);
   });
   it('does not let unscheduled priority rows hide a later scheduled banner', async () => {
     const rows = tables();
@@ -229,6 +239,7 @@ describe('home Supabase query contracts (mocked, not live RLS)', () => {
         image_url: `/future-${index}.png`,
         link_url: '/retailer/catalog',
         is_active: true,
+        status: 'published',
         area_id: AREA,
         starts_at: '2999-01-01T00:00:00+05:30',
         ends_at: null,
@@ -240,6 +251,7 @@ describe('home Supabase query contracts (mocked, not live RLS)', () => {
         image_url: '/current.png',
         link_url: '/retailer/catalog',
         is_active: true,
+        status: 'published',
         area_id: AREA,
         starts_at: null,
         ends_at: null,

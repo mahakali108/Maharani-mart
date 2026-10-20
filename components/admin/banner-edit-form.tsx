@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useFormState } from 'react-dom';
 import { MediaUploadField } from '@/components/media/media-upload-field';
+import { BANNER_STANDARD, MOBILE_BANNER_STANDARD } from '@/lib/retailer/banner-target';
 import { BannerPreview } from '@/components/admin/banner-preview';
 import { toBannerDateTimeLocal } from '@/lib/retailer/banner-target';
 import { updateBannerAction, type BannerFormState } from '@/lib/admin/banners-actions';
@@ -22,6 +23,8 @@ export function BannerEditForm({
   bannerId,
   title,
   imageUrl: initialImageUrl,
+  imageUrlMobile: initialImageMobileUrl,
+  status: initialStatus,
   linkUrl,
   subtitle,
   ctaLabel,
@@ -34,6 +37,8 @@ export function BannerEditForm({
   bannerId: string;
   title: string;
   imageUrl: string;
+  imageUrlMobile: string | null;
+  status: 'draft' | 'published';
   linkUrl: string | null;
   subtitle?: string | null;
   ctaLabel?: string | null;
@@ -46,6 +51,7 @@ export function BannerEditForm({
   const boundAction = updateBannerAction.bind(null, bannerId);
   const [state, formAction] = useFormState(boundAction, initialState);
   const [imageRef, setImageRef] = useState(initialImageUrl);
+  const [imageMobileRef, setImageMobileRef] = useState(initialImageMobileUrl ?? '');
   const [titleValue, setTitleValue] = useState(title);
   const [subtitleValue, setSubtitleValue] = useState(subtitle ?? '');
   const [ctaValue, setCtaValue] = useState(ctaLabel ?? '');
@@ -61,18 +67,32 @@ export function BannerEditForm({
         </div>
       ) : null}
       <input type="hidden" name="imageUrl" value={imageRef} />
+      <input type="hidden" name="imageUrlMobile" value={imageMobileRef} />
 
       <div>
-        <Label>Banner image</Label>
+        <Label>Desktop banner image</Label>
         {/* Artwork standard: the carousel reserves a 3:1 box and crops to fit. */}
         <p className="mb-2 text-[11px] leading-4 text-ink-400">
-          Recommended {`1080 × 360 px`} (3:1). The image is cropped to 3:1 on the storefront — never stretched.
+          Recommended {`${BANNER_STANDARD.width} × ${BANNER_STANDARD.height} px`} (3:1). The image is cropped to 3:1 on larger screens — never stretched.
         </p>
         <MediaUploadField
           kind="banner"
           ownerId={bannerId}
           hasExisting
           onUploaded={(media) => setImageRef(media.ref)}
+        />
+      </div>
+
+      <div>
+        <Label>Mobile banner image (optional)</Label>
+        <p className="mb-2 text-[11px] leading-4 text-ink-400">
+          Recommended {`${MOBILE_BANNER_STANDARD.width} × ${MOBILE_BANNER_STANDARD.height} px`} (4:3). Shown below 768 px. Leave empty to reuse the desktop artwork.
+        </p>
+        <MediaUploadField
+          kind="banner"
+          ownerId={bannerId}
+          hasExisting={imageMobileRef !== ''}
+          onUploaded={(media) => setImageMobileRef(media.ref)}
         />
       </div>
 
@@ -105,6 +125,16 @@ export function BannerEditForm({
           </Select>
         </div>
         <div>
+          <Label htmlFor="status">Visibility</Label>
+          <Select id="status" name="status" defaultValue={initialStatus}>
+            <option value="draft">Draft — hidden from retailers</option>
+            <option value="published">Published</option>
+          </Select>
+          <p className="mt-1 text-[11px] leading-4 text-ink-400">
+            Drafts stay editable and are never shown on the storefront, even while active.
+          </p>
+        </div>
+        <div>
           <Label htmlFor="sortOrder">Priority (lower number displays first)</Label>
           <Input id="sortOrder" name="sortOrder" type="number" min={0} max={1000000} step={1} defaultValue={sortOrder} required />
         </div>
@@ -120,7 +150,14 @@ export function BannerEditForm({
         </div>
       </div>
 
-      <BannerPreview title={titleValue} subtitle={subtitleValue} ctaLabel={ctaValue} imageUrl={imageRef} linkUrl={linkValue} />
+      <BannerPreview
+        title={titleValue}
+        subtitle={subtitleValue}
+        ctaLabel={ctaValue}
+        imageUrl={imageRef}
+        imageUrlMobile={imageMobileRef}
+        linkUrl={linkValue}
+      />
       <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
     </form>
   );

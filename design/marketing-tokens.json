@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "scope": "retailer-marketing-surfaces-only",
+  "description": "Berry palette for the retailer storefront's marketing surfaces only (home hero, promotional banners and their carousel chrome). These tokens are intentionally NOT part of design/tokens.json: the shared platform registry bans saturated pink/red branding, and the owner approved berry for marketing surfaces alone. The generated CSS is exempted, by exact filename, from the prohibited-colour audit; tests assert parity with this file and restrict marketing-* utilities to the allowlisted components.",
+  "families": {
+    "berry": {
+      "description": "Berry brand accent for storefront marketing. 600 is the action stop; 800 is for headings on pale berry surfaces.",
+      "tokens": {
+        "50": "#FFF1F7",
+        "100": "#FCE7F3",
+        "200": "#FBCFE8",
+        "400": "#F472B6",
+        "600": "#BE185D",
+        "700": "#9D174D",
+        "800": "#831843",
+        "900": "#701A3E",
+        "950": "#4C0D26"
+      }
+    },
+    "ink": {
+      "description": "Neutral text stops used on marketing surfaces so body copy stays readable against pale berry.",
+      "tokens": {
+        "100": "#F4F4F5",
+        "600": "#52525B",
+        "900": "#27272A"
+      }
+    },
+    "leaf": {
+      "description": "Success/assurance accent for marketing trust rows (verified, secure, delivered).",
+      "tokens": {
+        "50": "#ECFDF5",
+        "700": "#047857"
+      }
+    },
+    "paper": {
+      "description": "Pure white for text on a berry action fill and for marketing cards.",
+      "tokens": {
+        "50": "#FFFFFF"
+      }
+    }
+  },
+  "semantic": {
+    "surface": { "ref": "berry.50", "description": "Marketing page band / hero surface." },
+    "surface-accent": { "ref": "berry.100", "description": "Secondary berry surface, badges and quiet highlights." },
+    "border": { "ref": "berry.100", "description": "Hairline border on marketing surfaces." },
+    "heading": { "ref": "berry.800", "description": "Marketing headings on pale berry or white." },
+    "action": { "ref": "berry.600", "description": "Primary marketing call to action." },
+    "action-hover": { "ref": "berry.700", "description": "Hover/pressed marketing call to action." },
+    "on-action": { "ref": "paper.50", "description": "Label on a marketing action fill." },
+    "text": { "ref": "ink.900", "description": "Primary body text on marketing surfaces." },
+    "text-secondary": { "ref": "ink.600", "description": "Supporting body text on marketing surfaces." },
+    "success": { "ref": "leaf.700", "description": "Assurance icon/text accent." },
+    "success-surface": { "ref": "leaf.50", "description": "Assurance chip surface." }
+  },
+  "contrastPairs": [
+    { "name": "Marketing primary text on surface", "foreground": "text", "background": "surface", "minimum": 4.5 },
+    { "name": "Marketing secondary text on surface", "foreground": "text-secondary", "background": "surface", "minimum": 4.5 },
+    { "name": "Marketing heading on surface", "foreground": "heading", "background": "surface", "minimum": 4.5 },
+    { "name": "Marketing action label", "foreground": "on-action", "background": "action", "minimum": 4.5 },
+    { "name": "Marketing action text on white", "foreground": "action", "background": "paper.50", "minimum": 4.5 },
+    { "name": "Marketing action text on surface", "foreground": "action", "background": "surface", "minimum": 4.5 },
+    { "name": "Marketing heading on white", "foreground": "heading", "background": "paper.50", "minimum": 4.5 },
+    { "name": "Marketing success on its surface", "foreground": "success", "background": "success-surface", "minimum": 4.5 }
+  ]
+}

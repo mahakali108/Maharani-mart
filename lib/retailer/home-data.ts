@@ -168,7 +168,9 @@ export async function loadRetailerHome(
   // disagreed with the admin form: an end date stored at midnight UTC hid the
   // banner for that whole day. So the query only narrows to active, in-area,
   // visible rows; the schedule is applied below.
-  let bannerQuery = supabase.from('banners').select('*').eq('is_active', true);
+  // `status` (0074) gates drafts at the database policy as well as here, so a
+  // draft can never leak even if a row is left active.
+  let bannerQuery = supabase.from('banners').select('*').eq('is_active', true).eq('status', 'published');
   bannerQuery = areaId ? bannerQuery.or(`area_id.is.null,area_id.eq.${areaId}`) : bannerQuery.is('area_id', null);
 
   const [bannerResult, categoryResult, brandResult, productResult, schemeResult, historyResult, cartResult, favoriteIds, taxonomyCounts] = await Promise.all([
