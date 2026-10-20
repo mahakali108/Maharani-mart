@@ -8,13 +8,35 @@
 --
 -- Purely additive: no row is deleted, no existing column is rewritten, and
 -- every pre-existing banner becomes 'published'. The SELECT policy is narrowed
--- so drafts can never leak to retailers while is_active is true.
--- Safe to re-run.
+-- so drafts can never leak to retailers while is_active is true, and the WRITE
+-- policy is aligned with the `banners.manage` permission (admin and super_admin
+-- only — staff never held that permission in the application).
+-- Safe to re-run, including after a partially applied earlier attempt.
 -- ============================================================================
 
 alter table public.banners
   add column if not exists image_url_mobile text,
   add column if not exists status text not null default 'published';
+
+-- Converge a partially applied earlier attempt: `add column if not exists`
+-- would leave a nullable `status` untouched, and a CHECK constraint passes for
+-- NULL, so a NULL row could escape the approved status set.
+do $$
+begin
+  if exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'banners'
+       and column_name = 'status'
+       and is_nullable = 'YES'
+  ) then
+    update public.banners set status = 'published' where status is null;
+    alter table public.banners alter column status set default 'published';
+    alter table public.banners alter column status set not null;
+  end if;
+end;
+$$;
 
 do $$
 begin
@@ -45,3 +67,13 @@ create index if not exists banners_public_feed_idx
 drop policy if exists "banners_read" on public.banners;
 create policy "banners_read" on public.banners
   for select using ((is_active and status = 'published') or is_staff_or_above());
+
+-- 0001 granted `banners_write` to every staff member, which is broader than the
+-- application's `banners.manage` permission (admin + super_admin only, see
+-- lib/permissions/permissions.ts). A staff session talking straight to
+-- PostgREST could therefore write banners the UI would never offer it.
+drop policy if exists "banners_write" on public.banners;
+create policy "banners_write" on public.banners
+  for all
+  using (is_admin_or_above())
+  with check (is_admin_or_above());

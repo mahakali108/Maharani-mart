@@ -12,6 +12,11 @@ drop policy if exists "banners_read" on public.banners;
 create policy "banners_read" on public.banners
   for select using (is_active or is_staff_or_above());
 
+-- Restore the original 0001 write policy exactly (staff included again).
+drop policy if exists "banners_write" on public.banners;
+create policy "banners_write" on public.banners
+  for all using (is_staff_or_above());
+
 drop index if exists public.banners_public_feed_idx;
 
 alter table public.banners

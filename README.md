@@ -20,6 +20,13 @@ legal/tax review. See [upgrade/release gate](docs/UPGRADE_REVIEW.md),
 [seller marketplace](docs/SELLER_MARKETPLACE.md) and
 [legal review](docs/LEGAL_REVIEW.md).
 
+This branch also adds migration **0074** (banner draft/published lifecycle and
+optional 4:3 mobile artwork). It is **repo-only and has not been applied to any
+project**. Its dependency, RLS and rollback review is in
+[docs/BANNER_MIGRATION_0074_REVIEW.md](docs/BANNER_MIGRATION_0074_REVIEW.md).
+Open-PR overlaps are tracked in
+[docs/OPEN_PR_CONFLICT_REPORT.md](docs/OPEN_PR_CONFLICT_REPORT.md).
+
 ## Stack
 
 - **Next.js 14** App Router (browser-installable PWA), Tailwind CSS, TypeScript and Zod

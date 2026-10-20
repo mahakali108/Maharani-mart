@@ -317,6 +317,22 @@ describe('prohibited-colour audit', () => {
     };
     const css = read('app/marketing-tokens.generated.css');
 
+    // The eight colours the owner approved for marketing surfaces, verbatim.
+    const approved: Record<string, string> = {
+      'berry.600': '#BE185D', // primary berry
+      'berry.800': '#831843', // deep berry
+      'berry.50': '#FFF1F7', // blush background
+      'berry.100': '#FCE7F3', // soft pink
+      'paper.50': '#FFFFFF', // white
+      'ink.900': '#27272A', // main text
+      'ink.600': '#52525B', // secondary text
+      'leaf.700': '#047857', // success
+    };
+    for (const [ref, hex] of Object.entries(approved)) {
+      const [family, shade] = ref.split('.');
+      expect(marketing.families[family!]?.tokens[shade!], `${ref} must be ${hex}`).toBe(hex);
+    }
+
     for (const [family, definition] of Object.entries(marketing.families)) {
       for (const [shade, hex] of Object.entries(definition.tokens)) {
         expect(css, `marketing CSS is missing ${family}.${shade}`).toContain(

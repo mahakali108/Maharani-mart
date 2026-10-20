@@ -86,10 +86,55 @@ describe('0074 banner lifecycle', () => {
     expect(await visibleIds(retailer)).not.toContain(paused);
   });
 
-  it('keeps the narrowed policy in place under the original name', async () => {
-    const { rows } = await db.query<{ polname: string }>(
-      `select polname from pg_policy where polrelid = 'public.banners'::regclass order by polname`,
+  it('keeps both narrowed policies in place under their original names', async () => {
+    const { rows } = await db.query<{ policyname: string }>(
+      `select p.polname as policyname
+         from pg_policy p
+         join pg_class c on c.oid = p.polrelid
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relname = 'banners'
+        order by p.polname`,
     );
-    expect(rows.map((row) => row.polname)).toContain('banners_read');
+    // 0052 adds restrictive active_account_* policies to every RLS table, so
+    // the banner policies are expected alongside them rather than alone.
+    expect(rows.map((row) => row.policyname)).toEqual(
+      expect.arrayContaining(['banners_read', 'banners_write']),
+    );
+  });
+
+  it('lets an admin publish and reject someone else\'s write, matching banners.manage', async () => {
+    const admin = await createUser(db, 'admin');
+    await as(db, admin, (tx) =>
+      tx.query(`insert into banners (title, image_url, status) values ('Admin draft', '/admin.png', 'draft')`),
+    );
+    const { rows } = await db.query<{ count: number | string }>(
+      `select count(*) as count from banners where title = 'Admin draft'`,
+    );
+    expect(Number(rows[0]!.count)).toBe(1);
+  });
+
+  it('refuses a banner write from staff, who never held banners.manage', async () => {
+    const staff = await createUser(db, 'staff');
+    const message = await errorOf(db, staff, (tx) =>
+      tx.query(`insert into banners (title, image_url) values ('Staff write', '/staff.png')`),
+    );
+    expect(message).toMatch(/row-level security|permission denied/i);
+  });
+
+  it('refuses a banner write from a seller', async () => {
+    const seller = await createUser(db, 'seller');
+    const message = await errorOf(db, seller, (tx) =>
+      tx.query(`insert into banners (title, image_url) values ('Seller write', '/seller.png')`),
+    );
+    expect(message).toMatch(/row-level security|permission denied/i);
+  });
+
+  it('refuses a draft read from anon and keeps published rows readable', async () => {
+    const live = await insertBanner({ title: 'Public live' });
+    const draft = await insertBanner({ title: 'Public draft', status: 'draft' });
+    const { rows } = await as(db, 'anon', (tx) => tx.query<{ id: string }>('select id from banners'));
+    const ids = rows.map((row) => row.id);
+    expect(ids).toContain(live);
+    expect(ids).not.toContain(draft);
   });
 });
