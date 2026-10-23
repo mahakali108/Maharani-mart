@@ -15,6 +15,7 @@ export const MEDIA_KINDS = [
   'brand-logo',
   'category-image',
   'banner',
+  'banner-draft',
   'retailer-avatar',
   'retailer-document',
   'supplier-document',
@@ -59,6 +60,7 @@ const DOC_MIME = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as
  *   brand-logo       → brands/{brandId}/{uuid}.{ext}
  *   category-image   → categories/{categoryId}/{uuid}.{ext}
  *   banner           → banners/{bannerId}/{uuid}.{ext}     (`_draft` before the row exists)
+ *   banner-draft     → banners/{bannerId}/{uuid}.{ext}     (`_draft` before the row exists; private bucket)
  *   retailer-avatar  → avatars/{userId}/{uuid}.{ext}
  *   retailer-document→ retailers/{retailerId}/documents/{uuid}.{ext}
  *   delivery-proof   → deliveries/{orderId}/{uuid}.{ext}       (private)
@@ -104,6 +106,22 @@ export const MEDIA_KIND_CONFIG: Record<MediaKind, MediaKindConfig> = {
     maxBytes: 5 * 1024 * 1024,
     mimeTypes: IMAGE_MIME,
     private: false,
+    maxEdge: 2000,
+    maxDimension: 10000,
+    folder: (ownerId) => `banners/${ownerId ?? '_draft'}`,
+  },
+  /**
+   * UNPUBLISHED banner artwork, held in a private bucket and reachable only
+   * through a short-lived signed URL. Publishing copies the object into the
+   * public `banners` bucket (lib/admin/banner-artwork.ts); nothing here ever
+   * writes a public URL, so draft artwork cannot leak by being uploaded.
+   */
+  'banner-draft': {
+    label: 'Draft banner image',
+    bucket: 'banner-drafts',
+    maxBytes: 5 * 1024 * 1024,
+    mimeTypes: IMAGE_MIME,
+    private: true,
     maxEdge: 2000,
     maxDimension: 10000,
     folder: (ownerId) => `banners/${ownerId ?? '_draft'}`,

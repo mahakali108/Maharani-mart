@@ -28,6 +28,9 @@ const REQUIRED_PERMISSION: Record<MediaKind, Permission> = {
   'brand-logo': 'master_data.manage',
   'category-image': 'master_data.manage',
   banner: 'banners.manage',
+  // Draft artwork is the same privilege as the banner itself: an admin who can
+  // publish a banner can also prepare its unpublished artwork.
+  'banner-draft': 'banners.manage',
   // Staff acting on someone else's behalf need retailer-management rights;
   // a user editing their own avatar is handled by the self-service branch.
   'retailer-avatar': 'retailers.approve',
@@ -47,7 +50,7 @@ const SELF_SERVICE_KINDS: ReadonlySet<MediaKind> = new Set<MediaKind>([
 ]);
 
 /** Kinds that may be uploaded before the owning row exists (create-then-attach). */
-const DRAFT_ALLOWED: ReadonlySet<MediaKind> = new Set<MediaKind>(['banner']);
+const DRAFT_ALLOWED: ReadonlySet<MediaKind> = new Set<MediaKind>(['banner', 'banner-draft']);
 
 /**
  * Decide whether `user` may write media of `kind` for entity `ownerId`.

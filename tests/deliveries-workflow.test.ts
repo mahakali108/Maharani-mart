@@ -366,8 +366,22 @@ describe('0045 proof buckets are private', () => {
 });
 
 describe('proof viewing uses signed URLs only', () => {
-  it('getSignedUrl serves exactly the four private buckets', () => {
-    expect(signedUrlSrc).toContain("export type PrivateBucket = 'retailer-documents' | 'supplier-documents' | 'delivery-proofs' | 'payment-proofs'");
+  it('getSignedUrl serves exactly the known private buckets and no public one', () => {
+    const declaration = signedUrlSrc.match(/export type PrivateBucket =([\s\S]*?);/);
+    expect(declaration, 'PrivateBucket union must exist').not.toBeNull();
+    const buckets = [...declaration![1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+
+    // A closed union: every addition (0077's banner-drafts) is deliberate.
+    expect(buckets).toEqual([
+      'retailer-documents',
+      'supplier-documents',
+      'delivery-proofs',
+      'payment-proofs',
+      'banner-drafts',
+    ]);
+    for (const publicBucket of ['banners', 'product-images', 'brand-logos', 'category-images', 'avatars']) {
+      expect(buckets, publicBucket).not.toContain(publicBucket);
+    }
   });
 
   it('the upload pipeline can never mint a public URL for a private kind', () => {

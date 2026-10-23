@@ -20,7 +20,7 @@ import { isMediaKind, type MediaKind, type UploadMediaResult } from './types';
 import { validateUpload } from './validate';
 import { deleteFromSupabaseStorage, uploadToSupabaseStorage } from './supabase';
 import type { DeleteOutcome } from './supabase';
-import { parseMediaRef } from './refs';
+import { isSafeObjectPath, parseMediaRef } from './refs';
 
 export { authorizeMediaWrite } from './access';
 export {
@@ -29,6 +29,9 @@ export {
   resolveMediaUrl,
   isLegacyObjectPath,
   isRenderableMediaRef,
+  isDraftBannerPath,
+  isSignedStorageUrl,
+  isSafeObjectPath,
 } from './refs';
 export { MEDIA_KINDS, MEDIA_KIND_CONFIG, isMediaKind } from './types';
 export type { MediaKind, UploadedMedia, UploadMediaResult } from './types';
@@ -71,23 +74,71 @@ export async function uploadMedia(
 }
 
 /**
+ * Buckets `deleteMedia()` is permitted to remove objects from.
+ *
+ * A stored value is caller-influenced data, so the bucket it names is treated
+ * as untrusted: anything outside this list is refused outright rather than
+ * handed to the Storage API. This is what stops a bare object path from being
+ * deleted out of the WRONG bucket.
+ */
+const DELETABLE_BUCKETS: ReadonlySet<string> = new Set([
+  'product-images',
+  'brand-logos',
+  'category-images',
+  'banners',
+  'banner-drafts',
+  'avatars',
+  'retailer-documents',
+  'supplier-documents',
+  'delivery-proofs',
+  'payment-proofs',
+]);
+
+/** Legacy default for a bare object path: the first private bucket that used them. */
+const LEGACY_OBJECT_PATH_BUCKET = 'retailer-documents';
+
+export interface DeleteMediaOptions {
+  /**
+   * Bucket for a bare object path. REQUIRED whenever the path does not belong
+   * to the legacy `retailer-documents` bucket — e.g. `banner-drafts`.
+   *
+   * Omitting it keeps the historical behaviour (retailer-documents) so every
+   * existing caller is unaffected.
+   */
+  bucket?: string;
+}
+
+/**
  * Best-effort cleanup of a stored reference.
  *
- * Only Supabase objects that can be confidently identified are removed
- * (a Supabase public URL, or a bare object path in the private
- * `retailer-documents` bucket). Old files are never auto-deleted en masse,
- * and a failure here never aborts the caller's DB change.
+ * Only Supabase objects that can be confidently identified are removed:
+ *
+ *   - a Supabase public URL  → its own bucket + path (must be allowlisted),
+ *   - a bare object path     → `options.bucket`, or `retailer-documents`.
+ *
+ * The bucket is always checked against `DELETABLE_BUCKETS` and the path is
+ * checked for traversal before any Storage call. Old files are never
+ * auto-deleted en masse, and a failure here never aborts the caller's DB change.
  */
-export async function deleteMedia(refValue: string | null | undefined): Promise<DeleteOutcome> {
+export async function deleteMedia(
+  refValue: string | null | undefined,
+  options: DeleteMediaOptions = {},
+): Promise<DeleteOutcome> {
   const ref = parseMediaRef(refValue);
   if (!ref) return 'unrecognized';
+
   if (ref.provider === 'supabase-url') {
+    if (!DELETABLE_BUCKETS.has(ref.bucket)) return 'unrecognized';
+    if (!isSafeObjectPath(ref.path)) return 'unrecognized';
     return deleteFromSupabaseStorage(ref.bucket, ref.path);
   }
+
   if (ref.provider === 'object-path') {
-    // The only private bucket is retailer-documents; object paths only appear
-    // in `retailer_documents.file_url`.
-    return deleteFromSupabaseStorage('retailer-documents', ref.value);
+    const bucket = options.bucket ?? LEGACY_OBJECT_PATH_BUCKET;
+    if (!DELETABLE_BUCKETS.has(bucket)) return 'unrecognized';
+    if (!isSafeObjectPath(ref.value)) return 'unrecognized';
+    return deleteFromSupabaseStorage(bucket, ref.value);
   }
+
   return 'not-supabase';
 }
