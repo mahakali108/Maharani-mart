@@ -57,7 +57,11 @@ export default async function RetailerCouponsPage() {
   // RLS shows the caller only ACTIVE coupons (0051 keeps a 30-day expired tail
   // visible so this page can show "recently expired" honestly). Retailer-
   // specific coupons for other shops are filtered in the classifier.
-  const [{ data: couponData }, { data: redemptionData }, { count: orderCount }] = await Promise.all([
+  const [
+    { data: couponData, error: couponError },
+    { data: redemptionData, error: redemptionError },
+    { count: orderCount },
+  ] = await Promise.all([
     supabase
       .from('coupons')
       .select(
@@ -80,6 +84,14 @@ export default async function RetailerCouponsPage() {
       .neq('status', 'cancelled'),
   ]);
 
+  // "No coupons right now" must only ever describe a successful read: a failed
+  // coupon or redemption read would otherwise tell the retailer no offer exists.
+  const couponReadError = couponError ?? redemptionError;
+  if (couponReadError) {
+    throw new Error(
+      `Coupons could not be loaded [${couponReadError.code ?? 'unknown'}]: ${couponReadError.message}`
+    );
+  }
   const coupons = (couponData ?? []) as unknown as RetailerCouponRow[];
   const usedRows = (redemptionData ?? []) as unknown as UsedCouponRow[];
 

@@ -69,7 +69,7 @@ async function loadCollectionBatch(
   salesmanId: string,
   cursor: ListCursor | null
 ) {
-  const { data } = await applyCursor(
+  const { data, error } = await applyCursor(
     applyKeysetOrder(
       supabase
         .from('payment_collections')
@@ -81,6 +81,9 @@ async function loadCollectionBatch(
     ORDER,
     PAGE_SIZE
   );
+  // A salesman's own collection history is money evidence: a failed read must
+  // never render as "No collections recorded yet".
+  if (error) throw new Error(`Collections could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as CollectionRow[];
   return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
 }

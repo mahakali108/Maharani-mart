@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { SchemeForm } from '@/components/admin/scheme-form';
 import { SchemeRowActions } from '@/components/admin/scheme-row-actions';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
@@ -25,12 +26,13 @@ export default async function AdminSchemesPage() {
   await requirePagePermission('pricing.manage');
   const supabase = createClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('schemes')
     .select('id, name, description, is_festival, starts_at, ends_at, is_active')
     .order('created_at', { ascending: false })
     .returns<SchemeRow[]>();
 
+  const readFailed = Boolean(error);
   const schemes = data ?? [];
   const now = Date.now();
 
@@ -50,7 +52,9 @@ export default async function AdminSchemesPage() {
         <SchemeForm />
       </Card>
 
-      {schemes.length === 0 ? (
+      {readFailed ? (
+        <ReadFailureNotice what="Schemes" detail={error?.message} />
+      ) : schemes.length === 0 ? (
         <AdminEmptyState
           icon={Tags}
           title="No schemes yet"

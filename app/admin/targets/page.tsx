@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { TargetForm } from '@/components/admin/target-form';
 import { TargetRowActions } from '@/components/admin/target-row-actions';
 import { computeTargetActual, formatMetricValue, metricLabel, type TargetRow } from '@/lib/admin/target-actuals';
@@ -18,7 +19,7 @@ export default async function AdminTargetsPage() {
   await requirePagePermission('targets.manage');
   const supabase = createClient();
 
-  const [{ data: memberData }, { data: targetData }] = await Promise.all([
+  const [{ data: memberData, error: memberError }, { data: targetData, error: targetError }] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, full_name, role')
@@ -33,6 +34,8 @@ export default async function AdminTargetsPage() {
       .returns<TargetRow[]>(),
   ]);
 
+  const readFailed = Boolean(memberError || targetError);
+  const readFailureMessage = memberError?.message ?? targetError?.message ?? null;
   const members = memberData ?? [];
   const memberById = new Map(members.map((m) => [m.id, m]));
   const targets = targetData ?? [];
@@ -60,7 +63,9 @@ export default async function AdminTargetsPage() {
         <CardHeader>
           <CardTitle>Set a target</CardTitle>
         </CardHeader>
-        {members.length === 0 ? (
+        {readFailed ? (
+          <ReadFailureNotice what="Team members and targets" detail={readFailureMessage} />
+        ) : members.length === 0 ? (
           <AdminEmptyState
             icon={Target}
             title="No team members yet"
@@ -71,7 +76,7 @@ export default async function AdminTargetsPage() {
         )}
       </Card>
 
-      {targets.length === 0 ? (
+      {readFailed ? null : targets.length === 0 ? (
         <AdminEmptyState
           icon={Target}
           title="No targets set yet"

@@ -62,7 +62,9 @@ async function loadStockBatch(
     .from('inventory_stock')
     .select('id, quantity, reserved_quantity, products ( name, sku_code ), warehouses ( name )');
 
-  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, BATCH_SIZE);
+  const { data, error } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, BATCH_SIZE);
+  // Never render a failed stock read as "No inventory recorded yet".
+  if (error) throw new Error(`Stock levels could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as StockRow[];
   const batch = toListBatch(rows, BATCH_SIZE, (row) => keysetCursorFor(row, ORDER));
   return { items: batch.items, nextCursor: batch.nextCursor };
@@ -87,12 +89,17 @@ export default async function StaffInventoryPage() {
   await requirePagePermission('inventory.view');
   const supabase = createClient();
 
-  const [firstBatch, { data: productData }, warehouseResolution] = await Promise.all([
+  const [firstBatch, { data: productData, error: productError }, warehouseResolution] = await Promise.all([
     loadStockBatch(supabase, null),
     supabase.from('products').select('id, name').eq('is_active', true).order('name'),
     resolveActiveWarehouse(supabase),
   ]);
 
+  // The product picker is part of the adjustment form; a failed read there
+  // would silently offer an empty list, so fail loudly instead.
+  if (productError) {
+    throw new Error(`Products could not be loaded [${productError.code ?? 'unknown'}]: ${productError.message}`);
+  }
   const stock = firstBatch.items;
   const products = (productData ?? []) as Option[];
 

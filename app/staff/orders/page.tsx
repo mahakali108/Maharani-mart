@@ -62,7 +62,11 @@ async function loadQueueBatch(
     .select('id, order_number, status, grand_total, placed_at, retailers ( shop_name ), warehouses ( name )')
     .in('status', ['confirmed', 'processing', 'packed']);
 
-  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, BATCH_SIZE);
+  const { data, error } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, BATCH_SIZE);
+  // A failed read must not render as "Nothing to dispatch" — that would tell the
+  // packer the queue is empty while orders are actually waiting (RLS denial,
+  // timeout, schema drift). Throwing reaches app/error.tsx instead.
+  if (error) throw new Error(`Dispatch queue could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as OrderRow[];
   const batch = toListBatch(rows, BATCH_SIZE, (row) => keysetCursorFor(row, ORDER));
   return { items: batch.items, nextCursor: batch.nextCursor };

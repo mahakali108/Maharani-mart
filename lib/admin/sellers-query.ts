@@ -180,6 +180,9 @@ export async function listOffers({
 }: Required<OfferListParams> & { sellerId: string | null }): Promise<{
   offers: SellerOfferRow[];
   total: number;
+  /** True when the read failed — the page must not render an empty queue. */
+  failed: boolean;
+  failureMessage: string | null;
 }> {
   const supabase = createClient();
   let query = supabase
@@ -198,10 +201,16 @@ export async function listOffers({
     .order('created_at', { ascending: false })
     .range(from, from + OFFERS_PER_PAGE - 1);
 
-  if (error) return { offers: [], total: 0 };
+  // Moderation is a queue with consequences: reporting a failed read as
+  // "no offers to review" hides pending listings from the reviewer.
+  if (error) {
+    return { offers: [], total: 0, failed: true, failureMessage: error.message };
+  }
   return {
     offers: ((data ?? []) as unknown as SellerOfferRow[]),
     total: count ?? 0,
+    failed: false,
+    failureMessage: null,
   };
 }
 

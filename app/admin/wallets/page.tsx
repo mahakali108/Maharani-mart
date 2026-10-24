@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { rupeesToPaise, paiseToRupees } from '@/lib/retailer/wallet';
@@ -40,7 +41,7 @@ export default async function AdminWalletsPage({
     query = query.ilike('shop_name', `%${q}%`);
   }
 
-  const [{ data: retailers }, { data: creditAccounts }] = await Promise.all([
+  const [{ data: retailers, error: retailersError }, { data: creditAccounts }] = await Promise.all([
     query.returns<RetailerRow[]>(),
     supabase
       .from('retailer_credit_accounts')
@@ -59,6 +60,7 @@ export default async function AdminWalletsPage({
           .returns<{ id: string; full_name: string; phone: string }[]>()
       : { data: [] as { id: string; full_name: string; phone: string }[] };
 
+  const readFailed = Boolean(retailersError);
   const profileById = new Map((profileData ?? []).map((p) => [p.id, p]));
   const accountByRetailer = new Map((creditAccounts ?? []).map((a) => [a.retailer_id, a]));
 
@@ -108,6 +110,14 @@ export default async function AdminWalletsPage({
           ) : null}
         </form>
       </Card>
+
+      {readFailed ? (
+        <ReadFailureNotice
+          what="Retailer credit accounts"
+          detail={retailersError?.message}
+          hint="Credit limits and outstanding balances below are NOT authoritative until this loads."
+        />
+      ) : null}
 
       <Card>
         <CardHeader>

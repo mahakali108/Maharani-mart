@@ -81,7 +81,9 @@ async function loadDeliveredBatch(
   if (filters.to) query = query.lte('delivered_at', `${filters.to}T23:59:59`);
   if (filters.q) query = query.ilike('orders.order_number', `%${filters.q}%`);
 
-  const { data } = await applyCursor(query, cursor, [], PAGE_SIZE);
+  const { data, error } = await applyCursor(query, cursor, [], PAGE_SIZE);
+  // "No completed deliveries yet" must not stand in for a failed read.
+  if (error) throw new Error(`Deliveries could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as DeliveredRow[];
   return toOffsetBatch(rows, PAGE_SIZE, offset);
 }

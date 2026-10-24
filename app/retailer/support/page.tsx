@@ -89,7 +89,8 @@ async function loadTicketBatch(
     .eq('retailer_id', retailerId);
   if (status) query = query.eq('status', status);
 
-  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const { data, error } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  if (error) throw new Error(`Support tickets could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as TicketRow[];
   return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
 }

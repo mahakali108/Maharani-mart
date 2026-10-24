@@ -10,6 +10,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { requireUser } from '@/lib/auth/session';
 import { formatIndiaDate } from '@/lib/datetime/india';
 
@@ -26,7 +27,7 @@ export default async function RetailerSchemesPage() {
   await requireUser();
   const supabase = createClient();
   const nowIso = new Date().toISOString();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('schemes')
     .select('id, name, description, is_festival, starts_at, ends_at')
     .eq('is_active', true)
@@ -35,6 +36,7 @@ export default async function RetailerSchemesPage() {
     .order('ends_at')
     .returns<SchemeRow[]>();
   const schemes = data ?? [];
+  const readFailed = Boolean(error);
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -77,11 +79,13 @@ export default async function RetailerSchemesPage() {
           </div>
         </div>
         <span className="shrink-0 text-[10px] font-bold text-primary-700">
-          {schemes.length} active offer{schemes.length === 1 ? '' : 's'}
+          {readFailed ? 'Unavailable' : `${schemes.length} active offer${schemes.length === 1 ? '' : 's'}`}
         </span>
       </section>
 
-      {schemes.length === 0 ? (
+      {readFailed ? (
+        <ReadFailureNotice what="Active schemes" detail={error?.message} />
+      ) : schemes.length === 0 ? (
         <section className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-center shadow-sm">
           <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600">
             <Tag className="h-7 w-7" aria-hidden="true" />

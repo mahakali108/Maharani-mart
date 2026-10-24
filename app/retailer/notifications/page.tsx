@@ -53,7 +53,8 @@ async function loadNotificationBatch(
     .select('id, title, body, link_url, is_read, created_at')
     .eq('recipient_id', recipientId);
 
-  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, BATCH_SIZE);
+  const { data, error } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, BATCH_SIZE);
+  if (error) throw new Error(`Notifications could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as NotificationRow[];
   const batch = toListBatch(rows, BATCH_SIZE, (row) => keysetCursorFor(row, ORDER));
 

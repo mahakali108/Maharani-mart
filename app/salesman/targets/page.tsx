@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { computeTargetActual, formatMetricValue, metricLabel, type TargetRow } from '@/lib/admin/target-actuals';
 import { targetAttainmentPercent } from '@/lib/admin/targets-shared';
 
@@ -10,7 +11,7 @@ export default async function SalesmanTargetsPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('staff_targets')
     .select('id, user_id, period_start, period_end, metric, target_value, is_active')
     .eq('user_id', user.id)
@@ -19,6 +20,7 @@ export default async function SalesmanTargetsPage() {
     .returns<TargetRow[]>();
 
   const targets = data ?? [];
+  const readFailed = Boolean(error);
   const actuals = await Promise.all(
     targets.map(async (t) => ({ targetId: t.id, actual: await computeTargetActual(t) }))
   );
@@ -31,7 +33,9 @@ export default async function SalesmanTargetsPage() {
         <p className="mt-1 text-sm text-ink-500">Your active targets and real progress from your orders, visits and approvals.</p>
       </div>
 
-      {targets.length === 0 ? (
+      {readFailed ? (
+        <ReadFailureNotice what="Your targets" detail={error?.message} />
+      ) : targets.length === 0 ? (
         <AdminEmptyState
           icon={Target}
           title="No active targets"
