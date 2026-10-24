@@ -494,7 +494,11 @@ describe('Dashboard source guards', () => {
   const compute = read('lib/admin/dashboard/compute.ts');
 
   it('authorizes the page with dashboard.view and the cookie-bound client', () => {
-    expect(page).toContain("requirePermission('dashboard.view')");
+    // Page components must use the REDIRECTING guard: a denial is a navigation
+    // outcome (/unauthorized), not an error-boundary crash. Server Actions keep
+    // the throwing variant. See tests/page-permission-guards.test.ts.
+    expect(page).toContain("requirePagePermission('dashboard.view')");
+    expect(page).not.toMatch(/^\s{2}await requirePermission\(/m);
     expect(page).toContain('createClient()');
     expect(page).not.toMatch(/createServiceRoleClient|SUPABASE_SERVICE_ROLE_KEY/);
     expect(data).not.toMatch(/createServiceRoleClient|SUPABASE_SERVICE_ROLE_KEY/);

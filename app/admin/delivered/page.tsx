@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Download, PackageCheck, Search, ShieldAlert } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePermission, requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { DeliveryStatusBadge } from '@/components/delivery/delivery-status-badge';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -136,7 +136,7 @@ export default async function AdminDeliveredPage({
 }: {
   searchParams: { q?: string; outcome?: string; staff?: string; from?: string; to?: string };
 }) {
-  await requirePermission('orders.view.all');
+  await requirePagePermission('orders.view.all');
   const supabase = createClient();
 
   const filters: DeliveredFilters = {

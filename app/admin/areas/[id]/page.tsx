@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PackageSearch, Warehouse } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { AreaEditForm } from '@/components/admin/area-edit-form';
@@ -35,7 +35,7 @@ interface ProductThresholdRow {
 }
 
 export default async function EditAreaPage({ params }: { params: { id: string } }) {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
 
   const supabase = createClient();
   const { data: area } = await supabase

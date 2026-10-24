@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { CouponForm, type Option } from '@/components/admin/coupon-form';
 
 export default async function AdminNewCouponPage() {
-  await requirePermission('pricing.manage');
+  await requirePagePermission('pricing.manage');
   const supabase = createClient();
 
   const [{ data: retailerData }, { data: categoryData }, { data: brandData }, { data: productData }] = await Promise.all([

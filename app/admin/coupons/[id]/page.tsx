@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Ticket } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { CouponForm, type Option } from '@/components/admin/coupon-form';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -32,7 +32,7 @@ interface CouponRow {
 }
 
 export default async function AdminCouponEditPage({ params }: { params: { id: string } }) {
-  await requirePermission('pricing.manage');
+  await requirePagePermission('pricing.manage');
   const supabase = createClient();
 
   const [{ data: coupon }, { data: retailerData }, { data: categoryData }, { data: brandData }, { data: productData }] =

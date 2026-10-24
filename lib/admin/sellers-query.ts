@@ -54,9 +54,18 @@ export function sellerListHref(params: Required<SellerListParams>, page: number)
   return qs ? `/admin/sellers?${qs}` : '/admin/sellers';
 }
 
+/**
+ * Seller directory page.
+ *
+ * `failed` is part of the contract on purpose: the previous version returned
+ * `{ sellers: [], total: 0 }` on a query error, which the page rendered as
+ * "No sellers yet" — a failed read and an empty marketplace looked identical.
+ */
 export async function listSellers({ q, status, page }: Required<SellerListParams>): Promise<{
   sellers: SellerRow[];
   total: number;
+  failed: boolean;
+  failureMessage: string | null;
 }> {
   const supabase = createClient();
   let query = supabase
@@ -76,10 +85,14 @@ export async function listSellers({ q, status, page }: Required<SellerListParams
     .order('created_at', { ascending: false })
     .range(from, from + SELLERS_PER_PAGE - 1);
 
-  if (error) return { sellers: [], total: 0 };
+  if (error) {
+    return { sellers: [], total: 0, failed: true, failureMessage: error.message };
+  }
   return {
     sellers: ((data ?? []) as unknown as SellerRow[]),
     total: count ?? 0,
+    failed: false,
+    failureMessage: null,
   };
 }
 

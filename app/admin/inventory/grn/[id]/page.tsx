@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import { GrnActionButtons } from '@/components/admin/grn-action-buttons';
@@ -25,7 +25,7 @@ interface ReceiptMovement {
 }
 
 export default async function GrnDetailPage({ params }: { params: { id: string } }) {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
   const supabase = createClient();
 
   const [{ data: grnData }, { data: itemData }, { data: movementData }] = await Promise.all([

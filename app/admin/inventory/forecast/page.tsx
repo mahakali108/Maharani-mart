@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { TrendingUp, ArrowDownRight, ArrowUpRight, Boxes, CalendarClock, PackagePlus, ShoppingBag, ShieldAlert } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { runForecastPipeline } from '@/lib/ai/forecast/index';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -40,7 +40,7 @@ export default async function ForecastDashboardPage({
 }: {
   searchParams: { days?: string; risk?: string };
 }) {
-  await requirePermission('reports.view.all');
+  await requirePagePermission('reports.view.all');
   const days = Math.min(365, Math.max(14, Number(searchParams.days ?? 30) || 30));
   const riskFilter = searchParams.risk ?? '';
 

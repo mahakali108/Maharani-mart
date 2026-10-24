@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Truck, History, PackageCheck } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { listOpenDeliveriesForUser, listRecentDeliveriesForUser } from '@/lib/delivery/queries';
 import { DeliveryStatusBadge } from '@/components/delivery/delivery-status-badge';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 export default async function SalesmanDeliveriesPage() {
-  const user = await requirePermission('deliveries.view.assigned');
+  const user = await requirePagePermission('deliveries.view.assigned');
   const [open, recent] = await Promise.all([
     listOpenDeliveriesForUser(user.id),
     listRecentDeliveriesForUser(user.id),

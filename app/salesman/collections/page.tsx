@@ -1,5 +1,5 @@
 import { BadgeIndianRupee } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePermission, requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { RecordCollectionForm } from '@/components/salesman/record-collection-form';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -112,7 +112,7 @@ function renderCollectionRows(rows: CollectionRow[]) {
 }
 
 export default async function SalesmanCollectionsPage() {
-  const user = await requirePermission('collections.record');
+  const user = await requirePagePermission('collections.record');
   const supabase = createClient();
 
   // My assigned retailers for the entry form.

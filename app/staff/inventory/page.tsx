@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Boxes, History } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePermission, requirePagePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { StockAdjustmentForm } from '@/components/admin/stock-adjustment-form';
@@ -84,7 +84,7 @@ function renderStockRows(stock: StockRow[]) {
 }
 
 export default async function StaffInventoryPage() {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
   const supabase = createClient();
 
   const [firstBatch, { data: productData }, warehouseResolution] = await Promise.all([

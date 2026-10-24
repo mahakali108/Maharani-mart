@@ -1,6 +1,6 @@
 import { Tags } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { SchemeForm } from '@/components/admin/scheme-form';
@@ -22,7 +22,7 @@ function toDateTimeLocal(iso: string): string {
 }
 
 export default async function AdminSchemesPage() {
-  await requirePermission('pricing.manage');
+  await requirePagePermission('pricing.manage');
   const supabase = createClient();
 
   const { data } = await supabase

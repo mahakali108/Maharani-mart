@@ -1,4 +1,4 @@
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { gatherDashboardData } from '@/lib/admin/dashboard/data';
 import { parseDashboardRange } from '@/lib/admin/dashboard/range';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  *
  * Authorization:
  *   1. middleware.ts restricts /admin/* to super_admin/admin
- *   2. requirePermission('dashboard.view')
+ *   2. requirePagePermission('dashboard.view') (a denial redirects to /unauthorized)
  *   3. Section visibility uses the existing permission matrix
  *   4. All reads go through the cookie-bound RLS client (never service role)
  *
@@ -24,7 +24,7 @@ export default async function AdminDashboardPage({
 }: {
   searchParams: { range?: string; from?: string; to?: string };
 }) {
-  const user = await requirePermission('dashboard.view');
+  const user = await requirePagePermission('dashboard.view');
   const visibility = dashboardVisibility(user.role);
   const range = parseDashboardRange(searchParams);
   const supabase = createClient();

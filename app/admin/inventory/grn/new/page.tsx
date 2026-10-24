@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import { GrnForm } from '@/components/admin/grn-form';
 import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 
 export default async function NewGrnPage() {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
   const supabase = createClient();
 
   const [{ data: productData }, warehouseResolution] = await Promise.all([

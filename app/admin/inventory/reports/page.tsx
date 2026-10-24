@@ -1,6 +1,6 @@
 import { BarChart3 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePermission, requirePagePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -337,7 +337,7 @@ export default async function InventoryReportsPage({
 }: {
   searchParams: { report?: string; warehouse?: string; q?: string; from?: string; to?: string };
 }) {
-  await requirePermission('reports.view.all');
+  await requirePagePermission('reports.view.all');
   const supabase = createClient();
 
   const filters: ReportFilters = {

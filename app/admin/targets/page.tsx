@@ -1,6 +1,6 @@
 import { Target } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { TargetForm } from '@/components/admin/target-form';
@@ -15,7 +15,7 @@ interface MemberRow {
 }
 
 export default async function AdminTargetsPage() {
-  await requirePermission('targets.manage');
+  await requirePagePermission('targets.manage');
   const supabase = createClient();
 
   const [{ data: memberData }, { data: targetData }] = await Promise.all([

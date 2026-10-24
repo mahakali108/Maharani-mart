@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Plus, Ticket } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { describeDiscountValue } from '@/lib/coupons/engine';
@@ -57,7 +57,7 @@ function CouponState({ coupon, now }: { coupon: CouponRow; now: number }) {
 }
 
 export default async function AdminCouponsPage() {
-  await requirePermission('pricing.manage');
+  await requirePagePermission('pricing.manage');
   const supabase = createClient();
 
   const { data } = await supabase

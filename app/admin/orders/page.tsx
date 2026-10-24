@@ -86,12 +86,18 @@ async function loadOrderBatch(
   if (filters.q) query = query.ilike('order_number', `%${filters.q}%`);
   if (filters.status) query = query.eq('status', filters.status);
 
-  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const { data, error } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
   const rows = (data ?? []) as unknown as OrderRow[];
-  return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
+  return {
+    ...toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER)),
+    // Without this flag a failed read is indistinguishable from "no orders":
+    // the page would render the empty state and the pager would end the list
+    // with "No more orders", both of which read as real business facts.
+    failed: Boolean(error),
+    failureMessage: error?.message ?? null,
+  };
 }
 
-/** Shared by the first (server-rendered) batch and every batch after it. */
 function renderOrderRows(rows: OrderRow[]) {
   return rows.map((o) => (
     <tr key={o.id}>
@@ -137,6 +143,11 @@ export default async function AdminOrdersPage({
   async function loadMoreOrders(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const batch = await loadOrderBatch(createClient(), filters, readCursor(cursor));
+    if (batch.failed) {
+      // Do not pretend the list ended normally: surface the failure so the
+      // client shows its error row instead of "No more orders".
+      throw new Error(`Could not load more orders: ${batch.failureMessage ?? 'unknown error'}`);
+    }
     return { rows: renderOrderRows(batch.items), nextCursor: batch.nextCursor };
   }
 
@@ -176,7 +187,16 @@ export default async function AdminOrdersPage({
         </form>
       </Card>
 
-      {orders.length === 0 ? (
+      {firstBatch.failed ? (
+        <Card className="border-amber-200 bg-amber-50 p-5">
+          <p className="text-sm font-semibold text-ink-900">Orders could not be loaded</p>
+          <p className="mt-1 text-sm text-ink-600">
+            The list is empty because the query failed, not because there are no orders. Retry, and if it
+            keeps failing ask an engineer to check the project schema.
+          </p>
+          <p className="mt-2 font-mono text-xs text-ink-500">{firstBatch.failureMessage}</p>
+        </Card>
+      ) : orders.length === 0 ? (
         <AdminEmptyState
           icon={ShoppingCart}
           title={hasFilters ? 'No orders match your filters' : 'No orders yet'}

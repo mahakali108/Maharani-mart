@@ -1,6 +1,6 @@
 import { IndianRupee } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { CommissionForm } from '@/components/admin/commission-form';
@@ -36,7 +36,7 @@ function paiseToRupees(paise: number): string {
 }
 
 export default async function AdminCommissionsPage() {
-  await requirePermission('commissions.manage');
+  await requirePagePermission('commissions.manage');
   const supabase = createClient();
 
   const [{ data: memberData }, { data: commissionData }] = await Promise.all([

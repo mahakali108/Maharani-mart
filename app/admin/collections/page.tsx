@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { BadgeIndianRupee, Search } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePermission, requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { CollectionReviewButtons } from '@/components/admin/collection-review';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -157,7 +157,7 @@ export default async function AdminCollectionsPage({
 }: {
   searchParams: { status?: string; q?: string };
 }) {
-  await requirePermission('collections.verify');
+  await requirePagePermission('collections.verify');
   const supabase = createClient();
 
   const filters: CollectionFilters = {
