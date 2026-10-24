@@ -616,18 +616,130 @@ branch's own work. All three are fixed here; nothing was applied to production.
 * Live RLS/Storage/PostgREST behaviour and the multi-connection concurrency guarantees — PGlite is single-connection.
 * Whether PR #107's renumbering (to 0080+) has happened.
 
+## 11. Failed reads rendered as facts (third pass, 2026-10-24)
+
+### 11.1 The defect, stated precisely
+
+PostgREST returns `{ data: null, error }` on failure. A page written as
+`const { data } = await supabase.from('x')…` drops the error, and the empty
+branch then makes a **factual claim about the operator's or customer's data**
+that was never actually read:
+
+| Read fails because… | page told the user |
+| --- | --- |
+| `42703` (schema drift after an unapplied migration) | "No return requests yet" |
+| RLS denial / expired session | "No commission records yet" |
+| statement timeout / network | "Nothing to dispatch" |
+| any of the above on a detail page | "404 — this no longer exists" |
+
+Two consequences, both real: the operator concludes there is no work (a
+dispatch queue or moderation queue that looks empty) or that data was deleted;
+and the underlying fault is invisible, because a tidy empty state is
+indistinguishable from a working system.
+
+This is **not** the same class as §6's detail-page/404 defect (already fixed and
+pinned by `tests/detail-pages-read-failure.test.ts`), but it has the same root
+cause: `{ data }` instead of `{ data, error }`.
+
+### 11.2 How the population was measured
+
+Static classifier over every `page.tsx` under `app/{admin,retailer,staff,salesman,seller}`
+that calls `.from()`/`.rpc()`:
+
+* **104** pages issue database reads.
+* **39** already mention an error (`error`, `failed`, `failureMessage`,
+  `throwIfReadFailed`, `errors.*`) — either directly or through a shared loader.
+* **65** did not. Of those 65, a manual read-by-read review (the classifier
+  over-reports: several are write-only forms or use loaders that already handle
+  errors) identified the genuine list/queue/detail reads.
+
+Script: `scripts/patch_read_failure.py` exists so each file is patched
+independently — an earlier batch script asserted its import anchor *after*
+substituting, so one file without that import silently dropped its own edit and
+aborted the remaining files. That failure mode is why the fixes below were
+applied in four small batches, each followed by a typecheck.
+
+### 11.3 Two remediations, chosen deliberately
+
+1. **Render a notice** — pages that must stay usable (they show other,
+   successfully-read content, or the operator needs the form) use
+   `components/ui/read-failure-notice.tsx`: `role="alert"`, rose-50 card,
+   "this is a read failure, not an empty list — nothing has been deleted",
+   and the PostgREST message in small mono for diagnosis. Used where an
+   operator would otherwise be misled **and** still needs the page.
+2. **Throw** — work queues and money-evidence lists (`staff/orders`,
+   `staff/inventory`, `salesman/collections`, `admin/delivered`,
+   `admin/inventory/products`, `retailer/orders`, `retailer/coupons`,
+   `retailer/support`, `retailer/notifications`) throw
+   `… could not be loaded [<code>]: <message>`, which lands in the existing
+   `app/error.tsx` / `app/retailer/error.tsx` boundary with a retry. This is
+   the pattern `lib/delivery/queries.ts#fetchDeliveryDetail` already used.
+
+Neither remediation invents data, changes a query, weakens RLS, or alters the
+visual design; both only replace a false statement with a true one.
+
+### 11.4 Fixed in this branch (files)
+
+| File | Was | Now |
+| --- | --- | --- |
+| `components/ui/read-failure-notice.tsx` | (new) | shared notice component |
+| `lib/admin/sellers-query.ts#listOffers` | `if (error) return { offers: [], total: 0 }` | returns `failed` / `failureMessage` (same contract as `listSellers`) |
+| `lib/delivery/queries.ts#listOpenDeliveriesForUser` | dropped `error` | throws with code |
+| `lib/delivery/queries.ts#listRecentDeliveriesForUser` | dropped `error` | throws with code |
+| `app/admin/coupons/page.tsx` | "No coupons yet" on failure | notice |
+| `app/admin/returns/page.tsx` | "No return requests yet" | notice |
+| `app/admin/offers/page.tsx` | "No offers to review" | notice (moderation queue) |
+| `app/admin/wallets/page.tsx` | silent empty credit table | notice + "balances are NOT authoritative" |
+| `app/admin/targets/page.tsx` | "No team members yet" / "No targets set yet" | notice |
+| `app/admin/commissions/page.tsx` | "No team members yet" / "No commission records yet" | notice |
+| `app/admin/pricing/page.tsx` | "No active products yet" / "No prices set yet" | notice |
+| `app/admin/pricing/schemes/page.tsx` | "No schemes yet" | notice |
+| `app/admin/delivered/page.tsx` | "No completed deliveries yet" | throws |
+| `app/admin/inventory/products/page.tsx` | "No matching products" | throws |
+| `app/retailer/schemes/page.tsx` | "No active schemes right now" (+ count badge) | notice, badge shows "Unavailable" |
+| `app/retailer/orders/page.tsx` | "No orders yet" | throws |
+| `app/retailer/coupons/page.tsx` | "No coupons right now" | throws |
+| `app/retailer/support/page.tsx` | "No support tickets yet" | throws |
+| `app/retailer/notifications/page.tsx` | "No notifications" | throws |
+| `app/salesman/targets/page.tsx` | "No active targets" | notice |
+| `app/salesman/collections/page.tsx` | "No collections recorded yet" | throws |
+| `app/staff/orders/page.tsx` | "Nothing to dispatch" | throws |
+| `app/staff/inventory/page.tsx` | "No inventory recorded yet" | throws |
+
+Regression tests: `tests/list-pages-read-failure.test.tsx` (14 cases) and
+`tests/queue-loaders-read-failure.test.tsx` (5 cases). Every case asserts both
+directions — the failure is surfaced **and** a successful empty read still shows
+the true empty state — because a one-sided test would also pass a regression
+that always shows an error.
+
+### 11.5 Deliberately NOT changed (with the reason)
+
+| Files | Why left alone |
+| --- | --- |
+| `app/retailer/orders/[id]/page.tsx`, `…/[id]/invoice/page.tsx`, `app/retailer/catalog/[id]/page.tsx` | Owned by open PR #107 / #42. Hunk-level handoff in `docs/HANDOFF_TO_PR_OWNERS.md`; #107's invoice page already carries the fix. |
+| `app/admin/inventory/page.tsx` (6 reads), `…/inventory/reports/page.tsx` (8), `…/reports/page.tsx` (6), `app/admin/command-center/page.tsx` (5), `app/retailer/catalog/page.tsx` (6), `app/admin/pricing/page.tsx` secondary option lists | Multi-read dashboards. Each read needs an individual decision about whether the page stays usable when that one read fails (e.g. a failed *area* list must not hide a successful *product* list). Blanket-editing them would trade a false empty state for a needlessly dead page. Listed as follow-up work, not silently skipped. |
+| `app/admin/attendance`, `audit-logs`, `follow-ups`, `routes`, `support`, `team`, `visits`, `warehouses`, `inventory/*` (batches, grn, low-stock, movements, transfers), `retailer/{account,cart,categories,favorites,quick-order}`, `salesman/{attendance,commissions,dcr,follow-ups,orders,profile,retailers,routes,visits}`, `staff/deliveries` (loader throws) | Remaining population from §11.2. Same defect, lower consequence per page (read-mostly reports and self-service forms). Fixing them is mechanical but each needs the render-vs-throw decision above; doing it blind across 35 files in one commit is exactly the kind of change this audit exists to prevent. |
+
+`app/staff/deliveries` and `app/salesman/deliveries` are **already covered**:
+their shared loader now throws (see §11.4).
+
 ## Appendix A — reproduction
 
 ```bash
 corepack pnpm install --frozen-lockfile
 corepack pnpm run typecheck
 corepack pnpm run lint
-corepack pnpm run test                     # 148 files / 2602 tests
+corepack pnpm exec vitest run               # 155 files / 2693 tests (third pass)
 NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co \
 NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder \
 NEXT_PUBLIC_SITE_URL=https://placeholder.example \
 SUPABASE_SERVICE_ROLE_KEY=placeholder corepack pnpm run build
 ```
+Third-pass gate (executed 2026-10-24, after the §11 fixes): typecheck 0 errors,
+lint clean, **155 files / 2693 tests passed**, production build compiled.
+CI remains BLOCKED (GitHub billing — see §0), so these local runs are the only
+executable evidence.
+
 Migration replay and catalog queries: `tests/helpers/pg-harness.ts` boots
 PGlite (PostgreSQL 16) and applies every migration in `supabase/migrations`;
 `tests/privilege-hardening-db.test.ts` asserts the 0078 privilege posture by
