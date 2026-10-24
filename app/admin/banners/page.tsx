@@ -11,6 +11,8 @@ interface BannerRow {
   id: string;
   title: string;
   image_url: string;
+  image_url_mobile: string | null;
+  status: 'draft' | 'published';
   link_url: string | null;
   area_id: string | null;
   sort_order: number;
@@ -27,7 +29,7 @@ export default async function BannersPage() {
   const [{ data: bannerRows }, { data: areaRows }] = await Promise.all([
     supabase
       .from('banners')
-      .select('id, title, image_url, link_url, area_id, sort_order, is_active, starts_at, ends_at')
+      .select('id, title, image_url, image_url_mobile, status, link_url, area_id, sort_order, is_active, starts_at, ends_at')
       .order('sort_order')
       .order('id'),
     supabase.from('areas').select('id, name'),
@@ -68,7 +70,7 @@ export default async function BannersPage() {
                 <th className="px-5 py-3 font-medium">Area</th>
                 <th className="px-5 py-3 font-medium">Priority</th>
                 <th className="px-5 py-3 font-medium">Schedule (IST)</th>
-                <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Visibility</th>
                 <th className="px-5 py-3 font-medium" />
               </tr>
             </thead>
@@ -96,18 +98,28 @@ export default async function BannersPage() {
                     {b.ends_at ? ` – ${formatIndiaDateTime(b.ends_at)}` : ''}
                   </td>
                   <td className="px-5 py-3">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                        b.is_active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'
-                      }`}
-                    >
-                      {b.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          b.status === 'published' ? 'bg-primary-50 text-primary-700' : 'bg-ink-100 text-ink-600'
+                        }`}
+                      >
+                        {b.status === 'published' ? 'Published' : 'Draft'}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          b.is_active ? 'bg-mint-50 text-mint-700' : 'bg-ink-100 text-ink-500'
+                        }`}
+                      >
+                        {b.is_active ? 'Active' : 'Paused'}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-5 py-3">
                     <BannerRowActions
                       bannerId={b.id}
                       isActive={b.is_active}
+                      status={b.status}
                       isFirst={index === 0}
                       isLast={index === banners.length - 1}
                     />

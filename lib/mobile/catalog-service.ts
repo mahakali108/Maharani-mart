@@ -508,7 +508,11 @@ export async function loadMobileHome(
     // IST schedule window is applied below by `isBannerVisible`, the one
     // place that decides it.
     (async () => {
-      const { data } = await supabase.from('banners').select('*').eq('is_active', true);
+      const { data } = await supabase
+        .from('banners')
+        .select('*')
+        .eq('is_active', true)
+        .eq('status', 'published');
       return { data };
     })(),
     // The SAME taxonomy read the catalogue panes use — one query shape, so the

@@ -114,9 +114,13 @@ describe('catalogue — categories and brands are both visible and combine', () 
 
 describe('home — premium banner and service-area selector', () => {
   const home = read('components/retailer/home-content.tsx');
-  it('renders an ivory/lavender storefront hero with catalogue and reorder entry points', () => {
-    expect(home).toContain('bg-lavender-50');
+  it('renders the berry marketing hero with catalogue and reorder entry points', () => {
+    // Berry is scoped to the marketing hero; the rest of the storefront keeps
+    // the violet/lavender operational system.
+    expect(home).toContain('bg-marketing-surface');
+    expect(home).toContain('text-marketing-heading');
     expect(home).not.toContain('bg-blush-50');
+    expect(home).not.toContain('bg-lavender-50');
     expect(home).toContain('Explore catalogue');
     expect(home).toContain('Buy again');
     expect(read('app/globals.css')).not.toContain('.retailer-theme [class~=');

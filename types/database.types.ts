@@ -480,6 +480,10 @@ export interface Database {
           subtitle?: string | null;
           cta_label?: string | null;
           image_url: string;
+          /** Optional 4:3 mobile rendition; falls back to image_url. */
+          image_url_mobile: string | null;
+          /** Private draft or merchant-published banner (0074). */
+          status: 'draft' | 'published';
           link_url: string | null;
           area_id: string | null;
           sort_order: number;
@@ -495,6 +499,8 @@ export interface Database {
           subtitle?: string | null;
           cta_label?: string | null;
           image_url: string;
+          image_url_mobile?: string | null;
+          status?: 'draft' | 'published';
           link_url?: string | null;
           area_id?: string | null;
           sort_order?: number;

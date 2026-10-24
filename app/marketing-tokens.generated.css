@@ -1,0 +1,62 @@
+/* Generated from design/marketing-tokens.json. Do not edit by hand. */
+/* Marketing-only berry palette. Do not use outside the allowlisted storefront marketing components. */
+:root {
+  /* Berry brand accent for storefront marketing. 600 is the action stop; 800 is for headings on pale berry surfaces. */
+  --marketing-berry-50: #FFF1F7;
+  --marketing-berry-50-rgb: 255 241 247;
+  --marketing-berry-100: #FCE7F3;
+  --marketing-berry-100-rgb: 252 231 243;
+  --marketing-berry-200: #FBCFE8;
+  --marketing-berry-200-rgb: 251 207 232;
+  --marketing-berry-400: #F472B6;
+  --marketing-berry-400-rgb: 244 114 182;
+  --marketing-berry-600: #BE185D;
+  --marketing-berry-600-rgb: 190 24 93;
+  --marketing-berry-700: #9D174D;
+  --marketing-berry-700-rgb: 157 23 77;
+  --marketing-berry-800: #831843;
+  --marketing-berry-800-rgb: 131 24 67;
+  --marketing-berry-900: #701A3E;
+  --marketing-berry-900-rgb: 112 26 62;
+  --marketing-berry-950: #4C0D26;
+  --marketing-berry-950-rgb: 76 13 38;
+  /* Neutral text stops used on marketing surfaces so body copy stays readable against pale berry. */
+  --marketing-ink-100: #F4F4F5;
+  --marketing-ink-100-rgb: 244 244 245;
+  --marketing-ink-600: #52525B;
+  --marketing-ink-600-rgb: 82 82 91;
+  --marketing-ink-900: #27272A;
+  --marketing-ink-900-rgb: 39 39 42;
+  /* Success/assurance accent for marketing trust rows (verified, secure, delivered). */
+  --marketing-leaf-50: #ECFDF5;
+  --marketing-leaf-50-rgb: 236 253 245;
+  --marketing-leaf-700: #047857;
+  --marketing-leaf-700-rgb: 4 120 87;
+  /* Pure white for text on a berry action fill and for marketing cards. */
+  --marketing-paper-50: #FFFFFF;
+  --marketing-paper-50-rgb: 255 255 255;
+
+  /* Semantic marketing aliases: prefer these names in components. */
+  --marketing-surface: var(--marketing-berry-50);
+  --marketing-surface-rgb: var(--marketing-berry-50-rgb);
+  --marketing-surface-accent: var(--marketing-berry-100);
+  --marketing-surface-accent-rgb: var(--marketing-berry-100-rgb);
+  --marketing-border: var(--marketing-berry-100);
+  --marketing-border-rgb: var(--marketing-berry-100-rgb);
+  --marketing-heading: var(--marketing-berry-800);
+  --marketing-heading-rgb: var(--marketing-berry-800-rgb);
+  --marketing-action: var(--marketing-berry-600);
+  --marketing-action-rgb: var(--marketing-berry-600-rgb);
+  --marketing-action-hover: var(--marketing-berry-700);
+  --marketing-action-hover-rgb: var(--marketing-berry-700-rgb);
+  --marketing-on-action: var(--marketing-paper-50);
+  --marketing-on-action-rgb: var(--marketing-paper-50-rgb);
+  --marketing-text: var(--marketing-ink-900);
+  --marketing-text-rgb: var(--marketing-ink-900-rgb);
+  --marketing-text-secondary: var(--marketing-ink-600);
+  --marketing-text-secondary-rgb: var(--marketing-ink-600-rgb);
+  --marketing-success: var(--marketing-leaf-700);
+  --marketing-success-rgb: var(--marketing-leaf-700-rgb);
+  --marketing-success-surface: var(--marketing-leaf-50);
+  --marketing-success-surface-rgb: var(--marketing-leaf-50-rgb);
+}

@@ -24,9 +24,22 @@ const mediaRefSchema = z
   .min(1, 'Upload an image first.')
   .refine((value) => isRenderableMediaRef(value), 'Upload an image first.');
 
+/** The mobile rendition is optional: an empty value means "reuse the desktop art". */
+const optionalMediaRefSchema = z
+  .string()
+  .trim()
+  .optional()
+  .refine((value) => !value || isRenderableMediaRef(value), 'Upload a valid mobile image.');
+
+const bannerStatusSchema = z.enum(['draft', 'published'], {
+  errorMap: () => ({ message: 'Choose draft or published.' }),
+});
+
 const bannerSchema = z.object({
   title: z.string().trim().min(2, 'Enter a title.').max(140, 'Keep the title under 140 characters.'),
   imageUrl: mediaRefSchema,
+  imageUrlMobile: optionalMediaRefSchema,
+  status: bannerStatusSchema,
   subtitle: z.string().trim().max(300, 'Keep the subtitle under 300 characters.').optional(),
   ctaLabel: z.string().trim().max(60, 'Keep the button label under 60 characters.').optional(),
   linkUrl: z.string().trim().refine((value) => !value || !!resolveBannerTarget(value), 'Use an app route or an http(s) URL.').optional(),
@@ -53,6 +66,8 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   const parsed = bannerSchema.safeParse({
     title: formData.get('title'),
     imageUrl: formData.get('imageUrl'),
+    imageUrlMobile: formData.get('imageUrlMobile') || undefined,
+    status: formData.get('status') || 'draft',
     subtitle: formData.get('subtitle') || undefined,
     ctaLabel: formData.get('ctaLabel') || undefined,
     linkUrl: formData.get('linkUrl') || undefined,
@@ -64,13 +79,15 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
+  const { title, subtitle, ctaLabel, imageUrl, imageUrlMobile, status, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
 
   const supabase = createClient();
 
   const payload: BannerInsert = {
     title,
     image_url: imageUrl,
+    image_url_mobile: imageUrlMobile || null,
+    status,
     subtitle: subtitle || null,
     cta_label: ctaLabel || null,
     link_url: linkUrl || null,
@@ -101,6 +118,8 @@ export async function updateBannerAction(
   const parsed = bannerSchema.safeParse({
     title: formData.get('title'),
     imageUrl: formData.get('imageUrl'),
+    imageUrlMobile: formData.get('imageUrlMobile') || undefined,
+    status: formData.get('status') || 'draft',
     subtitle: formData.get('subtitle') || undefined,
     ctaLabel: formData.get('ctaLabel') || undefined,
     linkUrl: formData.get('linkUrl') || undefined,
@@ -112,13 +131,15 @@ export async function updateBannerAction(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
-  const { title, subtitle, ctaLabel, imageUrl, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
+  const { title, subtitle, ctaLabel, imageUrl, imageUrlMobile, status, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
 
   const supabase = createClient();
   const schedule = bannerScheduleInstants(startsAt, endsAt);
   const payload: BannerUpdate = {
     title,
     image_url: imageUrl,
+    image_url_mobile: imageUrlMobile || null,
+    status,
     subtitle: subtitle || null,
     cta_label: ctaLabel || null,
     link_url: linkUrl || null,
@@ -134,6 +155,22 @@ export async function updateBannerAction(
   revalidatePath('/admin/banners');
   revalidatePath('/retailer/home');
   redirect('/admin/banners');
+}
+
+/**
+ * Publish a draft, or move a live banner back to draft. Drafts are hidden from
+ * every non-staff reader by the 0074 SELECT policy, regardless of is_active.
+ */
+export async function setBannerStatusAction(bannerId: string, status: 'draft' | 'published') {
+  const parsed = bannerStatusSchema.safeParse(status);
+  if (!parsed.success) throw new Error('Choose draft or published.');
+  await requirePermission('banners.manage');
+  const supabase = createClient();
+  const payload: BannerUpdate = { status: parsed.data };
+  const { error } = await supabase.from('banners').update(payload as unknown as never).eq('id', bannerId);
+  if (error) throw new Error(error.message);
+  revalidatePath('/admin/banners');
+  revalidatePath('/retailer/home');
 }
 
 export async function toggleBannerActiveAction(bannerId: string, isActive: boolean) {
@@ -178,15 +215,16 @@ export async function deleteBannerAction(bannerId: string) {
     .from('banners')
     .delete()
     .eq('id', bannerId)
-    .select('image_url')
-    .single<{ image_url: string }>();
+    .select('image_url, image_url_mobile')
+    .single<{ image_url: string; image_url_mobile: string | null }>();
   if (error) throw new Error(error.message);
 
-  // Also remove the underlying file so deleting a banner doesn't leave it
+  // Also remove the underlying files so deleting a banner doesn't leave them
   // orphaned. deleteMedia() is best-effort and only removes Supabase objects
   // it can confidently identify; legacy files are never auto-deleted en masse.
   if (data) {
-    await deleteMedia(data.image_url);
+    const refs = new Set([data.image_url, data.image_url_mobile].filter((ref): ref is string => !!ref));
+    await Promise.all([...refs].map((ref) => deleteMedia(ref)));
   }
 
   revalidatePath('/admin/banners');

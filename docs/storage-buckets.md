@@ -23,10 +23,31 @@ Migrations are NOT applied automatically by deploys — see
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `product-images` | Product photos & gallery | Public | 5 MB | png/jpeg/webp | `products/{productId}/gallery/{uuid}.{ext}` | `product_images.image_url` (full public URL) | `removeProductImageAction` → `deleteMedia()` | Public read; insert/update staff+; delete staff+ | `components/admin/product-image-manager.tsx` (upload); product cards, gallery, cart, checkout, orders, quick-order (display) |
 | `banners` | Promo banners | Public | 5 MB | png/jpeg/webp | `banners/{bannerId}/{uuid}.{ext}` (`_draft` before the row exists) | `banners.image_url` (full public URL) | `deleteBannerAction` → `deleteMedia()` | Public read; insert/update staff+; delete admin+ | `components/admin/banner-form.tsx`, `banner-edit-form.tsx`; `components/retailer/promo-banner.tsx` |
+| `banner-drafts` | **Unpublished** banner artwork (0077, repo-only — see below) | **Private** | 5 MB | png/jpeg/webp | `banners/{bannerId}/{uuid}.{ext}` (`_draft` before the row exists) | `banners.draft_image_path` / `draft_image_mobile_path` (object path, never a URL) | none automatic — permanent; publish copies to `banners` | Admin-only (select/insert/update/delete), matching `banners.manage` | no UI in this PR — admin preview reads via a 15-minute signed URL |
 | `brand-logos` | Brand logos | Public | 2 MB | png/jpeg/webp/svg | `brands/{brandId}/{uuid}.{ext}` | `brands.logo_url` (full public URL) | `updateBrandAction` / `deleteBrandAction` → `deleteMedia()` | Public read; insert/update staff+; delete admin+ | `components/admin/brand-edit-form.tsx` |
 | `category-images` | Category images | Public | 2 MB | png/jpeg/webp | `categories/{categoryId}/{uuid}.{ext}` | `categories.image_url` (full public URL) | `updateCategoryAction` / `deleteCategoryAction` → `deleteMedia()` | Public read; insert/update staff+; delete admin+ | `components/admin/category-edit-form.tsx`; category browse pages (display) |
 | `avatars` | User profile photos | Public | 2 MB | png/jpeg/webp | `avatars/{userId}/{uuid}.{ext}` | `profiles.avatar_url` | *(no writer UI yet — read-only)* | Public read; insert/update self (own folder only) | `app/salesman/profile/page.tsx` (read-only) |
 | `retailer-documents` | Retailer KYC / registration docs | **Private** | 10 MB | png/jpeg/webp/pdf | `retailers/{retailerId}/documents/{uuid}.{ext}` | `retailer_documents.file_url` (stores the **object path**, not a URL) | `deleteRetailerDocumentAction` → `deleteMedia()` | Read: staff+ or owning retailer; write: staff+ | `components/admin/retailer-documents-manager.tsx`; `app/admin/retailers/[id]/page.tsx` (via signed URL) |
+
+### `banner-drafts` (migration 0077 — NOT applied)
+
+Added so that artwork for an unpublished banner is not readable by
+`/storage/v1/object/public/banners/...` guessers. The whole point is that
+draft artwork has **no public URL at all**: it is reachable only through a
+short-lived signed URL minted server-side for an admin.
+
+Rules:
+
+* `0077` is **review-only**. No bucket exists, no policy was changed and no
+  object was moved. The public `banners` bucket is untouched.
+* Draft paths are validated twice — `DRAFT_BANNER_PATH_RE` in
+  `lib/media/refs.ts` and a CHECK constraint in `0077` — and both reject
+  absolute URLs, so private art can never be stored as a public link.
+* Publishing **copies** the object into the public bucket under the same path
+  and leaves the draft in place (`lib/admin/banner-artwork.ts`).
+* Never auto-deleted, including on rollback. See
+  `docs/BANNER_DRAFT_ARTWORK_IMPLEMENTATION.md` for the growth trade-off and
+  the manual cleanup proposal.
 
 ## Reference format stored in the columns
 

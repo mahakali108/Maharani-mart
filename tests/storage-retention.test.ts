@@ -20,7 +20,15 @@ const FRESH = '2026-09-25T00:00:00Z'; // 5 days before NOW → kept
 
 describe('storage bucket classification', () => {
   it('classifies product images and catalog media as permanent', () => {
-    for (const bucket of ['product-images', 'brand-logos', 'category-images', 'banners', 'avatars', 'retailer-documents']) {
+    for (const bucket of [
+      'product-images',
+      'brand-logos',
+      'category-images',
+      'banners',
+      'banner-drafts',
+      'avatars',
+      'retailer-documents',
+    ]) {
       expect(classifyStorageBucket(bucket), bucket).toBe('permanent');
     }
   });
@@ -31,6 +39,12 @@ describe('storage bucket classification', () => {
     expect(storageBucketPolicy('delivery-proofs')?.retentionDays).toBe(120);
     expect(storageBucketPolicy('payment-proofs')?.retentionDays).toBe(120);
     expect(temporaryStorageBuckets().map((p) => p.bucket).sort()).toEqual(['delivery-proofs', 'payment-proofs']);
+  });
+
+  it('never auto-deletes unpublished banner artwork, even across a rollback (0077)', () => {
+    // Owner decision: draft artwork is preserved. Reclaiming it is a separate,
+    // manually approved operation — never part of the retention cron.
+    expect(classifyStorageBucket('banner-drafts')).toBe('permanent');
   });
 
   it('treats any unknown bucket as permanent (cleanup never guesses)', () => {

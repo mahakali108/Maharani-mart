@@ -26,7 +26,13 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('next/navigation', () => ({ usePathname: () => mocks.path, useRouter: () => ({ push: mocks.push, replace: mocks.replace, back: mocks.back, refresh: mocks.refresh }) }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => React.createElement('a', { href, ...props }, children) }));
-vi.mock('next/image', () => ({ default: ({ src, alt, className, onError }: { src: string; alt: string; className?: string; onError?: () => void }) => React.createElement('img', { src, alt, className, onError }) }));
+vi.mock('next/image', () => ({
+  default: ({ src, alt, className, onError }: { src: string; alt: string; className?: string; onError?: () => void }) =>
+    React.createElement('img', { src, alt, className, onError }),
+  getImageProps: ({ src, alt, sizes, width, height }: { src: string; alt: string; sizes?: string; width: number; height: number }) => ({
+    props: { src, alt, sizes, width, height, srcSet: `${src} ${width}w` },
+  }),
+}));
 vi.mock('@/lib/retailer/cart-actions', () => ({ addToCartAction: mocks.add, updateCartQuantityAction: mocks.updateCartQuantity, removeCartItemAction: mocks.removeCartItem }));
 vi.mock('@/lib/retailer/saved-cart-actions', () => ({ saveCartItemForLaterAction: mocks.saveCartItem }));
 vi.mock('@/lib/retailer/order-actions', () => ({ addReorderLinesToCartAction: mocks.reorder }));

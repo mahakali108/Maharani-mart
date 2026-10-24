@@ -47,35 +47,63 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
 
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
-      <section aria-labelledby="home-welcome" className="relative overflow-hidden rounded-[1.75rem] border border-lavender-200 bg-lavender-50 shadow-card">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full border-[40px] border-peach-100/70 sm:h-96 sm:w-96" />
-        <div className="relative grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.4fr_1fr] lg:gap-10 lg:p-10">
+      <section
+        aria-labelledby="home-welcome"
+        className="relative overflow-hidden rounded-[1.75rem] border border-marketing-border bg-marketing-surface shadow-card"
+      >
+        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-marketing-berry-100/80 blur-2xl sm:h-96 sm:w-96" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 -left-20 h-64 w-64 rounded-full border-[36px] border-marketing-berry-200/40" />
+        <div className="relative grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.35fr_1fr] lg:gap-10 lg:p-10">
           <div className="min-w-0">
-            <p className="shop-eyebrow flex items-center gap-2"><Store className="h-4 w-4" aria-hidden="true" /> The retailer&apos;s everyday store</p>
-            <h1 id="home-welcome" className="mt-4 max-w-xl text-3xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">Your next restock,<br /><span className="text-primary-600">beautifully simple.</span></h1>
-            <p className="mt-4 text-sm font-medium text-slate-800">{name ? `Welcome, ${name}` : 'Welcome to Maharani Traders'}</p>
-            <p className="mt-1 max-w-md text-xs leading-6 text-slate-600 sm:text-sm">Discover products for your shelves, compare pack sizes and order at your wholesale piece price.</p>
+            <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-marketing-action">
+              <Store className="h-4 w-4" aria-hidden="true" /> The retailer&apos;s everyday store
+            </p>
+            <h1 id="home-welcome" className="mt-4 max-w-xl text-3xl font-semibold leading-[1.08] tracking-tight text-marketing-heading sm:text-4xl lg:text-[3.25rem]">
+              Your next restock,<br /><span className="text-marketing-action">beautifully simple.</span>
+            </h1>
+            <p className="mt-4 text-sm font-semibold text-marketing-text">{name ? `Welcome, ${name}` : 'Welcome to Maharani Traders'}</p>
+            <p className="mt-1 max-w-md text-xs leading-6 text-marketing-text-secondary sm:text-sm">
+              Discover products for your shelves, compare pack sizes and order at your wholesale piece price.
+            </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link href="/retailer/catalog" className="inline-flex min-h-12 items-center gap-3 rounded-xl bg-primary-600 px-5 text-sm font-semibold text-white hover:bg-primary-700">Explore catalogue <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
-              <Link href="/retailer/orders" className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-mint-50"><RotateCcw className="h-4 w-4" aria-hidden="true" /> Buy again</Link>
+              <Link href="/retailer/catalog" className="inline-flex min-h-12 items-center gap-3 rounded-xl bg-marketing-action px-5 text-sm font-semibold text-marketing-on-action transition hover:bg-marketing-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-marketing-action focus-visible:ring-offset-2">
+                Explore catalogue <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+              <Link href="/retailer/orders" className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-marketing-border bg-marketing-paper-50 px-4 text-sm font-semibold text-marketing-text transition hover:bg-marketing-berry-100">
+                <RotateCcw className="h-4 w-4" aria-hidden="true" /> Buy again
+              </Link>
             </div>
+            <p className="mt-4 flex items-start gap-1.5 text-[11px] leading-5 text-marketing-text-secondary">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-marketing-success" aria-hidden="true" />
+              Live stock and your verified wholesale price, rechecked at checkout.
+            </p>
           </div>
           <div className="flex min-w-0 flex-col justify-center gap-3">
-            <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-card sm:p-5">
-              <p className="shop-eyebrow">Your business, connected</p>
-              {shop ? <p className="mt-2 break-words text-lg font-semibold text-slate-900">{shop}</p> : null}
-              {location ? <p className="mt-2 flex gap-2 text-xs leading-5 text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words"><span className="block text-[10px] font-semibold uppercase tracking-wide">{areaName ? 'Registered area (not delivery coverage)' : 'Shop location'}</span>{location}</span></p> : null}
-              <Link href="/retailer/account/addresses" className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4">Manage delivery addresses <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></Link>
+            <div className="rounded-2xl border border-marketing-border bg-marketing-paper-50 p-4 shadow-card sm:p-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-marketing-action">Your business, connected</p>
+              {shop ? <p className="mt-2 break-words text-lg font-semibold text-marketing-heading">{shop}</p> : null}
+              {location ? <p className="mt-2 flex gap-2 text-xs leading-5 text-marketing-text-secondary"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words"><span className="block text-[10px] font-semibold uppercase tracking-wide">{areaName ? 'Registered area (not delivery coverage)' : 'Shop location'}</span>{location}</span></p> : null}
+              <Link href="/retailer/account/addresses" className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-marketing-text underline decoration-marketing-berry-200 underline-offset-4 hover:text-marketing-action">
+                Manage delivery addresses <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Link href="/retailer/schemes" className="rounded-2xl border border-mint-200 bg-mint-100 p-4 text-mint-700"><Tag className="mb-3 h-5 w-5" aria-hidden="true" /><span className="block text-sm font-semibold">Shop offers</span><span className="mt-1 block text-[11px]">Eligible schemes</span></Link>
-              <Link href="/retailer/quick-order" className="rounded-2xl border border-lavender-200 bg-lavender-100 p-4 text-lavender-700"><ShoppingBag className="mb-3 h-5 w-5" aria-hidden="true" /><span className="block text-sm font-semibold">Quick order</span><span className="mt-1 block text-[11px]">Know what you need?</span></Link>
+              <Link href="/retailer/schemes" className="rounded-2xl border border-mint-200 bg-mint-50 p-4 text-mint-800 transition hover:bg-mint-100">
+                <Tag className="mb-3 h-5 w-5" aria-hidden="true" />
+                <span className="block text-sm font-semibold">Shop offers</span>
+                <span className="mt-1 block text-[11px]">Eligible schemes</span>
+              </Link>
+              <Link href="/retailer/quick-order" className="rounded-2xl border border-marketing-border bg-marketing-berry-100 p-4 text-marketing-heading transition hover:bg-marketing-berry-200">
+                <ShoppingBag className="mb-3 h-5 w-5" aria-hidden="true" />
+                <span className="block text-sm font-semibold">Quick order</span>
+                <span className="mt-1 block text-[11px]">Know what you need?</span>
+              </Link>
             </div>
           </div>
         </div>
-        <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-lavender-200 bg-white/60 px-5 py-3 text-[11px] text-slate-600 sm:px-8" data-testid="service-area-selector">
+        <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-marketing-border bg-marketing-paper-50/70 px-5 py-3 text-[11px] text-marketing-text-secondary sm:px-8" data-testid="service-area-selector">
           <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{areaName ? `Your registered area: ${areaName} · confirm delivery PIN at checkout` : `Initial district: ${SERVICE_AREA_LABEL} · confirm PIN at checkout`}</span>
-          <Link href="/retailer/reports" className="inline-flex min-h-11 items-center gap-1.5 font-medium underline underline-offset-4"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Purchase reports</Link>
+          <Link href="/retailer/reports" className="inline-flex min-h-11 items-center gap-1.5 font-medium underline underline-offset-4 hover:text-marketing-action"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Purchase reports</Link>
         </div>
       </section>
       <HomeQuickActions />

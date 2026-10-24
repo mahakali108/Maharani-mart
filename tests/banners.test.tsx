@@ -9,6 +9,7 @@ import { PromoCarousel } from '@/components/retailer/promo-carousel';
 import { BannerPreview } from '@/components/admin/banner-preview';
 import {
   BANNER_STANDARD,
+  MOBILE_BANNER_STANDARD,
   bannerScheduleInstants,
   isBannerVisible,
   resolveBannerTarget,
@@ -39,6 +40,20 @@ vi.mock('next/link', () => ({
 vi.mock('next/image', () => ({
   default: ({ src, alt, className, fill }: { src: string; alt: string; className?: string; fill?: boolean }) =>
     React.createElement('img', { src, alt, className, 'data-fill': fill ? 'true' : undefined }),
+  // PromoBanner uses getImageProps to serve art-directed <picture> sources.
+  getImageProps: ({
+    src,
+    alt,
+    sizes,
+    width,
+    height,
+  }: {
+    src: string;
+    alt: string;
+    sizes?: string;
+    width: number;
+    height: number;
+  }) => ({ props: { src, alt, sizes, width, height, srcSet: `${src} ${width}w` } }),
 }));
 
 afterEach(cleanup);
@@ -161,6 +176,9 @@ describe('banner target safety', () => {
     expect(BANNER_STANDARD.height).toBe(360);
     expect(BANNER_STANDARD.aspectRatio).toBe('3 / 1');
     expect(BANNER_STANDARD.guidance).toContain('1080 × 360');
+    expect(MOBILE_BANNER_STANDARD.width).toBe(1200);
+    expect(MOBILE_BANNER_STANDARD.height).toBe(900);
+    expect(MOBILE_BANNER_STANDARD.aspectRatio).toBe('4 / 3');
   });
 });
 
@@ -174,7 +192,17 @@ describe('banner artwork', () => {
     expect(frame).toBeTruthy();
     const image = screen.getByRole('img', { name: 'Diwali offer' });
     expect(image.className).toContain('object-cover');
-    expect(image.getAttribute('data-fill')).toBe('true');
+    expect(container.querySelector('picture')).toBeTruthy();
+  });
+
+  it('serves mobile artwork through a media-scoped <picture> source', () => {
+    const { container } = render(
+      <PromoBanner title="Mobile offer" imageUrl="/banner.png" imageUrlMobile="/banner-mobile.png" />
+    );
+    const source = container.querySelector('picture source');
+    expect(source?.getAttribute('media')).toBe('(max-width: 767px)');
+    expect(source?.getAttribute('srcset')).toContain('banner-mobile');
+    expect(container.querySelector('.aspect-\\[4\\/3\\]')).toBeTruthy();
   });
 
   it('shows the merchant CTA only when there is a safe target', () => {
@@ -192,8 +220,11 @@ describe('admin preview', () => {
       <BannerPreview title="Summer offer" subtitle="Fresh deals" ctaLabel="Shop now" imageUrl="/preview.png" linkUrl="/retailer/catalog" />
     );
     expect(screen.getByRole('region', { name: 'Storefront banner preview' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: 'Summer offer' }).className).toContain('object-cover');
-    expect(screen.getByRole('link', { name: 'Shop now' }).getAttribute('href')).toBe('/retailer/catalog');
+    // Desktop and mobile artboards are both previewed with the same artwork.
+    const images = screen.getAllByRole('img', { name: 'Summer offer' });
+    expect(images).toHaveLength(2);
+    expect(images.every((image) => image.className.includes('object-cover'))).toBe(true);
+    expect(screen.getAllByRole('link', { name: 'Shop now' })[0]!.getAttribute('href')).toBe('/retailer/catalog');
     expect(container.querySelector('.aspect-\\[3\\/1\\]')).toBeTruthy();
   });
 });

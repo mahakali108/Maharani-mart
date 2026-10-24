@@ -7,8 +7,12 @@
  * permanent — the sweep can never reach it.
  *
  *   PERMANENT (never auto-deleted, regardless of object age):
- *     product-images, brand-logos, category-images, banners, avatars,
- *     retailer-documents (KYC paperwork is customer master data)
+ *     product-images, brand-logos, category-images, banners, banner-drafts,
+ *     avatars, retailer-documents (KYC paperwork is customer master data)
+ *
+ *   `banner-drafts` is permanent by owner decision: unpublished artwork must
+ *   survive a rollback, so it is never swept. See the storage-growth trade-off
+ *   in docs/BANNER_DRAFT_ARTWORK_IMPLEMENTATION.md.
  *
  *   TEMPORARY (per-record proof artifacts; their DB rows are deleted by the
  *   120-day business cleanup, so the objects go with them after 120 days):
@@ -49,6 +53,12 @@ const POLICIES: BucketRetentionPolicy[] = [
     bucket: 'banners',
     classification: 'permanent',
     reason: 'Managed marketing content — admin manages banner lifecycle explicitly.',
+  },
+  {
+    bucket: 'banner-drafts',
+    classification: 'permanent',
+    reason:
+      'Unpublished banner artwork. Owner decision: draft images are preserved and never auto-deleted, including across a rollback. Growth is reclaimed only by a separately approved manual cleanup.',
   },
   {
     bucket: 'avatars',

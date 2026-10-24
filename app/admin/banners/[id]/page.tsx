@@ -10,6 +10,8 @@ interface BannerDetail {
   subtitle?: string | null;
   cta_label?: string | null;
   image_url: string;
+  image_url_mobile: string | null;
+  status: 'draft' | 'published';
   link_url: string | null;
   area_id: string | null;
   sort_order: number;
@@ -48,6 +50,8 @@ export default async function EditBannerPage({ params }: { params: { id: string 
           subtitle={banner.subtitle}
           ctaLabel={banner.cta_label}
           imageUrl={banner.image_url}
+          imageUrlMobile={banner.image_url_mobile}
+          status={banner.status}
           linkUrl={banner.link_url}
           areaId={banner.area_id}
           sortOrder={banner.sort_order}

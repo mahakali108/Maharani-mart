@@ -1,7 +1,36 @@
 import type { Config } from 'tailwindcss';
 import registry from './design/tokens.json';
+import marketingRegistry from './design/marketing-tokens.json';
 
 const families = registry.families as Record<string, { tokens: Record<string, string> }>;
+
+/**
+ * Marketing berry palette (web only).
+ *
+ * Deliberately separate from the platform registry: berry is approved for the
+ * retailer home hero, promotional banners and their carousel chrome only.
+ * `tests/design-system-contract.test.ts` restricts `marketing-*` utilities to
+ * the allowlisted marketing components.
+ */
+const marketingFamilies = marketingRegistry.families as Record<string, { tokens: Record<string, string> }>;
+const marketingSemantic = marketingRegistry.semantic as Record<string, { ref: string }>;
+
+function marketingScale(name: string): Record<string, string> {
+  const tokens = marketingFamilies[name]?.tokens ?? {};
+  return Object.fromEntries(
+    Object.keys(tokens).map((shade) => [shade, `rgb(var(--marketing-${name}-${shade}-rgb) / <alpha-value>)`]),
+  );
+}
+
+const marketing = {
+  berry: marketingScale('berry'),
+  ink: marketingScale('ink'),
+  leaf: marketingScale('leaf'),
+  paper: marketingScale('paper'),
+  ...Object.fromEntries(
+    Object.keys(marketingSemantic).map((name) => [name, `rgb(var(--marketing-${name}-rgb) / <alpha-value>)`]),
+  ),
+};
 
 function familyScale(name: string): Record<string, string> {
   const tokens = families[name]?.tokens ?? {};
@@ -29,6 +58,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Storefront marketing-only berry. Never use on operational surfaces.
+        marketing,
         // Compatibility aliases all resolve to the canonical documented token registry.
         primary: violet,
         action: violet,

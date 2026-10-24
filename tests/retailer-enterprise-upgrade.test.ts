@@ -642,7 +642,7 @@ describe('migration hygiene', () => {
   const migrationsDir = join(root, 'supabase/migrations');
   const migrations = readdirSync(migrationsDir).filter((file) => file.endsWith('.sql')).sort();
 
-  it('is strictly ordered with unique prefixes and only the documented 0061 reservation', () => {
+  it('is strictly ordered with unique prefixes and only the documented reservations', () => {
     const numbers = migrations.map((file) => Number(file.slice(0, 4)));
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
@@ -652,9 +652,14 @@ describe('migration hygiene', () => {
       { length: Math.max(...numbers) },
       (_, index) => index + 1
     ).filter((number) => !present.has(number));
-    // 0061 was deliberately never shipped; deployed 0062–0068 identities
-    // cannot be renumbered without corrupting migration history.
-    expect(missing).toEqual([61]);
+    // Documented gaps, never reused:
+    //   0061 — deliberately never shipped; deployed 0062–0068 identities
+    //          cannot be renumbered without corrupting migration history.
+    //   0075 — data-retention archive, ON HOLD pending review.
+    //   0076 — banner alt_text proposal, deliberately deferred.
+    // 0077 (banner draft artwork) skips over them rather than taking a number
+    // that a reviewed, pending change has already been designed against.
+    expect(missing).toEqual([61, 75, 76]);
   });
 
   it('keeps the case/loose pricing migration and adds Powder catalog integrity plus variant gallery plus wallet ledger plus security hardening as the latest migrations', () => {

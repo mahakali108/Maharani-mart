@@ -33,6 +33,28 @@ Each palette token has a family-level use note next to its value in `design/toke
 
 Prefer semantic aliases over raw palette values: `action.primary`, `surface.page`, `surface.card`, `text.primary`, `text.secondary`, `status.success.*`, `status.warning.*`, `status.info.*`, `status.error.*`, `status.outOfStock.*`, `offer.*`, `chart.*`, and `focus.outline`. Tailwind's `primary`, `action`, `mint`, `sky`, `peach`, `amber`, `lavender`, `ivory`, `slate`, and `ink` scales are compatibility-friendly views of the same registry.
 
+## Marketing palette (web only)
+
+The retailer home hero, the promotional banner card and its carousel chrome use a **berry** palette that is intentionally outside the platform registry:
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `marketing.surface` | `#FFF1F7` | Hero / marketing band background |
+| `marketing.surface-accent` | `#FCE7F3` | Berry tile and quiet highlight |
+| `marketing.action` | `#BE185D` | Marketing call to action |
+| `marketing.action-hover` | `#9D174D` | Hover/pressed call to action |
+| `marketing.heading` | `#831843` | Marketing headings |
+| `marketing.text` | `#27272A` | Body text on marketing surfaces |
+| `marketing.text-secondary` | `#52525B` | Supporting copy |
+| `marketing.success` | `#047857` | Assurance icon/text |
+
+Rules:
+
+- These values live in `design/marketing-tokens.json` and are generated into `app/marketing-tokens.generated.css` by `node scripts/generate-marketing-tokens.mjs`. **Never** hand-edit the generated file.
+- They are **not** part of the shared 117-token registry and are never written to the Compose `Color.kt`, because the native app is outside this work and the platform palette intentionally excludes saturated pink/red branding.
+- `marketing-*` Tailwind utilities are restricted by `tests/design-system-contract.test.ts` to `components/retailer/home-content.tsx`, `promo-banner.tsx` and `promo-carousel.tsx`. Operational surfaces (catalogue, cart, checkout, orders, admin, seller) keep the violet semantic system.
+- The generated marketing CSS is the single, exact-filename exception to the prohibited-colour audit; every other source file remains fully audited.
+
 ## Accessibility and responsive rules
 
 - Automated WCAG contrast tests enforce 4.5:1 for normal text and 3:1 for the focus outline; primary text on the page is held to 7:1. Large icon/illustration areas are not treated as text.
@@ -40,7 +62,8 @@ Prefer semantic aliases over raw palette values: `action.primary`, `surface.page
 - Buttons and compact controls preserve minimum 44px web targets; Compose navigation and actions use the existing 48dp sizing contract.
 - Storefront content must remain usable at 320, 360, 390, 768, 1024, and 1440 CSS pixels. Product imagery always has a labelled fallback; actual product, brand, category, promotion, price, stock, pack, and MOQ content is backend-owned.
 - Four mobile category shortcuts use separate pastel surfaces; other category rows rotate only through the same approved family set.
-- No decorative gradients or banners may imply a live offer. The promotional carousel renders only actual active server-provided banners.
+- No decorative gradients or banners may imply a live offer. The promotional carousel renders only actual active and published server-provided banners.
+- Banner artwork: 1080 × 360 px (3:1) desktop, optional 1200 × 900 px (4:3) mobile rendition; both are cropped with `object-fit: cover`, never stretched.
 
 ## Native mapping
 
