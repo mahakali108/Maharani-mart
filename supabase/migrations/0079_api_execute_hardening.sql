@@ -47,9 +47,12 @@
 --
 --       * `anon`                     → refused (42501);
 --       * `authenticated`            → allowed for staff/admin, for the
---                                      retailer who owns the order, and for a
---                                      seller with a child order here (which
---                                      is what the cancel trigger needs);
+--                                      retailer who owns the order, for a
+--                                      seller with a child order here, and for
+--                                      a salesman whose RLS policy
+--                                      `orders_salesman_update` (0009) already
+--                                      lets them update this order (which is
+--                                      what the cancel trigger needs);
 --       * `service_role`             → allowed (cron/cancellation jobs);
 --       * no JWT at all (`auth.role()` null: SQL Editor, psql, a migration)
 --                                  → allowed, so an owner-driven manual
@@ -57,6 +60,13 @@
 --
 --     This narrows WHO may call it; it does not change what the function does,
 --     its idempotency or its return value.
+--
+--     The allowed set is deliberately the set of roles that can already reach
+--     this cancellation through RLS: a salesman is included because 0009's
+--     `orders_salesman_update` policy lets them set `orders.status` for their
+--     assigned retailers, and a cancellation whose stock release is refused
+--     would fail the whole UPDATE with 42501 (found in the 2026-10-24 review,
+--     pinned by tests/release-stock-authorization.test.ts).
 --
 -- ---------------------------------------------------------------------------
 -- H7  Fourteen more SECURITY DEFINER functions are EXECUTE-able by `anon`,
@@ -78,8 +88,13 @@
 --         anonymous `select` that correctly returns zero rows into
 --         "permission denied for function".
 --
--- Every statement is idempotent and guarded with to_regprocedure(), so this
--- file is a no-op on a database that never reached 0017.
+-- Every statement is idempotent and guarded (to_regprocedure / to_regclass), so
+-- this file applies cleanly even where a prerequisite migration is missing. One
+-- caveat is stated rather than hidden: H6's replacement body references
+-- `sub_orders` (0064), so on a database without it H6 is SKIPPED with a NOTICE
+-- and `release_order_stock` keeps its unguarded body (though H7 still withdraws
+-- its `anon` grant). Apply in version order — 0064 always precedes 0079 — and
+-- re-run this file afterwards if the NOTICE appears.
 -- ============================================================================
 
 
@@ -99,79 +114,110 @@ $$;
 -- ---------------------------------------------------------------------------
 -- H6 — release_order_stock: same body, plus the caller check it never had
 -- ---------------------------------------------------------------------------
-create or replace function public.release_order_stock(p_order_id uuid)
-returns jsonb
-language plpgsql security definer set search_path = public, pg_temp
-as $$
-declare
-  v_alloc record;
-  v_order orders%rowtype;
-  v_released int := 0;
-  v_caller_role text := coalesce(auth.role(), '');
+-- Guarded: the body references orders / order_stock_allocations /
+-- stock_movements / sub_orders, so on a database that never reached 0017 or
+-- 0064 this is a NOTICE instead of an abort (which would leave H5/H7 applied
+-- and the function definition un-hardened). Re-runnable.
+do $h6$
 begin
-  -- H6 (0079). Order of the checks matters: `anon` is refused before the
-  -- order is even read, so an unauthenticated caller learns nothing about
-  -- whether the id exists.
-  if v_caller_role = 'anon' then
-    raise exception 'You are not permitted to release stock.' using errcode = '42501';
+  if to_regclass('public.orders') is null
+     or to_regclass('public.order_stock_allocations') is null
+     or to_regclass('public.stock_movements') is null
+     or to_regclass('public.sub_orders') is null then
+    raise notice '0079 H6 SKIPPED: orders/order_stock_allocations/stock_movements/sub_orders not all present. release_order_stock still has NO caller check — apply 0017/0064 first, then re-run 0079.';
+    return;
   end if;
 
-  -- A JWT means a real API caller. Allowed: staff/admin for any order, the
-  -- retailer who owns it, and a seller who is a member of a seller that holds
-  -- a child order here — seller_update_sub_order('cancelled') can cancel the
-  -- parent, and that cancellation fires trg_release_stock_on_order_cancel.
-  -- No JWT at all is a database session (SQL Editor, psql, migration, cron)
-  -- and keeps today's behaviour.
-  if v_caller_role <> '' and v_caller_role <> 'service_role' then
-    if not (
-      public.is_staff_or_above()
-      or exists (
-        select 1 from orders o
-         where o.id = p_order_id
-           and o.retailer_id = auth.uid()
-      )
-      or exists (
-        select 1 from sub_orders so
-         where so.parent_order_id = p_order_id
-           and public.is_member_of_seller(so.seller_id)
-      )
-    ) then
-      raise exception 'You are not permitted to release stock for this order.'
-        using errcode = '42501';
+  execute $ddl$
+  create or replace function public.release_order_stock(p_order_id uuid)
+  returns jsonb
+  language plpgsql security definer set search_path = public, pg_temp
+  as $$
+  declare
+    v_alloc record;
+    v_order orders%rowtype;
+    v_released int := 0;
+    v_caller_role text := coalesce(auth.role(), '');
+  begin
+    -- H6 (0079). Order of the checks matters: `anon` is refused before the
+    -- order is even read, so an unauthenticated caller learns nothing about
+    -- whether the id exists.
+    if v_caller_role = 'anon' then
+      raise exception 'You are not permitted to release stock.' using errcode = '42501';
     end if;
-  end if;
 
-  select * into v_order from orders where id = p_order_id for update;
-  if not found then
-    return jsonb_build_object('status', 'order_not_found');
-  end if;
+    -- A JWT means a real API caller. Allowed: staff/admin for any order, the
+    -- retailer who owns it, a seller who is a member of a seller that holds a
+    -- child order here (seller_update_sub_order('cancelled') can cancel the
+    -- parent, and that cancellation fires trg_release_stock_on_order_cancel),
+    -- and a salesman for an order 0009's orders_salesman_update policy already
+    -- lets them update.
+    -- No JWT at all is a database session (SQL Editor, psql, migration, cron)
+    -- and keeps today's behaviour.
+    if v_caller_role <> '' and v_caller_role <> 'service_role' then
+      if not (
+        public.is_staff_or_above()
+        or exists (
+          select 1 from orders o
+           where o.id = p_order_id
+             and o.retailer_id = auth.uid()
+        )
+        or exists (
+          select 1 from sub_orders so
+           where so.parent_order_id = p_order_id
+             and public.is_member_of_seller(so.seller_id)
+        )
+        -- Mirrors 0009's orders_salesman_update USING predicate exactly.
+        or (
+          public.current_user_role() = 'salesman'
+          and exists (
+            select 1 from orders o
+             where o.id = p_order_id
+               and (
+                 o.collected_by = auth.uid()
+                 or public.is_retailer_assigned_to_current_salesman(o.retailer_id)
+               )
+          )
+        )
+      ) then
+        raise exception 'You are not permitted to release stock for this order.'
+          using errcode = '42501';
+      end if;
+    end if;
 
-  for v_alloc in
-    select * from order_stock_allocations
-    where order_id = p_order_id and status = 'reserved'
-    order by id
-    for update
-  loop
-    insert into stock_movements
-      (product_id, warehouse_id, batch_id, movement_type, quantity,
-       reference_type, reference_id, reference_order_id, reason, performed_by)
-    values
-      (v_alloc.product_id, v_alloc.warehouse_id, v_alloc.batch_id, 'sale_release',
-       v_alloc.quantity_reserved - v_alloc.quantity_dispatched,
-       'order', p_order_id, p_order_id,
-       'Reservation released for order ' || v_order.order_number, auth.uid());
+    select * into v_order from orders where id = p_order_id for update;
+    if not found then
+      return jsonb_build_object('status', 'order_not_found');
+    end if;
 
-    update order_stock_allocations
-    set status = 'released'
-    where id = v_alloc.id;
+    for v_alloc in
+      select * from order_stock_allocations
+      where order_id = p_order_id and status = 'reserved'
+      order by id
+      for update
+    loop
+      insert into stock_movements
+        (product_id, warehouse_id, batch_id, movement_type, quantity,
+         reference_type, reference_id, reference_order_id, reason, performed_by)
+      values
+        (v_alloc.product_id, v_alloc.warehouse_id, v_alloc.batch_id, 'sale_release',
+         v_alloc.quantity_reserved - v_alloc.quantity_dispatched,
+         'order', p_order_id, p_order_id,
+         'Reservation released for order ' || v_order.order_number, auth.uid());
 
-    v_released := v_released + (v_alloc.quantity_reserved - v_alloc.quantity_dispatched);
-  end loop;
+      update order_stock_allocations
+      set status = 'released'
+      where id = v_alloc.id;
 
-  return jsonb_build_object('status', 'released', 'order_id', p_order_id, 'units_released', v_released);
+      v_released := v_released + (v_alloc.quantity_reserved - v_alloc.quantity_dispatched);
+    end loop;
+
+    return jsonb_build_object('status', 'released', 'order_id', p_order_id, 'units_released', v_released);
+  end;
+  $$;
+  $ddl$;
 end;
-$$;
-
+$h6$;
 do $$
 begin
   if to_regprocedure('public.release_order_stock(uuid)') is not null then

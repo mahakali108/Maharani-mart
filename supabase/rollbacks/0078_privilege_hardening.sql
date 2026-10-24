@@ -42,10 +42,22 @@ begin
 end;
 $$;
 
-drop policy if exists "staff_write_banners" on storage.objects;
-create policy "staff_write_banners" on storage.objects
-  for insert with check (bucket_id = 'banners' and is_staff_or_above());
+-- Guarded exactly like the forward migration, so a rollback on a database
+-- without 0002/0003 cannot abort halfway through restoring the grants.
+do $h4$
+begin
+  if to_regprocedure('public.is_staff_or_above()') is null
+     or to_regclass('storage.objects') is null then
+    raise notice 'Rollback 0078 H4 skipped: storage.objects or public.is_staff_or_above() is missing.';
+    return;
+  end if;
 
-drop policy if exists "staff_update_banners" on storage.objects;
-create policy "staff_update_banners" on storage.objects
-  for update using (bucket_id = 'banners' and is_staff_or_above());
+  drop policy if exists "staff_write_banners" on storage.objects;
+  create policy "staff_write_banners" on storage.objects
+    for insert with check (bucket_id = 'banners' and is_staff_or_above());
+
+  drop policy if exists "staff_update_banners" on storage.objects;
+  create policy "staff_update_banners" on storage.objects
+    for update using (bucket_id = 'banners' and is_staff_or_above());
+end;
+$h4$;

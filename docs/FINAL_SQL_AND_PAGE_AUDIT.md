@@ -237,6 +237,9 @@ commit;
 — if runs exist with `completed_at` recent, deletion has already been happening
 and the accountant must review what was removed.
 
+*Owner-facing version of this section, with the exact evidence to collect
+(and nothing sensitive to paste), is `docs/OWNER_SECURITY_EVIDENCE_PACK.md`.*
+
 *Executed finding (this branch):* `guard_data_retention_rules_mutation()`
 (0055) rejects UPDATE/DELETE/INSERT on `data_retention_rules` unless the
 current role is `postgres`/`supabase_admin`. The **service-role key cannot
@@ -291,7 +294,7 @@ behaviour or misleading UI · **P3** hygiene.
 | 16 | **P1** | `ensure_fefo_coverage(uuid,uuid,int)` — `SECURITY DEFINER`, **no caller check**, EXECUTE-able by `anon` **and** `authenticated`, and it **writes**: when batches do not cover the request it inserts rows into `inventory_batches`. Anyone with the publishable key could create stock for any product/warehouse and skew the movement ledger. | privilege probe (`has_function_privilege('anon',…)=true`), body has no guard, executed call as `anon` reached the insert path | **Fix prepared in 0079** (owner-only; both callers are definer bodies in 0017) |
 | 17 | **P1** | `release_order_stock(uuid)` — `SECURITY DEFINER`, deliberately unguarded, EXECUTE-able by `anon` and `authenticated`. Any signed-in account could release another retailer's live reservations (the function then frees those units for a second sale). 0017's comment explains who calls it, not why nobody may. | executed: retailer B released retailer A's order before the fix, `42501` after | **Fix prepared in 0079** (staff/admin, owning retailer, seller with a child order, `service_role`, or a JWT-less DB session; identical body/idempotency) |
 | 18 | **P3** | 14 further definer functions (`adjust_product_stock`, `confirm_grn`, `cancel_grn`, `cancel_stock_transfer`, `execute_stock_transfer`, `record_batch_loss`, `reserve_order_stock`, `require_inventory_role`, `consume_ai_confirmation`, `consume_ai_rate_limit`, and four `admin_*_cost(s)` readers) were EXECUTE-able by `anon` although each either mutates stock or returns confidential cost behind a caller check an anonymous call can never satisfy. | privilege probe over the whole catalog | **Fix prepared in 0079** (anon-only revoke; `authenticated` grants unchanged) |
-| 19 | **P2** | 26 detail pages turned a **failed read into a 404**: they destructured `{ data }`, dropped `error`, and called `notFound()`, so a query/permission failure was reported to the user as "this record no longer exists" (orders, products, retailers, sellers, wallets, support, goods receipts, invoices, deliveries). | page scan (31 `notFound()` sites) + per-page read; `lib/supabase/read-guard.ts`, `lib/delivery/queries.ts` | **Fixed** — 26 pages + 2 query modules + the shared `read-guard` distinguish "no row" from "read failed"; `tests/detail-pages-read-failure.test.ts` keeps it that way (see §6.1) |
+| 19 | **P2** | 26 detail pages turned a **failed read into a 404**: they destructured `{ data }`, dropped `error`, and called `notFound()`, so a query/permission failure was reported to the user as "this record no longer exists" (orders, products, retailers, sellers, wallets, support, goods receipts, invoices, deliveries). | page scan (31 `notFound()` sites) + per-page read; `lib/supabase/read-guard.ts`, `lib/delivery/queries.ts` | **Fixed in 23 pages + 2 query modules + the shared `read-guard`**; 3 pages are owned by open PRs #107/#42 and are **handed off** (`docs/HANDOFF_TO_PR_OWNERS.md`) and listed as `PENDING HANDOFF` in `tests/detail-pages-read-failure.test.ts` (see §6.1) |
 
 ### 4.1 Verified-good (so the list above is read in context)
 
@@ -333,6 +336,10 @@ behaviour or misleading UI · **P3** hygiene.
 | `supabase/rollbacks/0079_api_execute_hardening.down.sql` | rollback | No | Restores 0017's unguarded `release_order_stock` body and the pre-0079 `anon` grants **verbatim**. **This rollback weakens security** (re-opens #16 and #17) — header says so; use only for an exact revert |
 | `tests/api-privilege-hardening.test.ts` | test (executed) | n/a | 24 cases: anon/authenticated `ensure_fefo_coverage`, owner/non-owner/staff/service `release_order_stock`, all 14 revoked grants, and the deliberate exceptions (`is_phone_registered`, `submit_supplier_application`, RLS predicates, anonymous catalog read) |
 | `tests/migration-catalog-invariants.test.ts` | test (executed) | n/a | 13 catalog invariants + app↔schema contract (RLS coverage, policy-less allow-list, definer `search_path`, anon-exposure allow-list, buckets, private-bucket policies, duplicate indexes, unvalidated FKs, contiguous numbering, table/view/RPC references) |
+| `tests/release-stock-authorization.test.ts` | test (executed) | n/a | 20 cases: the full `release_order_stock` matrix — allowed (staff/admin/super_admin, service_role, owning retailer, seller with a child order, salesman for an assigned or personally-collected order, JWT-less session) vs denied (anon, other retailer, another seller, another salesman, deactivated admin), plus idempotency and three real cancellation paths |
+| `tests/api-execute-revocation-flows.test.ts` | test (executed) | n/a | 11 cases proving AUTHORIZED inventory work still runs after 0079: GRN confirm (and idempotent re-confirm), GRN cancel, transfer execute, transfer cancel, batch loss, stock adjustment, plus the anon/retailer denial for each |
+| `docs/OWNER_SECURITY_EVIDENCE_PACK.md` | owner runbook | n/a | What to send back (E1–E7), how to run the read-only script, expected result per block, the two independent ways to pause the retention job |
+| `docs/HANDOFF_TO_PR_OWNERS.md` | handoff | n/a | The read-failure fix for the three pages owned by PR #107 / #42 (this branch must not edit them) + the migration-number reservation for #107 |
 | `supabase/audits/migration_and_security_verification_readonly.sql` | read-only audit (edited) | n/a | **11** SELECT blocks: history, numbering (76 versions incl. 0079), 0074/0077 effects, 0078/0079 grant posture, banner storage, RLS coverage, definer hygiene, **COUNT-only** object inventory, retention registry + run history, and the new anon-EXECUTE inventory (must be empty of `NO CALLER CHECK — REVIEW` rows) |
 | (unchanged) `supabase/migrations/0055_data_retention_cleanup.sql` | — | — | **On hold.** No retention or deletion job was added or altered |
 
@@ -363,7 +370,8 @@ internal links (243 static `href` literals) · 0 protected pages without a guard
 | `app/admin/retailers/[id]/page.tsx`, `app/admin/wallets/[id]/page.tsx` | failed retailer read ⇒ 404 | error destructured and rethrown to `error.tsx` |
 | `app/admin/sellers/[id]/page.tsx` + `lib/admin/sellers-query.ts` | `getSellerDetail` returned `null` for both "missing" and "failed" | `failureMessage` on the contract; page throws on failure, 404 only on absence |
 | `app/admin/support/[id]/page.tsx`, `app/retailer/support/[id]/page.tsx` | failed ticket read ⇒ 404; also hid the RLS "not yours" case behind the same 404 message | read failure thrown; `notFound()` kept for "no row visible to you" |
-| `app/retailer/orders/[id]/invoice/page.tsx` | a **money document** 404'd on a read error | read failure thrown; invoice only 404s when the order does not exist |
+| `app/retailer/orders/[id]/invoice/page.tsx` | a **money document** 404'd on a read error | **REVERTED — handed off.** The file belongs to open PR #107, which already throws on `orderError` in its own version, so the defect closes when #107 merges (`docs/HANDOFF_TO_PR_OWNERS.md`) |
+| `app/retailer/orders/[id]/page.tsx`, `app/retailer/catalog/[id]/page.tsx` | same defect | **REVERTED — handed off.** Owned by PR #107 and PR #42; this branch's edit was removed to honour "do not edit open-PR files". Exact hunks are in `docs/HANDOFF_TO_PR_OWNERS.md`; both routes still 404 on a failed read until those PRs land |
 | `app/admin/inventory/grn/[id]/page.tsx` | failed GRN read ⇒ "receipt deleted" | read failure thrown |
 | `lib/delivery/queries.ts` (`fetchDeliveryDetail`) | returned `null` for a failed read, so `/admin/delivered/[orderId]`, `/retailer/orders/[id]/delivery`, `/salesman/deliveries/[orderId]`, `/staff/deliveries/[orderId]` and the mobile delivery route all answered 404/`not_found` | error thrown with code + message; mobile route already maps a thrown error to `503 database_unavailable`, which is the honest answer |
 | `app/admin/areas/[id]`, `admin/catalog/brands/[id]`, `admin/catalog/categories/[id]`, `admin/coupons/[id]`, `admin/routes/[id]`, `admin/team/[id]`, `admin/warehouses/[id]`, `admin/suppliers/applications/[id]` | same defect on `.single()` / `.maybeSingle()` — a 42703 or an RLS denial showed as "deleted" | `throwIfReadFailed(...)` before `notFound()` |
@@ -419,14 +427,16 @@ All run in this workspace on this branch.
 | 1 | `corepack pnpm install --frozen-lockfile` | setup | ok (`@supabase/supabase-js` 2.110.7 per lockfile) |
 | 2 | `corepack pnpm run typecheck` (`tsc --noEmit`) | real | **pass**, exit 0 |
 | 3 | `corepack pnpm run lint` (`next lint`) | real | **pass** — "No ESLint warnings or errors" |
-| 4 | `corepack pnpm run test` (`vitest run`) | real | **pass — 151 files / 2 643 tests** (baseline at start of mission: 144 / 2 572; +71 across the two repair waves) |
+| 4 | `corepack pnpm run test` (`vitest run`) | real | **pass — 153 files / 2 674 tests** (baseline at start of mission: 144 / 2 572; +102 across the audit and the two review rounds) |
 | 5 | `corepack pnpm exec vitest run tests/privilege-hardening-db.test.ts tests/admin-layout-guard.test.ts` | real | **pass — 18/18** |
 | 5a | `corepack pnpm exec vitest run tests/api-privilege-hardening.test.ts` | real, executed SQL | **pass — 24/24**; the same file run against the 0078-only database fails **20/24**, which is the proof the migration is what closes those holes |
 | 5b | `corepack pnpm exec vitest run tests/migration-catalog-invariants.test.ts` | real, executed SQL | **pass — 13/13** (95 tables, 444 public + 32 storage policies, 106 definer fns, 10 buckets, 1 041 `.from()` + 61 `.rpc()` references) |
-| 5c | `corepack pnpm exec vitest run tests/detail-pages-read-failure.test.ts` | real (static over 151 pages) | **pass — 4/4**: 31 `notFound()` pages scanned, 0 without an error path beyond the 2 documented exceptions |
+| 5c | `corepack pnpm exec vitest run tests/detail-pages-read-failure.test.ts` | real (static over 151 pages) | **pass — 4/4**: 31 `notFound()` pages scanned; every one is error-aware or in the documented allow-list (2 by design + 3 `PENDING HANDOFF` to PRs #107/#42) |
+| 5d | `corepack pnpm exec vitest run tests/release-stock-authorization.test.ts` | real, executed SQL | **pass — 20/20**; against a pre-0079 database **7 fail** (the denial cases), proving the check does the work |
+| 5e | `corepack pnpm exec vitest run tests/api-execute-revocation-flows.test.ts` | real, executed SQL | **pass — 11/11** (GRN confirm/cancel, transfer execute/cancel, batch loss, stock adjustment as staff/admin; anon denied) |
 | 6 | `corepack pnpm exec vitest run tests/admin-page-error-states.test.tsx tests/page-permission-guards.test.ts` | real | **pass — 12/12** |
 | 7 | `NEXT_PUBLIC_SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… corepack pnpm run build` | real | **pass** — 151 pages + 69 handlers compiled |
-| 8 | Migration replay, all 76 files in order (PGlite/PostgreSQL 16) | **simulated platform**, real SQL engine | **76/76 applied, 0 failures** |
+| 8 | Migration replay, all 76 files in order (PGlite/PostgreSQL 16) | **simulated platform**, real SQL engine | **76/76 applied, 0 failures**; `0078` and `0079` re-apply cleanly (idempotent) |
 | 9 | Second application of the whole set | simulated | 16 files fail on re-entry (all historical + `0073`); `0078` and `0079` re-apply cleanly |
 | 10 | Catalog audit (RLS, policies, definer fns, grants, buckets, indexes) | simulated | 95 tables/views all RLS-on; 444 public + 32 storage policies; 106 definer fns, 0 without `search_path`; 0 duplicate indexes; 0 unvalidated FKs; 10 buckets with the expected visibility |
 | 10a | `supabase/audits/migration_and_security_verification_readonly.sql` executed against that replay | **simulated platform**, real SQL | **11/11 blocks execute, 0 failures**, no DML/DDL token outside comments (so the file really is read-only). Blocks 3/9/10 contain several statements and are run as a *script* by the SQL Editor — a single-statement runner rejects them. Block 11 returns the 15 reviewed anon-callable functions and **0** `NO CALLER CHECK — REVIEW` rows |
@@ -507,7 +517,9 @@ Independent of 0074/0077/0078. It touches privileges and one function body, no
 data. Pre-check on staging (a) retailer B cannot release retailer A's order,
 (b) `anon` cannot execute `ensure_fefo_coverage` or any of the 14 RPCs,
 (c) the admin cancel button still releases stock, (d) the seller sub-order
-cancel test still passes. Post-check the two verification snippets at the
+cancel test still passes, (e) `tests/release-stock-authorization.test.ts` and
+`tests/api-execute-revocation-flows.test.ts` pass **on staging** (they are the
+salesman-cancel regression guard and the inventory-flow guard). Post-check the two verification snippets at the
 bottom of the file. Rollback exists and re-opens the two exposures — labelled
 as such.
 
@@ -548,11 +560,61 @@ re-apply; 0074 → rollback → re-apply. Record outcomes. Production rollback o
 6. **`0059` collision** with PR #107 must be resolved by that PR's owner
    (renumber to **0080+**, since 0079 is now taken); no #107 file was touched here.
 7. **Open PRs #42/#45/#66** still conflict among themselves; nothing was merged,
-   rebased or overwritten.
+   rebased or overwritten. Three files owned by #107/#42 were **reverted** out of
+   this branch this round, so the read-failure fix for those routes is pending
+   their owners (`docs/HANDOFF_TO_PR_OWNERS.md`).
 8. **No live Supabase/Storage verification** was possible ⇒ no production
    performance, RLS-under-load or signed-URL behaviour is claimed.
 
 ---
+
+---
+
+## 10. Security review round — release gate (2026-10-24, second pass)
+
+An independent statement-by-statement review of `0078`/`0079` against a full
+migration replay **found one real regression and two robustness gaps** in this
+branch's own work. All three are fixed here; nothing was applied to production.
+
+### 10.1 Found and fixed
+
+| # | Finding (in our own migrations) | How it was found | Fix |
+| --- | --- | --- | --- |
+| R1 | **0079 broke salesman-initiated cancellation.** `orders_salesman_update` (0009) lets a salesman set `orders.status` for their assigned retailers; the cancel trigger then called `release_order_stock`, which 0079 refused with `42501`, so the whole UPDATE failed. Executed: `SALESMAN CANCEL RESULT: You are not permitted to release stock for this order.` | authorization matrix on a disposable DB | The allowed set now **mirrors the 0009 RLS predicate** (`current_user_role() = 'salesman'` AND (`collected_by = auth.uid()` OR retailer assigned)). It grants no capability the salesman did not already have through RLS. Pinned by `tests/release-stock-authorization.test.ts` |
+| R2 | **0078 aborted on a database without 0002/0003** (`function is_admin_or_above() does not exist`), after H1–H3 had already applied — leaving a half-applied migration. | ran both files against an empty schema | H4 wrapped in a `do $h4$` block guarded on `to_regprocedure('public.is_admin_or_above()')` + `to_regclass('storage.objects')` |
+| R3 | **0079 aborted on a database without 0017/0064** (`relation "orders" does not exist`). | same probe | H6 wrapped in a `do $h6$` block guarded on the four relations it references, with a NOTICE that names the consequence (the unguarded body survives, H7's anon revocation still applies) |
+| R4 | The **0078 rollback** had the same unguarded-policy abort path. | rollback review | Same guard added to the rollback |
+| R5 | This branch had edited **three files owned by open PRs #107 and #42**. | cross-checked every changed path against the file lists of PRs 7/21/31/42/45/66/107 | Reverted those three files to the branch base (verified byte-identical) and moved the fixes to `docs/HANDOFF_TO_PR_OWNERS.md`. Note: PR #107's own version of the invoice page **already** throws on `orderError`, so that one closes on merge |
+
+### 10.2 What the review proved (executed, disposable PostgreSQL 16)
+
+| Claim | How it was proven | Result |
+| --- | --- | --- |
+| Function ownership | catalog query after the replay | all five hardened functions are owned by `postgres` (so definer bodies inside them keep working after the revokes) |
+| 0079 is idempotent | applied twice on the full schema | clean both times; `anon=false`, `authenticated=true`, caller check present |
+| 0078/0079 are safe without prerequisites | applied to an empty schema, and to a 0063-level schema | both **apply cleanly** (no-op / NOTICE) |
+| The anon revocations break nothing anonymous | exhaustive differential: every one of the **95** tables read as `anon` before vs after 0079 | **0 differences**; 22 tables were already unreadable to `anon` before and after |
+| Public flows still work | executed as `anon` | `is_phone_registered`, `submit_supplier_application` (returns an application id), banner/brand/category/area reads, product id reads: all OK |
+| Cost columns stay closed | executed as `anon` | `select cost_price from products` → `permission denied for table products` (pre-existing column grants: 20/21 columns) |
+| The two exposures are really closed | executed as `anon` | `release_order_stock` and `ensure_fefo_coverage` → `permission denied for function` |
+| The revocations do not break authorized inventory work | GRN confirm/cancel, transfer execute/cancel, batch loss, stock adjustment as staff/admin | all succeed (`tests/api-execute-revocation-flows.test.ts`, 11/11) |
+| The release check is what closes the hole | same test file run against a pre-0079 database | **7 cases fail** (the denials), i.e. the guards are doing the work |
+| Rollbacks are honest downgrades | applied both rollbacks, then re-applied 0079 | rollback re-opens `anon=true` and removes the caller check; re-applying 0079 restores it |
+| The audit script is read-only | 19 statements, all `SELECT`/`WITH`; executed whole-file with a **schema + data fingerprint** before/after | 0 non-select statements, 0 DML/DDL keywords, **fingerprints identical** |
+
+### 10.3 Reviewed and accepted as-is
+
+* `0078` H1–H3: revokes only, guarded on `to_regprocedure`, no data or policy change beyond the two banner storage policies.
+* `0079` H5: `ensure_fefo_coverage` has no legitimate API caller — its only call sites are 0017 definer bodies.
+* `0079` H7: the 14 `anon` revocations keep every `authenticated` grant; the RLS predicates that `public` policies evaluate for anonymous readers (`current_user_role`, `is_admin_or_above`, `is_staff_or_above`, `is_*_assigned_to_current_*`, `is_member_of_seller`, `can_current_*`) are **deliberately kept**.
+* Neither migration touches `banners` columns, `banner-drafts` policies (0077's), the retention registry, `vercel.json`, or any data row.
+
+### 10.4 Still unverified (cannot be proven from this repository)
+
+* Whether `0074`/`0077`/`0078`/`0079` are applied in `fhrmsrumsraprvutrpeo` — needs E1.
+* Whether the retention cron runs — needs E3/E4 (see `docs/OWNER_SECURITY_EVIDENCE_PACK.md`).
+* Live RLS/Storage/PostgREST behaviour and the multi-connection concurrency guarantees — PGlite is single-connection.
+* Whether PR #107's renumbering (to 0080+) has happened.
 
 ## Appendix A — reproduction
 

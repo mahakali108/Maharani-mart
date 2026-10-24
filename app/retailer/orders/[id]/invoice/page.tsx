@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Download } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requireUser } from '@/lib/auth/session';
 import { PrintButton } from '@/components/retailer/print-button';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
@@ -35,7 +34,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: order, error: orderError }, { data: retailer }, { data: itemData }] = await Promise.all([
+  const [{ data: order }, { data: retailer }, { data: itemData }] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, status, subtotal, gst_total, discount_total, grand_total, placed_at')
@@ -55,9 +54,6 @@ export default async function InvoicePage({ params }: { params: { id: string } }
       .eq('order_id', params.id),
   ]);
 
-  // An invoice that cannot be read must not 404: the customer would conclude
-  // the order was deleted. Fail loudly so the error boundary offers a retry.
-  throwIfReadFailed(orderError, 'Invoice');
   if (!order) notFound();
 
   const items = (itemData ?? []) as unknown as InvoiceOrderItemRow[];

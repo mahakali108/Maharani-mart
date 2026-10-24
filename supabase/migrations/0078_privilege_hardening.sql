@@ -115,14 +115,27 @@ $$;
 -- `storage.objects` is a Supabase-managed table: the policies below are the
 -- only rows touched, and no object is created, moved or deleted here.
 -- Re-runnable: each policy is dropped by name first, exactly like 0013/0074.
-drop policy if exists "staff_write_banners" on storage.objects;
-create policy "staff_write_banners" on storage.objects
-  for insert with check (bucket_id = 'banners' and is_admin_or_above());
+-- Guarded as well: a scratch/partially restored database may not have 0002's
+-- is_admin_or_above() yet, and an unguarded CREATE POLICY would abort the whole
+-- migration after H1–H3 had already been applied.
+do $h4$
+begin
+  if to_regprocedure('public.is_admin_or_above()') is null
+     or to_regclass('storage.objects') is null then
+    raise notice '0078 H4 skipped: storage.objects or public.is_admin_or_above() is missing.';
+    return;
+  end if;
 
-drop policy if exists "staff_update_banners" on storage.objects;
-create policy "staff_update_banners" on storage.objects
-  for update using (bucket_id = 'banners' and is_admin_or_above())
-  with check (bucket_id = 'banners' and is_admin_or_above());
+  drop policy if exists "staff_write_banners" on storage.objects;
+  create policy "staff_write_banners" on storage.objects
+    for insert with check (bucket_id = 'banners' and is_admin_or_above());
+
+  drop policy if exists "staff_update_banners" on storage.objects;
+  create policy "staff_update_banners" on storage.objects
+    for update using (bucket_id = 'banners' and is_admin_or_above())
+    with check (bucket_id = 'banners' and is_admin_or_above());
+end;
+$h4$;
 
 -- `staff_delete_banners` already used is_admin_or_above() in 0003 and is left
 -- untouched, as is the public read policy on the `banners` bucket: a public
