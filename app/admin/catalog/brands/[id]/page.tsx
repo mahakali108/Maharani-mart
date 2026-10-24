@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { BrandEditForm } from '@/components/admin/brand-edit-form';
 
@@ -11,8 +12,11 @@ interface BrandDetail {
 
 export default async function EditBrandPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { data: brand } = await supabase.from('brands').select('id, name, logo_url').eq('id', params.id).single<BrandDetail>();
+  const { data: brand, error: brandError } = await supabase.from('brands').select('id, name, logo_url').eq('id', params.id).single<BrandDetail>();
 
+  // `.single()` also fails when the row is missing (PGRST116); a broken read
+  // must not be reported to the operator as a deleted brand.
+  throwIfReadFailed(brandError, 'Brand');
   if (!brand) notFound();
 
   return (

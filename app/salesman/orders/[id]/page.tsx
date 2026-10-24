@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { formatQuantitySummary, groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { MarkDeliveredButton } from '@/components/salesman/mark-delivered-button';
@@ -34,12 +35,13 @@ export default async function SalesmanOrderDetailPage({ params }: { params: { id
   const user = await requireUser();
   const supabase = createClient();
 
-  const { data: order } = await supabase
+  const { data: order, error: orderError } = await supabase
     .from('orders')
     .select('id, order_number, status, grand_total, notes, retailer_id, collected_by, placed_at, retailers ( shop_name, address )')
     .eq('id', params.id)
     .maybeSingle<OrderRow>();
 
+  throwIfReadFailed(orderError, 'Order');
   if (!order) notFound();
 
   if (order.collected_by !== user.id) {

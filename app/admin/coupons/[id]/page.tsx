@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Ticket } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { CouponForm, type Option } from '@/components/admin/coupon-form';
@@ -35,7 +36,7 @@ export default async function AdminCouponEditPage({ params }: { params: { id: st
   await requirePagePermission('pricing.manage');
   const supabase = createClient();
 
-  const [{ data: coupon }, { data: retailerData }, { data: categoryData }, { data: brandData }, { data: productData }] =
+  const [{ data: coupon, error: couponError }, { data: retailerData }, { data: categoryData }, { data: brandData }, { data: productData }] =
     await Promise.all([
       supabase
         .from('coupons')
@@ -50,6 +51,7 @@ export default async function AdminCouponEditPage({ params }: { params: { id: st
       supabase.from('products').select('id, name').eq('is_active', true).order('name'),
     ]);
 
+  throwIfReadFailed(couponError, 'Coupon');
   if (!coupon) notFound();
 
   const toOptions = (rows: Array<{ id: string; name?: string; shop_name?: string }>): Option[] =>

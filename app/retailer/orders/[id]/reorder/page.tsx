@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ChevronRight, Info, RotateCcw, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { piecePriceFromCase } from '@/lib/retailer/case-pricing';
@@ -56,12 +57,14 @@ export default async function ReorderPage({ params }: { params: { id: string } }
   const user = await requireUser();
   const supabase = createClient();
 
-  const { data: order } = await supabase
+  const { data: order, error: orderError } = await supabase
     .from('orders')
     .select('id, order_number, placed_at')
     .eq('id', params.id)
     .eq('retailer_id', user.id)
     .maybeSingle<OrderRow>();
+  // A failed read is not a missing order.
+  throwIfReadFailed(orderError, 'Order');
   if (!order) notFound();
 
   const [{ data: retailer }, { data: itemData }] = await Promise.all([

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ClipboardList, ShoppingCart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requireUser } from '@/lib/auth/session';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,13 +35,14 @@ export default async function SalesmanRetailerDetailPage({ params }: { params: {
   // The explicit assignment filter is the application-level boundary;
   // retailers RLS repeats the same condition at the database boundary.
   // Therefore manually entering an unassigned retailer UUID returns 404.
-  const { data: retailer } = await supabase
+  const { data: retailer, error: retailerError } = await supabase
     .from('retailers')
     .select('id, shop_name, gstin, area_id, address, status, created_at')
     .eq('id', params.id)
     .eq('assigned_salesman_id', user.id)
     .maybeSingle<RetailerDetail>();
 
+  throwIfReadFailed(retailerError, 'Retailer');
   if (!retailer) notFound();
 
   // Separate profile/area queries preserve the safe retailer-list pattern

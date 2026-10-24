@@ -29,7 +29,8 @@ select version, name, inserted_at
 --    expected_gap: 0061 never existed (there is no 0061 file in the repo).
 --    0075 and 0076 are RESERVED and intentionally missing: 0075 is the
 --    on-hold 120-day retention migration, 0076 the deferred banner alt_text.
---    0079+ must not be allocated without checking open PRs (see §7 of the
+--    0079 is this audit's own review-only EXECUTE hardening (not applied);
+--    0080+ must not be allocated without checking open PRs (see §7 of the
 --    audit document).
 -- ---------------------------------------------------------------------------
 with repo_versions(version, note) as (
@@ -59,7 +60,8 @@ with repo_versions(version, note) as (
     ('0068', 'seller governance'), ('0069', 'seller portal'), ('0070', 'seller invite only'),
     ('0071', 'gaya default'), ('0072', 'super admin invitations'), ('0073', 'delivery pins'),
     ('0074', 'banner lifecycle'), ('0077', 'banner draft artwork'),
-    ('0078', 'privilege hardening')
+    ('0078', 'privilege hardening'),
+    ('0079', 'api execute hardening')
 )
 select r.version,
        r.note,
@@ -124,9 +126,12 @@ select column_name, data_type, is_nullable
 
 
 -- ---------------------------------------------------------------------------
--- 5. Migration 0078 — privilege posture of the three hardened functions.
+-- 5. Migrations 0078 + 0079 — privilege posture of the hardened functions.
 --    Expected after 0078: anon = false and authenticated = false for the two
 --    helpers; handle_new_user has no API-role grant at all.
+--    Expected after 0079: anon = false for ensure_fefo_coverage and
+--    release_order_stock (release_order_stock keeps authenticated = true —
+--    the admin cancel action and the order-cancel trigger need it).
 -- ---------------------------------------------------------------------------
 select p.proname,
        pg_get_function_identity_arguments(p.oid) as args,
@@ -144,7 +149,9 @@ select p.proname,
      'handle_new_user',
      'is_phone_registered',
      'submit_supplier_application',
-     'can_current_staff_read_profile'
+     'can_current_staff_read_profile',
+     'ensure_fefo_coverage',
+     'release_order_stock'
    )
  order by p.proname;
 
@@ -222,3 +229,41 @@ select status, count(*) as runs, max(completed_at) as last_completed
   from public.cleanup_runs
  group by status
  order by status;
+
+
+-- ---------------------------------------------------------------------------
+-- 11. SECURITY DEFINER functions still EXECUTE-able by `anon`.
+--     Supabase's default privileges grant EXECUTE on every new public function
+--     to anon/authenticated, so a definer helper is reachable at
+--     /rest/v1/rpc/<name> unless a migration withdraws the grant.
+--
+--     Expected after 0078 + 0079: ONLY the reviewed allow-list below.
+--       public endpoints  : is_phone_registered, submit_supplier_application
+--       RLS predicates    : current_user_role, is_admin_or_above,
+--                           is_staff_or_above, can_current_staff_read_profile,
+--                           can_current_user_view_delivery, is_member_of_seller,
+--                           and the is_*_assigned_to_current_* helpers
+--     Anything else in this list is a new exposure: either revoke it in a
+--     reviewed forward migration or justify it here. Trigger functions are
+--     excluded (they need no EXECUTE grant).
+-- ---------------------------------------------------------------------------
+select p.proname,
+       pg_get_function_identity_arguments(p.oid) as args,
+       exists (select 1 from pg_trigger t where t.tgfoid = p.oid and not t.tgisinternal) as is_trigger,
+       case
+         when p.proname in ('is_phone_registered', 'submit_supplier_application') then 'public endpoint'
+         when p.prosrc like '%auth.uid()%'
+           or p.prosrc like '%current_user_role%'
+           or p.prosrc like '%is_staff_or_above%'
+           or p.prosrc like '%is_admin_or_above%'
+           or p.prosrc like '%is_warehouse_assigned_to_current_staff%'
+           or p.prosrc like '%is_retailer_area_assigned_to_current_staff%' then 'caller-checked predicate/helper'
+         else 'NO CALLER CHECK — REVIEW'
+       end as posture
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.prosecdef
+   and not exists (select 1 from pg_trigger t where t.tgfoid = p.oid and not t.tgisinternal)
+   and has_function_privilege('anon', p.oid, 'EXECUTE')
+ order by posture desc, p.proname;

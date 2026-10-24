@@ -187,6 +187,12 @@ export async function fetchDeliveryDetail(
     .eq('order_id', orderId)
     .maybeSingle();
 
+  // A failed delivery read used to be indistinguishable from "no delivery task":
+  // both returned null, so every caller rendered a 404. Only a genuinely absent
+  // row is `null`; a read failure must reach the caller's error boundary.
+  if (deliveryResult.error) {
+    throw new Error(`Delivery could not be loaded [${deliveryResult.error.code ?? 'unknown'}]: ${deliveryResult.error.message}`);
+  }
   if (!deliveryResult.data) return null;
 
   const raw = deliveryResult.data as unknown as {

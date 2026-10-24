@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProductForm } from '@/components/admin/product-form';
 import { ProductImageManager } from '@/components/admin/product-image-manager';
@@ -72,7 +73,7 @@ export default async function EditProductPage({ params }: { params: { id: string
   const supabase = createClient();
 
   const [
-    { data: productRow },
+    { data: productRow, error: productError },
     { data: brandData },
     { data: categoryData },
     { data: imageData },
@@ -99,6 +100,9 @@ export default async function EditProductPage({ params }: { params: { id: string
       .order('created_at'),
   ]);
 
+  // `.single()` reports a missing row AND a failed read as null data; only the
+  // former is a 404. A schema/permission failure belongs in error.tsx.
+  throwIfReadFailed(productError, 'Product');
   if (!productRow) {
     notFound();
   }

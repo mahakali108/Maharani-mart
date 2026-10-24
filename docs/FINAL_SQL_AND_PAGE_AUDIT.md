@@ -17,13 +17,13 @@ git history; this file is the single authoritative deliverable).
 
 | Task | Status in this workspace | Why |
 | --- | --- | --- |
-| Read/inspect the whole repo (75 migrations, 151 pages, 69 API routes, 14 rollbacks, tests) | **done** | local checkout |
-| Apply every migration in order on a disposable PostgreSQL-compatible engine | **done** — 75/75, 0 failures (PGlite = PostgreSQL 16 WASM) | no credentials needed |
-| Query the resulting catalog: RLS, 476 policies, 106 `SECURITY DEFINER` fns, grants, buckets | **done** | executes the real SQL |
+| Read/inspect the whole repo (76 migrations, 151 pages, 69 API routes, 15 rollbacks, tests) | **done** | local checkout |
+| Apply every migration in order on a disposable PostgreSQL-compatible engine | **done** — 76/76, 0 failures (PGlite = PostgreSQL 16 WASM) | no credentials needed |
+| Query the resulting catalog: RLS, 444 public + 32 storage policies, 106 `SECURITY DEFINER` fns, per-role EXECUTE, buckets | **done** | executes the real SQL |
 | Cross-check every `.from()` / `.rpc()` in the app against that schema | **done** — 0 missing tables, 0 missing RPCs | static + catalog |
 | Route inventory, internal-link check, role-gate analysis, page error/empty-state audit | **done** | file tree + code |
-| Reproduce and fix page defects; add regression tests | **done** (30 pages + 1 lib module) | local |
-| typecheck / ESLint / Vitest / production build | **done** — 148 files, 2 602 tests pass | local toolchain |
+| Reproduce and fix page defects; add regression tests | **done** (26 read-failure pages + earlier layout/banner/list fixes + 2 query modules) | local |
+| typecheck / ESLint / Vitest / production build | **done** — 150 files, 2 639 tests pass | local toolchain |
 | Determine whether the 120-day deletion job is *running in Vercel* | **NOT POSSIBLE** — needs the Vercel project | no Vercel access |
 | Read the official project's `supabase_migrations.schema_migrations` | **NOT POSSIBLE** — needs DB access | no CLI/token/connection string |
 | Inspect production schema, policies, buckets, banner objects | **NOT POSSIBLE** | no `.env.local`, network to `*.supabase.co` blocked (TLS fails, HTTP 000) |
@@ -32,7 +32,7 @@ git history; this file is the single authoritative deliverable).
 **Minimum evidence needed to move from "repository-only" to "verified":**
 
 1. Output of `supabase/audits/migration_and_security_verification_readonly.sql`
-   (10 read-only SELECT blocks; run in the SQL editor of `fhrmsrumsraprvutrpeo`).
+   (11 read-only SELECT blocks; run in the SQL editor of `fhrmsrumsraprvutrpeo`).
 2. Vercel → Project → Cron Jobs / Settings → Environment Variables: whether a
    cron for `/api/cron/cleanup` is enabled and whether `CRON_SECRET` is set.
 3. The deployed `NEXT_PUBLIC_SUPABASE_URL` value (URL only, never keys), to prove
@@ -45,9 +45,9 @@ git history; this file is the single authoritative deliverable).
 
 1. **Migration replay.** Stubbed the Supabase platform surface (`auth.users`,
    `auth.uid()`, `storage.buckets/objects`, `anon/authenticated/service_role`,
-   Supabase default privileges) and applied **all 75** files from
+   Supabase default privileges) and applied **all 76** files from
    `supabase/migrations` in filename order to PGlite (PostgreSQL 16 compiled to
-   WASM). Result: 75 applied, 0 failed.
+   WASM). Result: 76 applied, 0 failed.
 2. **Second pass (idempotency).** Re-applied the entire set on the same
    database: 16 files fail on re-entry (historical, non-idempotent by design,
    plus `0073` which is not).
@@ -79,10 +79,10 @@ itself documents otherwise.
 | Category | Files | Evidence |
 | --- | --- | --- |
 | Applied **and verified** | **none** | production catalog unreachable |
-| Not applied (documented in-repo) | `0074`, `0077`, `0078` | headers + `docs/MIGRATION_APPLICATION_EVIDENCE.md`; `0078` is new here |
+| Not applied (documented in-repo) | `0074`, `0077`, `0078`, `0079` | headers + `docs/MIGRATION_APPLICATION_EVIDENCE.md`; `0078`/`0079` are new here |
 | Partially applied / drift — cannot be excluded | `0073` (not re-runnable), and any history row whose effects are missing | second-pass test; §2.3 |
 | Conflicting / duplicated / unsafe | `0055` (armed retention), `0073` (retry hazard), `0059` (number collision with PR #107), `0061` (dangling reference), 16 files not re-runnable | executed tests + PR file lists |
-| Unverified | the remaining 71 | no production access |
+| Unverified | the remaining 72 | no production access |
 
 ### 2.2 Items the mission named explicitly
 
@@ -92,11 +92,12 @@ itself documents otherwise.
 | **0074** banner lifecycle | **Required by code already on `main`** (`lib/retailer/home-data.ts:173`, `lib/mobile/catalog-service.ts:512` filter `status='published'`; admin actions write `status`/`image_url_mobile`). Additive and re-runnable; safe SQL, but deploy order is wrong while it is unapplied — reads fail with `42703`. | grep + replay |
 | **0077** draft storage | **Unapproved, and inert if applied alone**: no page or action references `draft_image_path` / `draft_image_mobile_path`; `types/database.types.ts` has no such columns; the copy-on-publish module (`lib/admin/banner-artwork.ts`) is not wired to any UI. Creates a private bucket + 4 admin-only policies. | grep + types |
 | **0078** privilege hardening (new, this branch) | **Not applied anywhere.** Forward-only, re-runnable, guarded: revokes `EXECUTE` on `fefo_plan_for_product`, `current_offer_floor_paise`, `handle_new_user` from API roles; narrows two banner storage write policies to `is_admin_or_above()`. Matching rollback restores the previous grants **verbatim** (documented as a security downgrade). | `tests/privilege-hardening-db.test.ts` (11 executed cases) |
-| **0059** vs PR #107 | **Collision, unresolved by design.** `main` has `0059_supplier_applications.sql`; PR #107 adds `0059_india_compliance_safety.sql`. #107 must renumber (0079+) before it can ever be applied. **No file owned by #107 was modified.** | `gh pr view 107 --json files` |
+| **0079** API EXECUTE hardening, part 2 (new, this turn) | **Not applied anywhere.** Revokes `anon`/`authenticated` EXECUTE on `ensure_fefo_coverage` (it inserts inventory batches, no caller check); adds the missing caller check to `release_order_stock` (same body, `42501` for anon and for any non-owner/non-seller/non-staff caller); withdraws `anon` EXECUTE on 14 inventory/cost RPCs. Keeps `authenticated` grants and the RLS predicates that `public` policies evaluate. Rollback restores 0017's unguarded body and the anon grants — **security-weakening, labelled in the file**. | `tests/api-privilege-hardening.test.ts` (24 executed cases; 20 of them fail on the 0078-only database) |
+| **0059** vs PR #107 | **Collision, unresolved by design.** `main` has `0059_supplier_applications.sql`; PR #107 adds `0059_india_compliance_safety.sql`. #107 must renumber (now **0080+**, because this branch took 0079 for its own review-only hardening) before it can ever be applied. **No file owned by #107 was modified.** | `gh pr view 107 --json files` |
 | **0061** | **Does not exist and must not be invented.** `0062` still references a "0054/0061 allowlist convention" in a comment. | file list + grep |
 | 0075 / 0076 | **Reserved and absent** (0075 = on-hold retention archive, 0076 = deferred banner `alt_text`). This branch used 0078 accordingly. | 0077 header |
 
-### 2.3 Full inventory (all 75 migrations)
+### 2.3 Full inventory (all 76 migrations)
 
 | # | Migration | Purpose | Replay | Re-run | Production | Action |
 | --- | --- | :-: | :-: | :-: | --- | --- |
@@ -175,6 +176,7 @@ itself documents otherwise.
 | 73 | `0074_banner_lifecycle_and_variants.sql` | Banner lifecycle and responsive artwork. | OK | yes | Repo-only, **not applied** (repo docs) | **Blocking for the app** — see §4 S2 |
 | 74 | `0077_banner_draft_artwork.sql` | 0077 — private storage for UNPUBLISHED banner artwork. | OK | yes | Repo-only, **not applied**; unreviewed | Hold — feature not wired end-to-end |
 | 75 | `0078_privilege_hardening.sql` | 0078 — forward-only privilege hardening found by the repository SQL audit. | OK | yes | **New in this branch — not applied** | Owner approval; apply after 0074 decision (order-independent) |
+| 76 | `0079_api_execute_hardening.sql` | 0079 — API-role EXECUTE hardening, part 2: `ensure_fefo_coverage` owner-only, `release_order_stock` caller check, `anon` grants withdrawn from 14 inventory/cost RPCs. | OK | yes | **New this turn — not applied** | Owner approval; independent of 0074/0077/0078 |
 
 ---
 
@@ -235,6 +237,16 @@ commit;
 — if runs exist with `completed_at` recent, deletion has already been happening
 and the accountant must review what was removed.
 
+*Executed finding (this branch):* `guard_data_retention_rules_mutation()`
+(0055) rejects UPDATE/DELETE/INSERT on `data_retention_rules` unless the
+current role is `postgres`/`supabase_admin`. The **service-role key cannot
+pause the job** (it fails `42501`); block B must be run in the SQL Editor (or
+as `postgres`) or it will silently be assumed to have worked. The same run
+confirmed the 12 registry rows: `business_120` = allocations, returns,
+coins_ledger, payment_records, stock_movements, orders (all `enabled = true`);
+`temporary_90` = carts, notifications, notification_logs, invites,
+ai_rate_limit, cleanup_runs.
+
 **C. Code side (permanent, reviewed via PR — not done here)**
 Remove the `crons` entry from `vercel.json` and/or gate `run_data_cleanup` behind
 a kill-switch setting. **`vercel.json` and the retention files are owned by open
@@ -276,11 +288,20 @@ behaviour or misleading UI · **P3** hygiene.
 | 13 | **P3** | `middleware.ts` has dead code: `PUBLIC_PATHS` / `isPublicPath()` unused; the list omits `/register-supplier`, `/forgot-password`, `/legal/*` (harmless today). | grep | Reported only (auth path, cosmetic) |
 | 14 | **P3** | `lib/admin/seller-actions.ts` and `lib/delivery/otp.ts` handle secrets but lack an explicit `import 'server-only'` (they are only imported from server modules today). | grep of `SERVICE_ROLE` users | Reported only |
 | 15 | **P3** | 16 historical migrations are not re-runnable; `is_phone_registered` is intentionally anon-callable (enumeration surface, rate-limit decision open since 0057). | second-pass replay; 0057 note | Reported, by design |
+| 16 | **P1** | `ensure_fefo_coverage(uuid,uuid,int)` — `SECURITY DEFINER`, **no caller check**, EXECUTE-able by `anon` **and** `authenticated`, and it **writes**: when batches do not cover the request it inserts rows into `inventory_batches`. Anyone with the publishable key could create stock for any product/warehouse and skew the movement ledger. | privilege probe (`has_function_privilege('anon',…)=true`), body has no guard, executed call as `anon` reached the insert path | **Fix prepared in 0079** (owner-only; both callers are definer bodies in 0017) |
+| 17 | **P1** | `release_order_stock(uuid)` — `SECURITY DEFINER`, deliberately unguarded, EXECUTE-able by `anon` and `authenticated`. Any signed-in account could release another retailer's live reservations (the function then frees those units for a second sale). 0017's comment explains who calls it, not why nobody may. | executed: retailer B released retailer A's order before the fix, `42501` after | **Fix prepared in 0079** (staff/admin, owning retailer, seller with a child order, `service_role`, or a JWT-less DB session; identical body/idempotency) |
+| 18 | **P3** | 14 further definer functions (`adjust_product_stock`, `confirm_grn`, `cancel_grn`, `cancel_stock_transfer`, `execute_stock_transfer`, `record_batch_loss`, `reserve_order_stock`, `require_inventory_role`, `consume_ai_confirmation`, `consume_ai_rate_limit`, and four `admin_*_cost(s)` readers) were EXECUTE-able by `anon` although each either mutates stock or returns confidential cost behind a caller check an anonymous call can never satisfy. | privilege probe over the whole catalog | **Fix prepared in 0079** (anon-only revoke; `authenticated` grants unchanged) |
+| 19 | **P2** | 26 detail pages turned a **failed read into a 404**: they destructured `{ data }`, dropped `error`, and called `notFound()`, so a query/permission failure was reported to the user as "this record no longer exists" (orders, products, retailers, sellers, wallets, support, goods receipts, invoices, deliveries). | page scan (31 `notFound()` sites) + per-page read; `lib/supabase/read-guard.ts`, `lib/delivery/queries.ts` | **Fixed** — 26 pages + 2 query modules + the shared `read-guard` distinguish "no row" from "read failed"; `tests/detail-pages-read-failure.test.ts` keeps it that way (see §6.1) |
 
 ### 4.1 Verified-good (so the list above is read in context)
 
-* All **89** public tables have RLS enabled; no `DISABLE ROW LEVEL SECURITY` anywhere.
-* **106** `SECURITY DEFINER` functions, **0** without a pinned `search_path`.
+* All **95** public tables/views have RLS enabled; no `DISABLE ROW LEVEL SECURITY` anywhere.
+  (Count is taken from the catalog after the full replay; earlier drafts said 89
+  because `information_schema` + `pg_tables` disagreed on the partitioned/`if not
+  exists` tables. `tests/migration-catalog-invariants.test.ts` now asserts it.)
+* **106** `SECURITY DEFINER` functions, **0** without a pinned `search_path`; **0**
+  reachable by `anon` without either a caller check or a reviewed public purpose
+  once 0078 + 0079 are applied (the invariant is now a test, not a paragraph).
 * **0** duplicate indexes; **206** foreign keys; 3 tables intentionally
   policy-less and service-role only (`cleanup_runs`, `data_retention_rules`,
   `supplier_application_rate_limits`).
@@ -293,6 +314,12 @@ behaviour or misleading UI · **P3** hygiene.
   (`active_account_update` restrictive policy).
 * Service-role clients appear only in server modules (`lib/supabase/server.ts`
   is `server-only`; no client component imports it).
+* Every bucket the app targets exists after the replay, every private bucket's
+  policy is path-scoped (no bare `bucket_id = …` read), and banner artwork
+  writes are `is_admin_or_above()` only.
+* The **application ↔ schema contract** is now executed: 699 source files,
+  **1 041** `.from()` references and **61** `.rpc()` references all resolve
+  (plus every RPC's argument names), and no migration version is duplicated.
 
 ---
 
@@ -302,7 +329,11 @@ behaviour or misleading UI · **P3** hygiene.
 | --- | --- | --- | --- |
 | `supabase/migrations/0078_privilege_hardening.sql` | forward-only migration | **No** | Guarded on `to_regprocedure(...)`; re-runnable; no DROP TABLE/COLUMN, no DELETE, no data change; addresses #3, #4, #5 |
 | `supabase/rollbacks/0078_privilege_hardening.sql` | rollback | No | Restores the pre-0078 grants and the two 0003 policies verbatim. **This rollback weakens security** (re-opens anon/authenticated access to the price floor and inventory plan) — documented in the file header; use only on staging or with written acceptance |
-| `supabase/audits/migration_and_security_verification_readonly.sql` | read-only audit | n/a | 10 SELECT blocks: history, numbering, 0074/0077 effects, grant posture, banner storage, RLS coverage, definer hygiene, **COUNT-only** object inventory, retention registry + run history |
+| `supabase/migrations/0079_api_execute_hardening.sql` | forward-only migration | **No** | Guarded on `to_regprocedure(...)`; re-runnable; no DROP/DELETE/data change; addresses #16, #17, #18. Keeps every `authenticated` grant and every predicate that `public` RLS policies evaluate for anonymous readers |
+| `supabase/rollbacks/0079_api_execute_hardening.down.sql` | rollback | No | Restores 0017's unguarded `release_order_stock` body and the pre-0079 `anon` grants **verbatim**. **This rollback weakens security** (re-opens #16 and #17) — header says so; use only for an exact revert |
+| `tests/api-privilege-hardening.test.ts` | test (executed) | n/a | 24 cases: anon/authenticated `ensure_fefo_coverage`, owner/non-owner/staff/service `release_order_stock`, all 14 revoked grants, and the deliberate exceptions (`is_phone_registered`, `submit_supplier_application`, RLS predicates, anonymous catalog read) |
+| `tests/migration-catalog-invariants.test.ts` | test (executed) | n/a | 13 catalog invariants + app↔schema contract (RLS coverage, policy-less allow-list, definer `search_path`, anon-exposure allow-list, buckets, private-bucket policies, duplicate indexes, unvalidated FKs, contiguous numbering, table/view/RPC references) |
+| `supabase/audits/migration_and_security_verification_readonly.sql` | read-only audit (edited) | n/a | **11** SELECT blocks: history, numbering (76 versions incl. 0079), 0074/0077 effects, 0078/0079 grant posture, banner storage, RLS coverage, definer hygiene, **COUNT-only** object inventory, retention registry + run history, and the new anon-EXECUTE inventory (must be empty of `NO CALLER CHECK — REVIEW` rows) |
 | (unchanged) `supabase/migrations/0055_data_retention_cleanup.sql` | — | — | **On hold.** No retention or deletion job was added or altered |
 
 No historical migration was edited, renumbered or replayed. No table, column,
@@ -327,6 +358,21 @@ internal links (243 static `href` literals) · 0 protected pages without a guard
 | `app/admin/orders/page.tsx` | query error ⇒ "No orders yet"; a failed continuation ⇒ "No more orders" | failure notice for the first batch; the load-more action throws so the client shows an error row instead of an end-of-list |
 | `app/admin/sellers/page.tsx` + `lib/admin/sellers-query.ts` | `listSellers` swallowed errors and returned `[]`, page rendered "No sellers yet" | `failed` / `failureMessage` in the contract; explicit notice |
 | 28 pages (list in §6.3) | throwing guard during render ⇒ error boundary for an authorization decision | `requirePagePermission` (redirect to `/unauthorized`) |
+| `app/retailer/orders/[id]/page.tsx`, `app/admin/orders/[id]/page.tsx` | failed read ⇒ 404 ("order deleted") | `throwIfReadFailed(error, 'Order')` before `notFound()` |
+| `app/admin/products/[id]/page.tsx` | `.single()` error ⇒ 404 | error surfaced; 404 only for `PGRST116` |
+| `app/admin/retailers/[id]/page.tsx`, `app/admin/wallets/[id]/page.tsx` | failed retailer read ⇒ 404 | error destructured and rethrown to `error.tsx` |
+| `app/admin/sellers/[id]/page.tsx` + `lib/admin/sellers-query.ts` | `getSellerDetail` returned `null` for both "missing" and "failed" | `failureMessage` on the contract; page throws on failure, 404 only on absence |
+| `app/admin/support/[id]/page.tsx`, `app/retailer/support/[id]/page.tsx` | failed ticket read ⇒ 404; also hid the RLS "not yours" case behind the same 404 message | read failure thrown; `notFound()` kept for "no row visible to you" |
+| `app/retailer/orders/[id]/invoice/page.tsx` | a **money document** 404'd on a read error | read failure thrown; invoice only 404s when the order does not exist |
+| `app/admin/inventory/grn/[id]/page.tsx` | failed GRN read ⇒ "receipt deleted" | read failure thrown |
+| `lib/delivery/queries.ts` (`fetchDeliveryDetail`) | returned `null` for a failed read, so `/admin/delivered/[orderId]`, `/retailer/orders/[id]/delivery`, `/salesman/deliveries/[orderId]`, `/staff/deliveries/[orderId]` and the mobile delivery route all answered 404/`not_found` | error thrown with code + message; mobile route already maps a thrown error to `503 database_unavailable`, which is the honest answer |
+| `app/admin/areas/[id]`, `admin/catalog/brands/[id]`, `admin/catalog/categories/[id]`, `admin/coupons/[id]`, `admin/routes/[id]`, `admin/team/[id]`, `admin/warehouses/[id]`, `admin/suppliers/applications/[id]` | same defect on `.single()` / `.maybeSingle()` — a 42703 or an RLS denial showed as "deleted" | `throwIfReadFailed(...)` before `notFound()` |
+| `app/salesman/orders/[id]`, `salesman/retailers/[id]`, `staff/orders/[id]`, `retailer/orders/[id]/reorder` | same defect on order/retailer detail | `throwIfReadFailed(...)` before `notFound()` |
+| `app/retailer/catalog/[id]` (product **and** pack resolution) | three lookups 404'd on failure — on the customer-facing product page | all three errors thrown |
+| `app/retailer/brands/[id]` | `errors.brand` flag ignored before `notFound()` | flag now throws |
+| `app/retailer/categories/[id]` | `errors.category` flag ignored before `notFound()` | flag now throws |
+| `app/salesman/orders/new` | a failed retailer read rendered "No active retailers assigned" — a false statement about the salesman's book | read failure thrown; the empty state now only means empty |
+| `lib/supabase/read-guard.ts` + `tests/detail-pages-read-failure.test.ts` | the class, not just the instances | shared helper + a scan that fails if any `notFound()` page stops distinguishing the two cases (2 documented exceptions) |
 
 ### 6.2 Audited, no change needed
 
@@ -339,6 +385,7 @@ internal links (243 static `href` literals) · 0 protected pages without a guard
 | Admin (62) | now guarded twice (middleware + layout); narrower powers via page guards; `/admin/control-center*` requires Super Admin |
 | Mobile API (69 handlers) | every RPC and table they reference exists in the migration set |
 | Loading/empty/error states | root + role shells + 16/8 segment boundaries; empty states are real empty states (the four misleading ones are fixed above) |
+| `notFound()` for authorization, not for absence (`salesman/orders/new`'s unassigned-retailer branch, role checks in the retailer/staff/salesman layouts) | these 404 deliberately so a URL cannot be used to enumerate accounts | unchanged — but the page's *read* failure no longer shares that path |
 
 ### 6.3 Pages converted to the redirecting guard
 
@@ -372,13 +419,18 @@ All run in this workspace on this branch.
 | 1 | `corepack pnpm install --frozen-lockfile` | setup | ok (`@supabase/supabase-js` 2.110.7 per lockfile) |
 | 2 | `corepack pnpm run typecheck` (`tsc --noEmit`) | real | **pass**, exit 0 |
 | 3 | `corepack pnpm run lint` (`next lint`) | real | **pass** — "No ESLint warnings or errors" |
-| 4 | `corepack pnpm run test` (`vitest run`) | real | **pass — 148 files / 2 602 tests** (baseline at start of mission: 144 / 2 572) |
+| 4 | `corepack pnpm run test` (`vitest run`) | real | **pass — 151 files / 2 643 tests** (baseline at start of mission: 144 / 2 572; +71 across the two repair waves) |
 | 5 | `corepack pnpm exec vitest run tests/privilege-hardening-db.test.ts tests/admin-layout-guard.test.ts` | real | **pass — 18/18** |
+| 5a | `corepack pnpm exec vitest run tests/api-privilege-hardening.test.ts` | real, executed SQL | **pass — 24/24**; the same file run against the 0078-only database fails **20/24**, which is the proof the migration is what closes those holes |
+| 5b | `corepack pnpm exec vitest run tests/migration-catalog-invariants.test.ts` | real, executed SQL | **pass — 13/13** (95 tables, 444 public + 32 storage policies, 106 definer fns, 10 buckets, 1 041 `.from()` + 61 `.rpc()` references) |
+| 5c | `corepack pnpm exec vitest run tests/detail-pages-read-failure.test.ts` | real (static over 151 pages) | **pass — 4/4**: 31 `notFound()` pages scanned, 0 without an error path beyond the 2 documented exceptions |
 | 6 | `corepack pnpm exec vitest run tests/admin-page-error-states.test.tsx tests/page-permission-guards.test.ts` | real | **pass — 12/12** |
 | 7 | `NEXT_PUBLIC_SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… corepack pnpm run build` | real | **pass** — 151 pages + 69 handlers compiled |
-| 8 | Migration replay, all 75 files in order (PGlite/PostgreSQL 16) | **simulated platform**, real SQL engine | **75/75 applied, 0 failures** |
-| 9 | Second application of the whole set | simulated | 16 files fail on re-entry (all historical + `0073`); `0078` re-applies cleanly |
-| 10 | Catalog audit (RLS, policies, definer fns, grants, buckets, indexes) | simulated | 89 tables all RLS-on; 476 policies (444 public + 32 storage); 106 definer fns, 0 without `search_path`; 0 duplicate indexes |
+| 8 | Migration replay, all 76 files in order (PGlite/PostgreSQL 16) | **simulated platform**, real SQL engine | **76/76 applied, 0 failures** |
+| 9 | Second application of the whole set | simulated | 16 files fail on re-entry (all historical + `0073`); `0078` and `0079` re-apply cleanly |
+| 10 | Catalog audit (RLS, policies, definer fns, grants, buckets, indexes) | simulated | 95 tables/views all RLS-on; 444 public + 32 storage policies; 106 definer fns, 0 without `search_path`; 0 duplicate indexes; 0 unvalidated FKs; 10 buckets with the expected visibility |
+| 10a | `supabase/audits/migration_and_security_verification_readonly.sql` executed against that replay | **simulated platform**, real SQL | **11/11 blocks execute, 0 failures**, no DML/DDL token outside comments (so the file really is read-only). Blocks 3/9/10 contain several statements and are run as a *script* by the SQL Editor — a single-statement runner rejects them. Block 11 returns the 15 reviewed anon-callable functions and **0** `NO CALLER CHECK — REVIEW` rows |
+| 10b | RPC argument-name check (61 call sites vs `proargnames`) | static + catalog | 0 mismatches |
 | 11 | RPC/table cross-check vs catalog | static + simulated | 0 missing |
 | 12 | Internal link check | static | 0 broken / 243 literals |
 | 13 | RLS & Storage against a real non-production Supabase project | **live** | **NOT RUN — no credentials** |
@@ -421,7 +473,9 @@ SQL editor of `fhrmsrumsraprvutrpeo`. Attach queries 1–10. Confirm:
 * query 2 shows `0074`/`0077`/`0078` as `NOT APPLIED` (expected);
 * query 3 shows banner columns per 0074 or not at all (drift check);
 * query 8 returns **0 rows**;
-* query 10 shows whether `business_120` rules are enabled.
+* query 10 shows whether `business_120` rules are enabled;
+* query 11 lists only the reviewed anon-callable functions (no
+  `NO CALLER CHECK — REVIEW` row).
 
 **Step 2 — bind the target.** Confirm Vercel `NEXT_PUBLIC_SUPABASE_URL` is
 `https://fhrmsrumsraprvutrpeo.supabase.co` and that Preview ≠ Production. If
@@ -448,6 +502,15 @@ Independent of 0074. Pre-check on staging; post-check §“Verification” foote
 the file (grants all false for API roles; storage policies mention
 `is_admin_or_above`). Rollback exists and is documented as a downgrade.
 
+**Step 6b — apply `0079` to production (approval: owner).**
+Independent of 0074/0077/0078. It touches privileges and one function body, no
+data. Pre-check on staging (a) retailer B cannot release retailer A's order,
+(b) `anon` cannot execute `ensure_fefo_coverage` or any of the 14 RPCs,
+(c) the admin cancel button still releases stock, (d) the seller sub-order
+cancel test still passes. Post-check the two verification snippets at the
+bottom of the file. Rollback exists and re-opens the two exposures — labelled
+as such.
+
 **Step 7 — keep on hold.**
 `0077` (unapproved; nothing consumes it) and `0055`/`0075` (retention window
 pending legal + accountant review). No banner objects are moved or deleted; no
@@ -463,8 +526,8 @@ RPCs.
 the four error-state pages behave (blank/functional queries show empty states;
 a deliberately broken query shows the notice).
 
-**Rollback drills (staging):** 0078 → rollback → re-apply; 0074 → rollback →
-re-apply. Record outcomes. Production rollback of 0074 drops two columns
+**Rollback drills (staging):** 0078 → rollback → re-apply; 0079 → rollback →
+re-apply; 0074 → rollback → re-apply. Record outcomes. Production rollback of 0074 drops two columns
 (**data loss**) — the rollback file says so; pause drafts first.
 
 ---
@@ -477,11 +540,13 @@ re-apply. Record outcomes. Production rollback of 0074 drops two columns
    read-only script is run.
 3. **`0074` unapplied while `main` depends on it** ⇒ banner reads/writes fail on
    a 0073 database.
-4. **`0078` needs approval** to close the anon/authenticated RPC exposure and
-   the staff-writes-banner-artwork gap.
+4. **`0078` + `0079` need approval** to close the SECURITY DEFINER RPC exposures
+   (`fefo_plan_for_product`, `current_offer_floor_paise`, `ensure_fefo_coverage`,
+   `release_order_stock`, 14 anon-executable helpers) and the
+   staff-writes-banner-artwork gap.
 5. **Auth "Confirm email"** must be confirmed ON (staff-role-at-signup risk).
 6. **`0059` collision** with PR #107 must be resolved by that PR's owner
-   (renumber to 0079+); no #107 file was touched here.
+   (renumber to **0080+**, since 0079 is now taken); no #107 file was touched here.
 7. **Open PRs #42/#45/#66** still conflict among themselves; nothing was merged,
    rebased or overwritten.
 8. **No live Supabase/Storage verification** was possible ⇒ no production

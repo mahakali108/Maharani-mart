@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { StaffEditForm } from '@/components/admin/staff-edit-form';
@@ -24,13 +25,14 @@ export default async function EditStaffPage({ params }: { params: { id: string }
   await requirePagePermission('team.manage');
 
   const supabase = createClient();
-  const { data: staffMember } = await supabase
+  const { data: staffMember, error: staffMemberError } = await supabase
     .from('profiles')
     .select('id, full_name, phone, role')
     .eq('id', params.id)
     .in('role', ['staff', 'salesman'])
     .maybeSingle<StaffDetail>();
 
+  throwIfReadFailed(staffMemberError, 'Team member');
   if (!staffMember) notFound();
 
   const month = indiaTodayDateKey().slice(0, 7);

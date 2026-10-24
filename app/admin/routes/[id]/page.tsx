@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AddRouteStopForm } from '@/components/admin/add-route-stop-form';
 import { RemoveRouteStopButton } from '@/components/admin/remove-route-stop-button';
@@ -26,7 +27,7 @@ interface RetailerOption {
 export default async function AdminRouteDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const [{ data: route }, { data: stopData }, { data: retailerData }] = await Promise.all([
+  const [{ data: route, error: routeError }, { data: stopData }, { data: retailerData }] = await Promise.all([
     supabase.from('routes').select('id, name, profiles ( full_name )').eq('id', params.id).maybeSingle<RouteDetail>(),
     supabase
       .from('route_customers')
@@ -36,6 +37,7 @@ export default async function AdminRouteDetailPage({ params }: { params: { id: s
     supabase.from('retailers').select('id, shop_name').eq('status', 'active').order('shop_name'),
   ]);
 
+  throwIfReadFailed(routeError, 'Route');
   if (!route) notFound();
 
   const stops = (stopData ?? []) as unknown as StopRow[];

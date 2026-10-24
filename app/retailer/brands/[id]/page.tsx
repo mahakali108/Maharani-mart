@@ -37,6 +37,11 @@ export default async function RetailerBrandDetailPage({ params }: { params: { id
     null,
     canResolvePrices
   );
+  // `errors.brand` is a failed read, not a missing brand: 404 here told the
+  // customer the brand had been removed.
+  if (data.errors.brand) {
+    throw new Error('This brand could not be loaded. Please try again.');
+  }
   if (!data.brand) notFound();
 
   /** Server Action for the batches after the first; the brand id is captured. */

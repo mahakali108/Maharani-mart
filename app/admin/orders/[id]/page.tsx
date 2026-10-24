@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { formatQuantitySummary, groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { can } from '@/lib/permissions/permissions';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminOrderActions } from '@/components/admin/order-actions-panel';
@@ -49,7 +50,7 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
   const user = await requireUser();
   const supabase = createClient();
 
-  const [{ data: order }, { data: itemData }, { data: historyData }, { data: deliveryData }, { data: staffData }] = await Promise.all([
+  const [{ data: order, error: orderError }, { data: itemData }, { data: historyData }, { data: deliveryData }, { data: staffData }] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, status, subtotal, gst_total, grand_total, notes, cancelled_reason, placed_at, retailers ( shop_name, address )')
@@ -76,6 +77,8 @@ export default async function AdminOrderDetailPage({ params }: { params: { id: s
       .order('full_name'),
   ]);
 
+  // A failed read must not be reported as a missing order.
+  throwIfReadFailed(orderError, 'Order');
   if (!order) notFound();
 
   const { data: subOrderData } = await supabase.rpc(

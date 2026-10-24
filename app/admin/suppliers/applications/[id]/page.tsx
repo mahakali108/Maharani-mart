@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { getSignedUrl } from '@/lib/storage/signed-url';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 import { Card } from '@/components/ui/card';
@@ -58,7 +59,10 @@ export default async function SupplierApplicationDetailPage({ params }: { params
     .select('*')
     .eq('id', params.id)
     .maybeSingle();
-  if (error || !data) notFound();
+  // A failed read is not a deleted application (and the reviewer needs to
+  // know their decision screen failed to load).
+  throwIfReadFailed(error, 'Supplier application');
+  if (!data) notFound();
   const s = data as unknown as SupplierDetail;
 
   // Possible-duplicate warning (NOT a block): phone/email is contact data,

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { formatRowQuantity, rowPieces, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { DispatchButton } from '@/components/staff/dispatch-button';
@@ -33,7 +34,7 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
   await requirePagePermission('orders.view.all');
   const supabase = createClient();
 
-  const [{ data: order }, { data: itemData }] = await Promise.all([
+  const [{ data: order, error: orderError }, { data: itemData }] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_number, status, warehouse_id, grand_total, placed_at, retailers ( shop_name, address ), warehouses ( name )')
@@ -45,6 +46,7 @@ export default async function StaffOrderDetailPage({ params }: { params: { id: s
       .eq('order_id', params.id),
   ]);
 
+  throwIfReadFailed(orderError, 'Order');
   if (!order) notFound();
 
   const items = (itemData ?? []) as unknown as OrderItemRow[];

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { WalletBalanceCards } from '@/components/admin/wallet-balance-cards';
 import { WalletLedgerTable } from '@/components/admin/wallet-ledger-table';
@@ -63,7 +64,7 @@ interface OrderRow {
 export default async function AdminWalletDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const [{ data: retailer }, { data: creditAccount }, { data: ledgerData }, { data: orderData }, { data: profile }] =
+  const [{ data: retailer, error: retailerError }, { data: creditAccount }, { data: ledgerData }, { data: orderData }, { data: profile }] =
     await Promise.all([
       supabase
         .from('retailers')
@@ -94,6 +95,8 @@ export default async function AdminWalletDetailPage({ params }: { params: { id: 
       supabase.from('profiles').select('full_name, phone').eq('id', params.id).maybeSingle<{ full_name: string; phone: string }>(),
     ]);
 
+  // Wallet/credit reads are money: a failure must never render as "not found".
+  throwIfReadFailed(retailerError, 'Retailer wallet');
   if (!retailer) notFound();
 
   const ledger = ledgerData ?? [];

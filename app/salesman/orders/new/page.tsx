@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { ShoppingCart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
@@ -48,7 +49,7 @@ export default async function NewSalesmanOrderPage({
   const user = await requireUser();
   const supabase = createClient();
 
-  const { data: retailerData } = await supabase
+  const { data: retailerData, error: retailerError } = await supabase
     .from('retailers')
     .select('id, shop_name, area_id, status')
     .eq('assigned_salesman_id', user.id)
@@ -56,6 +57,9 @@ export default async function NewSalesmanOrderPage({
     .order('shop_name')
     .returns<AssignedRetailer[]>();
 
+  // Without this the failure rendered as "No active retailers assigned" — a
+  // statement about the salesman's book of business that was simply untrue.
+  throwIfReadFailed(retailerError, 'Assigned retailers');
   const retailers = retailerData ?? [];
   if (retailers.length === 0) {
     return (

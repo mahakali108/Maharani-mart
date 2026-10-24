@@ -19,6 +19,7 @@ import {
 import { formatQuantitySummary, formatRowQuantity, groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { RetailerOrderActions } from '@/components/retailer/order-actions-panel';
 import { DeliveryAddressCard } from '@/components/retailer/delivery-address-card';
 import { formatInr } from '@/lib/retailer/format';
@@ -112,7 +113,7 @@ export default async function OrderDetailPage({
   const deliveryEstimate = process.env.COMPANY_DELIVERY_ESTIMATE?.trim() || null;
 
   const [
-    { data: order },
+    { data: order, error: orderError },
     { data: itemData },
     { data: historyData },
     { data: retailer },
@@ -149,6 +150,9 @@ export default async function OrderDetailPage({
     getOrderCoinMovement(supabase, params.id, user.id),
   ]);
 
+  // A failed read is not a deleted order: surface it to the error boundary
+  // instead of telling the customer their order no longer exists.
+  throwIfReadFailed(orderError, 'Order');
   if (!order) notFound();
 
   const { data: subOrderRows } = await supabase.rpc(

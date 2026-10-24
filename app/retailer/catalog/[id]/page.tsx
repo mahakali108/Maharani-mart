@@ -15,6 +15,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requireUser } from '@/lib/auth/session';
 import { getProductPriceOverride, getProductPriceOverrides, resolvePackPrice } from '@/lib/retailer/effective-price';
 import { piecePriceFromCase, resolveLooseTierSet, tierRangeLabel, type PricingTier } from '@/lib/retailer/case-pricing';
@@ -134,20 +135,22 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   let productId = params.id;
   let requestedPackId: string | null = null;
   {
-    const { data: productRef } = await supabase
+    const { data: productRef, error: productRefError } = await supabase
       .from('products')
       .select('id')
       .eq('id', params.id)
       .eq('is_active', true)
       .maybeSingle<{ id: string }>();
+    throwIfReadFailed(productRefError, 'Product');
     if (productRef) {
       productId = productRef.id;
     } else {
-      const { data: packRef } = await supabase
+      const { data: packRef, error: packRefError } = await supabase
         .from('product_packs')
         .select('id, product_id')
         .eq('id', params.id)
         .maybeSingle<{ id: string; product_id: string }>();
+      throwIfReadFailed(packRefError, 'Pack');
       if (!packRef) notFound();
       requestedPackId = packRef.id;
       productId = packRef.product_id;
@@ -161,7 +164,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     .maybeSingle<{ area_id: string }>();
 
   const nowIso = new Date().toISOString();
-  const [{ data: product }, { data: packData }, favoriteIds, { data: cartData }] = await Promise.all([
+  const [{ data: product, error: productError }, { data: packData }, favoriteIds, { data: cartData }] = await Promise.all([
     supabase
       .from('products')
       .select(
@@ -188,6 +191,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       .returns<CartItemRow[]>(),
   ]);
 
+  throwIfReadFailed(productError, 'Product');
   if (!product) notFound();
 
   const [{ data: schemeRows }, override, similar, together, marketplaceOffers] = await Promise.all([

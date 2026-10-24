@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { WarehouseEditForm } from '@/components/admin/warehouse-edit-form';
 
@@ -13,11 +14,12 @@ interface WarehouseDetail {
 export default async function EditWarehousePage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const [{ data: warehouse }, { data: areaData }] = await Promise.all([
+  const [{ data: warehouse, error: warehouseError }, { data: areaData }] = await Promise.all([
     supabase.from('warehouses').select('id, name, area_id, address').eq('id', params.id).single<WarehouseDetail>(),
     supabase.from('areas').select('id, name').eq('is_active', true).order('name'),
   ]);
 
+  throwIfReadFailed(warehouseError, 'Warehouse');
   if (!warehouse) notFound();
 
   return (

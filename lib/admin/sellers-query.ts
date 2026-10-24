@@ -101,9 +101,11 @@ export async function getSellerDetail(sellerId: string): Promise<{
   members: SellerMemberRow[];
   offers: SellerOfferRow[];
   invite: SellerInviteStatus | null;
+  /** Set when the seller row read FAILED (as opposed to returning no row). */
+  failureMessage: string | null;
 }> {
   const supabase = createClient();
-  const [{ data: seller }, { data: members }, { data: offers }, { data: invite }] = await Promise.all([
+  const [{ data: seller, error: sellerError }, { data: members }, { data: offers }, { data: invite }] = await Promise.all([
     supabase
       .from('sellers' as never)
       .select('*')
@@ -130,6 +132,7 @@ export async function getSellerDetail(sellerId: string): Promise<{
     members: ((members ?? []) as unknown as SellerMemberRow[]),
     offers: ((offers ?? []) as unknown as SellerOfferRow[]),
     invite: invite ?? null,
+    failureMessage: sellerError?.message ?? null,
   };
 }
 
