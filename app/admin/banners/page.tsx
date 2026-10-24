@@ -26,7 +26,7 @@ export default async function BannersPage() {
 
   // Separate queries rather than an embed — same reasoning as the fix
   // in app/admin/retailers/page.tsx.
-  const [{ data: bannerRows }, { data: areaRows }] = await Promise.all([
+  const [{ data: bannerRows, error: bannerError }, { data: areaRows }] = await Promise.all([
     supabase
       .from('banners')
       .select('id, title, image_url, image_url_mobile, status, link_url, area_id, sort_order, is_active, starts_at, ends_at')
@@ -47,6 +47,23 @@ export default async function BannersPage() {
         </p>
       </div>
 
+      {bannerError ? (
+        /* A failed read must never be rendered as "No banners yet": an empty
+           list and a broken query look identical to the operator otherwise.
+           The most likely cause for this exact select is a schema that is
+           behind the application (42703 for `status` / `image_url_mobile`,
+           both added by migration 0074), so the notice says so explicitly. */
+        <Card className="border-amber-200 bg-amber-50 p-5">
+          <p className="text-sm font-semibold text-ink-900">Banners could not be loaded</p>
+          <p className="mt-1 text-sm text-ink-600">
+            The list below is empty because the query failed, not because there are no banners.
+            Check that migration 0074 (banner <code>status</code> and <code>image_url_mobile</code>)
+            has been applied to this project, then retry.
+          </p>
+          <p className="mt-2 font-mono text-xs text-ink-500">{bannerError.message}</p>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Add a new banner</CardTitle>
@@ -55,11 +72,13 @@ export default async function BannersPage() {
       </Card>
 
       {banners.length === 0 ? (
-        <AdminEmptyState
-          icon={ImageIcon}
-          title="No banners yet"
-          body="Add your first banner above — it'll appear on the retailer home screen once active."
-        />
+        bannerError ? null : (
+          <AdminEmptyState
+            icon={ImageIcon}
+            title="No banners yet"
+            body="Add your first banner above — it'll appear on the retailer home screen once active."
+          />
+        )
       ) : (
         <Card className="table-scroll p-0">
           <table className="w-full min-w-[720px] text-sm">
