@@ -17,10 +17,11 @@ describe('0080 Retailer Memberships & Loyalty Schema (PostgreSQL 16 PGlite)', ()
     retailer1 = await createUser(db, 'retailer', 'Retailer One');
     retailer2 = await createUser(db, 'retailer', 'Retailer Two');
 
-    // Activate the retailers
+    // Activate the retailers and ensure exactly one active warehouse
     await as(db, admin, (tx: Tx) =>
       tx.query(`update retailers set status='active' where id in ($1, $2)`, [retailer1, retailer2])
     );
+    await db.query(`insert into public.warehouses (name, is_active) values ('Central Gaya Warehouse', true)`);
   });
 
   describe('Membership Plans & RLS', () => {
@@ -187,5 +188,61 @@ describe('0080 Retailer Memberships & Loyalty Schema (PostgreSQL 16 PGlite)', ()
         error = err;
       }
       expect(error).toBeNull();
+    });
+  });
+
+  describe('Automated Delivery Accrual & Return Reversal Trigger', () => {
+    it('automatically awards loyalty points when order is delivered, applying active plan multiplier', async () => {
+      // 1. Assign retailer1 Gold membership (2x multiplier)
+      await as(db, admin, async (tx: Tx) => {
+        await tx.query(`select public.admin_set_retailer_membership($1, 'gold')`, [retailer1]);
+      });
+
+      // 2. Insert a confirmed dispatched order for retailer1 of ₹1500 (using service_role)
+      const orderId = 'b0000000-0000-0000-0000-000000000001';
+      await as(db, 'service', async (tx: Tx) => {
+        await tx.query(`
+          insert into public.orders (
+            id, order_number, retailer_id, status, subtotal, gst_total, discount_total, grand_total
+          ) values (
+            $1, 'ORD-DELIV-1', $2, 'dispatched', 1271.19, 228.81, 0, 1500.00
+          )
+        `, [orderId, retailer1]);
+      });
+
+      // Before delivery, loyalty balance should be 100 (from earlier test)
+      const balBefore = await as(db, retailer1, async (tx: Tx) => {
+        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
+      });
+      const initialBal = balBefore.rows[0]?.get_retailer_loyalty_balance ?? 0;
+
+      // 3. Update status to 'delivered'
+      await as(db, 'service', async (tx: Tx) => {
+        await tx.query(`update public.orders set status = 'delivered' where id = $1`, [orderId]);
+      });
+
+      // 1500 rupees / 100 = 15 base points * 2.0x Gold multiplier = 30 points awarded!
+      const balAfter = await as(db, retailer1, async (tx: Tx) => {
+        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
+      });
+      expect(balAfter.rows[0]?.get_retailer_loyalty_balance).toBe(initialBal + 30);
+
+      // 4. Repeated update with status = 'delivered' does not award duplicate points (idempotent)
+      await as(db, 'service', async (tx: Tx) => {
+        await tx.query(`update public.orders set status = 'delivered', notes = 're-saved' where id = $1`, [orderId]);
+      });
+      const balAfterDuplicate = await as(db, retailer1, async (tx: Tx) => {
+        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
+      });
+      expect(balAfterDuplicate.rows[0]?.get_retailer_loyalty_balance).toBe(initialBal + 30);
+
+      // 5. Returning the order to warehouse automatically reverses the 30 points
+      await as(db, 'service', async (tx: Tx) => {
+        await tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]);
+      });
+      const balAfterReturn = await as(db, retailer1, async (tx: Tx) => {
+        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
+      });
+      expect(balAfterReturn.rows[0]?.get_retailer_loyalty_balance).toBe(initialBal);
     });
   });

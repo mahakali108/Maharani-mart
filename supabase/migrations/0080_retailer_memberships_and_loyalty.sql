@@ -312,7 +312,8 @@ declare
   v_entry_id uuid;
   v_current_balance integer;
 begin
-  if not is_admin_or_above() then
+  -- Authorized if Super Admin/Admin or executed internally by postgres/service_role/trigger
+  if auth.role() is distinct from 'service_role' and current_user is distinct from 'postgres' and not is_admin_or_above() then
     raise exception 'Access denied: Super Admin or Admin authorization required to write loyalty points.' using errcode = '42501';
   end if;
 
@@ -368,3 +369,85 @@ $$;
 
 revoke all on function public.record_loyalty_points(uuid, integer, text, text, text, uuid, text) from public, anon;
 grant execute on function public.record_loyalty_points(uuid, integer, text, text, text, uuid, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 4. AUTOMATED LOYALTY ACCRUAL ON ORDER DELIVERED
+-- ---------------------------------------------------------------------------
+create or replace function public.trg_order_delivered_loyalty()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_multiplier numeric(4, 2) := 1.0;
+  v_qualifying_rupees numeric;
+  v_points integer;
+  v_idempotency_key text;
+begin
+  -- Trigger condition 1: Order transitions to 'delivered'
+  if new.status = 'delivered' and (old.status is distinct from 'delivered') then
+    -- Check active membership multiplier at delivery time (server time)
+    select coalesce(mp.points_multiplier, 1.0)
+      into v_multiplier
+      from public.retailer_memberships rm
+      join public.membership_plans mp on mp.id = rm.plan_id
+     where rm.retailer_id = new.retailer_id
+       and rm.status = 'active'
+       and (rm.expires_at is null or rm.expires_at > now())
+     order by case rm.tier when 'gold' then 3 when 'silver' then 2 else 1 end desc
+     limit 1;
+
+    -- Base points: 1 point per whole 100 rupees of grand_total
+    v_qualifying_rupees := coalesce(new.grand_total, 0);
+    if v_qualifying_rupees >= 100 then
+      v_points := floor((floor(v_qualifying_rupees / 100)) * coalesce(v_multiplier, 1.0));
+      if v_points > 0 then
+        v_idempotency_key := 'loyalty:earn:' || new.id::text;
+        perform public.record_loyalty_points(
+          new.retailer_id,
+          v_points,
+          'ORDER_EARN',
+          'Delivered Order #' || coalesce(new.order_number, new.id::text) || ' loyalty award',
+          'order',
+          new.id,
+          v_idempotency_key
+        );
+      end if;
+    end if;
+  end if;
+
+  -- Trigger condition 2: Delivered order is returned -> reverse points
+  if new.status = 'returned' and old.status = 'delivered' then
+    v_idempotency_key := 'loyalty:reversal:' || new.id::text;
+    -- Find how many points were earned
+    select points into v_points
+      from public.loyalty_ledger
+     where reference_type = 'order'
+       and reference_id = new.id
+       and entry_type = 'ORDER_EARN';
+
+    if found and v_points > 0 then
+      perform public.record_loyalty_points(
+        new.retailer_id,
+        -v_points,
+        'ORDER_REVERSAL',
+        'Returned Order #' || coalesce(new.order_number, new.id::text) || ' point reversal',
+        'order',
+        new.id,
+        v_idempotency_key
+      );
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.trg_order_delivered_loyalty() from public, anon;
+grant execute on function public.trg_order_delivered_loyalty() to authenticated, service_role;
+
+drop trigger if exists trg_orders_delivered_loyalty on public.orders;
+create trigger trg_orders_delivered_loyalty
+  after update of status on public.orders
+  for each row execute function public.trg_order_delivered_loyalty();
