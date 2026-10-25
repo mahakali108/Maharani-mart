@@ -12,32 +12,28 @@
 
 name: Native Android Debug APK
 
+# AUTO-TRIGGERS DISABLED (2026-10-25) — zero-cost CI change, no job removed.
+#
+# This product ships as a WEB PWA. The Kotlin/Compose tree under android/ is
+# historical and is not built, signed or released by the delivery pipeline, so
+# automatically spending GitHub Actions minutes on it (and on a second copy of
+# the web gate) was pure cost on a private Free-tier repository:
+#
+#   * `push` matched `tests/**` and `package.json`, so nearly every commit
+#   * `pull_request` doubled that, once per event
+#   * the Android job alone had a 45-minute timeout
+#
+# The jobs below are kept byte-for-byte so a native investigation is still
+# reproducible — they are simply manual now. Web checks moved to ci.yml, which
+# is the only workflow that runs on normal developer activity.
+#
+#   * the `web` job stays because `android` declares `needs: web`
+#   * `production-probe` no longer runs on pull requests; production is probed
+#     by production-health.yml (push to main + daily schedule + manual)
+#
+# Manual native run: Actions → "Native Android Debug APK" → Run workflow.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'android/**'
-      - 'app/api/mobile/**'
-      - 'lib/mobile/**'
-      - 'lib/permissions/**'
-      - 'tests/**'
-      - 'scripts/android-apk-size-report.py'
-      - 'scripts/production-probe.mjs'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/android-apk.yml'
-  pull_request:
-    paths:
-      - 'android/**'
-      - 'app/api/mobile/**'
-      - 'lib/mobile/**'
-      - 'lib/permissions/**'
-      - 'tests/**'
-      - 'scripts/android-apk-size-report.py'
-      - 'scripts/production-probe.mjs'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/android-apk.yml'
 
 permissions:
   contents: read

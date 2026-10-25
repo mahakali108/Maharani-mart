@@ -126,11 +126,7 @@ async function loadOrderBatch(
   if (filters.from) query = query.gte('placed_at', indiaDayStartIso(filters.from)!);
   if (filters.to) query = query.lte('placed_at', indiaDayEndIso(filters.to)!);
 
-  const { data, count, error } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
-  // "No orders yet" is a statement about the retailer's own purchase history.
-  // A failed read must reach app/retailer/error.tsx, never masquerade as an
-  // empty history.
-  if (error) throw new Error(`Orders could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
+  const { data, count } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
   const rows = (data ?? []) as OrderRow[];
   const batch = toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
   return { ...batch, total: count ?? rows.length };

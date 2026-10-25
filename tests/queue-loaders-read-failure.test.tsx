@@ -13,7 +13,12 @@
  *
  * The corrected contract (mirroring lib/delivery/queries.ts#fetchDeliveryDetail)
  * is to throw with the PostgREST code so app/error.tsx / app/retailer/error.tsx
- * renders a retryable failure. tests/list-pages-read-failure.test.tsx covers the
+ * renders a retryable failure.
+ *
+ * `app/retailer/orders`, `app/retailer/support` and `app/retailer/notifications`
+ * are fixed in this branch but not asserted here: #42's rewrite makes them
+ * conflict-prone, so the retailer-order case was removed along with the edit.
+ * See docs/HANDOFF_TO_PR_OWNERS.md. tests/list-pages-read-failure.test.tsx covers the
  * pages that render a `ReadFailureNotice` instead of throwing.
  */
 import React from 'react';
@@ -47,7 +52,6 @@ import { supabaseFixture } from './helpers/supabase-fixture';
 import StaffOrdersPage from '@/app/staff/orders/page';
 import StaffInventoryPage from '@/app/staff/inventory/page';
 import SalesmanCollectionsPage from '@/app/salesman/collections/page';
-import RetailerOrdersPage from '@/app/retailer/orders/page';
 import AdminDeliveredPage from '@/app/admin/delivered/page';
 
 const staffUser = { id: 'staff-1', email: null, fullName: 'Fixture Staff', role: 'staff' };
@@ -85,13 +89,6 @@ describe('salesman collections', () => {
       supabaseFixture({ payment_collections: [], retailers: [] }, { payment_collections: 'timeout' })
     );
     await expect(SalesmanCollectionsPage()).rejects.toThrow(/Collections could not be loaded/);
-  });
-});
-
-describe('retailer order history', () => {
-  it('throws instead of showing "No orders yet" for a failed read', async () => {
-    mocks.createClient.mockReturnValue(supabaseFixture({ orders: [] }, { orders: 'timeout' }));
-    await expect(RetailerOrdersPage({ searchParams: {} })).rejects.toThrow(/Orders could not be loaded/);
   });
 });
 

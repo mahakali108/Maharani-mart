@@ -72,10 +72,9 @@ Operators concluded there was no work; real faults stayed invisible.
 | 2 | Work queues did the same | "Nothing to dispatch", "No inventory recorded yet", "No collections recorded yet" — the packer is told there is no work | throw with the PostgREST code → existing `error.tsx` boundary (9 pages) |
 | 3 | `listOffers` returned `{ offers: [], total: 0 }` on error | the offer list was indistinguishable from "no offers"; the PR #107 moderation flow depends on it | returns `failed`/`failureMessage`, the same documented contract `listSellers` already used |
 | 4 | Both delivery list loaders dropped `error` | staff/salesman delivery lists silently empty | throw, mirroring `fetchDeliveryDetail` |
-| 5 | Retailer schemes count badge | showed `0` on a failed read | shows `Unavailable` |
 | 6 | Admin wallets credit table | silent empty table where money is administered | notice that balances are **not authoritative** |
 
-Files: 19 pages + 2 shared loaders + 1 new component
+Files: 16 pages + 2 shared loaders + 1 new component
 (`components/ui/read-failure-notice.tsx`). The notice uses the design-system
 `status.warning.*` (amber) semantic pair — the repo's colour contract forbids
 red/rose/pink utilities outright, and amber is the sanctioned attention surface.
@@ -99,8 +98,8 @@ Each fix replaces a false statement with a true one.
 
 | File | Cases | What it pins |
 | --- | --- | --- |
-| `tests/list-pages-read-failure.test.tsx` | 14 | each fixed page surfaces the failure **and** a successful empty read still shows the true empty state |
-| `tests/queue-loaders-read-failure.test.tsx` | 5 | queue/evidence loaders throw with the PostgREST code instead of an empty queue |
+| `tests/list-pages-read-failure.test.tsx` | 12 | each fixed page surfaces the failure **and** a successful empty read still shows the true empty state |
+| `tests/queue-loaders-read-failure.test.tsx` | 4 | queue/evidence loaders throw with the PostgREST code instead of an empty queue |
 
 Both directions are asserted deliberately: a one-sided test would also pass a
 regression that always shows an error. Existing guards
@@ -114,6 +113,12 @@ still pass unchanged.
   `…/[id]/invoice/page.tsx` (PR #107) and `app/retailer/catalog/[id]/page.tsx`
   (PR #42). Hunk-level handoff in `docs/HANDOFF_TO_PR_OWNERS.md`; #107's invoice
   page already carries the fix.
+* **Three more PR-owned files reverted** — `app/retailer/orders/page.tsx`,
+  `app/retailer/notifications/page.tsx`, `app/retailer/schemes/page.tsx` were
+  edited earlier in this branch and are rebuilt by PR #42 (`orders` also by
+  #107). They are now byte-identical to `origin/main` (verified by
+  `git hash-object` vs `git rev-parse origin/main:<path>`), and the exact patch
+  their owner needs is in `docs/HANDOFF_TO_PR_OWNERS.md`.
 * **Multi-read dashboards** — `admin/inventory` (6 reads),
   `admin/inventory/reports` (8), `admin/reports` (6), `admin/command-center` (5),
   `retailer/catalog` (6). Each read needs its own decision (a failed *area* list
@@ -146,8 +151,8 @@ still pass unchanged.
 | --- | --- |
 | `tsc --noEmit` | **PASS** (0 errors) |
 | ESLint (`next lint`) | **PASS** (no warnings or errors) |
-| `vitest run` | **PASS** (155 files · 2693 tests) |
-| Production build (`next build`) | **PASS** (compiled; placeholder env vars only) |
+| `vitest run` | **PASS** (155 files · 2697 tests) |
+| Production build (`next build`) | **PASS** (compiled with `NEXT_PUBLIC_*` unset — same as `ci.yml`) |
 | Migration replay 76/76 + 6 checkpoint builds | **PASS** |
 | `0078`/`0079` privilege + rollback suites | **PASS** (incl. 11/11 revocation flows, 20/20 release-stock authorization) |
 | Audit script non-mutating | **PASS** (fingerprints identical) |
@@ -159,3 +164,44 @@ still pass unchanged.
 No merge, no deploy, no production SQL, no secret or cron change, no data
 deletion. Not claimed: "all fixed", "production ready", "all tests passed" —
 the last would be false in the presence of a BLOCKED CI.
+
+## 10. CI: why the checks are red, and the zero-cost change
+
+**Cause (verified).** Every failing job on this repository starts **zero steps**
+and ends ~2 s later with: *"The job was not started because recent account
+payments have failed or your spending limit needs to be increased."* Verified on
+run `40078570305` (commit `af17247`): the web job and the production-probe job
+both have `steps: 0`. A job that runs no steps has executed no line of this
+repository's code, so the red Xs are **not** typecheck/test/build failures.
+
+Supporting evidence: private repo, personal (user) account, GitHub Free
+(`/rulesets` answers *"Upgrade to GitHub Pro or make this repository public"*),
+**last green run 2026-10-09T16:56Z**, **399 runs** created 2026-10-01 → 2026-10-25,
+and the scheduled job fails too (so the block is account-wide).
+
+**Not verified:** whether the trigger is exhausted included minutes or a failed
+payment method — the billing/timing APIs return `403` for this token; only the
+owner's *Settings → Billing → Plans and usage → Actions* screen can say. No claim
+is made either way, and nothing was purchased or changed in billing.
+
+**Why it was expensive.** `android-apk.yml` triggered on `push` (all branches;
+its path filter includes `tests/**`) **and** `pull_request`, and carried three
+jobs: the full web gate, a 45-minute Android job, and a live production probe.
+One commit therefore queued two full runs plus a `workflow_run`; the probe also
+gated pull requests on the health of the *deployed* build.
+
+**Change (in this PR — no separate PR needed, since it is the same branch's CI
+contract):**
+
+| File | Change |
+| --- | --- |
+| `.github/workflows/ci.yml` **(new)** | one job: `install --frozen-lockfile` → `typecheck` → `lint` → `test` → `build`, on `pull_request → main`, `push → main`, and manual. `cancel-in-progress`, `contents: read`, no secrets, no matrix, no services. |
+| `.github/workflows/android-apk.yml` | auto-triggers removed → `workflow_dispatch` only. **No job deleted or edited** (`android` needs `web`; the probe job remains for manual reproduction). |
+| `.github/workflows/production-health.yml` | `pull_request` trigger removed; `push → main`, daily schedule and manual dispatch kept. |
+| `.github/workflows/android-evidence.yml` | untouched (unrelated). |
+| `tests/pwa-ci.test.ts` | asserts the old triggers are **gone**, the web gate still runs on PRs/pushes to `main`, native is still dispatch-gated, and the probe is no longer a PR gate. |
+
+Nothing lifts an account-level Actions block from inside a repository — the
+zero-cost options (wait for the monthly reset / make the repo public with owner
+approval) are documented in `docs/CI_ACTIONS_ZERO_COST.md`. Until then local runs
+are the only executable evidence, and GitHub CI is reported as **BLOCKED**.

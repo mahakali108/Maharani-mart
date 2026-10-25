@@ -12,7 +12,12 @@
  *
  * Each case asserts BOTH directions: a failure shows the notice (and not the
  * empty state), and a working query with zero rows still shows the real empty
- * state. The second half matters — an "always show an error" regression would
+ * state.
+ *
+ * Retailer schemes / notifications / orders are NOT covered here: those files
+ * belong to open PR #42 (orders also to #107). This branch reverted its edits to
+ * them rather than conflict with their rewrites, and the exact patch for their
+ * owner is in docs/HANDOFF_TO_PR_OWNERS.md. The second half matters — an "always show an error" regression would
  * pass a one-sided test.
  */
 import React from 'react';
@@ -48,7 +53,6 @@ import AdminReturnsPage from '@/app/admin/returns/page';
 import AdminOffersPage from '@/app/admin/offers/page';
 import AdminWalletsPage from '@/app/admin/wallets/page';
 import AdminTargetsPage from '@/app/admin/targets/page';
-import RetailerSchemesPage from '@/app/retailer/schemes/page';
 import SalesmanTargetsPage from '@/app/salesman/targets/page';
 
 const FAILURE = 'permission denied for table coupons';
@@ -147,21 +151,6 @@ describe('admin targets', () => {
     render(await AdminTargetsPage());
     expect(screen.getByText('No team members yet')).toBeDefined();
     expect(screen.getByText('No targets set yet')).toBeDefined();
-  });
-});
-
-describe('retailer schemes', () => {
-  it('reports the read failure instead of "No active schemes right now"', async () => {
-    mocks.createClient.mockReturnValue(supabaseFixture({ schemes: [] }, { schemes: 'timeout' }));
-    render(await RetailerSchemesPage());
-    expect(screen.getByText('Active schemes could not be loaded.')).toBeDefined();
-    expect(screen.queryByText('No active schemes right now')).toBeNull();
-  });
-
-  it('keeps the real empty state when the query works', async () => {
-    mocks.createClient.mockReturnValue(supabaseFixture({ schemes: [] }));
-    render(await RetailerSchemesPage());
-    expect(screen.getByText('No active schemes right now')).toBeDefined();
   });
 });
 

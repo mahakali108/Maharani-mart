@@ -122,3 +122,77 @@ Supabase's history table is keyed by it.
   `banners.alt_text`.
 
 This branch did **not** renumber, move, or edit any #107 file.
+
+---
+
+## PR #42 — three more retailer pages: same "failed read rendered as empty" defect
+
+Found by a cross-check of this branch's diff against every open PR's file list
+during the CI pass. This branch had edited these three files; **the edits were
+reverted** and they are byte-identical to `origin/main` again (verified by
+`git hash-object` against `git rev-parse origin/main:<path>`). The defect itself
+is still present in PR #42's own versions, so the fix belongs to #42's owner.
+
+Why #42's owner and not this branch: #42 rewrites all three files
+(`notifications` −105 lines, `orders` 334 changed lines, `schemes` +21), so a
+patch written against `main`'s text will not apply and a merge would conflict on
+the exact lines involved.
+
+### 1. `app/retailer/schemes/page.tsx`
+
+PR #42's version, ~line 36: `const { data } = await supabase.from('schemes')…`,
+then `const schemes = data ?? [];` and an empty state that says *"No active
+schemes right now"*.
+
+```diff
+-  const { data } = await supabase
++  const { data, error } = await supabase
+     .from('schemes')
+     …
+     .returns<SchemeRow[]>();
++  // A failed read must not claim there are no active schemes.
++  if (error) {
++    throw new Error(`Active schemes could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
++  }
+   const schemes = data ?? [];
+```
+
+Test to add (`tests/retailer-pages-read-failure.test.tsx`): render the page with
+`supabaseFixture({ schemes: [] }, { schemes: 'timeout' })` and expect
+`rejects.toThrow(/Active schemes could not be loaded/)`.
+
+### 2. `app/retailer/notifications/page.tsx`
+
+PR #42's version, ~line 19: `const { data } = await supabase.from('notifications')…`.
+
+```diff
+-  const { data } = await supabase
++  const { data, error } = await supabase
+     .from('notifications')
+     …
+     .returns<NotificationRow[]>();
++  if (error) throw new Error(`Notifications could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
+```
+
+### 3. `app/retailer/orders/page.tsx`
+
+PR #42's version, ~line 98: `const { data, count } = await query;` followed by an
+empty state that can read *"No orders yet"*.
+
+```diff
+-  const { data, count } = await query;
++  const { data, count, error } = await query;
++  // "No orders yet" is a statement about the retailer's purchase history; a
++  // failed read must reach error.tsx instead of inventing an empty history.
++  if (error) throw new Error(`Orders could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
+```
+
+(`app/retailer/orders/page.tsx` is also in PR #107's file list — whoever merges
+first should carry this hunk, and the second must not revert it.)
+
+### For reference: where the guard lives in this branch
+
+`lib/supabase/read-guard.ts` (`throwIfReadFailed`) and the shared
+`components/ui/read-failure-notice.tsx` already exist, so #42 can use them
+instead of writing a new error surface. Both are additive files; nothing in #42's
+tree conflicts with them.

@@ -669,8 +669,7 @@ applied in four small batches, each followed by a typecheck.
    operator would otherwise be misled **and** still needs the page.
 2. **Throw** — work queues and money-evidence lists (`staff/orders`,
    `staff/inventory`, `salesman/collections`, `admin/delivered`,
-   `admin/inventory/products`, `retailer/orders`, `retailer/coupons`,
-   `retailer/support`, `retailer/notifications`) throw
+   `admin/inventory/products`, `retailer/coupons`, `retailer/support`) throw
    `… could not be loaded [<code>]: <message>`, which lands in the existing
    `app/error.tsx` / `app/retailer/error.tsx` boundary with a retry. This is
    the pattern `lib/delivery/queries.ts#fetchDeliveryDetail` already used.
@@ -696,18 +695,15 @@ visual design; both only replace a false statement with a true one.
 | `app/admin/pricing/schemes/page.tsx` | "No schemes yet" | notice |
 | `app/admin/delivered/page.tsx` | "No completed deliveries yet" | throws |
 | `app/admin/inventory/products/page.tsx` | "No matching products" | throws |
-| `app/retailer/schemes/page.tsx` | "No active schemes right now" (+ count badge) | notice, badge shows "Unavailable" |
-| `app/retailer/orders/page.tsx` | "No orders yet" | throws |
 | `app/retailer/coupons/page.tsx` | "No coupons right now" | throws |
 | `app/retailer/support/page.tsx` | "No support tickets yet" | throws |
-| `app/retailer/notifications/page.tsx` | "No notifications" | throws |
 | `app/salesman/targets/page.tsx` | "No active targets" | notice |
 | `app/salesman/collections/page.tsx` | "No collections recorded yet" | throws |
 | `app/staff/orders/page.tsx` | "Nothing to dispatch" | throws |
 | `app/staff/inventory/page.tsx` | "No inventory recorded yet" | throws |
 
-Regression tests: `tests/list-pages-read-failure.test.tsx` (14 cases) and
-`tests/queue-loaders-read-failure.test.tsx` (5 cases). Every case asserts both
+Regression tests: `tests/list-pages-read-failure.test.tsx` (12 cases) and
+`tests/queue-loaders-read-failure.test.tsx` (4 cases). Every case asserts both
 directions — the failure is surfaced **and** a successful empty read still shows
 the true empty state — because a one-sided test would also pass a regression
 that always shows an error.
@@ -717,6 +713,7 @@ that always shows an error.
 | Files | Why left alone |
 | --- | --- |
 | `app/retailer/orders/[id]/page.tsx`, `…/[id]/invoice/page.tsx`, `app/retailer/catalog/[id]/page.tsx` | Owned by open PR #107 / #42. Hunk-level handoff in `docs/HANDOFF_TO_PR_OWNERS.md`; #107's invoice page already carries the fix. |
+| `app/retailer/orders/page.tsx`, `app/retailer/notifications/page.tsx`, `app/retailer/schemes/page.tsx` | **Reverted** from this branch: all three are rebuilt by open PR #42 (`orders` also in #107), so a patch written against `main` would conflict on the exact lines. Verified byte-identical to `origin/main`; exact patch for their owner in `docs/HANDOFF_TO_PR_OWNERS.md` §"PR #42 — three more retailer pages". |
 | `app/admin/inventory/page.tsx` (6 reads), `…/inventory/reports/page.tsx` (8), `…/reports/page.tsx` (6), `app/admin/command-center/page.tsx` (5), `app/retailer/catalog/page.tsx` (6), `app/admin/pricing/page.tsx` secondary option lists | Multi-read dashboards. Each read needs an individual decision about whether the page stays usable when that one read fails (e.g. a failed *area* list must not hide a successful *product* list). Blanket-editing them would trade a false empty state for a needlessly dead page. Listed as follow-up work, not silently skipped. |
 | `app/admin/attendance`, `audit-logs`, `follow-ups`, `routes`, `support`, `team`, `visits`, `warehouses`, `inventory/*` (batches, grn, low-stock, movements, transfers), `retailer/{account,cart,categories,favorites,quick-order}`, `salesman/{attendance,commissions,dcr,follow-ups,orders,profile,retailers,routes,visits}`, `staff/deliveries` (loader throws) | Remaining population from §11.2. Same defect, lower consequence per page (read-mostly reports and self-service forms). Fixing them is mechanical but each needs the render-vs-throw decision above; doing it blind across 35 files in one commit is exactly the kind of change this audit exists to prevent. |
 
