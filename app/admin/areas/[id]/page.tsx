@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PackageSearch, Warehouse } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { AreaEditForm } from '@/components/admin/area-edit-form';
@@ -35,15 +36,16 @@ interface ProductThresholdRow {
 }
 
 export default async function EditAreaPage({ params }: { params: { id: string } }) {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
 
   const supabase = createClient();
-  const { data: area } = await supabase
+  const { data: area, error: areaError } = await supabase
     .from('areas')
     .select('id, name, district')
     .eq('id', params.id)
     .single<AreaDetail>();
 
+  throwIfReadFailed(areaError, 'Area');
   if (!area) notFound();
   const { data: districtRows, error: districtError } = await supabase.from('areas').select('district');
   if (districtError) throw new Error('District options could not be loaded.');

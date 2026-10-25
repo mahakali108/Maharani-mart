@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Lock, PackageSearch, UserRound } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { requireUser } from '@/lib/auth/session';
 import { formatIndiaRelativeDateTime } from '@/lib/datetime/india';
 import { formatInr } from '@/lib/retailer/format';
@@ -74,13 +75,16 @@ export default async function SupportTicketDetailPage({ params }: { params: { id
 
   // Ownership is enforced twice: the query itself (retailer_id = caller) and
   // RLS (0048) — a ticket id from another retailer resolves to notFound().
-  const { data: ticket } = await supabase
+  const { data: ticket, error: ticketError } = await supabase
     .from('support_tickets')
     .select('id, ticket_number, subject, topic, priority, status, created_at, updated_at')
     .eq('id', params.id)
     .eq('retailer_id', user.id)
     .maybeSingle<TicketRow>();
 
+  // Ownership failures and read failures are different: RLS returning no row is
+  // a legitimate 404, a broken query is not.
+  throwIfReadFailed(ticketError, 'Support ticket');
   if (!ticket) notFound();
 
   const [{ data: messageData }, { data: ticketWithOrder }] = await Promise.all([

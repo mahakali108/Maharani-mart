@@ -2,6 +2,7 @@ import { serviceAreaLabel } from '@/lib/areas/district';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { resolveDocumentUrl } from '@/lib/media/document-url';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { RetailerRowActions } from '@/components/admin/retailer-row-actions';
@@ -44,7 +45,7 @@ const STATUS_LABELS: Record<RetailerDetail['status'], string> = {
 export default async function RetailerDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const [{ data: retailerBase }, { data: areaData }, { data: docData }, { data: salesmanData }] = await Promise.all([
+  const [{ data: retailerBase, error: retailerError }, { data: areaData }, { data: docData }, { data: salesmanData }] = await Promise.all([
     supabase
       .from('retailers')
       .select(
@@ -65,6 +66,8 @@ export default async function RetailerDetailPage({ params }: { params: { id: str
       .order('full_name'),
   ]);
 
+  // A failed read must not be rendered as "retailer not found".
+  throwIfReadFailed(retailerError, 'Retailer');
   if (!retailerBase) notFound();
 
   // Same reasoning as app/admin/retailers/page.tsx: fetched separately

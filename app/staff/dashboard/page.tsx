@@ -1,11 +1,11 @@
 import { ClipboardCheck, ClipboardList, PackageCheck, Truck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { indiaDayStartIso, indiaTodayDateKey } from '@/lib/datetime/india';
 import { Card } from '@/components/ui/card';
 
 export default async function StaffDashboardPage() {
-  await requirePermission('orders.view.all');
+  await requirePagePermission('orders.view.all');
   const supabase = createClient();
 
   // "Today" follows the Asia/Kolkata calendar day (00:00 IST), not server time.

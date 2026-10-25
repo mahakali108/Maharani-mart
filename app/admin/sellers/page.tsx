@@ -34,7 +34,7 @@ export default async function SellersPage({
 }) {
   const viewer = await requirePagePermission('sellers.view');
   const query = parseSellerListParams(searchParams);
-  const { sellers, total } = await listSellers(query);
+  const { sellers, total, failed, failureMessage } = await listSellers(query);
   const pages = Math.max(1, Math.ceil(total / SELLERS_PER_PAGE));
   const currentPage = Math.min(query.page, pages);
 
@@ -89,7 +89,16 @@ export default async function SellersPage({
         ) : null}
       </form>
 
-      {sellers.length === 0 ? (
+      {failed ? (
+        <Card className="border-amber-200 bg-amber-50 p-5">
+          <p className="text-sm font-semibold text-ink-900">Sellers could not be loaded</p>
+          <p className="mt-1 text-sm text-ink-600">
+            The directory is empty because the query failed, not because there are no sellers. Retry, and if it
+            keeps failing ask an engineer to check the project schema.
+          </p>
+          <p className="mt-2 font-mono text-xs text-ink-500">{failureMessage}</p>
+        </Card>
+      ) : sellers.length === 0 ? (
         <AdminEmptyState
           icon={Users}
           title="No sellers yet"

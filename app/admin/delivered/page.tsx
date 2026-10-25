@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Download, PackageCheck, Search, ShieldAlert } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePermission, requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { DeliveryStatusBadge } from '@/components/delivery/delivery-status-badge';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -81,7 +81,9 @@ async function loadDeliveredBatch(
   if (filters.to) query = query.lte('delivered_at', `${filters.to}T23:59:59`);
   if (filters.q) query = query.ilike('orders.order_number', `%${filters.q}%`);
 
-  const { data } = await applyCursor(query, cursor, [], PAGE_SIZE);
+  const { data, error } = await applyCursor(query, cursor, [], PAGE_SIZE);
+  // "No completed deliveries yet" must not stand in for a failed read.
+  if (error) throw new Error(`Deliveries could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as DeliveredRow[];
   return toOffsetBatch(rows, PAGE_SIZE, offset);
 }
@@ -136,7 +138,7 @@ export default async function AdminDeliveredPage({
 }: {
   searchParams: { q?: string; outcome?: string; staff?: string; from?: string; to?: string };
 }) {
-  await requirePermission('orders.view.all');
+  await requirePagePermission('orders.view.all');
   const supabase = createClient();
 
   const filters: DeliveredFilters = {

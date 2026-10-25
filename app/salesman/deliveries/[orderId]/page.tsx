@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, MapPin, Phone } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { fetchDeliveryDetail } from '@/lib/delivery/queries';
 import { DeliveryStatusBadge } from '@/components/delivery/delivery-status-badge';
 import { DeliveryExecutionForm } from '@/components/delivery/delivery-execution-form';
@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 export default async function SalesmanDeliveryDetailPage({ params }: { params: { orderId: string } }) {
-  const user = await requirePermission('deliveries.view.assigned');
+  const user = await requirePagePermission('deliveries.view.assigned');
   const detail = await fetchDeliveryDetail(params.orderId);
   if (!detail) notFound();
 

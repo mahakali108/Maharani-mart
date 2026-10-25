@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, FileText, ImageOff, KeyRound, MapPin, PackageCheck } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { can } from '@/lib/permissions/permissions';
 import { fetchDeliveryDetail } from '@/lib/delivery/queries';
@@ -14,7 +14,7 @@ import { Card } from '@/components/ui/card';
 import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 
 export default async function AdminDeliveredDetailPage({ params }: { params: { orderId: string } }) {
-  const user = await requirePermission('orders.view.all');
+  const user = await requirePagePermission('orders.view.all');
   const detail = await fetchDeliveryDetail(params.orderId);
   if (!detail) notFound();
 

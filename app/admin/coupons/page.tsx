@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { Plus, Ticket } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { describeDiscountValue } from '@/lib/coupons/engine';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
@@ -57,10 +58,10 @@ function CouponState({ coupon, now }: { coupon: CouponRow; now: number }) {
 }
 
 export default async function AdminCouponsPage() {
-  await requirePermission('pricing.manage');
+  await requirePagePermission('pricing.manage');
   const supabase = createClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('coupons')
     .select('id, code, title, description, discount_type, discount_value, minimum_order_value, maximum_discount, usage_limit, per_retailer_limit, used_count, starts_at, expires_at, is_active, first_order_only, retailers ( shop_name ), categories ( name ), brands ( name ), products ( name ), created_at')
     .order('created_at', { ascending: false })
@@ -68,6 +69,7 @@ export default async function AdminCouponsPage() {
 
   const coupons = data ?? [];
   const now = Date.now();
+  const readFailed = Boolean(error);
 
   return (
     <div className="space-y-6">
@@ -86,7 +88,9 @@ export default async function AdminCouponsPage() {
         </Link>
       </div>
 
-      {coupons.length === 0 ? (
+      {readFailed ? (
+        <ReadFailureNotice what="Coupons" detail={error?.message} />
+      ) : coupons.length === 0 ? (
         <AdminEmptyState
           icon={Ticket}
           title="No coupons yet"

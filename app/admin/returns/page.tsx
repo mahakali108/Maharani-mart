@@ -2,6 +2,7 @@ import { RotateCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { ReturnRowActions } from '@/components/admin/return-row-actions';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
@@ -25,12 +26,13 @@ const STATUS_STYLES: Record<ReturnRequestRow['status'], string> = {
 export default async function ReturnsPage() {
   const supabase = createClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('return_requests')
     .select('id, reason, status, requested_at, resolution_note, orders ( order_number ), retailers ( shop_name )')
     .order('requested_at', { ascending: false });
 
   const returns = (data ?? []) as unknown as ReturnRequestRow[];
+  const readFailed = Boolean(error);
   const pending = returns.filter((r) => r.status === 'requested');
   const resolved = returns.filter((r) => r.status !== 'requested');
 
@@ -41,7 +43,9 @@ export default async function ReturnsPage() {
         <p className="mt-1 text-sm text-ink-500">Return requests submitted by retailers on delivered orders.</p>
       </div>
 
-      {returns.length === 0 ? (
+      {readFailed ? (
+        <ReadFailureNotice what="Return requests" detail={error?.message} />
+      ) : returns.length === 0 ? (
         <AdminEmptyState
           icon={RotateCcw}
           title="No return requests yet"

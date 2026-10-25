@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { CategoryEditForm } from '@/components/admin/category-edit-form';
 
@@ -13,11 +14,12 @@ interface CategoryDetail {
 export default async function EditCategoryPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const [{ data: category }, { data: categoryData }] = await Promise.all([
+  const [{ data: category, error: categoryError }, { data: categoryData }] = await Promise.all([
     supabase.from('categories').select('id, name, parent_id, image_url').eq('id', params.id).single<CategoryDetail>(),
     supabase.from('categories').select('id, name').order('name'),
   ]);
 
+  throwIfReadFailed(categoryError, 'Category');
   if (!category) notFound();
 
   return (

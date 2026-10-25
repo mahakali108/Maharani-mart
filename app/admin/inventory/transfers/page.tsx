@@ -1,6 +1,6 @@
 import { ArrowLeftRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { InventoryNav } from '@/components/admin/inventory-nav';
@@ -17,7 +17,7 @@ interface TransferListRow extends StockTransferRow {
 }
 
 export default async function TransfersPage() {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
   const supabase = createClient();
 
   const [{ data: transferData }, { data: warehouseData }, { data: batchData }] = await Promise.all([

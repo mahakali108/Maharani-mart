@@ -1,8 +1,8 @@
 import { MaharaniAIChat } from '@/components/ai/maharani-ai-chat';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 
 export default async function AdminAIPage() {
-  await requirePermission('reports.view.all');
+  await requirePagePermission('reports.view.all');
   return <MaharaniAIChat surface="admin" title="✨ Maharani Business Copilot" subtitle="Authorized operational intelligence across products, orders, sales and inventory—grounded in current business data." quickActions={[
     { label: 'Sales Summary', prompt: 'Last 30 days sales summary do.' },
     { label: 'Top Products', prompt: 'Last 30 days ke top products dikhao.' },

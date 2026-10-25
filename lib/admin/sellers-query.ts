@@ -54,9 +54,18 @@ export function sellerListHref(params: Required<SellerListParams>, page: number)
   return qs ? `/admin/sellers?${qs}` : '/admin/sellers';
 }
 
+/**
+ * Seller directory page.
+ *
+ * `failed` is part of the contract on purpose: the previous version returned
+ * `{ sellers: [], total: 0 }` on a query error, which the page rendered as
+ * "No sellers yet" — a failed read and an empty marketplace looked identical.
+ */
 export async function listSellers({ q, status, page }: Required<SellerListParams>): Promise<{
   sellers: SellerRow[];
   total: number;
+  failed: boolean;
+  failureMessage: string | null;
 }> {
   const supabase = createClient();
   let query = supabase
@@ -76,10 +85,14 @@ export async function listSellers({ q, status, page }: Required<SellerListParams
     .order('created_at', { ascending: false })
     .range(from, from + SELLERS_PER_PAGE - 1);
 
-  if (error) return { sellers: [], total: 0 };
+  if (error) {
+    return { sellers: [], total: 0, failed: true, failureMessage: error.message };
+  }
   return {
     sellers: ((data ?? []) as unknown as SellerRow[]),
     total: count ?? 0,
+    failed: false,
+    failureMessage: null,
   };
 }
 
@@ -88,9 +101,11 @@ export async function getSellerDetail(sellerId: string): Promise<{
   members: SellerMemberRow[];
   offers: SellerOfferRow[];
   invite: SellerInviteStatus | null;
+  /** Set when the seller row read FAILED (as opposed to returning no row). */
+  failureMessage: string | null;
 }> {
   const supabase = createClient();
-  const [{ data: seller }, { data: members }, { data: offers }, { data: invite }] = await Promise.all([
+  const [{ data: seller, error: sellerError }, { data: members }, { data: offers }, { data: invite }] = await Promise.all([
     supabase
       .from('sellers' as never)
       .select('*')
@@ -117,6 +132,7 @@ export async function getSellerDetail(sellerId: string): Promise<{
     members: ((members ?? []) as unknown as SellerMemberRow[]),
     offers: ((offers ?? []) as unknown as SellerOfferRow[]),
     invite: invite ?? null,
+    failureMessage: sellerError?.message ?? null,
   };
 }
 
@@ -164,6 +180,9 @@ export async function listOffers({
 }: Required<OfferListParams> & { sellerId: string | null }): Promise<{
   offers: SellerOfferRow[];
   total: number;
+  /** True when the read failed — the page must not render an empty queue. */
+  failed: boolean;
+  failureMessage: string | null;
 }> {
   const supabase = createClient();
   let query = supabase
@@ -182,10 +201,16 @@ export async function listOffers({
     .order('created_at', { ascending: false })
     .range(from, from + OFFERS_PER_PAGE - 1);
 
-  if (error) return { offers: [], total: 0 };
+  // Moderation is a queue with consequences: reporting a failed read as
+  // "no offers to review" hides pending listings from the reviewer.
+  if (error) {
+    return { offers: [], total: 0, failed: true, failureMessage: error.message };
+  }
   return {
     offers: ((data ?? []) as unknown as SellerOfferRow[]),
     total: count ?? 0,
+    failed: false,
+    failureMessage: null,
   };
 }
 

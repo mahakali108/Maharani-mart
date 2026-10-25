@@ -1,5 +1,5 @@
 import { BadgeIndianRupee } from 'lucide-react';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePermission, requirePagePermission } from '@/lib/admin/guard';
 import { createClient } from '@/lib/supabase/server';
 import { RecordCollectionForm } from '@/components/salesman/record-collection-form';
 import { AdminEmptyState } from '@/components/admin/empty-state';
@@ -69,7 +69,7 @@ async function loadCollectionBatch(
   salesmanId: string,
   cursor: ListCursor | null
 ) {
-  const { data } = await applyCursor(
+  const { data, error } = await applyCursor(
     applyKeysetOrder(
       supabase
         .from('payment_collections')
@@ -81,6 +81,9 @@ async function loadCollectionBatch(
     ORDER,
     PAGE_SIZE
   );
+  // A salesman's own collection history is money evidence: a failed read must
+  // never render as "No collections recorded yet".
+  if (error) throw new Error(`Collections could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as CollectionRow[];
   return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
 }
@@ -112,7 +115,7 @@ function renderCollectionRows(rows: CollectionRow[]) {
 }
 
 export default async function SalesmanCollectionsPage() {
-  const user = await requirePermission('collections.record');
+  const user = await requirePagePermission('collections.record');
   const supabase = createClient();
 
   // My assigned retailers for the entry form.

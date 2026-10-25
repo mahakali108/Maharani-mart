@@ -2,6 +2,7 @@ import { Tag, History } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { PriceListForm } from '@/components/admin/price-list-form';
 import { PricePreviewForm } from '@/components/admin/price-preview-form';
 import { DeactivatePriceButton } from '@/components/admin/deactivate-price-button';
@@ -45,7 +46,7 @@ const SCOPE_LABELS: Record<PriceListRow['scope'], string> = {
 export default async function PricingPage() {
   const supabase = createClient();
 
-  const [{ data: productData }, { data: areaData }, { data: retailerData }, { data: priceListData }] =
+  const [{ data: productData, error: productError }, { data: areaData, error: areaError }, { data: retailerData, error: retailerError }, { data: priceListData, error: priceListError }] =
     await Promise.all([
       supabase.from('products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('areas').select('id, name').eq('is_active', true).order('name'),
@@ -60,6 +61,9 @@ export default async function PricingPage() {
         .limit(100),
     ]);
 
+  const readFailed = Boolean(productError || areaError || retailerError || priceListError);
+  const readFailureMessage =
+    productError?.message ?? areaError?.message ?? retailerError?.message ?? priceListError?.message ?? null;
   const products = (productData ?? []) as ProductOption[];
   const areas = (areaData ?? []) as AreaOption[];
   const retailers = (retailerData ?? []) as RetailerOption[];
@@ -80,7 +84,9 @@ export default async function PricingPage() {
         </p>
       </div>
 
-      {products.length === 0 ? (
+      {readFailed ? (
+        <ReadFailureNotice what="Products, areas, retailers and price history" detail={readFailureMessage} />
+      ) : products.length === 0 ? (
         <AdminEmptyState
           icon={Tag}
           title="No active products yet"
@@ -114,7 +120,7 @@ export default async function PricingPage() {
           <h2 className="text-sm font-semibold text-ink-800">Price history</h2>
         </div>
 
-        {priceLists.length === 0 ? (
+        {readFailed ? null : priceLists.length === 0 ? (
           <AdminEmptyState
             icon={History}
             title="No prices set yet"

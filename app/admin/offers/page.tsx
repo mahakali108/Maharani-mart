@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { OfferRowActions } from '@/components/admin/offer-row-actions';
 import { OfferFloorForm } from '@/components/admin/offer-forms';
@@ -39,7 +40,7 @@ export default async function AdminOffersPage({
   await requirePagePermission('sellers.offers.manage');
   const query = parseOfferListParams(searchParams);
   const sellerId = typeof searchParams.seller === 'string' ? searchParams.seller : null;
-  const { offers, total } = await listOffers({ ...query, sellerId });
+  const { offers, total, failed: offersFailed, failureMessage } = await listOffers({ ...query, sellerId });
   const pages = Math.max(1, Math.ceil(total / OFFERS_PER_PAGE));
   const currentPage = Math.min(query.page, pages);
 
@@ -107,7 +108,9 @@ export default async function AdminOffersPage({
         )}
       </form>
 
-      {offers.length === 0 ? (
+      {offersFailed ? (
+        <ReadFailureNotice what="Seller offers" detail={failureMessage} />
+      ) : offers.length === 0 ? (
         <AdminEmptyState
           icon={ShieldCheck}
           title="No offers to review"

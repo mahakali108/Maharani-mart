@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { BannerEditForm } from '@/components/admin/banner-edit-form';
 
@@ -20,10 +20,10 @@ interface BannerDetail {
 }
 
 export default async function EditBannerPage({ params }: { params: { id: string } }) {
-  await requirePermission('banners.manage');
+  await requirePagePermission('banners.manage');
 
   const supabase = createClient();
-  const [{ data: banner }, { data: areas }] = await Promise.all([
+  const [{ data: banner, error: bannerError }, { data: areas }] = await Promise.all([
     supabase
       .from('banners')
       .select('*')
@@ -32,6 +32,12 @@ export default async function EditBannerPage({ params }: { params: { id: string 
     supabase.from('areas').select('id, name').eq('is_active', true).order('name'),
   ]);
 
+  // A failed read is not a missing banner. `maybeSingle()` returns null data
+  // for BOTH, and 404-ing on a query error told the operator the banner had
+  // been deleted. Only a successful read with no row is a real 404.
+  if (bannerError) {
+    throw new Error(`Banner ${params.id} could not be loaded: ${bannerError.message}`);
+  }
   if (!banner) notFound();
 
   return (

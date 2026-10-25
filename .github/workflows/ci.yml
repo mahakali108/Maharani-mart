@@ -1,0 +1,92 @@
+# Maharani Traders — minimal web CI (free-tier aware).
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# The web gate used to live inside `android-apk.yml`, whose triggers were
+# `push` (all branches, path-filtered) + `pull_request`. On a private GitHub
+# Free repository, every one of those events queued the SAME workflow, which
+# also contained an Android job (45-minute timeout) and a live production
+# probe. That is the most expensive shape GitHub Actions can take:
+#
+#   * every push to a working branch AND every pull_request event = 2 runs
+#   * each run installed dependencies and built the whole Next.js app
+#   * each run also fired `android-evidence.yml` via `workflow_run`
+#
+# Evidence for that volume: 399 workflow runs were created between 2026-10-01
+# and 2026-10-25 (36 push, 15 pull_request, 10 schedule, 39 workflow_run in
+# the first 100 alone). The last green run was 2026-10-09T16:56Z; from
+# 2026-10-10 every job fails with ZERO steps started and the annotation
+# "The job was not started because recent account payments have failed or your
+# spending limit needs to be increased." See docs/CI_ACTIONS_ZERO_COST.md.
+#
+# So this workflow is deliberately the CHEAPEST honest gate:
+#   * only pull requests into main, pushes to main, and manual dispatch
+#   * one job, no matrix, no services, no Docker, no Android, no deployment
+#   * `cancel-in-progress` so a superseded push stops burning minutes
+#   * the repository's own scripts and the committed lockfile — nothing new
+#
+# It does NOT deploy, does NOT touch Supabase, does NOT read a secret, and
+# does NOT probe production. Open a workflow run's log to see why a check
+# failed; nothing here writes to the repository.
+name: Web CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: this workflow only reads the checked-out code.
+permissions:
+  contents: read
+
+# A new push to the same branch cancels the previous run instead of paying for
+# both. `github.ref` keeps `main` runs serialised per commit, not cancelled by
+# an unrelated pull request.
+concurrency:
+  group: web-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web checks (typecheck, lint, tests, build)
+    runs-on: ubuntu-latest
+    # The full local suite takes ~2 min of tests + ~1.5 min of build on a
+    # developer machine; 25 minutes is generous headroom, not a target.
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack (pnpm from packageManager field)
+        run: corepack enable
+
+      # `--frozen-lockfile` is the CI contract: the lockfile must already match
+      # package.json, so a dependency change that was not committed fails here
+      # instead of silently resolving something else on the runner.
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: corepack pnpm run typecheck
+
+      - name: Lint
+        run: corepack pnpm run lint
+
+      - name: Unit and integration tests
+        run: corepack pnpm test
+
+      # Same invocation the previous in-repo workflow used. It needs no
+      # Supabase credentials: every page that reads the database is dynamic and
+      # is not prerendered at build time. If that ever changes, the build fails
+      # loudly here — which is the point of running it in CI at all.
+      - name: Build the production Next.js app
+        run: corepack pnpm run build

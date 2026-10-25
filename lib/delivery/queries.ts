@@ -89,25 +89,33 @@ function toListRow(raw: RawListRow): DeliveryListRow {
 /** Open tasks assigned to a staff/salesman member (assigned + in progress). */
 export async function listOpenDeliveriesForUser(userId: string): Promise<DeliveryListRow[]> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('order_deliveries')
     .select(LIST_SELECT)
     .eq('assigned_staff_id', userId)
     .in('delivery_status', ['assigned', 'in_progress'])
     .order('dispatched_at', { ascending: true, nullsFirst: false });
+  // Same rule as fetchDeliveryDetail: only a genuinely empty result is empty.
+  // Silently returning [] rendered "No deliveries" for a broken query.
+  if (error) {
+    throw new Error(`Deliveries could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
+  }
   return ((data ?? []) as unknown as RawListRow[]).map(toListRow);
 }
 
 /** Recently completed/failed tasks assigned to a user (last 20). */
 export async function listRecentDeliveriesForUser(userId: string): Promise<DeliveryListRow[]> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('order_deliveries')
     .select(LIST_SELECT)
     .eq('assigned_staff_id', userId)
     .in('delivery_status', ['delivered', 'partially_delivered', 'failed', 'returned_to_warehouse'])
     .order('delivered_at', { ascending: false, nullsFirst: false })
     .limit(20);
+  if (error) {
+    throw new Error(`Recent deliveries could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
+  }
   return ((data ?? []) as unknown as RawListRow[]).map(toListRow);
 }
 
@@ -187,6 +195,12 @@ export async function fetchDeliveryDetail(
     .eq('order_id', orderId)
     .maybeSingle();
 
+  // A failed delivery read used to be indistinguishable from "no delivery task":
+  // both returned null, so every caller rendered a 404. Only a genuinely absent
+  // row is `null`; a read failure must reach the caller's error boundary.
+  if (deliveryResult.error) {
+    throw new Error(`Delivery could not be loaded [${deliveryResult.error.code ?? 'unknown'}]: ${deliveryResult.error.message}`);
+  }
   if (!deliveryResult.data) return null;
 
   const raw = deliveryResult.data as unknown as {

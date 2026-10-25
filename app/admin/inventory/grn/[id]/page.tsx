@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { InventoryNav } from '@/components/admin/inventory-nav';
 import { GrnActionButtons } from '@/components/admin/grn-action-buttons';
@@ -25,10 +26,10 @@ interface ReceiptMovement {
 }
 
 export default async function GrnDetailPage({ params }: { params: { id: string } }) {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
   const supabase = createClient();
 
-  const [{ data: grnData }, { data: itemData }, { data: movementData }] = await Promise.all([
+  const [{ data: grnData, error: grnError }, { data: itemData }, { data: movementData }] = await Promise.all([
     supabase.from('grns').select('*, warehouses ( name )').eq('id', params.id).maybeSingle(),
     supabase
       .from('grn_items')
@@ -44,6 +45,8 @@ export default async function GrnDetailPage({ params }: { params: { id: string }
   ]);
 
   const grn = grnData as unknown as GrnDetailRow | null;
+  // A failed read is not a missing GRN.
+  throwIfReadFailed(grnError, 'Goods receipt');
   if (!grn) notFound();
 
   const items = (itemData ?? []) as unknown as GrnItemDetail[];

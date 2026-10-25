@@ -75,7 +75,9 @@ async function loadProductBatch(
   // caller explicitly asks for out-of-stock (where zero rows matter).
   if (filters.status !== 'out_of_stock') query = query.gt('quantity_on_hand', 0);
 
-  const { data } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  const { data, error } = await applyCursor(applyKeysetOrder(query, ORDER), cursor, ORDER, PAGE_SIZE);
+  // "No matching products" must mean zero rows, never a failed read.
+  if (error) throw new Error(`Inventory products could not be loaded [${error.code ?? 'unknown'}]: ${error.message}`);
   const rows = (data ?? []) as unknown as ProductTotalsViewRow[];
   return toListBatch(rows, PAGE_SIZE, (row) => keysetCursorFor(row, ORDER));
 }

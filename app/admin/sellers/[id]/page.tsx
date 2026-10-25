@@ -30,7 +30,10 @@ export default async function SellerDetailPage({
   params: { id: string };
 }) {
   await requirePagePermission('sellers.view');
-  const { seller, members, offers, invite } = await getSellerDetail(params.id);
+  const { seller, members, offers, invite, failureMessage } = await getSellerDetail(params.id);
+  // A failed read is not a missing seller: 404 would tell the operator the
+  // seller account was deleted.
+  if (failureMessage) throw new Error(`Seller could not be loaded: ${failureMessage}`);
   if (!seller) notFound();
 
   // Active packs for the admin-managed offer form (server-fetched; the pack

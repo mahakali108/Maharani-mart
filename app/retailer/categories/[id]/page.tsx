@@ -10,6 +10,11 @@ export default async function RetailerCategoryDetailPage({ params }: { params: {
   await requireUser();
   const supabase = createClient();
   const data = await loadCategoryDetail(supabase, params.id);
+  // `errors.category` means the taxonomy read itself failed. 404ing here told
+  // the customer the category had been removed; surface the failure instead.
+  if (data.errors.category) {
+    throw new Error('This category could not be loaded. Please try again.');
+  }
   if (!data.category) notFound();
 
   return (

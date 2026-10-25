@@ -50,14 +50,15 @@ on:
         default: '10'
   push:
     branches: [main]
-  pull_request:
-    paths:
-      - '.github/workflows/production-health.yml'
-      - 'scripts/production-health-probe.py'
-      - 'tests/production-health-probe.test.ts'
-      - 'app/api/health/route.ts'
-      - 'app/api/mobile/v1/health/route.ts'
-      - 'middleware.ts'
+  # NO pull_request trigger, deliberately (2026-10-25).
+  #
+  # A production probe answers "is the DEPLOYED build healthy", not "is this
+  # diff correct". Running it on every pull request therefore:
+  #   * charged minutes for a measurement of main, not of the PR,
+  #   * turned an unrelated production incident into a red X on somebody's
+  #     pull request, and implied a false pass ("probe green" != "diff safe").
+  # Production is probed on push to main, on the daily 08:00 IST schedule, and
+  # on demand from the Actions tab.
   schedule:
     # 02:30 UTC daily, i.e. 08:00 IST — before the shop opens in Bihar.
     - cron: '30 2 * * *'

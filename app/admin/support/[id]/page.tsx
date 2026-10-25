@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronLeft, Headset, PackageSearch, UserRound } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { Card } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { TicketActionsForm } from '@/components/admin/ticket-actions-form';
@@ -56,7 +57,7 @@ interface MessageRow {
 export default async function AdminSupportTicketPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
 
-  const { data: ticket } = await supabase
+  const { data: ticket, error: ticketError } = await supabase
     .from('support_tickets')
     .select(
       'id, ticket_number, subject, topic, priority, status, created_at, updated_at, resolved_at, closed_at, ' +
@@ -66,6 +67,7 @@ export default async function AdminSupportTicketPage({ params }: { params: { id:
     .eq('id', params.id)
     .maybeSingle<TicketRow>();
 
+  throwIfReadFailed(ticketError, 'Support ticket');
   if (!ticket) notFound();
 
   const [{ data: messageData }, { data: authorData }] = await (async () => {

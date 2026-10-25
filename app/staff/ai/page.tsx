@@ -1,8 +1,8 @@
 import { MaharaniAIChat } from '@/components/ai/maharani-ai-chat';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 
 export default async function StaffAIPage() {
-  await requirePermission('inventory.view');
+  await requirePagePermission('inventory.view');
   return <MaharaniAIChat surface="staff" title="✨ Maharani Warehouse Copilot" subtitle="Read-only help for authorized products, warehouse stock, FEFO batches, expiry, GRNs, transfers and orders." quickActions={[
     { label: 'Low Stock', prompt: 'Authorized low-stock products dikhao.' },
     { label: 'Expiring Stock', prompt: 'Agle 30 din ke expiring batches dikhao.' },

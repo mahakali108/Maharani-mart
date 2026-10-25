@@ -1,8 +1,9 @@
 import { IndianRupee } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { requirePermission } from '@/lib/admin/guard';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { CommissionForm } from '@/components/admin/commission-form';
 import { CommissionRowActions } from '@/components/admin/commission-row-actions';
 
@@ -36,10 +37,10 @@ function paiseToRupees(paise: number): string {
 }
 
 export default async function AdminCommissionsPage() {
-  await requirePermission('commissions.manage');
+  await requirePagePermission('commissions.manage');
   const supabase = createClient();
 
-  const [{ data: memberData }, { data: commissionData }] = await Promise.all([
+  const [{ data: memberData, error: memberError }, { data: commissionData, error: commissionError }] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, full_name, role')
@@ -54,6 +55,8 @@ export default async function AdminCommissionsPage() {
       .returns<CommissionRow[]>(),
   ]);
 
+  const readFailed = Boolean(memberError || commissionError);
+  const readFailureMessage = memberError?.message ?? commissionError?.message ?? null;
   const members = memberData ?? [];
   const memberById = new Map(members.map((m) => [m.id, m]));
   const commissions = commissionData ?? [];
@@ -71,7 +74,9 @@ export default async function AdminCommissionsPage() {
         <CardHeader>
           <CardTitle>Generate a commission</CardTitle>
         </CardHeader>
-        {members.length === 0 ? (
+        {readFailed ? (
+          <ReadFailureNotice what="Team members and commission records" detail={readFailureMessage} />
+        ) : members.length === 0 ? (
           <AdminEmptyState
             icon={IndianRupee}
             title="No team members yet"
@@ -82,7 +87,7 @@ export default async function AdminCommissionsPage() {
         )}
       </Card>
 
-      {commissions.length === 0 ? (
+      {readFailed ? null : commissions.length === 0 ? (
         <AdminEmptyState
           icon={IndianRupee}
           title="No commission records yet"
