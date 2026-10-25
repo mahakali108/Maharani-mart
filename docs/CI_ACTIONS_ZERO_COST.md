@@ -40,6 +40,25 @@ contains no evidence about the diff.
 * The scheduled `Production health` job also fails (2026-10-25T07:46Z), which
   confirms the block is account-wide, not workflow-specific.
 
+### The new workflow was accepted; only execution is blocked
+
+The commit that adds `ci.yml` (`0116622`) produced run **`40205122974`**,
+workflow **`Web CI`**, event `pull_request`. GitHub therefore **parsed and
+registered the new workflow file** — an invalid `on:`/job definition cannot
+create a run at all. Its single job then behaved exactly like every other job on
+this account:
+
+| Field | Value |
+| --- | --- |
+| Job | Web checks (typecheck, lint, tests, build) |
+| Steps started | **0** |
+| Started → completed | 15:03:27Z → 15:03:29Z (2 s) |
+| Annotation | the same billing message |
+
+This is the precise distinction to keep: **workflow validity is proven, step
+execution is not.** Nothing about typecheck/lint/test/build was measured by
+GitHub on this commit, so no check here may be described as "CI passed".
+
 ### What is NOT verified — do not assume
 
 * Whether the trigger is **exhausted included minutes** or a **failed payment

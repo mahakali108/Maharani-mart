@@ -201,6 +201,14 @@ contract):**
 | `.github/workflows/android-evidence.yml` | untouched (unrelated). |
 | `tests/pwa-ci.test.ts` | asserts the old triggers are **gone**, the web gate still runs on PRs/pushes to `main`, native is still dispatch-gated, and the probe is no longer a PR gate. |
 
+Fresh evidence on **this** commit (`0116622`): GitHub **accepted** the new
+workflow — run [`40205122974`](https://github.com/mahakali108/Maharani-mart/actions/runs/40205122974)
+(`Web CI`, event `pull_request`) exists, which an invalid workflow file could
+never produce — and its single job then started **0 steps** and ended 2 s later
+with the same billing annotation. So *workflow validity is proven; step execution
+is not*. The check name is `Web checks (typecheck, lint, tests, build)`; it will
+stay red until the account-level block clears.
+
 Nothing lifts an account-level Actions block from inside a repository — the
 zero-cost options (wait for the monthly reset / make the repo public with owner
 approval) are documented in `docs/CI_ACTIONS_ZERO_COST.md`. Until then local runs
