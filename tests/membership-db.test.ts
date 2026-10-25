@@ -175,3 +175,17 @@ describe('0080 Retailer Memberships & Loyalty Schema (PostgreSQL 16 PGlite)', ()
     });
   });
 });
+
+  describe('Migration Idempotency & Concurrency', () => {
+    it('executes 0080 migration repeatedly without duplicate object errors', async () => {
+      const { readFileSync } = await import('node:fs');
+      const sql = readFileSync('supabase/migrations/0080_retailer_memberships_and_loyalty.sql', 'utf8');
+      let error: Error | null = null;
+      try {
+        await db.exec(sql);
+      } catch (err: any) {
+        error = err;
+      }
+      expect(error).toBeNull();
+    });
+  });

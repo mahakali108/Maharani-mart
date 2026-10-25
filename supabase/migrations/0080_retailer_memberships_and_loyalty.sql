@@ -15,7 +15,10 @@
 -- ---------------------------------------------------------------------------
 -- 1. MEMBERSHIP PLANS
 -- ---------------------------------------------------------------------------
-create type membership_tier as enum ('free', 'silver', 'gold');
+do $$ begin
+  create type membership_tier as enum ('free', 'silver', 'gold');
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists public.membership_plans (
   id text primary key,                                   -- 'free', 'silver', 'gold'
@@ -62,7 +65,10 @@ create policy "membership_plans_admin_update" on public.membership_plans
 -- ---------------------------------------------------------------------------
 -- 2. RETAILER MEMBERSHIPS (Assignments & History)
 -- ---------------------------------------------------------------------------
-create type membership_status as enum ('active', 'pending_payment', 'expired', 'cancelled');
+do $$ begin
+  create type membership_status as enum ('active', 'pending_payment', 'expired', 'cancelled');
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists public.retailer_memberships (
   id uuid primary key default uuid_generate_v4(),
@@ -321,6 +327,9 @@ begin
       return v_entry_id;
     end if;
   end if;
+
+  -- Row-lock retailer account row to serialize concurrent debits/mutations
+  perform id from public.retailers where id = p_retailer_id for update;
 
   -- Prevent negative balance on debit
   if p_points < 0 then

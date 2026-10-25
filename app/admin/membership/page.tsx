@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { adminAssignRetailerMembershipAction, adminRecordLoyaltyPointsAction } from '@/lib/membership/actions';
 import type { MembershipPlan } from '@/lib/membership/types';
 
@@ -38,6 +39,10 @@ export default async function AdminMembershipPage() {
     supabase.from('retailers').select('id, shop_name').order('shop_name', { ascending: true }),
   ]);
 
+  const readFailed = Boolean(plansResult.error || membershipsResult.error || retailersResult.error);
+  const readFailureMessage =
+    plansResult.error?.message ?? membershipsResult.error?.message ?? retailersResult.error?.message ?? null;
+
   const plans = (plansResult.data as unknown as MembershipPlan[]) ?? [];
   const memberships = (membershipsResult.data as unknown as MembershipRow[]) ?? [];
   const retailers = (retailersResult.data as unknown as RetailerOption[]) ?? [];
@@ -52,6 +57,10 @@ export default async function AdminMembershipPage() {
           Super Admin and Admin control center for B2B Retailer Memberships (Free, Silver, Gold) and auditable loyalty points.
         </p>
       </header>
+
+      {readFailed && (
+        <ReadFailureNotice what="Membership configuration and records" detail={readFailureMessage} />
+      )}
 
       {/* Plan Configurations */}
       <section className="space-y-4">

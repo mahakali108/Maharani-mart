@@ -11,6 +11,7 @@ import {
 } from '@/lib/membership/server';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,12 @@ export default async function RetailerMembershipPage() {
     getRetailerLoyaltyPosition(supabase, user.id),
     getRetailerLoyaltyLedger(supabase, user.id, 10),
   ]);
+
+  const readFailed = Boolean(
+    membershipRes.error || plansRes.error || historyRes.error || loyaltyBalRes.error || loyaltyLedgerRes.error
+  );
+  const readFailureMessage =
+    membershipRes.error ?? plansRes.error ?? historyRes.error ?? loyaltyBalRes.error ?? loyaltyLedgerRes.error ?? null;
 
   const activeMembership = membershipRes.membership;
   const plans = plansRes.plans;
@@ -48,6 +55,10 @@ export default async function RetailerMembershipPage() {
         <ChevronRight className="h-3 w-3" />
         <span className="text-slate-800">Membership & Loyalty</span>
       </div>
+
+      {readFailed && (
+        <ReadFailureNotice what="Membership and loyalty account details" detail={readFailureMessage} />
+      )}
 
       {/* Active Membership Hero */}
       <section className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-peach-50 to-amber-100/40 p-6 shadow-sm">
