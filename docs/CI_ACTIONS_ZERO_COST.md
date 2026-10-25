@@ -65,7 +65,9 @@ GitHub on this commit, so no check here may be described as "CI passed".
   method**. Both render the identical annotation.
 * The exact minutes used. The billing and Actions-permission endpoints return
   `403 Resource not accessible by integration` for the token available here, and
-  the timing API returns no billable duration.
+  the timing API returns no billable duration. §2.1 therefore *measures job
+  durations* and reports a lower bound plus a stated estimate — not the account's
+  own meter.
 * Branch protection / required status checks: `403` for the same reason, so
   whether "Web checks" is a required check cannot be confirmed from here.
 
@@ -106,6 +108,62 @@ Two structural faults, independent of billing:
 
 ---
 
+## 2.1 Measured: which job spent the minutes
+
+Job durations taken from the Actions API for the runs of **2026-10-08 → 2026-10-09**
+(the last two days before the block):
+
+| Job | Jobs that executed | Minutes |
+| --- | --- | --- |
+| `Android unit tests, lint, and debug APK` | **39** | **389.6** |
+| `Web typecheck, lint, tests, and build` | ~50 | 156.3 |
+
+**71 % of the measured minutes on those two days went to the Android job**, at an
+average of **10.0 minutes per invocation** versus 3.1 for the web gate.
+
+Run volume for **2026-10-01 → 2026-10-09**: **244** runs of the android workflow,
+6 of `Android artifact evidence`, 4 of `Production health`.
+
+Crucially, the Android job was **actually executing on every push and every pull
+request** in that window — the `if: github.event_name == 'workflow_dispatch'` gate
+that exists today was merged on **2026-10-24 in PR #116**, two weeks *after* the
+block began. `git log -S"github.event_name == 'workflow_dispatch'"` on
+`.github/workflows/android-apk.yml` returns `0508f8b` and nothing earlier.
+
+**Estimate (method stated, not a measurement):** 244 runs × 10.0 min measured
+average ≈ **2,440 Android minutes** for 1–9 October, before counting ~244 web
+jobs at ~3 min. Against the Free plan's **2,000 minutes/month** for private
+repositories, this is a sufficient explanation for the block beginning on
+10 October. It is an estimate because per-job durations for all 244 runs were
+not fetched; the *lower bound* measured directly (389.6 min in two days) is fact.
+
+## 2.2 The Android job is cost-neutral now — but it WAS the cost centre
+
+`android-apk.yml` still declares three jobs, but since this PR it only runs on
+`workflow_dispatch`, so **it consumes zero minutes unless a human starts it**.
+
+| Item | Status | Note |
+| --- | --- | --- |
+| `android` job (JDK 17 + Android SDK 36 + Gradle `testDebugUnitTest lintDebug assembleDebug`, 45-min timeout) | manual-only | The product ships as a web PWA: `vercel.json` builds `next build`, no workflow publishes an APK to Play or anywhere else, and no other workflow consumes the artifact except `android-evidence.yml` |
+| `needs: web` on the `android` job | present | A manual native dispatch also runs the full web gate — two jobs for one diagnostic |
+| `android-evidence.yml` (`workflow_run` on `Native Android Debug APK`) | automatic **when a native build runs** | Dormant while native builds are manual |
+
+**Recommendation: do not delete the Android job in this PR.** Deleting it would
+be a behaviour change to a "PWA-only" claim that also breaks three passing test
+files, and it buys nothing today because the job already costs zero:
+
+* `tests/production-readiness.test.ts` asserts `android-apk.yml` contains
+  `assembleDebug`, `testDebugUnitTest`, `lintDebug`, `com.maharanitraders.app`
+* `tests/android-release-versioning.test.ts` asserts the APK version-policy steps
+* `tests/pwa-ci.test.ts` asserts the `android` job stays dispatch-gated
+* `tests/android-project-integrity.test.ts` inspects the `android/` tree itself
+
+If the owner does want it gone, it should be **one separate, approved change**
+that removes the `android` job, drops `needs: web`, retires `android-evidence.yml`
+and updates those four test files together — and decides explicitly whether the
+`android/` source tree stays as documentation. That is a product decision
+(native is out of scope per the audit brief), not a CI-cost fix.
+
 ## 3. What this change does (all in the existing PR, not a new one)
 
 | File | Change | Why |
@@ -136,24 +194,33 @@ it is still real minute usage, which is why §4 matters.
 
 ---
 
-## 4. Zero-cost options (owner decision — none executed here)
+## 4. Zero-cost options — what the free tier actually allows
 
-The block is at **account level**. Deleting workflow files does not lift it; it
-only stops wasting runs once the block clears. With that understood:
+Verified against GitHub's own billing documentation (read 2026-10-25):
 
-| Option | Cost | What it needs | Trade-off |
+* Private repositories on **GitHub Free: 2,000 Actions minutes per month**,
+  500 MB artifact storage. Public repositories and **self-hosted runners are
+  free of minute metering**. Minutes reset to zero at the start of each month and
+  do not carry over. Without a payment method, jobs are blocked once the included
+  minutes are used.
+* Public repositories additionally get *larger* standard runners (4-core/16 GB)
+  at no charge versus 2-core/8 GB for private.
+
+| Option | Cost | Needs | Verdict |
 | --- | --- | --- | --- |
-| **A. Wait for the monthly reset** and keep the new cheap workflow | ₹0 | nothing | No CI until the reset date. Use §5's local gate in the meantime. |
-| **B. Make the repository public** — Actions minutes are free/unlimited for public repositories on GitHub Free | ₹0 | explicit owner approval, because the source becomes world-readable | A public repo also exposes history and PR diffs. Not something an agent may decide. |
-| **C. Check the payment method** if the annotation is caused by a failed payment rather than exhausted minutes | ₹0 if it is a stale/expired card needing re-authorisation; a purchase if a paid plan is chosen | owner, in Billing settings | This is a **billing action** and was explicitly out of scope for this task. |
-| **D. Buy minutes / upgrade to Pro** | money | owner | Rejected by the instruction "no money, no paid plan". |
-| **E. Local / free-runner CI** | ₹0 | see §5 | Evidence is real but is *not* GitHub CI, and must never be reported as "CI passed". |
+| **A. Wait for the monthly reset** (1 Nov 2026) and keep the new cheap workflow | **₹0** | nothing | **Recommended now.** ~2,000 min/month with a 3-minute web gate is ~600 runs of headroom; the Android job can no longer touch it. |
+| **B. Make the repository public** | **₹0** | explicit owner approval — the code, history and PR diffs become world-readable | Only if automatic PR checks are needed before the reset. **Not an agent decision.** |
+| **C. Self-hosted runner** | **₹0** in Actions minutes | your own hardware + a repo admin registering the runner | Works on every plan, but it is infrastructure to maintain and a repo-settings change; also unusable from this sandbox. |
+| **D. Card re-authorisation**, if the block is a failed payment rather than exhausted minutes | ₹0 if it is a stale card; **a purchase** if a paid plan is chosen | owner, in Billing | Out of scope by instruction. |
+| **E. Buy minutes / upgrade to Pro** | **money** | owner | Rejected by instruction. |
 
-Recommendation: **A now, B only if the owner wants automatic PR checks before
-the reset.** In both cases keep the workflow as changed — it is strictly cheaper
-and it removes the false-red production probe from PRs.
+**Recommended: A.** Keep the workflow as changed — it is strictly cheaper and it
+removes the false-red production probe from pull requests. Revisit B only if
+automatic checks are needed this week.
 
----
+> Distinguishing D from A still requires the owner's *Settings → Billing and
+> plans → Plans and usage → Actions* screen; §2.1's measurement makes exhausted
+> minutes the strongly supported explanation, but does not prove it.
 
 ## 5. The free gate that actually runs today (local parity)
 
@@ -168,10 +235,18 @@ corepack pnpm test
 corepack pnpm run build        # verified working with NEXT_PUBLIC_* unset
 ```
 
-Measured on this change: typecheck **0 errors**, ESLint **clean**, vitest
-**155 files / 2697 tests passed**, `next build` **compiled** with no
-`NEXT_PUBLIC_*` variables set. These are local results. **GitHub CI status
-remains BLOCKED and is not reported as passing.**
+Measured on commit `78a6f05`, 2026-10-25, with no Supabase credentials present:
+
+| Command | Exit code | Result |
+| --- | --- | --- |
+| `corepack pnpm install --frozen-lockfile` | **0** | lockfile matched |
+| `corepack pnpm run typecheck` | **0** | 0 errors |
+| `corepack pnpm run lint` | **0** | no warnings or errors |
+| `corepack pnpm test` | **0** | **155 files / 2694 tests passed** |
+| `corepack pnpm run build` | **0** | compiled, 133/133 static pages |
+
+These are local results. **GitHub CI status remains BLOCKED and is not reported
+as passing.**
 
 Two caveats that make local a weaker signal than CI, stated plainly:
 

@@ -145,14 +145,50 @@ still pass unchanged.
    live rather than from migration text.
 4. GitHub billing, then CI becomes meaningful again.
 
+### 10.1 Which job actually spent the minutes (measured)
+
+Job durations from the Actions API for 2026-10-08 → 10-09 (the last two days
+before the block):
+
+| Job | Executions | Minutes |
+| --- | --- | --- |
+| `Android unit tests, lint, and debug APK` | 39 | **389.6** |
+| `Web typecheck, lint, tests, and build` | ~50 | 156.3 |
+
+**71 % of those two days' minutes were Android**, at 10.0 min/invocation vs 3.1 for
+web. **244** runs of the android workflow were created 2026-10-01 → 10-09, and the
+`if: github.event_name == 'workflow_dispatch'` gate that exists today was merged
+**2026-10-24 in PR #116** — two weeks *after* the block began. Estimate (method
+stated, not a measurement): 244 × 10.0 ≈ **2,440 min** against a **2,000 min**
+Free-plan allowance. The directly measured lower bound is 389.6 min in 48 hours.
+
+### 10.2 The Android job is already cost-neutral — do not delete it here
+
+Since this PR it runs only on `workflow_dispatch`, so it costs **zero minutes**
+unless a human starts it. Removing it would break four passing suites
+(`production-readiness`, `android-release-versioning`, `pwa-ci`,
+`android-project-integrity`) and buy nothing today. If the owner wants native
+work gone, it belongs in one separate approved change that also drops
+`needs: web`, retires `android-evidence.yml` and updates those tests — a product
+decision, not a CI-cost fix. Full analysis in `docs/CI_ACTIONS_ZERO_COST.md` §2.2.
+
+### 10.3 Free-tier options (no payment)
+
+GitHub Free gives **2,000 private-repo minutes/month**, resets monthly; public
+repos and self-hosted runners are free of minute metering. Zero-cost choices:
+**(A)** wait for the 1 Nov reset with the new 3-minute gate (recommended),
+**(B)** make the repo public (needs explicit owner approval — code becomes
+public), **(C)** a self-hosted runner (needs your hardware + a repo-settings
+change). Nothing here requires money, and **no billing change was made**.
+
 ## 9. Checks — with real results
 
 | Check | Result |
 | --- | --- |
-| `tsc --noEmit` | **PASS** (0 errors) |
-| ESLint (`next lint`) | **PASS** (no warnings or errors) |
-| `vitest run` | **PASS** (155 files · 2697 tests) |
-| Production build (`next build`) | **PASS** (compiled with `NEXT_PUBLIC_*` unset — same as `ci.yml`) |
+| `tsc --noEmit` | **PASS** (0 errors, exit 0) |
+| ESLint (`next lint`) | **PASS** (no warnings or errors, exit 0) |
+| `vitest run` | **PASS** (155 files · 2694 tests) |
+| Production build (`next build`) | **PASS** (exit 0, 133/133 static pages, `NEXT_PUBLIC_*` unset — same as `ci.yml`) |
 | Migration replay 76/76 + 6 checkpoint builds | **PASS** |
 | `0078`/`0079` privilege + rollback suites | **PASS** (incl. 11/11 revocation flows, 20/20 release-stock authorization) |
 | Audit script non-mutating | **PASS** (fingerprints identical) |
