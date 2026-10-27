@@ -130,6 +130,7 @@ none deletes audit or business records by default).
 | Category price reads | `lib/retailer/category-pricing.ts` (RLS-scoped loader) |
 | Single pricing chokepoint | `lib/retailer/pricing-data.ts` — `loadPackTiers(supabase, packIds, retailerId)` now injects one synthetic tier at the category price, so catalog, cart, checkout preview, reorder, quick-order, coupon eligibility and the sales-order screen price identically |
 | Call sites updated | `lib/orders/quote-order.ts` (both quote paths), `lib/retailer/catalog.ts`, `lib/retailer/cart-validation.ts`, `lib/coupons/cart-lines.ts`, `app/retailer/{cart,checkout,quick-order,catalog/[id],orders/[id]/reorder}`, `app/salesman/orders/new` |
+| Existing admin actions re-pointed | `lib/admin/retailers-actions.ts` — approve/reject/suspend/reactivate now call the audited 0081 RPCs instead of a direct `UPDATE` |
 | Admin: approvals | `app/admin/retailer-applications/page.tsx`, `components/admin/retailer-approval-panel.tsx`, `components/admin/retailer-approval-sla-form.tsx`, `lib/admin/retailer-approval-actions.ts` |
 | Admin: category pricing | `app/admin/pricing/tiers/page.tsx`, `components/admin/category-price-editor.tsx`, `lib/admin/tier-pricing-actions.ts` |
 | Admin: compliance | `app/admin/compliance/page.tsx`, `lib/compliance/checklist.ts` |
@@ -162,11 +163,16 @@ none deletes audit or business records by default).
 ## 4. Test evidence (local, executed)
 
 ```
-npx vitest run        167 files / 2802 tests passed   (~100 s)
+npx vitest run        168 files / 2818 tests passed   (~105 s)
 npx tsc --noEmit      clean
 npx next lint         "No ESLint warnings or errors"
-npx next build        succeeded (all routes compiled)
+npx next build        succeeded (138/138 static pages, all routes compiled)
 ```
+
+Remote CI: **not run for this branch.** `.github/workflows/ci.yml` triggers only
+on pull requests into `main` and pushes to `main`, and the existing `main` runs
+fail in ~3 seconds with the documented GitHub billing/spending-limit annotation
+(see `docs/CI_ACTIONS_ZERO_COST.md`). No remote check is claimed as passing.
 
 New behavioural coverage (executed on PostgreSQL 16 via PGlite, not string
 matching):
