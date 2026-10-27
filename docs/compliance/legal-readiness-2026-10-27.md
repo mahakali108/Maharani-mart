@@ -32,6 +32,20 @@ The same checklist is rendered in-app at `/admin/compliance` from
 | Digital Personal Data Protection Act, 2023 + DPDP Rules, 2025 | Rules notified 13 Nov 2025; **phased commencement**: machinery rules in force, consent-manager provisions 13 Nov 2026, substantive obligations 13 May 2027 (verify) | Privacy notice and retention practice must be reviewed before the substantive date; the AI 14-day deletion is a platform decision, not a statutory one |
 | IT (Intermediary Guidelines) Rules, 2021 | In force | Grievance/acknowledgement mechanics if the platform is treated as an intermediary |
 
+### 1a. Source verification log (2026-10-27)
+
+What was actually read today, and how much weight it carries:
+
+| Source | What it established | Confidence / caveat |
+| --- | --- | --- |
+| PIB (Ministry of Electronics & IT) release, 17 Nov 2025 — "DPDP Rules, 2025 Notified" | The DPDP Rules, 2025 were notified on 13–14 Nov 2025 (Gazette **G.S.R. 846(E)**), operationalising the DPDP Act, 2023 | **Official government release.** Notification date is reliable. The *commencement schedule* is taken from the Rules themselves and from legal commentary — read rule 1 of the Rules before relying on it. |
+| Secondary legal commentary on DPDP Rules 2025 (multiple firms, 2025–2026) | Phased commencement: rules 1, 2 and 17–21 in force on notification; rule 4 (consent managers) after 12 months; the remaining substantive rules after 18 months | **Secondary.** Consistent across sources but must be confirmed against rule 1(2)–(4) of the notified Rules. |
+| Department of Consumer Affairs / Consumer Protection (E-Commerce) Rules, 2020 (as amended 2021) | Grievance officer: acknowledge within **48 hours**, resolve within **1 month**; display legal name, address, customer-care and grievance contact; marketplace seller disclosure duties | **Substantive text is stable and widely reproduced.** Verify the current consolidated text on the Department's site. |
+| Commentary on the Consumer Protection (E-Commerce) (Amendment) Rules, **2026** (notified 9 Sep 2026; reported effective **1 January 2027**) | Additional disclosures (best-before, return/refund, warranty, delivery and payment terms) plus a duty to give the complainant a copy of the recorded complaint | **Secondary and FUTURE-DATED.** Do not treat as a current obligation; confirm the notification and the effective date on the official portal. |
+
+Nothing in this file should be quoted as legal advice. Where a date or duty
+matters, the owner's CA/lawyer must check the notification text itself.
+
 Every date above must be re-verified against the official notification before
 being relied on. The table is deliberately conservative: it separates **in
 force** from **future** and flags uncertainty.

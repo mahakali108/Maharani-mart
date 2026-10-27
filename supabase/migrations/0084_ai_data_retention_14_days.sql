@@ -34,7 +34,9 @@
 --     malformed or tampered parameter cannot redirect a DELETE
 --   * registry cross-check: the run fails closed if ai_retention_rules and the
 --     hard-coded list disagree (a future migration cannot silently widen scope)
---   * batch-limited, idempotent, retry-safe, per-target error isolation
+--   * batch-limited (at most p_batch_size rows per target per run, hard-capped
+--     by p_max_rows_per_target), idempotent, retry-safe, per-target error
+--     isolation
 --   * service_role/owner only; no API role can execute it
 --   * deleted prompts/responses are NOT logged — counts, cutoff and status only
 --
@@ -173,8 +175,11 @@ begin
           if p_dry_run then
             v_total := least(v_batch, p_max_rows_per_target);
           else
+            -- One bounded batch per target per run: a daily run is rate
+            -- limited by p_batch_size (and hard-capped by
+            -- p_max_rows_per_target), never an unbounded delete.
             loop
-              exit when v_total >= p_max_rows_per_target;
+              exit when v_total >= least(p_batch_size, p_max_rows_per_target);
               if v_idx = 1 then
                 delete from public.ai_audit_logs
                  where ctid in (

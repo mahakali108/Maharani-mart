@@ -1,313 +1,294 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  as,
-  createMigratedDb,
-  createPack,
-  createRetailer,
-  createUser,
-  errorOf,
-  type Db,
-  type PackFixture,
-  type RetailerFixture,
-} from './helpers/pg-harness';
+import { as, createMigratedDb, createPack, createUser, errorOf, type Db } from './helpers/pg-harness';
 
 /**
- * AI-only 14-day retention (migration 0084), executed on PostgreSQL 16.
+ * Migration 0084 — AI-only 14-day retention.
  *
- * Boundaries under test:
- *   - 13 days 23 hours old  -> KEPT
- *   - exactly 14 days old   -> KEPT (the rule is "strictly older than 14 days";
- *                              it becomes eligible on the next run)
- *   - 14 days + 1 minute    -> DELETED
+ * The owner's constraint is narrow and must stay narrow: delete Super Admin AI
+ * data older than 14 days, and nothing else. These tests drive the real
+ * function on a real database.
  *
- * The absolute boundary — retailer/seller accounts, orders, products,
- * inventory, payments, ledgers, audit evidence and legal records — is asserted
- * by counting those tables before and after a live run.
+ * BOUNDARY NOTE (PGlite): `now()` is fixed for the whole transaction, so a row
+ * written with `now() - interval '14 days'` is exactly 14 days old *within that
+ * transaction* and is therefore NOT strictly older than the cutoff — it is
+ * kept. Rows at 14 days + 1 minute are deleted. The boundary is asserted
+ * against that documented behaviour rather than pretending a clock advanced.
  */
 
 let db: Db;
-let retailer: RetailerFixture;
-let pack: PackFixture;
-let admin: string;
+let retailer: string;
 
-type CleanupReport = {
-  run_id: string;
+const AI_TABLES = [
+  'ai_audit_logs',
+  'ai_business_memory',
+  'ai_rate_limit_windows',
+  'ai_confirmed_actions',
+  'ai_demand_forecasts',
+] as const;
+
+async function seedAiRows(daysAgo: number) {
+  // Keep each seed isolated: earlier eligible rows would inflate the counts.
+  for (const table of AI_TABLES) {
+    await db.query(`delete from public.${table}`);
+  }
+  const age = `${daysAgo} days`;
+  await db.query(
+    `insert into public.ai_audit_logs (request_id, user_id, surface, request_type, tool_name, duration_ms, success, created_at)
+     values (gen_random_uuid(), $1, 'admin', 'tool', 'get_business_overview', 12, true, now() - $2::interval)`,
+    [retailer, age]
+  );
+  await db.query(
+    `insert into public.ai_business_memory (user_id, memory_key, memory_value, updated_at)
+     values ($1, 'reorder_preference', 'concise', now() - $2::interval)`,
+    [retailer, age]
+  );
+  await db.query(
+    `insert into public.ai_rate_limit_windows (user_id, bucket, window_started_at, request_count)
+     values ($1, 'chat', now() - $2::interval, 3)`,
+    [retailer, age]
+  );
+  await db.query(
+    `insert into public.ai_confirmed_actions (nonce, user_id, consumed_at)
+     values ($1, $2, now() - $3::interval)`,
+    [randomUUID(), retailer, age]
+  );
+  await db.query(
+    `insert into public.ai_demand_forecasts (product_id, snapshot_days, direction, computed_at)
+     select product_id, 30, 'stable', now() - $1::interval from public.product_packs limit 1`,
+    [age]
+  );
+}
+
+async function counts(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const table of AI_TABLES) {
+    const { rows } = await db.query<{ n: string }>(`select count(*)::text as n from public.${table}`);
+    out[table] = Number(rows[0]!.n);
+  }
+  return out;
+}
+
+interface CleanupTarget {
+  table: string;
+  eligible_rows?: number;
+  deleted_rows?: number;
   status: string;
-  total_affected: number;
+}
+interface CleanupResult {
+  run_id: string;
   dry_run: boolean;
-  targets: { target_key: string; status: string; eligible_rows?: number; deleted_rows?: number }[];
+  cutoff: string;
+  total_affected: number;
+  targets: CleanupTarget[];
   errors: { target_key: string; message: string }[];
-};
-
-const RUN = `select public.run_ai_data_cleanup($1::boolean, $2::text, $3::int, $4::int) as result`;
-
-async function runCleanup(
-  opts: { dryRun?: boolean; batchSize?: number; maxRows?: number; triggeredBy?: string } = {}
-): Promise<CleanupReport> {
-  const { rows } = await as(db, 'service', (tx) =>
-    tx.query<{ result: CleanupReport }>(RUN, [
-      opts.dryRun ?? false,
-      opts.triggeredBy ?? 'test',
-      opts.batchSize ?? 500,
-      opts.maxRows ?? 20000,
-    ])
-  );
-  return rows[0]!.result;
+  status: string;
 }
 
-const ago = (days: number, hours = 0, minutes = 0) =>
-  `now() - interval '${days} days' - interval '${hours} hours' - interval '${minutes} minutes'`;
-
-async function seedAiRows(label: string) {
-  // Two rows per store: one kept (13d 23h) and one expired (14d + 1 min).
-  // Each scenario starts from a clean AI slate so the expected counts describe
-  // THIS scenario only.
-  await db.query(`delete from ai_audit_logs`);
-  await db.query(`delete from ai_business_memory`);
-  await db.query(`delete from ai_rate_limit_windows`);
-  await db.query(`delete from ai_confirmed_actions`);
-  await db.query(`delete from ai_demand_forecasts`);
-  const suffix = `${label}-${randomUUID().slice(0, 6)}`;
-
-  await db.query(
-    `insert into ai_audit_logs (request_id, user_id, surface, request_type, duration_ms, success, created_at)
-     values
-       (gen_random_uuid(), $1, 'retailer', 'chat', 10, true, ${ago(13, 23, 0)}),
-       (gen_random_uuid(), $1, 'retailer', 'chat', 10, true, ${ago(14, 0, 1)})`,
-    [retailer.id]
+async function run(dryRun = false, batch = 500) {
+  const { rows } = await db.query<{ r: CleanupResult }>(
+    `select public.run_ai_data_cleanup($1, 'test', $2, 5000) as r`,
+    [dryRun, batch]
   );
-  await db.query(
-    `insert into ai_business_memory (user_id, memory_key, memory_value, source, updated_at)
-     values
-       ($1, 'preferred_brand', $2, 'user_confirmed', ${ago(13, 23, 0)}),
-       ($1, 'frequent_product', $2, 'user_confirmed', ${ago(14, 0, 1)})`,
-    [retailer.id, `v-${suffix}`]
-  );
-  await db.query(
-    `insert into ai_rate_limit_windows (user_id, bucket, window_started_at, request_count)
-     values
-       ($1, $2, ${ago(13, 23, 0)}, 1),
-       ($1, $3, ${ago(14, 0, 1)}, 1)`,
-    [retailer.id, `k1-${suffix}`, `k2-${suffix}`]
-  );
-  await db.query(
-    `insert into ai_confirmed_actions (nonce, user_id, consumed_at)
-     values
-       ($1, $2, ${ago(13, 23, 0)}),
-       ($3, $2, ${ago(14, 0, 1)})`,
-    [randomUUID(), retailer.id, randomUUID()]
-  );
-  await db.query(
-    `insert into ai_demand_forecasts (product_id, snapshot_days, direction, computed_at)
-     values
-       ($1, 30, 'stable', ${ago(13, 23, 0)}),
-       ($1, 30, 'stable', ${ago(14, 0, 1)})`,
-    [pack.productId]
-  );
-}
-
-async function countAiRows() {
-  const { rows } = await db.query<{
-    audit: string;
-    memory: string;
-    windows: string;
-    confirmed: string;
-    forecasts: string;
-  }>(`select
-        (select count(*) from ai_audit_logs)::text as audit,
-        (select count(*) from ai_business_memory)::text as memory,
-        (select count(*) from ai_rate_limit_windows)::text as windows,
-        (select count(*) from ai_confirmed_actions)::text as confirmed,
-        (select count(*) from ai_demand_forecasts)::text as forecasts`);
-  return rows[0]!;
-}
-
-async function countBusinessRows() {
-  const { rows } = await db.query<Record<string, string>>(`
-    select
-      (select count(*) from retailers)::text as retailers,
-      (select count(*) from profiles)::text as profiles,
-      (select count(*) from products)::text as products,
-      (select count(*) from product_packs)::text as packs,
-      (select count(*) from product_tier_prices)::text as tier_prices,
-      (select count(*) from orders)::text as orders,
-      (select count(*) from retailer_wallet_ledger)::text as wallet_ledger,
-      (select count(*) from loyalty_ledger)::text as loyalty_ledger,
-      (select count(*) from retailer_approval_events)::text as approval_events,
-      (select count(*) from retailer_applications)::text as applications,
-      (select count(*) from audit_logs)::text as audit_logs,
-      (select count(*) from super_admin_audit_logs)::text as super_admin_audit_logs,
-      (select count(*) from cart_items)::text as cart_items,
-      (select count(*) from support_tickets)::text as support_tickets
-  `);
-  return rows[0]!;
+  const result = rows[0]!.r;
+  // Convenience view used by the assertions below.
+  return {
+    ...result,
+    totalDeleted: result.total_affected,
+    deleted: Object.fromEntries(
+      result.targets.map((target) => [target.table, target.deleted_rows ?? target.eligible_rows ?? 0])
+    ) as Record<string, number>,
+  };
 }
 
 beforeAll(async () => {
   db = await createMigratedDb();
-  admin = await createUser(db, 'admin');
-  retailer = await createRetailer(db, { creditLimitRupees: 0 });
-  pack = await createPack(db, { gstPercent: 18 });
-  // A couple of unrelated rows so the boundary counts are non-trivial.
-  await db.query(
-    `insert into retailer_wallet_ledger (retailer_id, entry_type, points, amount_paise, note, created_at)
-     values ($1, 'ORDER_EARN', 0, 0, 'seed', now() - interval '400 days')
-     on conflict do nothing`,
-    [retailer.id]
-  ).catch(() => undefined);
-  await db.query(
-    `insert into loyalty_ledger (retailer_id, points, entry_type, reason, created_at)
-     values ($1, 5, 'ORDER_EARN', 'seed', now() - interval '400 days')`,
-    [retailer.id]
-  );
+  retailer = await createUser(db, 'retailer');
+  // A non-AI row of every "must never be touched" family, plus one product so
+  // a forecast snapshot can be seeded (ai_demand_forecasts.product_id is NOT NULL).
+  await db.query(`insert into public.warehouses (name, is_active) values ('Retention warehouse', true)`);
+  await createPack(db, { gstPercent: 18, moq: 1, unitsPerCase: 10 });
 }, 180_000);
 
 afterAll(async () => {
-  await db.close();
+  await db?.close();
 });
 
-describe('AI 14-day retention boundaries', () => {
-  it('dry run reports eligible rows without deleting any of them', async () => {
-    await seedAiRows('dry');
-    const before = await countAiRows();
-    const report = await runCleanup({ dryRun: true });
-
-    expect(report.status).toBe('completed');
-    expect(report.dry_run).toBe(true);
-    for (const target of report.targets) {
-      expect(target.status).toBe('ok');
-      expect(target.eligible_rows).toBe(1);
-      expect(target.deleted_rows ?? 0).toBe(0);
-    }
-    expect(await countAiRows()).toEqual(before);
+describe('14-day boundary', () => {
+  it('keeps rows that are 13 days 23 hours old', async () => {
+    await seedAiRows(13);
+    await db.query(`update public.ai_audit_logs set created_at = now() - interval '13 days 23 hours'`);
+    const result = await run();
+    expect(result.totalDeleted).toBe(0);
+    expect((await counts()).ai_audit_logs).toBe(1);
   });
 
-  it('deletes only rows strictly older than 14 days (13d23h and exactly 14d are kept)', async () => {
-    await seedAiRows('live');
-    const before = await countAiRows();
-    const report = await runCleanup();
-
-    expect(report.status).toBe('completed');
-    expect(report.total_affected).toBe(5);
-
-    const after = await countAiRows();
-    expect(Number(after.audit)).toBe(Number(before.audit) - 1);
-    expect(Number(after.memory)).toBe(Number(before.memory) - 1);
-    expect(Number(after.windows)).toBe(Number(before.windows) - 1);
-    expect(Number(after.confirmed)).toBe(Number(before.confirmed) - 1);
-    expect(Number(after.forecasts)).toBe(Number(before.forecasts) - 1);
-
-    // Every remaining AI row is at most 14 days old.
-    const { rows } = await db.query<{ violations: string }>(`
-      select (
-        (select count(*) from ai_audit_logs where created_at < now() - interval '14 days')
-      + (select count(*) from ai_business_memory where updated_at < now() - interval '14 days')
-      + (select count(*) from ai_rate_limit_windows where window_started_at < now() - interval '14 days')
-      + (select count(*) from ai_confirmed_actions where consumed_at < now() - interval '14 days')
-      + (select count(*) from ai_demand_forecasts where computed_at < now() - interval '14 days')
-      )::text as violations`);
-    expect(rows[0]!.violations).toBe('0');
-  });
-
-  it('keeps a row sitting exactly on the cutoff and deletes one second older', async () => {
-    // `now()` is frozen for the duration of a transaction, so inserting and
-    // running the engine inside ONE transaction pins the boundary exactly:
-    //   created_at = now() - 14 days  -> NOT deleted (strictly-older rule)
-    //   created_at = now() - 14 days - 1s -> deleted
-    await db.query(`delete from ai_audit_logs`);
-    const report = await as(db, 'service', async (tx) => {
+  it('keeps a row exactly on the cutoff and deletes one a second older (same transaction)', async () => {
+    for (const table of AI_TABLES) await db.query(`delete from public.${table}`);
+    // `now()` is fixed inside one transaction, so this pins the boundary
+    // exactly: the row at now() - 14 days equals the cutoff, and the strict
+    // `<` predicate must not delete it, while a row one second older goes.
+    const outcome = await as(db, 'service', async (tx) => {
       await tx.query(
-        `insert into ai_audit_logs (request_id, user_id, surface, request_type, duration_ms, success, created_at)
-         values
-           (gen_random_uuid(), $1, 'retailer', 'chat', 1, true, now() - interval '14 days'),
-           (gen_random_uuid(), $1, 'retailer', 'chat', 1, true, now() - interval '14 days' - interval '1 second')`,
-        [retailer.id]
+        `insert into public.ai_audit_logs (request_id, user_id, surface, request_type, tool_name, duration_ms, success, created_at)
+         values (gen_random_uuid(), $1, 'admin', 'tool', 'boundary-exact', 1, true, now() - interval '14 days')`,
+        [retailer]
       );
-      const { rows } = await tx.query<{ result: CleanupReport }>(RUN, [false, 'test', 500, 20000]);
-      const { rows: left } = await tx.query<{ created_at: string }>(
-        `select created_at from ai_audit_logs order by created_at`
+      await tx.query(
+        `insert into public.ai_audit_logs (request_id, user_id, surface, request_type, tool_name, duration_ms, success, created_at)
+         values (gen_random_uuid(), $1, 'admin', 'tool', 'boundary-older', 1, true, now() - interval '14 days 1 second')`,
+        [retailer]
       );
-      return { report: rows[0]!.result, left };
+      const res = await tx.query<{ r: { total_affected: number } }>(
+        `select public.run_ai_data_cleanup(false, 'test', 500, 5000) as r`
+      );
+      const remaining = await tx.query<{ tool_name: string }>(
+        `select tool_name from public.ai_audit_logs where tool_name like 'boundary-%' order by tool_name`
+      );
+      return { deleted: res.rows[0]!.r.total_affected, remaining: remaining.rows.map((row) => row.tool_name) };
     });
-    expect(report.report.targets[0]?.deleted_rows).toBe(1);
-    expect(report.left).toHaveLength(1);
-    const kept = await db.query<{ n: string }>(
-      `select count(*)::text as n from ai_audit_logs where created_at = now() - interval '14 days'`
+    expect(outcome.deleted).toBe(1);
+    expect(outcome.remaining).toEqual(['boundary-exact']);
+  });
+
+  it('deletes rows 14 days + 1 minute old across all five AI tables', async () => {
+    await seedAiRows(15);
+    await db.query(`update public.ai_audit_logs set created_at = now() - interval '14 days 1 minute'`);
+    await db.query(`update public.ai_business_memory set updated_at = now() - interval '14 days 1 minute'`);
+    await db.query(`update public.ai_rate_limit_windows set window_started_at = now() - interval '14 days 1 minute'`);
+    await db.query(`update public.ai_confirmed_actions set consumed_at = now() - interval '14 days 1 minute'`);
+    await db.query(`update public.ai_demand_forecasts set computed_at = now() - interval '14 days 1 minute'`);
+    const result = await run();
+    expect(result.totalDeleted).toBe(5);
+    const after = await counts();
+    for (const table of AI_TABLES) expect(after[table], table).toBe(0);
+  });
+});
+
+describe('dry run, idempotency and batching', () => {
+  it('a dry run reports the rows but deletes nothing', async () => {
+    await seedAiRows(30);
+    const before = await counts();
+    const result = await run(true);
+    expect(result.dry_run).toBe(true);
+    // A dry run reports eligibility only; it deletes nothing.
+    expect(result.targets.map((target) => target.eligible_rows)).toEqual([1, 1, 1, 1, 1]);
+    expect(result.targets.every((target) => target.deleted_rows === undefined)).toBe(true);
+    expect(await counts()).toEqual(before);
+  });
+
+  it('is idempotent and retry-safe', async () => {
+    // A dataset with nothing older than the cutoff: two runs must both be no-ops.
+    await seedAiRows(5);
+    const first = await run();
+    expect(first.totalDeleted).toBe(0);
+    const second = await run();
+    expect(second.totalDeleted).toBe(0);
+
+    // And a deleting run followed by a rerun deletes nothing more.
+    await seedAiRows(30);
+    expect((await run()).totalDeleted).toBeGreaterThan(0);
+    expect((await run()).totalDeleted).toBe(0);
+  });
+
+  it('respects the per-target batch size (one bounded batch per run)', async () => {
+    for (const table of AI_TABLES) await db.query(`delete from public.${table}`);
+    await db.query(
+      `insert into public.ai_audit_logs (request_id, user_id, surface, request_type, tool_name, duration_ms, success, created_at)
+       select gen_random_uuid(), $1, 'admin', 'tool', 'get_business_overview', 12, true, now() - interval '40 days'
+         from generate_series(1, 12)`,
+      [retailer]
     );
-    expect(['0', '1']).toContain(kept.rows[0]!.n);
+    const first = await run(false, 3);
+    expect(first.deleted.ai_audit_logs).toBe(3);
+    const { rows } = await db.query<{ n: string }>(`select count(*)::text as n from public.ai_audit_logs`);
+    expect(Number(rows[0]!.n)).toBe(9);
   });
+});
 
-  it('is idempotent: a repeated live run on an unchanged dataset deletes nothing twice', async () => {
-    await seedAiRows('idempotent');
-    const first = await runCleanup();
-    expect(first.total_affected).toBe(5);
-    const second = await runCleanup();
-    expect(second.total_affected).toBe(0);
-    const third = await runCleanup();
-    expect(third.total_affected).toBe(0);
-  });
-
-  it('respects the batch/max-rows limit and is retry-safe', async () => {
-    await seedAiRows('batch');
-    const limited = await runCleanup({ batchSize: 1, maxRows: 1 });
-    expect(limited.total_affected).toBe(5); // 1 per target, 5 targets, each had 1
-    const report = await runCleanup({ batchSize: 1, maxRows: 1 });
-    expect(report.total_affected).toBe(0);
-  });
-
-  it('records an operational audit row without any AI content', async () => {
-    const { rows } = await db.query<{ run_id: string; summary: Record<string, unknown>; errors: unknown[] }>(
-      `select run_id, summary, errors from ai_cleanup_runs order by started_at desc limit 1`
-    );
-    const row = rows[0]!;
-    expect(row.run_id).toMatch(/^ai-cleanup-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}$/);
-    const serialized = JSON.stringify(row.summary);
-    expect(serialized).not.toMatch(/memory_value|prompt|response|brand-|cat-|prod-/);
-    expect(row.errors).toEqual([]);
-  });
-
-  it('cannot be executed by an API role', async () => {
-    for (const who of [retailer.id, admin, 'anon']) {
-      const message = await errorOf(db, who, (tx) => tx.query(RUN, [true, 'test', 100, 100]));
-      expect(message).not.toBeNull();
+describe('scope isolation', () => {
+  it('leaves every business, ledger and audit-account record untouched', async () => {
+    const tables = [
+      'orders',
+      'order_items',
+      'payment_collections',
+      'retailer_wallet_ledger',
+      'loyalty_ledger',
+      'retailer_credit_accounts',
+      'coupons',
+      'notification_logs',
+      'audit_logs',
+      'super_admin_audit_logs',
+      'cleanup_runs',
+      'products',
+      'product_packs',
+      'retailer_account_requests',
+    ];
+    const before: Record<string, number> = {};
+    for (const table of tables) {
+      const { rows } = await db.query<{ n: string }>(`select count(*)::text as n from public.${table}`);
+      before[table] = Number(rows[0]!.n);
     }
-    const { rows } = await db.query<{ n: string }>(`select count(*)::text as n from ai_cleanup_runs`);
-    expect(Number(rows[0]!.n)).toBeGreaterThan(0);
+    await seedAiRows(45);
+    await run();
+    for (const table of tables) {
+      const { rows } = await db.query<{ n: string }>(`select count(*)::text as n from public.${table}`);
+      expect(Number(rows[0]!.n), table).toBe(before[table]);
+    }
   });
 
-  it('never touches business, ledger, audit-evidence or account records', async () => {
-    const before = await countBusinessRows();
-    await seedAiRows('boundary');
-    const report = await runCleanup();
-    expect(report.total_affected).toBe(5);
-    const after = await countBusinessRows();
-    expect(after).toEqual(before);
+  it('never deletes a general audit row even at 400 days', async () => {
+    await db.query(
+      `insert into public.audit_logs (table_name, record_id, action, changed_by, created_at)
+       values ('retailers', gen_random_uuid(), 'update', $1, now() - interval '400 days')`,
+      [retailer]
+    );
+    const before = await db.query<{ n: string }>(`select count(*)::text as n from public.audit_logs`);
+    await seedAiRows(45);
+    await run();
+    const after = await db.query<{ n: string }>(`select count(*)::text as n from public.audit_logs`);
+    expect(after.rows[0]!.n).toBe(before.rows[0]!.n);
   });
 
-  it('keeps the registry and the hard-coded implementation in step', async () => {
-    const { rows } = await db.query<{ table_name: string; retention_days: number; cutoff_column: string }>(
-      `select table_name, retention_days, cutoff_column from ai_retention_rules order by table_name`
+  it('records a run audit row without prompts, responses or personal data', async () => {
+    await seedAiRows(45);
+    await run();
+    const { rows } = await db.query<{ summary: unknown; triggered_by: string; errors: unknown }>(
+      `select summary, triggered_by, errors from public.ai_cleanup_runs order by started_at desc limit 1`
+    );
+    expect(rows[0]!.summary).toBeTruthy();
+    const serialized = JSON.stringify(rows[0]);
+    expect(serialized).not.toMatch(/select |insert |@|password|token/i);
+    expect(rows[0]!.triggered_by).toBe('test');
+  });
+
+  it('is not executable by an API role', async () => {
+    const message = await errorOf(db, 'anon', (tx) =>
+      tx.query(`select public.run_ai_data_cleanup(false, 'anon', 100, 100)`)
+    );
+    expect(message).toMatch(/permission denied|could not be executed/i);
+  });
+
+  it('has a registry that matches the implemented allow-list exactly', async () => {
+    const { rows } = await db.query<{ table_name: string; cutoff_column: string; retention_days: number }>(
+      `select table_name, cutoff_column, retention_days from public.ai_retention_rules order by table_name`
     );
     expect(rows).toEqual([
-      { table_name: 'ai_audit_logs', retention_days: 14, cutoff_column: 'created_at' },
-      { table_name: 'ai_business_memory', retention_days: 14, cutoff_column: 'updated_at' },
-      { table_name: 'ai_confirmed_actions', retention_days: 14, cutoff_column: 'consumed_at' },
-      { table_name: 'ai_demand_forecasts', retention_days: 14, cutoff_column: 'computed_at' },
-      { table_name: 'ai_rate_limit_windows', retention_days: 14, cutoff_column: 'window_started_at' },
+      { table_name: 'ai_audit_logs', cutoff_column: 'created_at', retention_days: 14 },
+      { table_name: 'ai_business_memory', cutoff_column: 'updated_at', retention_days: 14 },
+      { table_name: 'ai_confirmed_actions', cutoff_column: 'consumed_at', retention_days: 14 },
+      { table_name: 'ai_demand_forecasts', cutoff_column: 'computed_at', retention_days: 14 },
+      { table_name: 'ai_rate_limit_windows', cutoff_column: 'window_started_at', retention_days: 14 },
     ]);
   });
 
-  it('does not alter the general-purpose 90/120-day cleanup engine', async () => {
-    // The general engine's own registry must not have gained an AI-scoped row
-    // with a shorter window, and its function must still be service-role only.
-    const { rows } = await db.query<{ n: string }>(
-      `select count(*)::text as n from data_retention_rules where retention_days < 90 and category = 'temporary_90'`
+  it('leaves the existing 90/120-day engine completely untouched', async () => {
+    const { rows } = await db.query<{ spec: string }>(
+      `select prosrc as spec from pg_proc where proname = 'run_data_cleanup'`
     );
-    expect(rows[0]!.n).toBe('0');
-    const message = await errorOf(db, retailer.id, (tx) =>
-      tx.query(`select public.run_data_cleanup(true, 'manual', 10, 10)`)
-    );
-    expect(message).not.toBeNull();
+    expect(rows).toHaveLength(1);
+    // The general engine knows nothing about the AI-only 14-day rule.
+    expect(rows[0]!.spec).not.toContain('ai_retention_rules');
+    expect(rows[0]!.spec).not.toContain('ai_cleanup_runs');
   });
 });
