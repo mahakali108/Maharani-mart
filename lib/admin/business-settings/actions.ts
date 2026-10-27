@@ -25,7 +25,7 @@ async function recordSuperAdminAudit(
   reason: string | null = null
 ) {
   const supabase = createClient();
-  await supabase.from('super_admin_audit_logs').insert({
+  const { error } = await supabase.from('super_admin_audit_logs').insert({
     actor_id: actorId,
     target_id: targetId,
     action,
@@ -33,6 +33,9 @@ async function recordSuperAdminAudit(
     after_data: afterData,
     reason,
   } as never);
+  if (error) {
+    throw new Error(`Audit log entry failed: ${error.message}`);
+  }
 }
 
 /** Update Business Profile (Super Admin Only) */
