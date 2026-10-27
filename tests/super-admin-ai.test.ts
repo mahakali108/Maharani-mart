@@ -114,15 +114,24 @@ describe('Super Admin AI security properties', () => {
     }
   });
 
-  it('system prompt instructs the super admin to separate facts/metrics/forecasts/recommendations and treat DB text as untrusted', () => {
+  it('system prompt instructs the super admin to separate facts/calculations/suggestions/unknowns and treat DB text as untrusted', () => {
     const prompt = buildSystemPrompt(
       { id: '11111111-1111-4111-8111-111111111111', role: 'super_admin', fullName: 'T', surface: 'admin' },
       []
     );
-    expect(prompt).toContain('VERIFIED database facts');
+    // The owner-mandated four labels.
+    expect(prompt).toContain('VERIFIED — a fact');
+    expect(prompt).toContain('CALCULATED — a number');
+    expect(prompt).toContain('SUGGESTION — your recommendation');
+    expect(prompt).toContain('UNKNOWN / NOT RECORDED');
     expect(prompt).toContain('FORECASTS/estimates');
     expect(prompt).toContain('UNTRUSTED DATA');
     expect(prompt).toContain('Required approval');
+    // Read-only by design, and it must name the human screen instead of acting.
+    expect(prompt).toContain('You are read-only by design');
+    expect(prompt).toContain('Retailer Approvals');
+    // Bilingual: Hindi is an explicit supported reply language.
+    expect(prompt).toContain('Hindi (Devanagari)');
     // The anti-fabrication rule is still present.
     expect(prompt).toContain("I couldn't verify that from current Maharani Traders data.");
   });

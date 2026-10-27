@@ -1,248 +1,172 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { as, createMigratedDb, createUser, errorOf, type Db, type Tx } from './helpers/pg-harness';
+
+/**
+ * Paid retailer membership — RETIRED (migration 0083).
+ *
+ * These tests replace the old "membership purchase works" suite. They assert
+ * what the owner asked for after the change:
+ *   - no plan is purchasable or even visible to a retailer;
+ *   - no API role can grant, renew or extend a membership;
+ *   - every historical table/row is retained (nothing deleted);
+ *   - the independently useful loyalty ledger still works, at the documented
+ *     base rate (1 point per whole ₹100), with no membership multiplier.
+ */
 
 let db: Db;
 let admin: string;
 let retailer1: string;
 let retailer2: string;
 
-describe('0080 Retailer Memberships & Loyalty Schema (PostgreSQL 16 PGlite)', () => {
+describe('Paid membership retirement + retained loyalty ledger (PostgreSQL 16)', () => {
   beforeAll(async () => {
     db = await createMigratedDb();
-
-    // Create admin user and promote to active
     admin = await createUser(db, 'super_admin', 'Admin User');
-
-    // Create two test retailers
     retailer1 = await createUser(db, 'retailer', 'Retailer One');
     retailer2 = await createUser(db, 'retailer', 'Retailer Two');
-
-    // Activate the retailers and ensure exactly one active warehouse
     await as(db, admin, (tx: Tx) =>
       tx.query(`update retailers set status='active' where id in ($1, $2)`, [retailer1, retailer2])
     );
     await db.query(`insert into public.warehouses (name, is_active) values ('Central Gaya Warehouse', true)`);
   });
 
-  describe('Membership Plans & RLS', () => {
-    it('has default Free, Silver, Gold membership plans preloaded', async () => {
-      const res = await as(db, 'anon', async (tx: Tx) => {
-        return tx.query(`select * from public.membership_plans order by price_paise asc`);
-      });
-      // anon should return 0 rows due to RLS
-      expect(res.rows.length).toBe(0);
-
-      // Authenticated retailer can read active plans
-      const authRes = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query(`select * from public.membership_plans order by price_paise asc`);
-      });
-      expect(authRes.rows.length).toBe(3);
-      expect(authRes.rows.map((r: any) => r.id)).toEqual(['free', 'silver', 'gold']);
+  describe('Retirement', () => {
+    it('keeps the plan rows for history but deactivates every plan', async () => {
+      const all = await db.query<{ id: string; is_active: boolean }>(
+        `select id, is_active from public.membership_plans order by id`
+      );
+      expect(all.rows.map((row) => row.id).sort()).toEqual(['free', 'gold', 'silver']);
+      expect(all.rows.every((row) => row.is_active === false)).toBe(true);
     });
 
-    it('prevents non-admin retailers from modifying or inserting plans', async () => {
-      const err = await errorOf(db, retailer1, async (tx: Tx) => {
-        await tx.query(`
-          insert into public.membership_plans (id, tier, name, duration_days)
-          values ('platinum', 'gold', 'Hacked Tier', 30)
-        `);
-      });
-      expect(err).toBeDefined();
+    it('shows no purchasable plan to a retailer', async () => {
+      const res = await as(db, retailer1, (tx: Tx) => tx.query(`select * from public.membership_plans`));
+      expect(res.rows).toHaveLength(0);
     });
 
-    it('allows Admin to modify plan pricing and benefits', async () => {
-      await as(db, admin, async (tx: Tx) => {
-        await tx.query(`
-          update public.membership_plans
-          set discount_percent = 2.50
-          where id = 'silver'
-        `);
-      });
+    it('withdraws the grant so no API role can grant, renew or extend a membership', async () => {
+      for (const who of [retailer1, admin, 'anon']) {
+        const message = await errorOf(db, who, (tx: Tx) =>
+          tx.query(`select public.admin_set_retailer_membership($1, 'gold')`, [retailer1])
+        );
+        expect(message).toMatch(/permission denied|could not be executed|Access denied/i);
+      }
+      const { rows } = await db.query<{ n: string }>(
+        `select count(*)::text as n from retailer_memberships where retailer_id = $1`,
+        [retailer1]
+      );
+      expect(rows[0]!.n).toBe('0');
+    });
 
-      const res = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ discount_percent: string }>(`select discount_percent from public.membership_plans where id = 'silver'`);
-      });
-      expect(Number(res.rows[0]?.discount_percent)).toBe(2.50);
+    it('no longer advertises a membership discount anywhere in checkout', () => {
+      // The old discount helper had no checkout caller; this asserts the
+      // claim did not reappear during the change.
+      const quote = readFileSync('lib/orders/quote-order.ts', 'utf8');
+      expect(quote).not.toMatch(/membership/i);
+      const checkoutPage = readFileSync('app/retailer/checkout/page.tsx', 'utf8');
+      expect(checkoutPage).not.toMatch(/membership/i);
     });
   });
 
-  describe('Authoritative Membership Assignment & Expiry Boundary', () => {
-    it('returns empty/default when retailer has no active membership assigned', async () => {
-      const res = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query(`select * from public.get_active_retailer_membership($1)`, [retailer1]);
-      });
-      expect(res.rows.length).toBe(0);
-    });
-
-    it('prevents retailers from assigning memberships to themselves via RPC', async () => {
+  describe('Auditable loyalty ledger (retained)', () => {
+    it('prevents direct insert by retailers into the loyalty ledger', async () => {
       const err = await errorOf(db, retailer1, async (tx: Tx) => {
-        await tx.query(`
-          select public.admin_set_retailer_membership($1, 'gold')
-        `, [retailer1]);
+        await tx.query(
+          `insert into public.loyalty_ledger (retailer_id, points, entry_type, reason)
+           values ($1, 500, 'ORDER_EARN', 'Hacked Points')`,
+          [retailer1]
+        );
       });
-      expect(err).toMatch(/Super Admin or Admin authorization required/);
+      expect(err).toMatch(/permission denied/i);
     });
 
-    it('allows Admin to assign Silver membership and confirms active status', async () => {
-      await as(db, admin, async (tx: Tx) => {
-        await tx.query(`
-          select public.admin_set_retailer_membership($1, 'silver', 'Upgraded by Admin')
-        `, [retailer1]);
-      });
-
-      const res = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ tier: string; status: string }>(`select * from public.get_active_retailer_membership($1)`, [retailer1]);
-      });
-      expect(res.rows.length).toBe(1);
-      expect(res.rows[0]?.tier).toBe('silver');
-      expect(res.rows[0]?.status).toBe('active');
-    });
-
-    it('immediately ceases membership benefits if expires_at is in the past', async () => {
-      // Manually set expiry to the past
-      await as(db, admin, async (tx: Tx) => {
-        await tx.query(`
-          update public.retailer_memberships
-          set expires_at = now() - interval '1 hour'
-          where retailer_id = $1 and status = 'active'
-        `, [retailer1]);
-      });
-
-      const res = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query(`select * from public.get_active_retailer_membership($1)`, [retailer1]);
-      });
-      expect(res.rows.length).toBe(0); // benefits stopped authoritatively
-    });
-
-    it('prevents cross-user membership reads via RPC', async () => {
-      const err = await errorOf(db, retailer2, async (tx: Tx) => {
-        await tx.query(`select * from public.get_active_retailer_membership($1)`, [retailer1]);
-      });
-      expect(err).toMatch(/Access denied/);
-    });
-  });
-
-  describe('Auditable Loyalty Points Ledger', () => {
-    it('prevents direct insert by retailers or anon into loyalty ledger', async () => {
-      const err = await errorOf(db, retailer1, async (tx: Tx) => {
-        await tx.query(`
-          insert into public.loyalty_ledger (retailer_id, points, entry_type, reason)
-          values ($1, 500, 'ORDER_EARN', 'Hacked Points')
-        `, [retailer1]);
-      });
-      expect(err).toMatch(/permission denied/);
-    });
-
-    it('allows Admin to award points with idempotency protection', async () => {
+    it('allows an admin to award points with idempotency protection', async () => {
       const key = 'test:award:1';
-      await as(db, admin, async (tx: Tx) => {
-        await tx.query(`
-          select public.record_loyalty_points($1, 100, 'ORDER_EARN', 'Order #101 award', 'order', null, $2)
-        `, [retailer1, key]);
-      });
-
-      const balRes = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
-      });
-      expect(balRes.rows[0]?.get_retailer_loyalty_balance).toBe(100);
-
-      // Replay identical idempotency key -> no double award
-      await as(db, admin, async (tx: Tx) => {
-        await tx.query(`
-          select public.record_loyalty_points($1, 100, 'ORDER_EARN', 'Order #101 retry', 'order', null, $2)
-        `, [retailer1, key]);
-      });
-
-      const balRes2 = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
-      });
-      expect(balRes2.rows[0]?.get_retailer_loyalty_balance).toBe(100);
+      await as(db, admin, (tx: Tx) =>
+        tx.query(
+          `select public.record_loyalty_points($1, 100, 'ORDER_EARN', 'Order #101 award', 'order', null, $2)`,
+          [retailer1, key]
+        )
+      );
+      const balance = async () => {
+        const res = await as(db, retailer1, (tx: Tx) =>
+          tx.query<{ b: number }>(`select public.get_retailer_loyalty_balance($1) as b`, [retailer1])
+        );
+        return res.rows[0]?.b;
+      };
+      expect(await balance()).toBe(100);
+      await as(db, admin, (tx: Tx) =>
+        tx.query(
+          `select public.record_loyalty_points($1, 100, 'ORDER_EARN', 'Order #101 retry', 'order', null, $2)`,
+          [retailer1, key]
+        )
+      );
+      expect(await balance()).toBe(100);
     });
 
     it('prevents negative balances on deduction', async () => {
       const err = await errorOf(db, admin, async (tx: Tx) => {
-        await tx.query(`
-          select public.record_loyalty_points($1, -200, 'REDEMPTION', 'Overspend', 'manual')
-        `, [retailer1]);
+        await tx.query(
+          `select public.record_loyalty_points($1, -200, 'REDEMPTION', 'Overspend', 'manual')`,
+          [retailer1]
+        );
       });
       expect(err).toMatch(/INSUFFICIENT_LOYALTY_POINTS/);
     });
 
-    it('enforces tenant isolation: retailer cannot see another retailer ledger', async () => {
+    it('enforces tenant isolation on the ledger', async () => {
       const res = await as(db, retailer2, async (tx: Tx) => {
         return tx.query(`select * from public.loyalty_ledger where retailer_id = $1`, [retailer1]);
       });
-      expect(res.rows.length).toBe(0);
+      expect(res.rows).toHaveLength(0);
+    });
+  });
+
+  describe('Migration replay', () => {
+    it('replays migration 0080 without duplicate-object errors', async () => {
+      const sql = readFileSync('supabase/migrations/0080_retailer_memberships_and_loyalty.sql', 'utf8');
+      await db.exec(sql);
+    });
+
+    it('replays migration 0083 (retirement) without error', async () => {
+      const sql = readFileSync('supabase/migrations/0083_retire_paid_membership.sql', 'utf8');
+      await db.exec(sql);
+      const { rows } = await db.query<{ n: string }>(`select count(*)::text as n from membership_plans where is_active`);
+      expect(rows[0]!.n).toBe('0');
+    });
+  });
+
+  describe('Delivered-order accrual (base rate, no membership multiplier)', () => {
+    it('awards 1 point per whole ₹100 and reverses on return', async () => {
+      const orderId = 'b0000000-0000-0000-0000-000000000001';
+      await as(db, 'service', (tx: Tx) =>
+        tx.query(
+          `insert into public.orders (id, order_number, retailer_id, status, subtotal, gst_total, discount_total, grand_total)
+           values ($1, 'ORD-DELIV-1', $2, 'dispatched', 1271.19, 228.81, 0, 1500.00)`,
+          [orderId, retailer1]
+        )
+      );
+
+      const balance = async () => {
+        const res = await as(db, retailer1, (tx: Tx) =>
+          tx.query<{ b: number }>(`select public.get_retailer_loyalty_balance($1) as b`, [retailer1])
+        );
+        return res.rows[0]?.b ?? 0;
+      };
+      const initial = await balance();
+
+      await as(db, 'service', (tx: Tx) => tx.query(`update public.orders set status = 'delivered' where id = $1`, [orderId]));
+      // ₹1500 → 15 base points. No multiplier: the paid-membership boost is retired.
+      expect(await balance()).toBe(initial + 15);
+
+      await as(db, 'service', (tx: Tx) =>
+        tx.query(`update public.orders set status = 'delivered', notes = 're-saved' where id = $1`, [orderId])
+      );
+      expect(await balance()).toBe(initial + 15);
+
+      await as(db, 'service', (tx: Tx) => tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]));
+      expect(await balance()).toBe(initial);
     });
   });
 });
-
-  describe('Migration Idempotency & Concurrency', () => {
-    it('executes 0080 migration repeatedly without duplicate object errors', async () => {
-      const { readFileSync } = await import('node:fs');
-      const sql = readFileSync('supabase/migrations/0080_retailer_memberships_and_loyalty.sql', 'utf8');
-      let error: Error | null = null;
-      try {
-        await db.exec(sql);
-      } catch (err: any) {
-        error = err;
-      }
-      expect(error).toBeNull();
-    });
-  });
-
-  describe('Automated Delivery Accrual & Return Reversal Trigger', () => {
-    it('automatically awards loyalty points when order is delivered, applying active plan multiplier', async () => {
-      // 1. Assign retailer1 Gold membership (2x multiplier)
-      await as(db, admin, async (tx: Tx) => {
-        await tx.query(`select public.admin_set_retailer_membership($1, 'gold')`, [retailer1]);
-      });
-
-      // 2. Insert a confirmed dispatched order for retailer1 of ₹1500 (using service_role)
-      const orderId = 'b0000000-0000-0000-0000-000000000001';
-      await as(db, 'service', async (tx: Tx) => {
-        await tx.query(`
-          insert into public.orders (
-            id, order_number, retailer_id, status, subtotal, gst_total, discount_total, grand_total
-          ) values (
-            $1, 'ORD-DELIV-1', $2, 'dispatched', 1271.19, 228.81, 0, 1500.00
-          )
-        `, [orderId, retailer1]);
-      });
-
-      // Before delivery, loyalty balance should be 100 (from earlier test)
-      const balBefore = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
-      });
-      const initialBal = balBefore.rows[0]?.get_retailer_loyalty_balance ?? 0;
-
-      // 3. Update status to 'delivered'
-      await as(db, 'service', async (tx: Tx) => {
-        await tx.query(`update public.orders set status = 'delivered' where id = $1`, [orderId]);
-      });
-
-      // 1500 rupees / 100 = 15 base points * 2.0x Gold multiplier = 30 points awarded!
-      const balAfter = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
-      });
-      expect(balAfter.rows[0]?.get_retailer_loyalty_balance).toBe(initialBal + 30);
-
-      // 4. Repeated update with status = 'delivered' does not award duplicate points (idempotent)
-      await as(db, 'service', async (tx: Tx) => {
-        await tx.query(`update public.orders set status = 'delivered', notes = 're-saved' where id = $1`, [orderId]);
-      });
-      const balAfterDuplicate = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
-      });
-      expect(balAfterDuplicate.rows[0]?.get_retailer_loyalty_balance).toBe(initialBal + 30);
-
-      // 5. Returning the order to warehouse automatically reverses the 30 points
-      await as(db, 'service', async (tx: Tx) => {
-        await tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]);
-      });
-      const balAfterReturn = await as(db, retailer1, async (tx: Tx) => {
-        return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer1]);
-      });
-      expect(balAfterReturn.rows[0]?.get_retailer_loyalty_balance).toBe(initialBal);
-    });
-  });

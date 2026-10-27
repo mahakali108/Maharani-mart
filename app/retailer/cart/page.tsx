@@ -147,7 +147,7 @@ export default async function CartPage() {
     .filter((id): id is string => Boolean(id));
   const [overrideByProduct, tierMap, marketplaceResult] = await Promise.all([
     getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null),
-    loadPackTiers(supabase, items.map((item) => item.pack_id)),
+    loadPackTiers(supabase, items.map((item) => item.pack_id), user.id),
     loadMarketplaceOfferQuotes(supabase, sellerOfferIds),
   ]);
   const offerById = new Map(marketplaceResult.offers.map((offer) => [offer.offerId, offer]));

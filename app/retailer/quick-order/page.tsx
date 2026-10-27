@@ -81,7 +81,8 @@ export default async function QuickOrderPage({ searchParams }: { searchParams: {
     // same engine the cart and checkout use instead of a case-price shortcut.
     const tierMap = await loadPackTiers(
       supabase,
-      products.flatMap((product) => product.product_packs.map((pack) => pack.id))
+      products.flatMap((product) => product.product_packs.map((pack) => pack.id)),
+      user.id
     );
     const overrides = await getProductPriceOverrides(
       supabase,

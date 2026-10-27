@@ -268,7 +268,7 @@ export async function quoteOrderForRetailer({
 
   const productIds = [...new Set(packs.map((pack) => pack.product_id))];
   const overrides = await getProductPriceOverrides(supabase, productIds, retailer.id, retailer.area_id);
-  const tierMap = await loadPackTiers(supabase, [...normalized.keys()]);
+  const tierMap = await loadPackTiers(supabase, [...normalized.keys()], retailer.id);
 
   let subtotal = 0;
   let gstTotal = 0;
@@ -498,7 +498,7 @@ export async function quoteSplitOrderForRetailer({
 
   const productIds = [...new Set(packs.map((pack) => pack.product_id))];
   const overrides = await getProductPriceOverrides(supabase, productIds, retailer.id, retailer.area_id);
-  const tierMap = await loadPackTiers(supabase, packIds);
+  const tierMap = await loadPackTiers(supabase, packIds, retailer.id);
 
   let subtotal = 0;
   let gstTotal = 0;

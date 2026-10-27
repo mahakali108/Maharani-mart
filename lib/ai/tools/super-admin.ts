@@ -527,7 +527,7 @@ async function systemHealth(context: AIToolContext) {
   );
 }
 
-export const superAdminTools: AIToolDefinition[] = [
+const superAdminToolDefinitions: AIToolDefinition[] = [
   // See SECURITY MODEL at the top of this file: READ-only, role-gated,
   // RLS-scoped, fixed allowlist, no mutation capability.
   {
@@ -611,3 +611,246 @@ export const superAdminTools: AIToolDefinition[] = [
     execute: async (_input, context) => systemHealth(context),
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Super Admin: retailer approval queue, category price comparison and the
+// compliance-readiness checklist (migrations 0081/0082 + lib/compliance).
+//
+// These are READ-only tools. The assistant may summarise and recommend, but
+// approving a retailer, changing a category price or editing a compliance
+// field must happen in the authorized admin screen with explicit human
+// confirmation — no tool here exposes a write path.
+// ---------------------------------------------------------------------------
+
+async function retailerApprovalQueue(context: AIToolContext) {
+  const [{ data: applications, error: appError }, { data: settings, error: settingsError }] = await Promise.all([
+    context.supabase
+      .from('retailer_applications' as never)
+      .select('retailer_id, status, shop_name, submitted_at, review_target_hours, decided_at, decision_reason')
+      .order('submitted_at', { ascending: true })
+      .limit(500),
+    context.supabase
+      .from('retailer_approval_settings' as never)
+      .select('review_target_hours, reminder_hours')
+      .maybeSingle<{ review_target_hours: number; reminder_hours: number }>(),
+  ]);
+  if (appError || settingsError) return dbFailure();
+
+  const rows = (applications ?? []) as unknown as Array<{
+    retailer_id: string;
+    status: string;
+    shop_name: string;
+    submitted_at: string;
+    review_target_hours: number | null;
+    decided_at: string | null;
+    decision_reason: string | null;
+  }>;
+
+  const now = Date.now();
+  const target = settings?.review_target_hours ?? 48;
+  const pending = rows.filter((row) => row.status === 'pending');
+  const withAge = pending.map((row) => ({
+    shopName: row.shop_name,
+    submittedAt: row.submitted_at,
+    waitingHours: Math.round(((now - new Date(row.submitted_at).getTime()) / 3_600_000) * 10) / 10,
+    overdue:
+      (now - new Date(row.submitted_at).getTime()) / 3_600_000 > (row.review_target_hours ?? target),
+  }));
+  const overdue = withAge.filter((row) => row.overdue);
+
+  return verified(
+    {
+      reviewTargetHours: target,
+      reminderHours: settings?.reminder_hours ?? null,
+      pendingCount: pending.length,
+      overdueCount: overdue.length,
+      approvedCount: rows.filter((row) => row.status === 'approved').length,
+      rejectedCount: rows.filter((row) => row.status === 'rejected').length,
+      suspendedCount: rows.filter((row) => row.status === 'suspended').length,
+      oldestPending: withAge.slice(0, 10),
+      note:
+        'reviewTargetHours is a configurable business SLA, not a statutory approval deadline. Approving or rejecting requires a written reason and is audit-logged; use /admin/retailer-applications.',
+    },
+    [
+      {
+        type: 'insight',
+        title: 'Retailer approvals',
+        subtitle: `${pending.length} pending · ${overdue.length} overdue · ${target}h review target`,
+        quality: 'verified',
+        lines: [
+          { label: 'Pending review', value: String(pending.length) },
+          { label: 'Overdue', value: String(overdue.length) },
+          { label: 'Approved', value: String(rows.filter((row) => row.status === 'approved').length) },
+        ],
+      },
+    ],
+    'retailer_applications + retailer_approval_settings (all pending + decided rows, max 500)'
+  );
+}
+
+async function categoryPriceComparison(context: AIToolContext) {
+  const { data, error } = await context.supabase
+    .from('product_tier_prices' as never)
+    .select('product_pack_id, retailer_category, price_per_piece, is_active, product_packs ( pack_name, products ( name ) )')
+    .eq('is_active', true)
+    .limit(2000);
+  if (error) return dbFailure();
+
+  const rows = (data ?? []) as unknown as Array<{
+    product_pack_id: string;
+    retailer_category: string;
+    price_per_piece: number;
+    product_packs: { pack_name: string; products: { name: string } | null } | null;
+  }>;
+
+  const byPack = new Map<string, { label: string; general?: number; silver?: number; gold?: number }>();
+  for (const row of rows) {
+    const entry = byPack.get(row.product_pack_id) ?? {
+      label: `${row.product_packs?.products?.name ?? 'Unknown product'} · ${row.product_packs?.pack_name ?? ''}`.trim(),
+    };
+    entry[row.retailer_category as 'general' | 'silver' | 'gold'] = Number(row.price_per_piece);
+    byPack.set(row.product_pack_id, entry);
+  }
+
+  const packs = [...byPack.values()];
+  const violations = packs.filter((entry) => {
+    if (entry.gold !== undefined && entry.silver !== undefined && entry.gold > entry.silver) return true;
+    if (entry.gold !== undefined && entry.general !== undefined && entry.gold > entry.general) return true;
+    if (entry.silver !== undefined && entry.general !== undefined && entry.silver > entry.general) return true;
+    return false;
+  });
+
+  const fullyPriced = packs.filter(
+    (entry) => entry.general !== undefined && entry.silver !== undefined && entry.gold !== undefined
+  );
+
+  return verified(
+    {
+      packsWithCategoryPrices: packs.length,
+      packsWithAllThreePrices: fullyPriced.length,
+      orderingViolations: violations.length,
+      sample: packs.slice(0, 15),
+      note:
+        'Prices are GST-inclusive per piece. The database enforces gold <= silver <= general, so orderingViolations should be 0; a non-zero value would indicate a data-integrity problem. Configure prices in /admin/pricing/tiers.',
+    },
+    [
+      {
+        type: 'insight',
+        title: 'Retailer category pricing',
+        subtitle: `${packs.length} packs configured · ${violations.length} ordering violations`,
+        quality: 'verified',
+        lines: [
+          { label: 'Packs configured', value: String(packs.length) },
+          { label: 'All three prices set', value: String(fullyPriced.length) },
+          { label: 'Ordering violations', value: String(violations.length) },
+        ],
+      },
+    ],
+    'product_tier_prices (active rows only)'
+  );
+}
+
+async function complianceReadiness(context: AIToolContext) {
+  const categories = ['product_tier_prices', 'retailer_applications'] as const;
+  void categories;
+  // Read the authoritative owner-configurable settings; nothing is invented.
+  const { data, error } = await context.supabase
+    .from('platform_settings' as never)
+    .select('key, value')
+    .in('key', ['business_profile', 'contact_grievance', 'marketplace_compliance']);
+  if (error) return dbFailure();
+
+  const settings = new Map(
+    ((data ?? []) as unknown as Array<{ key: string; value: Record<string, unknown> | null }>).map((row) => [
+      row.key,
+      row.value ?? {},
+    ])
+  );
+  const business = settings.get('business_profile') ?? {};
+  const contact = settings.get('contact_grievance') ?? {};
+  const marketplace = settings.get('marketplace_compliance') ?? {};
+
+  const checks = [
+    {
+      item: 'Legal entity name confirmed by the owner',
+      status: typeof business.legalEntityName === 'string' && business.legalEntityName ? 'provided' : 'owner_input_required',
+    },
+    {
+      item: 'GSTIN recorded and verified',
+      status: typeof business.gstin === 'string' && business.gstin ? 'provided' : 'owner_input_required',
+    },
+    {
+      item: 'Grievance officer details configured',
+      status: contact.isConfigured === true ? 'provided' : 'owner_input_required',
+    },
+    {
+      item: 'Seller-funded discount policy',
+      status: marketplace.sellerFundedDiscountsAllowed === true ? 'enabled' : 'not_enabled',
+    },
+    {
+      item: 'Written CA reference on file',
+      status:
+        typeof marketplace.caApprovalDocumentReference === 'string' && marketplace.caApprovalDocumentReference
+          ? 'provided'
+          : 'ca_review_required',
+    },
+  ];
+
+  return verified(
+    {
+      checks,
+      ownerInputRequired: checks.filter((check) => check.status === 'owner_input_required').length,
+      caReviewRequired: checks.filter((check) => check.status === 'ca_review_required').length,
+      note:
+        'This is a configuration-readiness view, NOT a legal opinion or a claim of compliance. Legal applicability must be confirmed against official sources and, where required, by a CA or lawyer. See /admin/compliance.',
+    },
+    [
+      {
+        type: 'insight',
+        title: 'Compliance configuration readiness',
+        subtitle: `${checks.filter((check) => check.status === 'owner_input_required').length} owner inputs outstanding`,
+        quality: 'verified',
+        lines: checks.slice(0, 4).map((check) => ({ label: check.item, value: check.status })),
+      },
+    ],
+    'platform_settings (business_profile, contact_grievance, marketplace_compliance)'
+  );
+}
+
+const extraSuperAdminTools: AIToolDefinition[] = [
+  {
+    name: 'get_retailer_approval_queue',
+    description:
+      'Get the retailer application review queue: pending/overdue counts, configured review target, oldest pending applications and the reason recorded for decided applications. Read-only; approving happens in /admin/retailer-applications.',
+    actionClass: 'READ',
+    roles: [...roles],
+    surfaces: [...surfaces],
+    inputSchema: noArgs,
+    inputJsonSchema: noArgsJson,
+    execute: async (_input, context) => retailerApprovalQueue(context),
+  },
+  {
+    name: 'get_category_price_comparison',
+    description:
+      'Compare General/Silver/Gold retailer category prices per pack, flag any ordering violation (gold <= silver <= general) and count packs with all three prices configured. Read-only.',
+    actionClass: 'READ',
+    roles: [...roles],
+    surfaces: [...surfaces],
+    inputSchema: noArgs,
+    inputJsonSchema: noArgsJson,
+    execute: async (_input, context) => categoryPriceComparison(context),
+  },
+  {
+    name: 'get_compliance_readiness',
+    description:
+      'Report which owner-configurable compliance inputs are present, missing (Owner Input Required) or awaiting CA review. This is a configuration readiness view, never a legal opinion or a claim of compliance.',
+    actionClass: 'READ',
+    roles: [...roles],
+    surfaces: [...surfaces],
+    inputSchema: noArgs,
+    inputJsonSchema: noArgsJson,
+    execute: async (_input, context) => complianceReadiness(context),
+  }
+];
+
+export const superAdminTools: AIToolDefinition[] = [...superAdminToolDefinitions, ...extraSuperAdminTools];

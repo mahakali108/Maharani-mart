@@ -1,50 +1,46 @@
 import Link from 'next/link';
-import { Crown, ChevronRight, CheckCircle2, Clock, Award } from 'lucide-react';
+import { Award, ChevronRight, Info, ShieldCheck } from 'lucide-react';
 import { requireUser } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import {
-  getAuthoritativeActiveMembership,
-  listAvailableMembershipPlans,
-  getRetailerMembershipHistory,
-  getRetailerLoyaltyPosition,
-  getRetailerLoyaltyLedger,
-} from '@/lib/membership/server';
+import { getRetailerLoyaltyPosition, getRetailerLoyaltyLedger } from '@/lib/membership/server';
+import { loadRetailerCategory } from '@/lib/retailer/category-pricing';
+import { RETAILER_CATEGORY_LABELS } from '@/lib/pricing/category-pricing';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 export const dynamic = 'force-dynamic';
 
-export default async function RetailerMembershipPage() {
+/**
+ * Retailer pricing category + loyalty points.
+ *
+ * The paid Silver/Gold membership subscription was retired (owner decision,
+ * migration 0083). A retailer's category is an ADMIN-ASSIGNED classification,
+ * not a purchase: there is no plan, no fee, no renewal and no expiry, and the
+ * screen never advertises a "buy" action.
+ *
+ * The loyalty points ledger is retained as an independent, auditable record.
+ * Historic balances are shown exactly as recorded and are never converted to
+ * cash or silently adjusted.
+ */
+export default async function RetailerCategoryPage() {
   const user = await requireUser();
   const supabase = createClient();
 
-  const [membershipRes, plansRes, historyRes, loyaltyBalRes, loyaltyLedgerRes] = await Promise.all([
-    getAuthoritativeActiveMembership(supabase, user.id),
-    listAvailableMembershipPlans(supabase),
-    getRetailerMembershipHistory(supabase, user.id),
+  const [category, loyaltyBalRes, loyaltyLedgerRes] = await Promise.all([
+    loadRetailerCategory(supabase, user.id).catch(() => 'general' as const),
     getRetailerLoyaltyPosition(supabase, user.id),
-    getRetailerLoyaltyLedger(supabase, user.id, 10),
+    getRetailerLoyaltyLedger(supabase, user.id, 20),
   ]);
 
-  const readFailed = Boolean(
-    membershipRes.error || plansRes.error || historyRes.error || loyaltyBalRes.error || loyaltyLedgerRes.error
-  );
-  const readFailureMessage =
-    membershipRes.error ?? plansRes.error ?? historyRes.error ?? loyaltyBalRes.error ?? loyaltyLedgerRes.error ?? null;
-
-  const activeMembership = membershipRes.membership;
-  const plans = plansRes.plans;
-  const history = historyRes.history;
+  const readFailureMessage = loyaltyBalRes.error ?? loyaltyLedgerRes.error ?? null;
   const loyaltyBalance = loyaltyBalRes.balance;
   const loyaltyLedger = loyaltyLedgerRes.entries;
-
-  const currentTier = activeMembership?.tier ?? 'free';
+  const label = RETAILER_CATEGORY_LABELS[category];
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
         <Link href="/retailer/home" className="hover:text-primary-600">
           Home
         </Link>
@@ -53,127 +49,69 @@ export default async function RetailerMembershipPage() {
           Account
         </Link>
         <ChevronRight className="h-3 w-3" />
-        <span className="text-slate-800">Membership & Loyalty</span>
+        <span className="text-slate-800">Pricing Category &amp; Points</span>
       </div>
 
-      {readFailed && (
-        <ReadFailureNotice what="Membership and loyalty account details" detail={readFailureMessage} />
-      )}
+      {readFailureMessage && <ReadFailureNotice what="Your pricing category and loyalty points" detail={readFailureMessage} />}
 
-      {/* Active Membership Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-peach-50 to-amber-100/40 p-6 shadow-sm">
+      <section className="relative overflow-hidden rounded-2xl border border-primary-200 bg-gradient-to-br from-primary-50 via-white to-primary-100/40 p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-900">
-              <Crown className="h-3.5 w-3.5 text-amber-600" />
-              <span className="capitalize">{currentTier} Tier Active</span>
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-primary-600/10 px-3 py-1 text-xs font-semibold text-primary-800">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>{label.en}</span>
             </div>
-            <h1 className="mt-2 text-2xl font-bold text-slate-900">
-              {currentTier === 'gold' ? 'Gold VIP Club' : currentTier === 'silver' ? 'Silver Executive Club' : 'Standard Free Membership'}
-            </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              {currentTier === 'free'
-                ? 'Upgrade to Silver or Gold to unlock instant order discounts and 2x loyalty points.'
-                : `Enjoying ${activeMembership?.discount_percent}% off orders and ${activeMembership?.points_multiplier}x loyalty points multiplier.`}
+            <h1 className="mt-2 text-xl font-bold text-slate-900 sm:text-2xl">{label.hi}</h1>
+            <p className="mt-1 max-w-xl text-sm text-slate-600">
+              Your account has been assigned the <strong>{label.en}</strong> pricing category by Maharani Traders:
+              {' '}
+              {label.description} The price shown on every product is the price you will be charged at checkout.
             </p>
           </div>
 
-          <div className="rounded-xl bg-white/80 p-4 backdrop-blur shadow-sm border border-amber-100 flex items-center gap-4">
-            <Award className="h-10 w-10 text-amber-500" />
+          <div className="flex items-center gap-4 rounded-xl border border-primary-100 bg-white/80 p-4 shadow-sm backdrop-blur">
+            <Award className="h-10 w-10 text-primary-500" />
             <div>
-              <p className="text-xs font-medium text-slate-500">Loyalty Balance</p>
-              <p className="text-xl font-bold text-slate-900">{loyaltyBalance} Points</p>
-              <p className="text-[10px] text-slate-400">Earned on confirmed orders</p>
+              <p className="text-xs font-medium text-slate-500">Loyalty points</p>
+              <p className="text-xl font-bold text-slate-900">{loyaltyBalance} pts</p>
+              <p className="text-[10px] text-slate-400">Earned on delivered orders</p>
             </div>
           </div>
         </div>
-
-        {activeMembership?.expires_at && (
-          <div className="mt-4 flex items-center gap-2 text-xs font-medium text-amber-800">
-            <Clock className="h-4 w-4" />
-            <span>Valid until: {formatIndiaDateTime(activeMembership.expires_at)}</span>
-          </div>
-        )}
       </section>
 
-      {/* Available Plans & Upgrades */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Membership Tiers & Benefits</h2>
-          <p className="text-xs text-slate-500">Select a plan to request an upgrade or renewal through Maharani Traders support.</p>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            <Info className="h-4 w-4 text-ink-400" /> How pricing categories work
+          </CardTitle>
+        </CardHeader>
+        <ul className="list-disc space-y-1.5 pl-5 text-xs text-slate-600">
+          <li>Categories are reviewed and assigned by Maharani Traders administrators — they are not purchased.</li>
+          <li>There is no membership fee, no subscription and no expiry date on your category.</li>
+          <li>
+            If your business details or volumes change, contact support and an administrator can review your category;
+            every change is recorded with a reason.
+          </li>
+          <li>Your category price applies to Maharani own-stock items; third-party seller offers keep their own approved price.</li>
+          <li>Loyalty points are a record of past activity. They are not cash and are never converted to money automatically.</li>
+        </ul>
+        <div className="mt-3">
+          <Link href="/retailer/support" className="text-xs font-semibold text-primary-700 hover:underline">
+            Contact support about your pricing category →
+          </Link>
         </div>
+      </Card>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          {plans.map((plan) => {
-            const isCurrent = plan.tier === currentTier;
-            return (
-              <Card key={plan.id} className={`flex flex-col justify-between border ${isCurrent ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-slate-200'}`}>
-                <div>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base font-semibold text-slate-900">{plan.name}</CardTitle>
-                      {isCurrent && (
-                        <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-800">
-                          ACTIVE
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500">{plan.description}</p>
-                    <div className="mt-2 text-2xl font-bold text-slate-900">
-                      {plan.price_paise === 0 ? '₹0' : `₹${(plan.price_paise / 100).toFixed(0)}`}
-                      <span className="text-xs font-normal text-slate-500"> / {plan.duration_days} days</span>
-                    </div>
-                  </CardHeader>
-
-                  <div className="space-y-4 px-1 pb-4">
-                    <div className="space-y-2 text-xs text-slate-700">
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-mint-600" />
-                        <span><strong>{plan.discount_percent}%</strong> extra order discount</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-mint-600" />
-                        <span><strong>{plan.points_multiplier}x</strong> loyalty points acceleration</span>
-                      </div>
-                      {Array.isArray(plan.features) && plan.features.map((feat, i) => (
-                        <div key={i} className="flex items-center gap-1.5">
-                          <CheckCircle2 className="h-4 w-4 text-mint-600" />
-                          <span>{feat}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  {isCurrent ? (
-                    <Button variant="outline" disabled className="w-full text-xs">
-                      Current Plan
-                    </Button>
-                  ) : (
-                    <Link href={`/retailer/support?topic=membership&plan=${plan.id}`} className="block">
-                      <Button variant="secondary" className="w-full text-xs">
-                        Request Upgrade (Admin-managed)
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Loyalty Points History */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Loyalty Points Activity</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Loyalty points activity</h2>
           <span className="text-xs text-slate-500">Append-only ledger</span>
         </div>
 
         {loyaltyLedger.length === 0 ? (
           <Card className="p-6 text-center text-sm text-slate-500">
-            No loyalty point transactions recorded yet. Complete orders to earn points!
+            No loyalty point entries yet. Points are added when an order is delivered.
           </Card>
         ) : (
           <Card className="table-scroll p-0">
@@ -195,47 +133,6 @@ export default async function RetailerMembershipPage() {
                     <td className={`px-4 py-2 text-right text-xs font-semibold ${entry.points > 0 ? 'text-mint-700' : 'text-slate-700'}`}>
                       {entry.points > 0 ? `+${entry.points}` : entry.points}
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        )}
-      </section>
-
-      {/* Subscription History */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Subscription History</h2>
-        {history.length === 0 ? (
-          <Card className="p-6 text-center text-sm text-slate-500">
-            Standard Free tier active. No previous paid subscription records found.
-          </Card>
-        ) : (
-          <Card className="table-scroll p-0">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50 text-left text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-2.5 font-medium">Plan</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 font-medium">Start Date</th>
-                  <th className="px-4 py-2.5 font-medium">Expiry Date</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {history.map((h) => (
-                  <tr key={h.id}>
-                    <td className="px-4 py-2 text-xs font-medium text-slate-900 capitalize">{h.tier}</td>
-                    <td className="px-4 py-2 text-xs">
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                        h.status === 'active' ? 'bg-mint-100 text-mint-800' : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        {h.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{formatIndiaDateTime(h.starts_at)}</td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{h.expires_at ? formatIndiaDateTime(h.expires_at) : 'Perpetual'}</td>
-                    <td className="px-4 py-2 text-right text-xs text-slate-700">₹{(h.amount_paid_paise / 100).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

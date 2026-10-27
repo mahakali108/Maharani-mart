@@ -246,7 +246,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const subscribedAlertPackIds = new Set(((alertRows ?? []) as { pack_id: string }[]).map((row) => row.pack_id));
   const packTiers = await loadPackTiers(
     supabase,
-    rawPacks.map((pack) => pack.id)
+    rawPacks.map((pack) => pack.id),
+    user.id
   );
 
   // Variant galleries: separate per-pack image sets (product_pack_images) with

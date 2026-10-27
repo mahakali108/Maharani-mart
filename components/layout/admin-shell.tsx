@@ -12,7 +12,6 @@ import {
   Factory,
   Store,
   ShieldCheck,
-  Crown,
   Tag,
   ShoppingCart,
   Users,
@@ -31,6 +30,8 @@ import {
   IndianRupee,
   Headset,
   Ticket,
+  ClipboardCheck,
+  Scale,
 } from 'lucide-react';
 
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
@@ -50,7 +51,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Sellers', href: '/admin/sellers', icon: Store, roles: ['super_admin'] },
   { label: 'Seller offers', href: '/admin/offers', icon: ShieldCheck, roles: ['super_admin', 'admin'] },
   { label: 'Pricing & Schemes', href: '/admin/pricing', icon: Tag },
-  { label: 'Memberships', href: '/admin/membership', icon: Crown, roles: ['super_admin', 'admin'] },
+  { label: 'Category Pricing', href: '/admin/pricing/tiers', icon: IndianRupee, roles: ['super_admin', 'admin'] },
+  { label: 'Retailer Approvals', href: '/admin/retailer-applications', icon: ClipboardCheck, roles: ['super_admin', 'admin'] },
   { label: 'Coupons', href: '/admin/coupons', icon: Ticket },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
   { label: 'Delivered Orders', href: '/admin/delivered', icon: PackageCheck },
@@ -66,6 +68,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },
   { label: 'Data Retention', href: '/admin/cleanup', icon: Database, roles: ['admin', 'super_admin'] },
+  { label: 'Compliance', href: '/admin/compliance', icon: Scale, roles: ['super_admin', 'admin'] },
   { label: 'Audit Log', href: '/admin/audit-logs', icon: ScrollText },
 ];
 

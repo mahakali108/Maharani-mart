@@ -81,7 +81,7 @@ export async function loadCartCouponLines(
     offerById = new Map(marketplace.offers.map((offer) => [offer.offerId, offer]));
     [overrides, tierMap] = await Promise.all([
       getProductPriceOverrides(supabase, productIds, retailerId, areaId),
-      loadPackTiers(supabase, packIds),
+      loadPackTiers(supabase, packIds, retailerId),
     ]);
   } catch {
     return { lines: [], subtotal: 0, error: true };
