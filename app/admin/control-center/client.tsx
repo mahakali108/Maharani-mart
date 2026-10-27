@@ -7,7 +7,7 @@ import {
   Edit3, ChevronRight, Search,
   Zap, TrendingUp, Gauge,
   ArrowLeftRight, Boxes, UserX,
-  UserCheck, Calendar, Timer, Pause, Play,
+  UserCheck, Calendar, Timer, Pause, Play, Building2,
 } from 'lucide-react';
 import Link from 'next/link';
 import type {
@@ -18,6 +18,12 @@ import type {
   MaintenanceModeConfig,
   MaintenanceScope,
 } from '@/lib/admin/control-center/types';
+import type {
+  BusinessProfileConfig,
+  ContactGrievanceConfig,
+  MarketplaceComplianceConfig,
+} from '@/lib/admin/business-settings/types';
+import { BusinessSettingsManager } from '@/components/admin/business-settings/business-settings-manager';
 import { ACCESS_PRESETS, statusBadgeColor } from '@/lib/admin/control-center/types';
 import {
   toggleFeature,
@@ -57,6 +63,7 @@ function StatusBadge({ status }: { status: AccessStatus }) {
 
 type Tab =
   | 'overview'
+  | 'business'
   | 'users'
   | 'features'
   | 'access'
@@ -66,6 +73,7 @@ type Tab =
 
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: 'overview', label: 'Overview', icon: Gauge },
+  { key: 'business', label: 'Compliance & Tax', icon: Building2 },
   { key: 'users', label: 'Users & Roles', icon: Users },
   { key: 'features', label: 'Features', icon: Package },
   { key: 'access', label: 'Access Management', icon: Clock },
@@ -90,6 +98,9 @@ interface ControlCenterClientProps {
   }>;
   auditLogs: SuperAdminAuditLog[];
   settings: Record<string, unknown>;
+  businessConfig: BusinessProfileConfig;
+  contactConfig: ContactGrievanceConfig;
+  marketplaceConfig: MarketplaceComplianceConfig;
   currentUserId: string; // eslint-disable-line @typescript-eslint/no-unused-vars -- reserved for future use
 }
 
@@ -99,6 +110,9 @@ export function ControlCenterClient({
   users,
   auditLogs,
   settings,
+  businessConfig,
+  contactConfig,
+  marketplaceConfig,
 }: ControlCenterClientProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [isPending, startTransition] = useTransition();
@@ -780,6 +794,13 @@ export function ControlCenterClient({
 
       {/* Tab Content */}
       {activeTab === 'overview' && <OverviewTab />}
+      {activeTab === 'business' && (
+        <BusinessSettingsManager
+          initialBusiness={businessConfig}
+          initialContact={contactConfig}
+          initialMarketplace={marketplaceConfig}
+        />
+      )}
       {activeTab === 'users' && <UsersTab />}
       {activeTab === 'features' && <FeaturesTab />}
       {activeTab === 'access' && <AccessTab />}

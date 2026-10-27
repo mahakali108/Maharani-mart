@@ -1,6 +1,11 @@
 import { Settings, ShieldCheck } from 'lucide-react';
 import { requireSuperAdminPage } from '@/lib/admin/control-center/guard';
 import { getControlCenterOverview, getFeatures, getAllUsers, getSuperAdminAuditLogs, getPlatformSettings } from '@/lib/admin/control-center/actions';
+import {
+  getAuthoritativeBusinessProfile,
+  getAuthoritativeContactGrievance,
+  getAuthoritativeMarketplaceCompliance,
+} from '@/lib/admin/business-settings/server';
 import { ControlCenterClient } from './client';
 
 export const dynamic = 'force-dynamic';
@@ -8,12 +13,15 @@ export const dynamic = 'force-dynamic';
 export default async function ControlCenterPage() {
   const user = await requireSuperAdminPage();
 
-  const [overview, features, users, auditLogs, settings] = await Promise.all([
+  const [overview, features, users, auditLogs, settings, business, contact, marketplace] = await Promise.all([
     getControlCenterOverview(),
     getFeatures(),
     getAllUsers(),
     getSuperAdminAuditLogs(30),
     getPlatformSettings(),
+    getAuthoritativeBusinessProfile(),
+    getAuthoritativeContactGrievance(),
+    getAuthoritativeMarketplaceCompliance(),
   ]);
 
   return (
@@ -40,6 +48,9 @@ export default async function ControlCenterPage() {
         users={users}
         auditLogs={auditLogs}
         settings={settings}
+        businessConfig={business}
+        contactConfig={contact}
+        marketplaceConfig={marketplace}
         currentUserId={user.id}
       />
     </div>

@@ -7,6 +7,7 @@ import {
   CircleAlert,
   CircleHelp,
   ClipboardList,
+  Crown,
   Heart,
   LogOut,
   MapPin,
@@ -47,6 +48,7 @@ interface ProfileContactRow {
 
 const ACCOUNT_LINKS = [
   { href: '/retailer/account/edit', label: 'Edit profile', body: 'Shop, owner and contact details', icon: NotebookText, tone: 'bg-sky-50 text-sky-700' },
+  { href: '/retailer/membership', label: '👑 Membership & Loyalty', body: 'Free, Silver, Gold benefits, discounts & loyalty points', icon: Crown, tone: 'bg-amber-50 text-amber-700' },
   { href: '/retailer/account/addresses', label: 'Address book', body: 'Saved delivery addresses for checkout', icon: MapPinned, tone: 'bg-sky-50 text-sky-700' },
   { href: '/retailer/reports', label: 'Purchase reports', body: 'Monthly totals, GST, top products, statements', icon: PieChart, tone: 'bg-sky-50 text-sky-700' },
   { href: '/retailer/cart/saved', label: 'Saved carts', body: 'Your reusable order lists', icon: Folders, tone: 'bg-lavender-50 text-lavender-700' },

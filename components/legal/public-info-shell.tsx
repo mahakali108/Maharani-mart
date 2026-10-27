@@ -6,6 +6,7 @@ const links = [
   { href: '/legal/privacy', label: 'Privacy' },
   { href: '/legal/shipping', label: 'Delivery' },
   { href: '/legal/returns', label: 'Returns' },
+  { href: '/legal/grievance', label: 'Grievance' },
   { href: '/contact', label: 'Contact' },
 ];
 
