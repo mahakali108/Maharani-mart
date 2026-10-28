@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
 import type { PricingTier } from '@/lib/retailer/case-pricing';
+import { loadEffectiveCategoryPrices } from '@/lib/retailer/category-pricing';
 
 interface TierRow {
   id: string;
@@ -16,10 +17,24 @@ interface TierRow {
 
 const TIER_CHUNK = 80;
 
-/** Loads the active pricing tiers for a set of packs, keyed by pack id. */
+/**
+ * Loads the active pricing tiers for a set of packs, keyed by pack id.
+ *
+ * When `retailerId` is supplied, a pack that has an administrator-configured
+ * retailer-category price (migration 0082) is represented by ONE synthetic
+ * tier at that price. That mirrors the database rule exactly — the category
+ * price is authoritative for the line and quantity slabs do not override it —
+ * and means every existing consumer (catalogue, cart, checkout preview,
+ * reorder, quick order, coupon eligibility) prices the same way without a
+ * second pricing implementation.
+ *
+ * Packs without a category price keep their real tier list, so the
+ * pre-existing slab/case rules are untouched.
+ */
 export async function loadPackTiers(
   supabase: ReturnType<typeof createClient>,
-  packIds: string[]
+  packIds: string[],
+  retailerId?: string | null
 ): Promise<Map<string, PricingTier[]>> {
   const unique = [...new Set(packIds.filter(Boolean))];
   const result = new Map<string, PricingTier[]>();
@@ -49,5 +64,23 @@ export async function loadPackTiers(
       result.set(row.product_pack_id, tiers);
     }
   }
+
+  if (retailerId) {
+    const { prices } = await loadEffectiveCategoryPrices(supabase, unique, retailerId);
+    for (const [packId, price] of prices) {
+      result.set(packId, [
+        {
+          id: `category-price:${packId}`,
+          min_quantity: 1,
+          max_quantity: null,
+          price_per_piece: price,
+          rule_type: 'loose',
+          label: 'Your retailer price',
+          is_active: true,
+        },
+      ]);
+    }
+  }
+
   return result;
 }

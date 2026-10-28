@@ -98,7 +98,8 @@ export default async function NewSalesmanOrderPage({
   const activePackIds = catalog.flatMap((product) => product.product_packs.filter((pack) => pack.is_active).map((pack) => pack.id));
   // Pricing and exact-pack availability both come from server-side reads.
   const [tierMap, availabilityByPack] = await Promise.all([
-    loadPackTiers(supabase, activePackIds),
+    // Price the catalogue for the retailer this order is being placed for.
+    loadPackTiers(supabase, activePackIds, selectedRetailer.id),
     loadCatalogAvailability(supabase, activePackIds),
   ]);
   const overrides = await Promise.all(

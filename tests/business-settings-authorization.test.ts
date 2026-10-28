@@ -80,7 +80,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
     expect(result.error).toMatch(/Super Admin authorization required/i);
   });
 
-  it('blocks activation of membership discounts in checkout when CA approval reference is missing', async () => {
+  it('refuses membership-discount activation outright — the feature is retired (0083)', async () => {
     vi.spyOn(sessionModule, 'requireUser').mockResolvedValueOnce({
       id: 'super-admin-uuid',
       role: 'super_admin',
@@ -92,13 +92,35 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       sellerFundedDiscountsAllowed: false,
       platformFundedDiscountsAllowed: true,
       productModerationRequired: true,
-      membershipDiscountCheckoutActive: true, // Attempt to activate without CA reference
-      caApprovalDocumentReference: '', // Missing / empty CA reference
+      membershipDiscountCheckoutActive: true, // Attempt to re-enable a retired feature
+      caApprovalDocumentReference: '', // No CA reference — and it would not help anyway
       tcsDeductionPercent: 1.0,
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Chartered Accountant approval document reference/i);
+    expect(result.error).toMatch(/retired with the paid membership system/i);
+  });
+
+  it('refuses membership-discount activation even WITH a recorded CA reference', async () => {
+    vi.spyOn(sessionModule, 'requireUser').mockResolvedValueOnce({
+      id: 'super-admin-uuid',
+      role: 'super_admin',
+      fullName: 'Super Admin',
+      phone: '+917777777777',
+    } as any);
+
+    const result = await updateMarketplaceComplianceAction({
+      sellerFundedDiscountsAllowed: false,
+      platformFundedDiscountsAllowed: true,
+      productModerationRequired: true,
+      membershipDiscountCheckoutActive: true,
+      caApprovalDocumentReference: 'CA-OPINION-2026-OCT-15',
+      tcsDeductionPercent: 1.0,
+    });
+
+    // A CA field is a safety control, never a switch for a retired feature.
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/no membership checkout discount to activate/i);
   });
 
   it('fails setting update if audit logging throws an error', async () => {

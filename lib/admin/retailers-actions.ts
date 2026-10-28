@@ -9,31 +9,50 @@ import type { Database } from '@/types/database.types';
 
 type RetailerUpdate = Database['public']['Tables']['retailers']['Update'];
 
-export async function approveRetailerAction(retailerId: string) {
-  const user = await requirePermission('retailers.approve');
+/**
+ * Retailer access changes go through the audited RPCs from migration 0081.
+ *
+ * The RPCs derive the acting user, the previous status and the new status
+ * inside PostgreSQL, require a written reason, and append an immutable
+ * `retailer_approval_events` row. The browser cannot supply any of that, and a
+ * retailer can never reach these functions (they check `is_admin_or_above()`).
+ *
+ * `callRetailerRpc` keeps the existing action signatures working so today's
+ * screens keep behaving the same way, but every change is now auditable.
+ */
+async function callRetailerRpc(
+  fn: 'admin_review_retailer_application' | 'admin_set_retailer_access',
+  params: Record<string, unknown>
+): Promise<void> {
   const supabase = createClient();
-
-  const payload: RetailerUpdate = {
-    status: 'active',
-    approved_by: user.id,
-    approved_at: new Date().toISOString(),
-  };
-
-  const { error } = await supabase.from('retailers').update(payload as unknown as never).eq('id', retailerId);
+  const { error } = await supabase.rpc(fn as never, params as never);
   if (error) throw new Error(error.message);
-
   revalidatePath('/admin/retailers');
+  revalidatePath('/admin/retailer-applications');
+  revalidatePath('/admin/control-center');
 }
 
-export async function suspendRetailerAction(retailerId: string) {
+const DEFAULT_APPROVAL_REASON = 'Approved in the admin retailer list.';
+
+export async function approveRetailerAction(retailerId: string, reason: string = DEFAULT_APPROVAL_REASON) {
+  await requirePermission('retailers.approve');
+  await callRetailerRpc('admin_review_retailer_application', {
+    p_retailer_id: retailerId,
+    p_decision: 'approved',
+    p_reason: reason,
+    // Category is NEVER upgraded implicitly by an approval: it stays whatever
+    // the administrator assigned (default general).
+    p_category: null,
+  });
+}
+
+export async function suspendRetailerAction(retailerId: string, reason = 'Suspended by administrator.') {
   await requirePermission('retailers.suspend');
-  const supabase = createClient();
-
-  const payload: RetailerUpdate = { status: 'suspended' };
-  const { error } = await supabase.from('retailers').update(payload as unknown as never).eq('id', retailerId);
-  if (error) throw new Error(error.message);
-
-  revalidatePath('/admin/retailers');
+  await callRetailerRpc('admin_set_retailer_access', {
+    p_retailer_id: retailerId,
+    p_action: 'suspend',
+    p_reason: reason,
+  });
 }
 
 /**
@@ -41,30 +60,29 @@ export async function suspendRetailerAction(retailerId: string) {
  * `retailers` row (which would orphan the linked `profiles`/auth user
  * with no retailer record — middleware's pending-approval check
  * assumes a retailer row exists for role='retailer', so a missing row
- * would silently skip that gate rather than block access). Using the
- * same 'suspended' status as suspendRetailerAction keeps that
- * invariant safe while still being a distinct, auditable action.
+ * would silently skip that gate rather than block access).
+ *
+ * The rejection is recorded on `retailer_applications.status` ('rejected')
+ * with a reason and an audit event, while the access gate stays
+ * `pending_approval`: the account remains blocked, and nothing is destroyed.
  */
-export async function rejectRetailerAction(retailerId: string) {
+export async function rejectRetailerAction(retailerId: string, reason = 'Rejected by administrator.') {
   await requirePermission('retailers.suspend');
-  const supabase = createClient();
-
-  const payload: RetailerUpdate = { status: 'suspended' };
-  const { error } = await supabase.from('retailers').update(payload as unknown as never).eq('id', retailerId);
-  if (error) throw new Error(error.message);
-
-  revalidatePath('/admin/retailers');
+  await callRetailerRpc('admin_review_retailer_application', {
+    p_retailer_id: retailerId,
+    p_decision: 'rejected',
+    p_reason: reason,
+    p_category: null,
+  });
 }
 
-export async function reactivateRetailerAction(retailerId: string) {
+export async function reactivateRetailerAction(retailerId: string, reason = 'Access restored by administrator.') {
   await requirePermission('retailers.approve');
-  const supabase = createClient();
-
-  const payload: RetailerUpdate = { status: 'active' };
-  const { error } = await supabase.from('retailers').update(payload as unknown as never).eq('id', retailerId);
-  if (error) throw new Error(error.message);
-
-  revalidatePath('/admin/retailers');
+  await callRetailerRpc('admin_set_retailer_access', {
+    p_retailer_id: retailerId,
+    p_action: 'restore',
+    p_reason: reason,
+  });
 }
 
 export type RetailerFormState = { error?: string; success?: string } | null;

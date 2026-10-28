@@ -62,8 +62,17 @@ function inheritsExistingPermission(tool: AIToolDefinition, context: Pick<AITool
   if (['get_command_overview', 'get_business_risks', 'get_executive_action_plan', 'get_audit_activity', 'get_system_health', 'get_supplier_status'].includes(tool.name)) {
     return canAny(role, ['reports.view.all']);
   }
-  if (['get_credit_risk_report', 'get_retailer_health_report'].includes(tool.name)) {
+  if (['get_credit_risk_report', 'get_retailer_health_report', 'get_retailer_approval_queue'].includes(tool.name)) {
     return canAny(role, ['retailers.view']);
+  }
+  // Category pricing + compliance readiness are executive read tools: they
+  // expose prices and configuration, so they require the full-report and
+  // control-center permissions the super_admin role already holds.
+  if (['get_category_price_comparison'].includes(tool.name)) {
+    return canAny(role, ['pricing.manage']);
+  }
+  if (['get_compliance_readiness'].includes(tool.name)) {
+    return canAny(role, ['command_center.view']);
   }
   // Control Center tools — super_admin only, mapped to command_center.view
   if (['get_users_expiring_soon', 'get_disabled_features', 'get_expired_retailers', 'get_suspended_users', 'get_recent_permission_changes'].includes(tool.name)) {

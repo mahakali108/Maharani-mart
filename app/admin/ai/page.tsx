@@ -15,5 +15,8 @@ export default async function AdminAIPage() {
     { label: 'Demand Forecast', prompt: 'Last 60 days ke data se demand forecast banao, rising demand aur stock-out risk highlights karke.' },
     { label: 'Stock-out Risk', prompt: 'Kaunse products next 7 days mein khatam ho sakte hain? Demand forecast se batao.' },
     { label: 'Inventory Risk', prompt: 'Abhi ka complete inventory risk report do — stock-out, overstock, dead-stock aur expiry risk.' },
+    { label: 'Retailer Approvals', prompt: 'Retailer approval queue dikhao — kitne pending hain, kitne overdue hain, aur sabse purane applications kaunse hain?' },
+    { label: 'Category Prices', prompt: 'General, Silver aur Gold retailer category prices compare karo aur koi ordering violation batао.' },
+    { label: 'Compliance Gaps', prompt: 'Compliance configuration readiness dikhao — kaunsi owner inputs missing hain aur kya CA review pending hai?' },
   ]} />;
 }

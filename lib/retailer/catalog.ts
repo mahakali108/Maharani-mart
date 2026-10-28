@@ -236,7 +236,7 @@ export async function loadCatalogPricing(
   const [overrides, offerIds, packTiers, availability] = await Promise.all([
     getProductPriceOverrides(supabase, ids, retailerId, areaId),
     getActiveOfferProductIds(supabase, ids),
-    loadPackTiers(supabase, packIds),
+    loadPackTiers(supabase, packIds, retailerId),
     loadCatalogAvailability(supabase, packIds),
   ]);
   return { overrides, offerIds, packTiers, availability };

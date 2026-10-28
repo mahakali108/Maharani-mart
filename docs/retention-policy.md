@@ -70,7 +70,7 @@ observable and can age out of the log like any other record.
 | Notifications | `notifications` | 90 days | YES | cutoff `created_at`; ephemeral messages |
 | Notification logs | `notification_logs` | 90 days | YES | cutoff `created_at`; provider/system logs |
 | Expired staff invites | `staff_account_invites` | 90 days | YES | cutoff `expires_at`; dead signup tokens (live invites are 15 min) |
-| AI rate-limit windows | `ai_rate_limit_windows` | 90 days | YES | cutoff `window_started_at`; spent processing windows |
+| AI rate-limit windows | `ai_rate_limit_windows` | 14 days (AI engine) / 90 days (general engine) | YES | **0084**: the dedicated AI engine deletes at 14 days (cutoff `window_started_at`); the 90-day general rule remains as a safety net and is unchanged. See §10. |
 | Cleanup audit logs | `cleanup_runs` | 90 days after completion | YES | a run is **never** deleted while still `running` (spec: never before completion) |
 | **Orders** | `orders` | 120 days | YES | cutoff `placed_at`; cascades remove `order_items`, `order_status_history`, `order_deliveries` + items, `coupon_redemptions` |
 | **Order Items** | `order_items` | 120 days (with order) | YES | counted in the `orders` run breakdown |
@@ -194,8 +194,54 @@ row is never deleted (and is force-finalized as `failed` if stale for an hour).
   approved 120-day list names inventory *history*, not receiving documents.
 * `staff_commissions`, `staff_targets` — money owed to staff; deleting them
   could erase liabilities. Not in the approved financial cleanup category.
-* `audit_logs`, `super_admin_audit_logs`, `ai_audit_logs` — audit trail.
+* `audit_logs`, `super_admin_audit_logs` — **general security/audit evidence**;
+  never touched by any cleanup, including the AI engine.
+* `ai_audit_logs` — deliberately **NOT** part of this 90/120-day engine. It is
+  covered by the separate AI-only 14-day rule in §10 (migration 0084).
 * `ai_predictions`, `ai_demand_forecasts`, `retailer_insights` — derived data,
-  not in any approved category.
+  not in any approved category **of this 90/120-day engine**. `ai_demand_forecasts`
+  is covered by the separate AI-only 14-day rule in §10.
 * `retailer_account_requests`, `retailer_documents` — customer master/KYC.
 * Everything in the permanent matrix (§3).
+
+
+---
+
+## 10. AI-only 14-day retention (migration 0084)
+
+The owner requires that **Super Admin AI data** — and only AI data — is deleted
+automatically after **14 days**. This is a *separate* engine from the 90/120-day
+business cleanup above; it does not modify `run_data_cleanup`, its registry or
+its schedule.
+
+| Store | Cutoff column | Rule |
+| --- | --- | --- |
+| `ai_audit_logs` | `created_at` | strictly older than 14 days |
+| `ai_business_memory` | `updated_at` | strictly older than 14 days |
+| `ai_rate_limit_windows` | `window_started_at` | strictly older than 14 days |
+| `ai_confirmed_actions` | `consumed_at` | strictly older than 14 days |
+| `ai_demand_forecasts` | `computed_at` | strictly older than 14 days |
+
+* **Boundary:** a row exactly 14 days old is *kept*; it is eligible on the next
+  run (the predicate is `< cutoff`, not `<=`). Timestamps are absolute
+  (`timestamptz`), i.e. UTC instants.
+* **Never touched:** every account, product, order, invoice/tax row, payment,
+  refund, wallet/loyalty ledger, return, complaint, general audit record and
+  Storage object. The engine's target list is a hard-coded allow-list of the
+  five tables above — there is no dynamic SQL and no table name parameter.
+* **Not stored:** prompts, responses, memory values or file contents. The run
+  log (`ai_cleanup_runs`) records the cutoff, per-target row counts, status and
+  errors only.
+* **Audit retention:** run logs are themselves general operational evidence and
+  are not deleted by the AI engine.
+* **Schedule:** **none by default.** The route `/api/cron/ai-cleanup` exists and
+  is guarded by `CRON_SECRET` (fails closed with 503 when unset), but this PR
+  deliberately registers **no `crons` entry** for it in `vercel.json`, so
+  deploying the application cannot start deleting AI data on its own. Arming it
+  is a separate, explicitly approved change that requires, in this order:
+  migration 0084 applied → one authorised `?dry_run=1` run reviewed → written
+  owner sign-off → add `{ "path": "/api/cron/ai-cleanup", "schedule": "30 2 * * *" }`.
+  The pre-existing `/api/cron/cleanup` schedule (`0 2 * * *`) is unchanged.
+* **External AI providers:** the platform cannot promise deletion from a
+  provider's own systems or backups; that depends on the provider's terms and
+  is outside this control.

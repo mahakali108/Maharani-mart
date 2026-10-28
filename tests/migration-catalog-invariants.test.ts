@@ -42,7 +42,7 @@ describe('RLS coverage', () => {
     expect(rows).toEqual([]);
   });
 
-  it('only the three documented service-role-only tables have no policy', async () => {
+  it('only the documented service-role-only tables have no policy', async () => {
     const rows = await q<{ table_name: string }>(`
       select c.relname as table_name
         from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -50,7 +50,13 @@ describe('RLS coverage', () => {
          and not exists (select 1 from pg_policies p
                           where p.schemaname = 'public' and p.tablename = c.relname)
        order by 1`);
+    // cleanup_runs + data_retention_rules (0055, general retention engine) and
+    // ai_cleanup_runs + ai_retention_rules (0084, AI-only 14-day retention) are
+    // server-scheduler-only: no client policy exists by design. The supplier
+    // rate-limit table is the same shape.
     expect(rows.map((r) => r.table_name)).toEqual([
+      'ai_cleanup_runs',
+      'ai_retention_rules',
       'cleanup_runs',
       'data_retention_rules',
       'supplier_application_rate_limits',

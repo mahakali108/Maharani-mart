@@ -102,7 +102,8 @@ export default async function ReorderPage({ params }: { params: { id: string } }
 
   const tierMap = await loadPackTiers(
     supabase,
-    previousLines.map((line) => line.first.pack_id!).filter(Boolean)
+    previousLines.map((line) => line.first.pack_id!).filter(Boolean),
+    user.id
   );
 
   /*

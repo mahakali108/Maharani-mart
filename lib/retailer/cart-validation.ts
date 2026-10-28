@@ -21,11 +21,12 @@ interface PackForCart {
 /** Validate one full intended persisted piece quantity against current server rules. */
 async function quantityError(
   supabase: ReturnType<typeof createClient>,
+  retailerId: string,
   pack: PackForCart,
   quantity: number,
   productOverride: number | null,
 ) {
-  const tiers = await loadPackTiers(supabase, [pack.id]);
+  const tiers = await loadPackTiers(supabase, [pack.id], retailerId);
   const pricing = calculateRetailerPiecePrice({
     quantity,
     unitsPerCase: pack.units_per_case,
@@ -68,7 +69,7 @@ export async function validatePackForCart(
       .maybeSingle<{ area_id: string | null }>();
     if (retailerError || !retailer) return 'Current retailer pricing could not be verified. Please try again.';
     const productOverride = await getProductPriceOverride(supabase, pack.product_id, retailerId, retailer.area_id);
-    return await quantityError(supabase, pack, quantity, productOverride);
+    return await quantityError(supabase, retailerId, pack, quantity, productOverride);
   } catch {
     return 'Current pricing could not be verified. Please try again.';
   }
