@@ -170,12 +170,15 @@ export async function updateMarketplaceComplianceAction(
       return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid marketplace compliance payload.' };
     }
 
-    // Safety Gate: Do not activate membership discounts without CA approval reference
-    if (parsed.data.membershipDiscountCheckoutActive && !parsed.data.caApprovalDocumentReference) {
+    // RETIRED (migration 0083): membership, and therefore the membership
+    // checkout discount, no longer exists. A CA reference can never switch it
+    // back on; a legacy payload asking for `true` is refused outright and the
+    // stored value is always false.
+    if (parsed.data.membershipDiscountCheckoutActive) {
       return {
         success: false,
         error:
-          'Tax-dependent membership discounts cannot be activated in checkout without recording a written Chartered Accountant approval document reference.',
+          'Membership discounts were retired with the paid membership system. There is no membership checkout discount to activate.',
       };
     }
 
@@ -188,6 +191,7 @@ export async function updateMarketplaceComplianceAction(
 
     const valueToSave: MarketplaceComplianceConfig = {
       ...parsed.data,
+      membershipDiscountCheckoutActive: false,
       updatedAt: new Date().toISOString(),
       updatedBy: user.id,
     };

@@ -63,12 +63,12 @@ describe('Super Admin Business Settings Validation & Tax Gates', () => {
 
   it('validates contact and statutory grievance officer payload', () => {
     const validGrievance = {
-      officialPhone: '+91 9431000000',
+      officialPhone: '+91 9430123456',
       supportEmail: 'support@maharanitraders.com',
       grievanceOfficerName: 'Ramesh Kumar',
       grievanceOfficerDesignation: 'Grievance Redressal Officer',
       grievanceEmail: 'grievance@maharanitraders.com',
-      grievancePhone: '+91 9431000001',
+      grievancePhone: '+91 9430123457',
       grievanceAddress: 'Maharani Hub, Gaya, Bihar',
       acknowledgementHours: 48,
       resolutionDays: 30,
@@ -81,12 +81,12 @@ describe('Super Admin Business Settings Validation & Tax Gates', () => {
 
   it('rejects invalid email for grievance contact', () => {
     const invalidEmail = {
-      officialPhone: '+91 9431000000',
+      officialPhone: '+91 9430123456',
       supportEmail: 'support@maharanitraders.com',
       grievanceOfficerName: 'Ramesh Kumar',
       grievanceOfficerDesignation: 'Grievance Redressal Officer',
       grievanceEmail: 'not-an-email',
-      grievancePhone: '+91 9431000001',
+      grievancePhone: '+91 9430123457',
       grievanceAddress: 'Maharani Hub, Gaya, Bihar',
       acknowledgementHours: 48,
       resolutionDays: 30,

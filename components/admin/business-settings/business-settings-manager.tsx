@@ -449,38 +449,42 @@ export function BusinessSettingsManager({
             </label>
           </div>
 
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
-              <ShieldAlert className="h-4 w-4 text-amber-700" />
-              Statutory CA Sign-Off Gate for Membership Discounts in Checkout
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
+              <ShieldAlert className="h-4 w-4 text-slate-500" />
+              Membership Discounts — Retired
             </div>
-            <p className="text-xs text-amber-800 leading-5">
-              In accordance with GST Section 15(3) safety protocols, membership discounts CANNOT be activated in live
-              checkout until a formal written CA opinion reference is recorded.
+            <p className="text-xs leading-5 text-slate-700">
+              Paid retailer membership (Free/Silver/Gold subscription) has been retired. Retailers are now classified
+              into pricing categories (General / Silver / Gold) by an administrator, and no membership discount exists
+              in checkout, so there is nothing here to activate.
             </p>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-1">
+            <p className="text-[11px] leading-5 text-slate-600">
+              A recorded CA opinion reference never re-enables this feature. Retailer-category prices are configured on
+              the <strong>Category Pricing</strong> screen and are re-validated server-side at checkout.
+            </p>
+            <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-semibold text-slate-800">CA Opinion Document Reference</label>
+                <label className="text-xs font-semibold text-slate-800" htmlFor="ca-opinion-reference">
+                  CA Opinion Document Reference (record only)
+                </label>
                 <input
+                  id="ca-opinion-reference"
                   type="text"
                   placeholder="e.g. CA-OPINION-MAHARANI-2026-OCT-15"
                   value={marketplace.caApprovalDocumentReference ?? ''}
                   onChange={(e) => setMarketplace({ ...marketplace, caApprovalDocumentReference: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900 focus:border-primary-500 focus:outline-none"
                 />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Stored as a project record only. It does not enable or justify any discount.
+                </p>
               </div>
 
               <div className="flex items-center pt-5">
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-900 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={marketplace.membershipDiscountCheckoutActive}
-                    onChange={(e) => setMarketplace({ ...marketplace, membershipDiscountCheckoutActive: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  Activate Membership Discounts in Checkout
-                </label>
+                <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
+                  Membership discount in checkout: <strong>permanently disabled</strong>
+                </p>
               </div>
             </div>
           </div>

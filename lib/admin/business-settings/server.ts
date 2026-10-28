@@ -14,24 +14,55 @@ export const DEFAULT_BUSINESS_PROFILE: BusinessProfileConfig = {
   gstin: null,
   pan: null,
   registrationState: 'Bihar',
-  registeredAddress: 'Gaya, Bihar, India',
-  verificationStatus: 'pending_verification',
+  // Deliberately empty: the registered address is an owner input. Rendering
+  // "Gaya, Bihar, India" here would publish an unverified legal address.
+  registeredAddress: '',
+  verificationStatus: 'unverified',
   isGstRegistered: false,
   notes: 'Owner verification pending. Legal entity details require PAN/GSTIN registration certificate upload.',
 };
 
+/**
+ * No invented contact identity. A placeholder phone, mailbox or officer name in
+ * a fallback object is exactly what ends up published on a grievance page, so
+ * every identity field starts EMPTY and the UI renders "Owner Input Required".
+ * The acknowledgement/resolution targets are workflow constants, not claims
+ * about the business.
+ */
 export const DEFAULT_CONTACT_GRIEVANCE: ContactGrievanceConfig = {
-  officialPhone: '+91 9400000000',
-  supportEmail: 'support@maharanitraders.com',
-  grievanceOfficerName: 'Grievance Officer',
+  officialPhone: '',
+  supportEmail: '',
+  grievanceOfficerName: '',
   grievanceOfficerDesignation: 'Grievance Redressal Officer',
-  grievanceEmail: 'grievance@maharanitraders.com',
-  grievancePhone: '+91 9400000000',
-  grievanceAddress: 'Gaya Hub, Bihar, India',
+  grievanceEmail: '',
+  grievancePhone: '',
+  grievanceAddress: '',
   acknowledgementHours: 48,
   resolutionDays: 30,
-  isConfigured: false, // Flagged false until owner fills in verified contacts
+  isConfigured: false, // False until the owner stores verified contacts
 };
+
+/** Every field a published grievance contact must actually have. */
+const REQUIRED_CONTACT_FIELDS = [
+  'officialPhone',
+  'supportEmail',
+  'grievanceOfficerName',
+  'grievanceEmail',
+  'grievancePhone',
+  'grievanceAddress',
+] as const;
+
+/**
+ * Defence in depth: `isConfigured` is only honoured when every required detail
+ * is actually present. A stored `isConfigured: true` with empty fields can
+ * therefore never publish a blank/invalid grievance contact.
+ */
+function contactIsPublishable(config: ContactGrievanceConfig): boolean {
+  return (
+    config.isConfigured === true &&
+    REQUIRED_CONTACT_FIELDS.every((field) => config[field].trim().length > 0)
+  );
+}
 
 export const DEFAULT_MARKETPLACE_COMPLIANCE: MarketplaceComplianceConfig = {
   sellerFundedDiscountsAllowed: false,
@@ -73,7 +104,8 @@ export async function getAuthoritativeContactGrievance(): Promise<ContactGrievan
   if (!data?.value || typeof data.value !== 'object') {
     return DEFAULT_CONTACT_GRIEVANCE;
   }
-  return { ...DEFAULT_CONTACT_GRIEVANCE, ...(data.value as Partial<ContactGrievanceConfig>) };
+  const merged = { ...DEFAULT_CONTACT_GRIEVANCE, ...(data.value as Partial<ContactGrievanceConfig>) };
+  return { ...merged, isConfigured: contactIsPublishable(merged) };
 }
 
 /** Load authoritative marketplace compliance settings */
@@ -88,5 +120,7 @@ export async function getAuthoritativeMarketplaceCompliance(): Promise<Marketpla
   if (!data?.value || typeof data.value !== 'object') {
     return DEFAULT_MARKETPLACE_COMPLIANCE;
   }
-  return { ...DEFAULT_MARKETPLACE_COMPLIANCE, ...(data.value as Partial<MarketplaceComplianceConfig>) };
+  const merged = { ...DEFAULT_MARKETPLACE_COMPLIANCE, ...(data.value as Partial<MarketplaceComplianceConfig>) };
+  // Retired by migration 0083: a legacy stored `true` can never take effect.
+  return { ...merged, membershipDiscountCheckoutActive: false };
 }
