@@ -3,6 +3,7 @@
 **Date:** 2026-10-27
 **Branch:** `arena/d032106f-maharani-mart`
 **Head at audit start:** `3346181dcb6570a1c70517c086abc533bc474f7f` (`main` merge of PR #118)
+**Implementation head:** `7d0a8fd` (branch tip, pushed to origin); commits `fcddf9e` → `e6d2afb` → `26bac6b` → `7d0a8fd`
 **Working tree at audit start:** clean
 **Supabase project:** `fhrmsrumsraprvutrpeo` (only). The legacy project was never contacted.
 **Production changes applied by this work:** **none** (no deploy, no migration, no cron, no setting, no data).
@@ -137,6 +138,8 @@ none deletes audit or business records by default).
 | Super Admin Control Center | `app/admin/control-center/page.tsx` — pending/overdue approvals, category-price count, owner-input count cards |
 | Super Admin AI | `lib/ai/tools/super-admin.ts` — `get_retailer_approval_queue`, `get_category_price_comparison`, `get_compliance_readiness` (all `actionClass: 'READ'`, `roles: ['super_admin']`), permission mapping in `lib/ai/tools/index.ts`, quick actions in `app/admin/ai/page.tsx` |
 | Membership retirement | deleted `app/admin/membership/page.tsx` + `lib/membership/actions.ts`; sidebar entry replaced; `app/retailer/membership/page.tsx` rewritten as "Pricing Category & Points"; `app/retailer/account/page.tsx` link copy |
+| Retired discount switch (final pass) | `lib/admin/business-settings/{actions,server,types}.ts` + `components/admin/business-settings/business-settings-manager.tsx` — the "activate membership discount" flag is refused even with a CA reference, always stored/read as `false`, and the UI panel is a static "Retired" notice |
+| Verified contact details (final pass) | `lib/admin/business-settings/{types,server}.ts` — no placeholder phone/mailbox/address defaults; placeholder values rejected by the schema; `isConfigured` honoured only when every field is truly present |
 | AI retention scheduler | `app/api/cron/ai-cleanup/route.ts` + `vercel.json` cron `30 2 * * *` (deploy-gated) |
 | Tests | `tests/retailer-approval-db.test.ts`, `tests/category-tier-pricing-db.test.ts`, `tests/ai-retention.test.ts`, `tests/category-pricing-unit.test.ts`; updated `tests/membership-db.test.ts`, `tests/membership-page-error.test.tsx`, `tests/migration-catalog-invariants.test.ts` |
 
@@ -163,7 +166,7 @@ none deletes audit or business records by default).
 ## 4. Test evidence (local, executed)
 
 ```
-npx vitest run        168 files / 2818 tests passed   (~105 s)
+npx vitest run        169 files / 2826 tests passed   (~140 s)
 npx tsc --noEmit      clean
 npx next lint         "No ESLint warnings or errors"
 npx next build        succeeded (138/138 static pages, all routes compiled)
@@ -299,8 +302,14 @@ licence or verification result is fabricated. Unconfigured values render as
 8. **Compliance sources must be re-verified**: the checklist links official
    portals but the applicability/commencement of each instrument needs the
    owner's CA/lawyer to confirm against the current text.
-9. **The legal pages still need owner-supplied contact details**; the platform
-   deliberately shows "Owner Input Required" rather than placeholders.
+9. **The legal pages still need owner-supplied contact details.** The fallback
+   values are now EMPTY (previously a placeholder number/mailbox/address), so
+   until the owner stores real details `/legal/grievance` renders
+   "Owner Input Required" and never a fake contact.
+10. **Category-price RLS is broader for staff than for retailers** by design:
+    salesmen/staff who create orders can read the retailer selling prices they
+    must quote (general + all categories), otherwise their quote would fail
+    `ORDER_PRICE_CHANGED`. Seller cost/floor data is never in that table.
 
 ---
 
