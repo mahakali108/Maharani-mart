@@ -234,8 +234,14 @@ its schedule.
   errors only.
 * **Audit retention:** run logs are themselves general operational evidence and
   are not deleted by the AI engine.
-* **Schedule:** `/api/cron/ai-cleanup` (Vercel Cron `30 2 * * *`), guarded by
-  `CRON_SECRET` and failing closed when it is unset. Not enabled until deploy.
+* **Schedule:** **none by default.** The route `/api/cron/ai-cleanup` exists and
+  is guarded by `CRON_SECRET` (fails closed with 503 when unset), but this PR
+  deliberately registers **no `crons` entry** for it in `vercel.json`, so
+  deploying the application cannot start deleting AI data on its own. Arming it
+  is a separate, explicitly approved change that requires, in this order:
+  migration 0084 applied → one authorised `?dry_run=1` run reviewed → written
+  owner sign-off → add `{ "path": "/api/cron/ai-cleanup", "schedule": "30 2 * * *" }`.
+  The pre-existing `/api/cron/cleanup` schedule (`0 2 * * *`) is unchanged.
 * **External AI providers:** the platform cannot promise deletion from a
   provider's own systems or backups; that depends on the provider's terms and
   is outside this control.

@@ -140,7 +140,7 @@ none deletes audit or business records by default).
 | Membership retirement | deleted `app/admin/membership/page.tsx` + `lib/membership/actions.ts`; sidebar entry replaced; `app/retailer/membership/page.tsx` rewritten as "Pricing Category & Points"; `app/retailer/account/page.tsx` link copy |
 | Retired discount switch (final pass) | `lib/admin/business-settings/{actions,server,types}.ts` + `components/admin/business-settings/business-settings-manager.tsx` — the "activate membership discount" flag is refused even with a CA reference, always stored/read as `false`, and the UI panel is a static "Retired" notice |
 | Verified contact details (final pass) | `lib/admin/business-settings/{types,server}.ts` — no placeholder phone/mailbox/address defaults; placeholder values rejected by the schema; `isConfigured` honoured only when every field is truly present |
-| AI retention scheduler | `app/api/cron/ai-cleanup/route.ts` + `vercel.json` cron `30 2 * * *` (deploy-gated) |
+| AI retention scheduler | `app/api/cron/ai-cleanup/route.ts` (route only). **No `crons` entry is registered** — arming it is a separate approved change (see `docs/retention-policy.md` §10). `/api/cron/cleanup` at `0 2 * * *` is unchanged. |
 | Tests | `tests/retailer-approval-db.test.ts`, `tests/category-tier-pricing-db.test.ts`, `tests/ai-retention.test.ts`, `tests/category-pricing-unit.test.ts`; updated `tests/membership-db.test.ts`, `tests/membership-page-error.test.tsx`, `tests/migration-catalog-invariants.test.ts` |
 
 ---
@@ -294,8 +294,10 @@ licence or verification result is fabricated. Unconfigured values render as
 4. **`app/retailer/membership` keeps its URL** (renamed content) to avoid
    breaking existing links/bookmarks and the PWA cache; it can be renamed to
    `/retailer/pricing-category` later with a redirect.
-5. **`/api/cron/ai-cleanup` only runs after deploy**; until then the AI
-   retention is enforced by the function but not scheduled in production.
+5. **AI retention is not scheduled at all.** The route exists and fails closed
+   without `CRON_SECRET`, but no Vercel cron entry is registered by this change,
+   so deploying the app cannot start AI deletion. Arming it needs a separate PR
+   after 0084 is applied, one reviewed dry run and written owner sign-off.
 6. **Vercel plan limits** apply to cron frequency; a daily run is assumed.
 7. **No real-database verification** of RLS/triggers, and **no true concurrency
    test** (PGlite is single-connection).
@@ -323,6 +325,15 @@ licence or verification result is fabricated. Unconfigured values render as
 | Membership back on | `supabase/rollbacks/0083…down.sql` — re-enables plans + grant + multiplier trigger (owner approval required). |
 | AI retention off | `supabase/rollbacks/0084…down.sql` **and** remove the `vercel.json` cron entry, otherwise the scheduler keeps calling a dropped function. Deletion is irreversible. |
 | Ordering | Apply in reverse: 0084 → 0083 → 0082 → 0081. Code first, then DB, per the deploy note in 0082. |
+
+---
+
+## 9a. Pre-production gate (added 2026-10-28)
+
+The release gate, migration order, rollback gaps, cron-safety decision and the
+owner/DBA evidence still required are consolidated in
+`docs/PRE_PRODUCTION_GATE_2026-10-28.md`. Verdict remains **NO-GO** until that
+evidence is supplied and reviewed.
 
 ---
 

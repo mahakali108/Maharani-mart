@@ -5,8 +5,19 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 /**
  * AI-only data retention scheduler (migration 0084).
  *
- *   schedule: daily at 02:30 UTC (vercel.json → crons)
- *   auth:     Authorization: Bearer ${CRON_SECRET} — fail closed when unset.
+ *   schedule: NOT SCHEDULED BY THIS PR. The route exists and is fully
+ *             implemented, but no `crons` entry for /api/cron/ai-cleanup is
+ *             registered in vercel.json, so a deploy of this branch cannot
+ *             start deleting AI data on its own. A SEPARATE, explicitly
+ *             approved change may add:
+ *                 { "path": "/api/cron/ai-cleanup", "schedule": "30 2 * * *" }
+ *             and only after all three of these are true:
+ *               1. migration 0084 is applied to the target project,
+ *               2. one authorised ?dry_run=1 run has been reviewed,
+ *               3. the owner has given written sign-off to arm it.
+ *   auth:     Authorization: Bearer ${CRON_SECRET} — fail closed when unset
+ *             (503). Until the schedule is armed, a manual invocation is the
+ *             ONLY way this can run, and it still requires the secret.
  *
  * This endpoint calls ONE function, run_ai_data_cleanup, which can only delete
  * from the five AI-owned tables and only rows strictly older than 14 days. It
