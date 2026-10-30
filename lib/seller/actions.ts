@@ -9,6 +9,7 @@ import {
   parsePaise,
   validateSellerInput,
 } from '@/lib/admin/seller-validation';
+import { checkProductCanBeSold, checkSellerCanTrade } from '@/lib/compliance/catalog-compliance';
 
 export type SellerActionResult =
   | { ok: true }
@@ -44,6 +45,12 @@ function mapOfferWriteError(message: string): string {
   }
   if (message.includes('SELLER_NOT_ACTIVE')) {
     return 'Only an active seller can activate or trade offers.';
+  }
+  if (message.includes('PRODUCT_COMPLIANCE_REQUIRED')) {
+    return 'This product needs an approved, unexpired Cosmetics/FMCG compliance review before it can be offered.';
+  }
+  if (message.includes('SELLER_COMPLIANCE_REQUIRED')) {
+    return 'Seller compliance must be approved and current before an offer can be published.';
   }
   return message;
 }
@@ -141,6 +148,12 @@ export async function sellerCreateOfferAction(formData: FormData): Promise<Selle
   if (packError || !pack || !pack.is_active) {
     return { ok: false, error: 'Selected product pack was not found or is inactive.' };
   }
+  const [productGate, sellerGate] = await Promise.all([
+    checkProductCanBeSold(supabase, pack.product_id),
+    checkSellerCanTrade(supabase, seller.id),
+  ]);
+  if (!productGate.ok) return { ok: false, error: productGate.error };
+  if (!sellerGate.ok) return sellerGate;
 
   // Note: moderation_status is always 'pending' on seller insert; the DB
   // trigger trg_a_seller_offer_portal_write & trg_enforce_seller_offer_rules

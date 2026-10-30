@@ -1,11 +1,13 @@
 # Indian E-Commerce Compliance Matrix — Maharani Traders
 
-**Document Version**: 1.0.0  
-**Effective Date**: 2026-10-27  
-**Platform**: Maharani Traders (`Maharani-mart`)  
-**Operating Entity**: Ajay General (Proprietorship) trading as Maharani Traders  
-**Operational Region**: Gaya District / Bihar (Serviceable PINs only)  
-**Catalog Classification**: Cosmetics & Fast-Moving Consumer Goods (FMCG) ONLY (Food products explicitly excluded)  
+> **Historical working matrix — do not rely on its PASS labels as a legal or launch conclusion.** It predates the source-level Phase 2D.1 corrections and the audit in [`../legal-review/COMPLIANCE_AUDIT_2026-10-30.md`](../legal-review/COMPLIANCE_AUDIT_2026-10-30.md). That audit is the current engineering assessment and records **BLOCKED — OWNER INPUT** and **BLOCKED — LAWYER/CA APPROVAL**. This matrix remains only as a review reference and has not been validated against owner records, a remote database, or a current consolidated legal text.
+
+**Document Version**: 1.0.0 (historical working matrix)
+**Effective Date**: 2026-10-27
+**Platform**: Maharani Traders (`Maharani-mart`)
+**Operating Entity**: Ajay General (Proprietorship) trading as Maharani Traders
+**Operational Region**: Gaya District / Bihar (Serviceable PINs only)
+**Catalog Classification**: Cosmetics & Fast-Moving Consumer Goods (FMCG) ONLY (Food products explicitly excluded)
 **Business Model**: Hybrid Wholesale B2B Marketplace (Own-stock + Admin-approved third-party seller offers)
 
 ---

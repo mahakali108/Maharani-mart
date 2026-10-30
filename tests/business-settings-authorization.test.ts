@@ -3,9 +3,12 @@ import {
   updateBusinessProfileAction,
   updateContactGrievanceAction,
   updateMarketplaceComplianceAction,
+  updateOrderingLaunchReadinessAction,
 } from '@/lib/admin/business-settings/actions';
 import * as sessionModule from '@/lib/auth/session';
 import * as supabaseServerModule from '@/lib/supabase/server';
+
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 describe('Super Admin Business Settings Authorization & Security Gates', () => {
   beforeEach(() => {
@@ -78,6 +81,76 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Super Admin authorization required/i);
+  });
+
+  it('blocks unauthenticated and retailer callers from recording ordering launch approvals', async () => {
+    const readinessPayload = {
+      businessIdentity: { status: 'pending' },
+      publicContacts: { status: 'pending' },
+      legalPolicies: { status: 'pending' },
+      gstInvoice: { status: 'pending' },
+      marketplaceTaxTcsSettlement: { status: 'pending' },
+      deliveryCodCancellationsRefunds: { status: 'pending' },
+      privacyReadiness: { status: 'pending' },
+      approvalValidityPolicy: {
+        status: 'configured',
+        validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        approvalReference: 'OWNER-POLICY-TEST',
+      },
+    };
+
+    vi.spyOn(sessionModule, 'requireUser').mockRejectedValueOnce(new Error('Authentication required.'));
+    const anonymous = await updateOrderingLaunchReadinessAction(readinessPayload);
+    expect(anonymous.success).toBe(false);
+    expect(anonymous.error).toMatch(/Authentication required/i);
+
+    vi.spyOn(sessionModule, 'requireUser').mockResolvedValueOnce({
+      id: 'retailer-user-uuid',
+      role: 'retailer',
+      fullName: 'Retailer Shop',
+      phone: '+918888888888',
+    } as any);
+    const retailer = await updateOrderingLaunchReadinessAction(readinessPayload);
+    expect(retailer.success).toBe(false);
+    expect(retailer.error).toMatch(/Super Admin authorization required/i);
+  });
+
+  it('sends only validated approvals and a reason to the atomic server-side writer', async () => {
+    const superAdminId = '11111111-1111-4111-8111-111111111111';
+    const readinessPayload = {
+      businessIdentity: { status: 'approved', approvalReference: 'OWNER-TEST-001' },
+      publicContacts: { status: 'approved', approvalReference: 'OWNER-TEST-002' },
+      legalPolicies: { status: 'approved', approvalReference: 'OWNER-TEST-003' },
+      gstInvoice: { status: 'approved', approvalReference: 'OWNER-TEST-004' },
+      marketplaceTaxTcsSettlement: { status: 'approved', approvalReference: 'OWNER-TEST-005' },
+      deliveryCodCancellationsRefunds: { status: 'approved', approvalReference: 'OWNER-TEST-006' },
+      privacyReadiness: { status: 'approved', approvalReference: 'OWNER-TEST-007' },
+      approvalValidityPolicy: {
+        status: 'configured',
+        validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        approvalReference: 'OWNER-POLICY-TEST',
+      },
+    };
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+
+    vi.spyOn(sessionModule, 'requireUser').mockResolvedValueOnce({
+      id: superAdminId,
+      role: 'super_admin',
+      fullName: 'Super Admin',
+      phone: '+917777777777',
+    } as any);
+    vi.spyOn(supabaseServerModule, 'createClient').mockReturnValue({ rpc } as any);
+
+    const result = await updateOrderingLaunchReadinessAction(readinessPayload, '  Owner review complete  ');
+
+    expect(result).toEqual({ success: true });
+    expect(rpc).toHaveBeenCalledWith('record_ordering_launch_readiness', {
+      p_approvals: readinessPayload,
+      p_reason: 'Owner review complete',
+    });
+    const sentApprovals = rpc.mock.calls[0]![1].p_approvals;
+    expect(sentApprovals).not.toHaveProperty('recordedAt');
+    expect(sentApprovals).not.toHaveProperty('recordedBy');
   });
 
   it('refuses membership-discount activation outright — the feature is retired (0083)', async () => {

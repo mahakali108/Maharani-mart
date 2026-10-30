@@ -7,6 +7,7 @@ import { getOrderCoinMovement } from '@/lib/coins/server';
 import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 import { createOrderRequestFingerprint } from '@/lib/orders/request-fingerprint';
 import { checkDeliveryTerms, deliveryOrderBlocker, type DeliveryDestination } from '@/lib/config/delivery-serviceability';
+import { isOrderingReady, ORDERING_NOT_ENABLED_MESSAGE } from '@/lib/compliance/ordering-readiness';
 import type { Database } from '@/types/database.types';
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -40,6 +41,7 @@ export type CreateOrderErrorCode =
   | 'insufficient_stock'
   | 'minimum_order_quantity'
   | 'coupon_invalid'
+  | 'ordering_not_enabled'
   | 'warehouse_configuration_error'
   | 'database_unavailable'
   | 'delivery_unavailable'
@@ -311,10 +313,18 @@ export async function createOrderForRetailer({
   /** Caller-scoped client. Mobile routes pass their verified bearer-token client. */
   supabase?: SupabaseClient;
 }): Promise<CreateOrderResult> {
-  const supabase = suppliedClient ?? createClient();
+  // This must run before request parsing, replay lookup, delivery checks,
+  // quoting, warehouse resolution, service-role order RPCs, Coins, cart
+  // clearing, or any payment work. Callers provide no readiness input, so no
+  // web/mobile/salesman payload can bypass the protected platform-settings gate.
+  if (!await isOrderingReady()) {
+    return { error: ORDERING_NOT_ENABLED_MESSAGE, code: 'ordering_not_enabled' };
+  }
+
   const normalizedNotes = (notes ?? '').trim();
   if (normalizedNotes.length > 1000) return { error: 'Order notes must be 1000 characters or fewer.', code: 'internal_error' };
 
+  const supabase = suppliedClient ?? createClient();
   const effectiveRequestKey = requestKey ?? randomUUID();
   if (!UUID_RE.test(effectiveRequestKey)) return { error: 'Invalid order request key.', code: 'internal_error' };
 

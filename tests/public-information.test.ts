@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
-const publicPages = ['about', 'contact', 'legal/terms', 'legal/privacy', 'legal/shipping', 'legal/returns'];
+const publicPages = ['about', 'contact', 'legal/terms', 'legal/privacy', 'legal/shipping', 'legal/returns', 'legal/grievance'];
 
 describe('public business information and review gates', () => {
   it.each(publicPages)('%s has a buildable public route and shared review notice', (route) => {
@@ -43,5 +43,36 @@ describe('public business information and review gates', () => {
     expect(seller).toContain('href="/contact"');
     const middleware = read('middleware.ts');
     expect(middleware).not.toMatch(/PROTECTED_PREFIXES = \[[^\]]*['"]\/legal['"]/);
+  });
+
+  it('adds an accessible review-gated Grievance Redressal route to the shared authentication frame', () => {
+    const authFrame = read('components/auth/auth-frame.tsx');
+    const grievance = read('app/legal/grievance/page.tsx');
+    expect(authFrame).toContain('aria-label="Public information"');
+    expect(authFrame).toContain('href="/legal/grievance"');
+    expect(authFrame).toContain('>Grievance Redressal</Link>');
+    expect(grievance).toContain('review-stage grievance information page');
+    expect(grievance).toContain('not represented as a statutory or operational SLA');
+    expect(grievance).not.toContain('e.g. grievance@');
+    expect(grievance).not.toContain('Gaya District, Bihar');
+  });
+
+  it('keeps the professional-review legal pack unpublished and versioned', () => {
+    const index = read('docs/legal-review/README.md');
+    expect(index).toContain('unpublished');
+    for (const document of [
+      'TERMS_AND_CONDITIONS.md',
+      'PRIVACY_POLICY.md',
+      'SHIPPING_AND_DELIVERY_POLICY.md',
+      'CANCELLATION_RETURNS_REFUNDS_POLICY.md',
+      'GRIEVANCE_REDRESSAL_POLICY.md',
+      'MARKETPLACE_SELLER_AGREEMENT.md',
+      'SELLER_COMPLIANCE_DECLARATION.md',
+      'PRODUCT_AUTHENTICITY_ANTI_COUNTERFEIT_POLICY.md',
+    ]) {
+      const content = read(`docs/legal-review/${document}`);
+      expect(content).toContain('0.1-review-draft');
+      expect(content).toMatch(/not .*publication|unpublished/i);
+    }
   });
 });

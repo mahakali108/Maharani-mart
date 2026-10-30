@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/auth/session';
 import { can } from '@/lib/permissions/permissions';
 import { analyzeProductCsv, describeImportResult, derivedPiecePrice } from '@/lib/admin/product-csv';
 import { seedDefaultPackForProduct } from '@/lib/admin/pack-seed';
+import { ALLOWED_CATALOG_SCOPES } from '@/lib/compliance/catalog-compliance';
 
 /**
  * CSV catalog import.
@@ -75,22 +76,26 @@ export type ImportResult =
 interface NameLookup {
   byName: Map<string, string>;
   inactive: Set<string>;
+  complianceScopeByName: Map<string, string>;
 }
 
-/** Case-insensitive name → id, plus the names that exist but are deactivated. */
+/** Case-insensitive name → id, active state, and authoritative category scope. */
 async function loadNameLookup(table: 'brands' | 'categories'): Promise<NameLookup> {
   const supabase = createClient();
-  const { data } = await supabase
-    .from(table)
-    .select('id, name, is_active')
-    .returns<{ id: string; name: string; is_active: boolean }[]>();
+  const result = table === 'categories'
+    ? await supabase.from('categories' as never).select('id, name, is_active, compliance_scope').returns<{ id: string; name: string; is_active: boolean; compliance_scope: string }[]>()
+    : await supabase.from('brands' as never).select('id, name, is_active').returns<{ id: string; name: string; is_active: boolean }[]>();
+  const data = result.data as Array<{ id: string; name: string; is_active: boolean; compliance_scope?: string }> | null;
   const byName = new Map<string, string>();
   const inactive = new Set<string>();
+  const complianceScopeByName = new Map<string, string>();
   for (const row of data ?? []) {
-    byName.set(row.name.trim().toLowerCase(), row.id);
-    if (!row.is_active) inactive.add(row.name.trim().toLowerCase());
+    const key = row.name.trim().toLowerCase();
+    byName.set(key, row.id);
+    if (!row.is_active) inactive.add(key);
+    if (table === 'categories') complianceScopeByName.set(key, row.compliance_scope ?? 'unapproved');
   }
-  return { byName, inactive };
+  return { byName, inactive, complianceScopeByName };
 }
 
 async function readUpload(formData: FormData): Promise<{ text: string } | { error: string }> {
@@ -178,7 +183,16 @@ export async function importProductsAction(formData: FormData): Promise<ImportRe
       if (!found)
         issues.push(`category: “${row.categoryName}” does not exist. Create it under Categories & Brands first.`);
       else if (categories.inactive.has(categoryKey)) issues.push(`category: “${row.categoryName}” is deactivated.`);
-      else categoryId = found;
+      else {
+        const scope = categories.complianceScopeByName.get(categoryKey) ?? 'unapproved';
+        if (scope === 'food_blocked') {
+          issues.push(`category: “${row.categoryName}” is Food and is not supported by this marketplace.`);
+        } else if (!ALLOWED_CATALOG_SCOPES.includes(scope as (typeof ALLOWED_CATALOG_SCOPES)[number])) {
+          issues.push(`category: “${row.categoryName}” is not an owner-classified Cosmetics or FMCG category.`);
+        } else {
+          categoryId = found;
+        }
+      }
     } else {
       issues.push('category: a category is required — products without one are invisible in category browsing.');
     }
@@ -261,6 +275,9 @@ export async function importProductsAction(formData: FormData): Promise<ImportRe
         barcode: value.barcode,
         lead_time_days: value.leadTimeDays,
         is_new_launch: row.isNewLaunch,
+        // 0086 makes publication conditional on an approved product review.
+        // Import always creates a compliance draft; it never publishes a row.
+        is_active: false,
         created_by: user.id,
       } as never)
       .select('id')

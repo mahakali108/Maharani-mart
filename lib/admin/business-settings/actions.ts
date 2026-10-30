@@ -10,6 +10,7 @@ import {
   businessProfileSchema,
   contactGrievanceSchema,
   marketplaceComplianceSchema,
+  orderingReadinessPayloadSchema,
 } from './types';
 
 interface SettingRow {
@@ -222,6 +223,45 @@ export async function updateMarketplaceComplianceAction(
 
     revalidatePath('/admin/control-center');
     revalidatePath('/retailer/checkout');
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unauthorized or internal error';
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Record the explicit approvals required before any order writer can run.
+ * The database RPC stamps the authenticated actor/time and writes its audit
+ * event in the same transaction, so an audit failure cannot leave a readiness
+ * change committed. This action never accepts actor IDs or timestamps.
+ */
+export async function updateOrderingLaunchReadinessAction(
+  payload: unknown,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireSuperAdmin();
+    const parsed = orderingReadinessPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid ordering launch-readiness payload.' };
+    }
+
+    const validUntil = Date.parse(parsed.data.approvalValidityPolicy.validUntil);
+    if (!Number.isFinite(validUntil) || validUntil <= Date.now()) {
+      return { success: false, error: 'The owner-recorded approval validity policy must expire at a future UTC time.' };
+    }
+
+    const supabase = createClient();
+    const { error } = await supabase.rpc('record_ordering_launch_readiness' as never, {
+      p_approvals: parsed.data as never,
+      p_reason: reason?.trim() || null,
+    } as never);
+    if (error) {
+      return { success: false, error: 'Ordering launch readiness could not be recorded. No approval change was applied.' };
+    }
+
+    revalidatePath('/admin/control-center');
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unauthorized or internal error';
