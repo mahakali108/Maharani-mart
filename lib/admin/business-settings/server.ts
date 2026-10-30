@@ -1,10 +1,12 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
-import type {
-  BusinessProfileConfig,
-  ContactGrievanceConfig,
-  MarketplaceComplianceConfig,
+import {
+  orderingReadinessConfigSchema,
+  type BusinessProfileConfig,
+  type ContactGrievanceConfig,
+  type MarketplaceComplianceConfig,
+  type OrderingReadinessConfig,
 } from './types';
 
 export const DEFAULT_BUSINESS_PROFILE: BusinessProfileConfig = {
@@ -123,4 +125,21 @@ export async function getAuthoritativeMarketplaceCompliance(): Promise<Marketpla
   const merged = { ...DEFAULT_MARKETPLACE_COMPLIANCE, ...(data.value as Partial<MarketplaceComplianceConfig>) };
   // Retired by migration 0083: a legacy stored `true` can never take effect.
   return { ...merged, membershipDiscountCheckoutActive: false };
+}
+
+/**
+ * Read the single authoritative launch-readiness setting for the Super Admin
+ * dashboard. Malformed, absent, or legacy values intentionally remain `null`:
+ * callers must display a blocked/pending state rather than infer an approval.
+ */
+export async function getAuthoritativeOrderingLaunchReadiness(): Promise<OrderingReadinessConfig | null> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('platform_settings' as never)
+    .select('value')
+    .eq('key', 'ordering_launch_readiness')
+    .maybeSingle<SettingRow>();
+
+  const parsed = orderingReadinessConfigSchema.safeParse(data?.value);
+  return parsed.success ? parsed.data : null;
 }

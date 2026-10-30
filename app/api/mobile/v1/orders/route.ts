@@ -53,7 +53,9 @@ function orderErrorResponse(result: Exclude<Awaited<ReturnType<typeof createOrde
   const mapped = result.code ? result : mapAtomicOrderError(result.error);
   // Preserve the versioned mobile error vocabulary: older clients understand
   // conflict (refresh checkout) but do not recognise a new coverage code.
-  const code = mapped.code === 'delivery_unavailable' ? 'conflict' : mapped.code ?? 'internal_error';
+  const code = mapped.code === 'delivery_unavailable' || mapped.code === 'ordering_not_enabled'
+    ? 'conflict'
+    : mapped.code ?? 'internal_error';
   const status = code === 'minimum_order_quantity' || code === 'coupon_invalid' || code === 'insufficient_stock'
     ? 422
     : code === 'warehouse_configuration_error' || code === 'database_unavailable' || code === 'internal_error'

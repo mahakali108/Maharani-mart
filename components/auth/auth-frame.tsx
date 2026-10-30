@@ -27,6 +27,7 @@ export function AuthFrame({ children, wide = false }: { children: React.ReactNod
           <Link href="/legal/privacy" className="min-h-11 inline-flex items-center">Privacy</Link>
           <Link href="/legal/shipping" className="min-h-11 inline-flex items-center">Delivery</Link>
           <Link href="/legal/returns" className="min-h-11 inline-flex items-center">Returns</Link>
+          <Link href="/legal/grievance" className="min-h-11 inline-flex items-center">Grievance Redressal</Link>
           <Link href="/contact" className="min-h-11 inline-flex items-center gap-1">Contact <ArrowUpRight className="h-3 w-3" aria-hidden="true" /></Link>
         </nav>
       </section>

@@ -7,6 +7,7 @@ import { PrintButton } from '@/components/retailer/print-button';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 import { classifyTaxSplit, computeInvoiceTaxLines } from '@/lib/retailer/invoice-tax';
 import { toInvoiceDisplayLines, type InvoiceOrderItemRow } from '@/lib/retailer/invoice-display';
+import { getTaxInvoiceReadiness } from '@/lib/retailer/tax-invoice-readiness';
 
 interface OrderInvoiceRow {
   id: string;
@@ -24,10 +25,6 @@ interface RetailerRow {
   gstin: string | null;
   address: string | null;
   areas: { name: string } | null;
-}
-
-function companyDetail(value: string | undefined, label: string): string {
-  return value && value.trim() ? value : `Configure ${label} in environment variables`;
 }
 
 export default async function InvoicePage({ params }: { params: { id: string } }) {
@@ -49,34 +46,44 @@ export default async function InvoicePage({ params }: { params: { id: string } }
     supabase
       .from('order_items')
       .select(
-        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, hsn_code, brands ( name ) ), product_packs ( pack_name, units_per_case )'
+        'id, product_id, pack_id, source_type, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, hsn_code, brands ( name ) ), product_packs ( pack_name, units_per_case )'
       )
       .eq('order_id', params.id),
   ]);
 
   if (!order) notFound();
 
-  const items = (itemData ?? []) as unknown as InvoiceOrderItemRow[];
+  const items = (itemData ?? []) as unknown as (InvoiceOrderItemRow & { source_type?: 'maharani' | 'seller' | null })[];
   const lines = toInvoiceDisplayLines(items);
+  const issuance = getTaxInvoiceReadiness({
+    hasMarketplaceSellerLine: items.some((item) => item.source_type === 'seller'),
+  });
+
+  // Preserve the order and its stored accounting rows, but do not render a
+  // misleading tax document without issuer facts or for a marketplace order
+  // whose seller-of-record model has not received CA approval.
+  if (!issuance.ready) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="shop-intro">
+          <p className="shop-eyebrow">Order documents</p>
+          <h1 className="shop-heading mt-1">Tax invoice unavailable</h1>
+          <Link href={`/retailer/orders/${order.id}`} className="mt-2 inline-flex min-h-10 items-center text-xs underline underline-offset-4">Back to order</Link>
+        </div>
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950">
+          <p className="font-semibold">A tax invoice is not being generated for this order.</p>
+          <p className="mt-2 text-xs leading-5">{issuance.message}</p>
+          <p className="mt-2 text-xs leading-5">The underlying order and recorded amounts are preserved. Please contact the business for the approved invoice process.</p>
+        </section>
+      </div>
+    );
+  }
+  const company = issuance.issuer;
 
   /*
-   * One invoice line per ordered pack. A mixed purchase (full cases plus a
-   * loose remainder) is stored as two `order_items` rows so each row's
-   * unit_price × quantity matches its line_total exactly; `toInvoiceDisplayLines`
-   * folds them back into a single invoice line whose amount is the sum of those
-   * rows, so the invoice still adds up to the order grand total to the paisa.
-   */
-  const company = {
-    name: companyDetail(process.env.COMPANY_NAME, 'COMPANY_NAME'),
-    gstin: companyDetail(process.env.COMPANY_GSTIN, 'COMPANY_GSTIN'),
-    address: companyDetail(process.env.COMPANY_ADDRESS, 'COMPANY_ADDRESS'),
-    phone: companyDetail(process.env.COMPANY_PHONE, 'COMPANY_PHONE'),
-  };
-
-  /*
-   * CGST/SGST vs IGST is decided ONLY from real GSTIN state codes (company
-   * GSTIN from env, retailer GSTIN from the account). When either is missing
-   * or invalid the tax prints as one GST line — never guessed.
+   * CGST/SGST vs IGST is decided ONLY from a configured, syntactically valid
+   * issuer GSTIN and the retailer GSTIN. It is a display calculation, not a
+   * GST-registration or place-of-supply determination.
    */
   const taxMode = classifyTaxSplit(company.gstin, retailer?.gstin ?? null);
   const tax = computeInvoiceTaxLines(

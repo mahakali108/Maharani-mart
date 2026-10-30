@@ -68,7 +68,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },
   { label: 'Data Retention', href: '/admin/cleanup', icon: Database, roles: ['admin', 'super_admin'] },
-  { label: 'Compliance', href: '/admin/compliance', icon: Scale, roles: ['super_admin', 'admin'] },
+  { label: 'Compliance', href: '/admin/compliance', icon: Scale, roles: ['super_admin'] },
   { label: 'Audit Log', href: '/admin/audit-logs', icon: ScrollText },
 ];
 

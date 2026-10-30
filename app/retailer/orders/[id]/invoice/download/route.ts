@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth/session';
 import { classifyTaxSplit } from '@/lib/retailer/invoice-tax';
 import { toInvoiceDisplayLines, type InvoiceOrderItemRow } from '@/lib/retailer/invoice-display';
 import { buildStandaloneInvoiceHtml } from '@/lib/retailer/invoice-html';
+import { getTaxInvoiceReadiness } from '@/lib/retailer/tax-invoice-readiness';
 
 interface OrderInvoiceRow {
   id: string;
@@ -55,7 +56,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     supabase
       .from('order_items')
       .select(
-        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, hsn_code, brands ( name ) ), product_packs ( pack_name, units_per_case )'
+        'id, product_id, pack_id, source_type, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, hsn_code, brands ( name ) ), product_packs ( pack_name, units_per_case )'
       )
       .eq('order_id', params.id),
   ]);
@@ -64,21 +65,24 @@ export async function GET(request: Request, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 });
   }
 
-  const items = (itemData ?? []) as unknown as InvoiceOrderItemRow[];
-  const lines = toInvoiceDisplayLines(items);
+  const items = (itemData ?? []) as unknown as (InvoiceOrderItemRow & { source_type?: 'maharani' | 'seller' | null })[];
+  const issuance = getTaxInvoiceReadiness({
+    hasMarketplaceSellerLine: items.some((item) => item.source_type === 'seller'),
+  });
+  if (!issuance.ready) {
+    return NextResponse.json(
+      { error: 'Tax invoice unavailable', message: issuance.message },
+      { status: 409, headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
 
-  const companyGstin = (process.env.COMPANY_GSTIN ?? '').trim() || 'Configure COMPANY_GSTIN in environment variables';
-  const taxMode = classifyTaxSplit(companyGstin, retailer?.gstin ?? null);
+  const lines = toInvoiceDisplayLines(items);
+  const taxMode = classifyTaxSplit(issuance.issuer.gstin, retailer?.gstin ?? null);
 
   const html = buildStandaloneInvoiceHtml({
     orderNumber: order.order_number,
     placedAt: order.placed_at,
-    company: {
-      name: (process.env.COMPANY_NAME ?? '').trim() || 'Configure COMPANY_NAME in environment variables',
-      gstin: companyGstin,
-      address: (process.env.COMPANY_ADDRESS ?? '').trim() || 'Configure COMPANY_ADDRESS in environment variables',
-      phone: (process.env.COMPANY_PHONE ?? '').trim() || 'Configure COMPANY_PHONE in environment variables',
-    },
+    company: issuance.issuer,
     billedTo: {
       shopName: retailer?.shop_name ?? '',
       address: retailer?.address ?? '',

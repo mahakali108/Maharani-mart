@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { toPaise } from '@/lib/retailer/case-pricing';
 import { classifyTaxSplit, computeInvoiceTaxLines } from '@/lib/retailer/invoice-tax';
 import { toInvoiceDisplayLines, type InvoiceOrderItemRow } from '@/lib/retailer/invoice-display';
+import { getTaxInvoiceReadiness } from '@/lib/retailer/tax-invoice-readiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export const dynamic = 'force-dynamic';
 const ORDER_SELECT = 'id, order_number, status, subtotal, gst_total, discount_total, grand_total, placed_at';
 
 const ITEM_SELECT =
-  'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, hsn_code, brands ( name ) ), product_packs ( pack_name, units_per_case )';
+  'id, product_id, pack_id, source_type, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, gst_percent, line_total, products ( name, hsn_code, brands ( name ) ), product_packs ( pack_name, units_per_case )';
 
 interface OrderInvoiceRow {
   id: string;
@@ -44,12 +45,6 @@ interface RetailerInvoiceRow {
   gstin: string | null;
   address: string | null;
   areas: { name: string } | null;
-}
-
-/** Company identity for the invoice header; null when not configured. */
-function companyField(value: string | undefined): string | null {
-  const trimmed = (value ?? '').trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 export async function GET(
@@ -98,12 +93,18 @@ export async function GET(
     if (itemResult.error) throw itemResult.error;
 
     const retailer = retailerResult.data ?? null;
-    const items = (itemResult.data ?? []) as unknown as InvoiceOrderItemRow[];
+    const items = (itemResult.data ?? []) as unknown as (InvoiceOrderItemRow & { source_type?: 'maharani' | 'seller' | null })[];
+    const issuance = getTaxInvoiceReadiness({
+      hasMarketplaceSellerLine: items.some((item) => item.source_type === 'seller'),
+    });
+    if (!issuance.ready) {
+      return jsonError('conflict', issuance.message, { status: 409, requestId });
+    }
 
     const lines = toInvoiceDisplayLines(items);
-    // CGST/SGST vs IGST is decided only from real GSTIN state codes; when
-    // either side is missing the tax stays unsplit — never guessed.
-    const taxMode = classifyTaxSplit(companyField(process.env.COMPANY_GSTIN), retailer?.gstin ?? null);
+    // CGST/SGST vs IGST is decided only from a configured syntactically valid
+    // issuer GSTIN and the retailer GSTIN; it is never guessed.
+    const taxMode = classifyTaxSplit(issuance.issuer.gstin, retailer?.gstin ?? null);
     const tax = computeInvoiceTaxLines(
       taxMode,
       lines.map((line) => ({
@@ -120,12 +121,7 @@ export async function GET(
         orderNumber: order.order_number,
         status: order.status,
         placedAt: order.placed_at,
-        biller: {
-          name: companyField(process.env.COMPANY_NAME),
-          gstin: companyField(process.env.COMPANY_GSTIN),
-          address: companyField(process.env.COMPANY_ADDRESS),
-          phone: companyField(process.env.COMPANY_PHONE),
-        },
+        biller: issuance.issuer,
         billedTo: {
           shopName: retailer?.shop_name ?? null,
           address: retailer?.address ?? null,

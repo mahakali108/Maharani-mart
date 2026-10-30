@@ -1,10 +1,14 @@
 import { Scale, ShieldAlert } from 'lucide-react';
-import { requirePagePermission } from '@/lib/admin/guard';
+import { redirect } from 'next/navigation';
+import { requireUser } from '@/lib/auth/session';
 import {
   getAuthoritativeBusinessProfile,
   getAuthoritativeContactGrievance,
   getAuthoritativeMarketplaceCompliance,
+  getAuthoritativeOrderingLaunchReadiness,
 } from '@/lib/admin/business-settings/server';
+import { getSuperAdminAuditLogs } from '@/lib/admin/control-center/actions';
+import { ORDERING_READINESS_CATEGORY_KEYS, type OrderingReadinessCategoryKey } from '@/lib/admin/business-settings/types';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   COMPLIANCE_CHECKLIST,
@@ -35,15 +39,48 @@ const STATUS_STYLES: Record<ComplianceStatus, string> = {
  * of current text, amendments and commencement dates.
  */
 export default async function CompliancePage() {
-  await requirePagePermission('reports.view.all');
+  // This view exposes owner-entered identity/contact readiness and must not be
+  // available to the broader admin/reporting role. The route middleware is
+  // intentionally not the only authorization boundary.
+  const viewer = await requireUser();
+  if (viewer.role !== 'super_admin') {
+    redirect('/unauthorized');
+  }
 
-  const [business, contact, marketplace] = await Promise.all([
+  const [business, contact, marketplace, orderingReadiness, auditLogs] = await Promise.all([
     getAuthoritativeBusinessProfile(),
     getAuthoritativeContactGrievance(),
     getAuthoritativeMarketplaceCompliance(),
+    getAuthoritativeOrderingLaunchReadiness(),
+    getSuperAdminAuditLogs(100),
   ]);
 
   const summary = complianceSummary(COMPLIANCE_CHECKLIST);
+  const readinessAuditEvents = auditLogs.filter((entry) => {
+    const after = entry.after_data;
+    return entry.action === 'SETTING_CHANGED'
+      && typeof after === 'object'
+      && after !== null
+      && after.schemaVersion === 1
+      && typeof after.recordedAt === 'string'
+      && typeof after.recordedBy === 'string';
+  });
+  const readinessLabels: Record<OrderingReadinessCategoryKey, string> = {
+    businessIdentity: 'Business identity',
+    publicContacts: 'Public contacts and grievance particulars',
+    legalPolicies: 'Legal policies',
+    gstInvoice: 'Invoice issuer and GST treatment',
+    marketplaceTaxTcsSettlement: 'Marketplace/TCS/settlement',
+    deliveryCodCancellationsRefunds: 'Delivery, COD, cancellation and refunds',
+    privacyReadiness: 'Privacy governance',
+  };
+  const readinessReviewer = orderingReadiness
+    ? readinessAuditEvents.find((entry) => entry.after_data?.recordedAt === orderingReadiness.recordedAt)
+    : undefined;
+  const readinessExpired = orderingReadiness
+    ? Date.parse(orderingReadiness.approvalValidityPolicy.validUntil) <= Date.now()
+    : false;
+
   const ownerFields = [
     { label: 'Legal entity name', value: business.legalEntityName, confirmed: business.verificationStatus === 'verified' },
     { label: 'GSTIN', value: business.gstin, confirmed: Boolean(business.gstin) && business.verificationStatus === 'verified' },
@@ -79,6 +116,73 @@ export default async function CompliancePage() {
           officer name, phone number, licence or verification result.
         </p>
       </Card>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-medium text-ink-900">New-order launch readiness</h2>
+          <p className="mt-1 text-xs text-ink-500">
+            This is the authoritative, fail-closed record consulted before a new order is created. A value is not approved merely because a setting or document field is filled.
+          </p>
+        </div>
+        {orderingReadiness ? (
+          <Card className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-ink-900">Recorded readiness approvals</p>
+                <p className="mt-1 text-xs text-ink-600">
+                  Recorded {new Date(orderingReadiness.recordedAt).toLocaleString()} by {readinessReviewer?.actor_name ?? 'Super Admin'}.
+                </p>
+              </div>
+              <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessExpired ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-primary-200 bg-primary-50 text-primary-800'}`}>
+                {readinessExpired ? 'Expired — blocks new orders' : 'Expires'} {new Date(orderingReadiness.approvalValidityPolicy.validUntil).toLocaleString()}
+              </span>
+            </div>
+            <div className="table-scroll overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-ink-100 text-left text-[11px] uppercase tracking-wide text-ink-500">
+                  <tr><th className="px-2 py-2 font-medium">Readiness area</th><th className="px-2 py-2 font-medium">Authoritative status</th><th className="px-2 py-2 font-medium">Approval/evidence reference</th></tr>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {ORDERING_READINESS_CATEGORY_KEYS.map((key) => {
+                    const category = orderingReadiness[key];
+                    return (
+                      <tr key={key}>
+                        <td className="px-2 py-2 text-xs font-medium text-ink-800">{readinessLabels[key]}</td>
+                        <td className="px-2 py-2 text-xs text-ink-700">{category.status === 'approved' ? 'Approved' : 'Pending — blocks new orders'}</td>
+                        <td className="px-2 py-2 font-mono text-xs text-ink-600">{category.status === 'approved' ? category.approvalReference : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <dl className="grid gap-3 border-t border-ink-100 pt-3 text-xs sm:grid-cols-3">
+              <div><dt className="font-medium text-ink-500">Recorded by</dt><dd className="mt-0.5 font-mono text-ink-800">{orderingReadiness.recordedBy}</dd></div>
+              <div><dt className="font-medium text-ink-500">Validity-policy reference</dt><dd className="mt-0.5 font-mono text-ink-800">{orderingReadiness.approvalValidityPolicy.approvalReference}</dd></div>
+              <div><dt className="font-medium text-ink-500">Recorded UTC</dt><dd className="mt-0.5 font-mono text-ink-800">{orderingReadiness.recordedAt}</dd></div>
+            </dl>
+          </Card>
+        ) : (
+          <Card className="border-amber-200 bg-amber-50/60">
+            <p className="text-sm font-semibold text-amber-950">No valid launch-readiness record is available.</p>
+            <p className="mt-1 text-xs text-amber-900">New-order creation remains blocked. Only the audited Super Admin writer can record a complete approval set with an explicit future expiry.</p>
+          </Card>
+        )}
+        <Card>
+          <p className="text-sm font-semibold text-ink-900">Readiness audit history</p>
+          {readinessAuditEvents.length > 0 ? (
+            <ul className="mt-2 space-y-2 text-xs text-ink-700">
+              {readinessAuditEvents.slice(0, 10).map((entry) => (
+                <li key={entry.id} className="rounded-lg border border-ink-100 px-3 py-2">
+                  <span className="font-medium text-ink-900">{entry.actor_name}</span> recorded readiness at {new Date(entry.created_at).toLocaleString()}. {entry.reason ? `Reason: ${entry.reason}` : 'No reason recorded.'}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-xs text-ink-600">No matching readiness audit event is available. This is not evidence of approval.</p>
+          )}
+        </Card>
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {(Object.keys(summary) as ComplianceStatus[]).map((status) => (

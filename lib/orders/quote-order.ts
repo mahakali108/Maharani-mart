@@ -452,6 +452,21 @@ export async function quoteSplitOrderForRetailer({
   const packs = (packData ?? []) as unknown as PackForQuote[];
   const packById = new Map(packs.map((pack) => [pack.id, pack]));
 
+  // Defense in depth before order creation: catalog visibility/RLS can change
+  // between cart and checkout, so quote the authoritative eligibility function
+  // for every requested product. The final order_items trigger in 0086 repeats
+  // this check inside the order transaction to close direct/API races.
+  const eligibility = await Promise.all([...new Set(packs.map((pack) => pack.product_id))].map(async (productId) => {
+    const { data, error } = await supabase.rpc(
+      'product_is_sale_eligible' as never,
+      { p_product_id: productId } as never
+    );
+    return { productId, eligible: !error && data === true };
+  }));
+  if (eligibility.some((entry) => !entry.eligible)) {
+    return { error: 'One or more products are not approved for sale in the Cosmetics/FMCG catalogue.' };
+  }
+
   interface OfferForQuote {
     id: string;
     seller_id: string;

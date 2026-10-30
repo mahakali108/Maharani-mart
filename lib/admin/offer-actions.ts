@@ -8,6 +8,7 @@ import {
   parsePositiveInt,
   validateSellerReason,
 } from '@/lib/admin/seller-validation';
+import { checkProductCanBeSold, checkSellerCanTrade } from '@/lib/compliance/catalog-compliance';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -150,6 +151,12 @@ export async function createOfferAction(formData: FormData): Promise<OfferAction
     .maybeSingle<{ id: string; product_id: string; is_active: boolean }>();
   if (packError) return { ok: false, error: packError.message };
   if (!pack || !pack.is_active) return { ok: false, error: 'That pack is not active.' };
+  const [productGate, sellerGate] = await Promise.all([
+    checkProductCanBeSold(supabase, pack.product_id),
+    checkSellerCanTrade(supabase, sellerId),
+  ]);
+  if (!productGate.ok) return { ok: false, error: productGate.error };
+  if (!sellerGate.ok) return sellerGate;
 
   const { data, error } = await supabase
     .from('seller_offers' as never)

@@ -14,13 +14,13 @@ export default async function GrievancePage() {
 
   return (
     <PublicInfoShell
-      eyebrow="Compliance · Consumer Protection (E-Commerce) Rules, 2020"
-      title="Grievance Redressal Mechanism"
-      intro="In accordance with the Consumer Protection (E-Commerce) Rules, 2020 and Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, the details of the Grievance Officer and ticket escalation workflow are published below."
+      eyebrow="Grievance information · review required"
+      title="Grievance Redressal Information"
+      intro="This is an unpublished review-stage grievance information page. The owner and a qualified Indian lawyer must confirm the applicable e-commerce/intermediary requirements, officer details and tested workflow before it is represented as a final statutory mechanism."
     >
       <InfoCard title="Grievance Officer Details">
         <p className="text-sm text-slate-700">
-          The Grievance Officer is designated to redress grievances of consumers and registered retailer partners regarding orders, catalog content, pricing, data privacy, or delivery discrepancies.
+          Formal grievance handling requires an owner-designated officer, verified contact details and an operationally tested workflow. The applicability and final wording of any statutory grievance process require legal review for this B2B and marketplace model.
         </p>
 
         {contact.isConfigured ? (
@@ -38,36 +38,41 @@ export default async function GrievancePage() {
             <div className="flex items-center gap-1.5 font-bold text-amber-900 pb-1">
               <span>⚠️ Status: Pending Owner Confirmation</span>
             </div>
-            <p><strong>Designation:</strong> Grievance Redressal Officer</p>
-            <p><strong>Operating Entity:</strong> Ajay General (Proprietorship) trading as Maharani Traders</p>
-            <p><strong>Jurisdiction / Operating Hub:</strong> Gaya District, Bihar, India</p>
-            <p><strong>Name:</strong> [OWNER INPUT REQUIRED: Grievance Officer Full Name]</p>
-            <p><strong>Official Email:</strong> [OWNER INPUT REQUIRED: e.g. grievance@maharanitraders.com]</p>
-            <p><strong>Telephone / WhatsApp Desk:</strong> [OWNER INPUT REQUIRED: e.g. +91 94XXXXXXXX]</p>
-            <p><strong>Registered Address:</strong> [OWNER INPUT REQUIRED: Official Business Address, Gaya, Bihar]</p>
+            <p><strong>Operating Entity:</strong> Ajay General trading as Maharani Traders</p>
+            <p><strong>Officer name:</strong> Owner input and verification required before publication.</p>
+            <p><strong>Designation:</strong> Owner input and verification required before publication.</p>
+            <p><strong>Official email:</strong> Owner input and verification required before publication.</p>
+            <p><strong>Telephone:</strong> Owner input and verification required before publication.</p>
+            <p><strong>Business/grievance address:</strong> Owner input and verification required before publication.</p>
           </div>
         )}
       </InfoCard>
 
-      <InfoCard title="Grievance Escalation Timeline & Process">
+      <InfoCard title="Complaint route and review workflow">
         <p>
-          <strong>1. Ticket Acknowledgement:</strong> Every formal grievance received via email or the in-app support portal is acknowledged with a unique ticket reference number within <strong>{contact.acknowledgementHours} hours</strong> of receipt.
-        </p>
-        <p className="mt-2">
-          <strong>2. Redressal & Resolution:</strong> In compliance with Rule 4(5) of the Consumer Protection (E-Commerce) Rules, 2020, grievances are investigated and redressed within <strong>{contact.resolutionDays} days</strong> from the date of receipt.
-        </p>
-        <p className="mt-2">
-          <strong>3. Direct In-App Support:</strong> For immediate delivery shortfall adjustments, OTP issues, or damaged goods, signed-in retailers should first raise an inquiry through the{' '}
+          Signed-in retailers can create a support record through the{' '}
           <Link href="/retailer/help" className="font-semibold text-primary-700 underline">
             Retailer Help Centre
           </Link>{' '}
-          or contact the assigned delivery staff during physical handover.
+          and receive a ticket reference. The owner must separately approve whether that workflow is the formal grievance route for each applicable legal regime.
+        </p>
+        {contact.isConfigured ? (
+          <p className="mt-2">
+            The configured internal workflow targets are acknowledgement within {contact.acknowledgementHours} hours and review within {contact.resolutionDays} days. These are not represented as a statutory or operational SLA until legal applicability, staffing and escalation controls are approved and tested.
+          </p>
+        ) : (
+          <p className="mt-2">
+            No public acknowledgement or resolution target is published while the officer details and workflow remain pending owner and legal confirmation.
+          </p>
+        )}
+        <p className="mt-2">
+          The intended controlled workflow is received, acknowledged, assigned, in progress and resolved, with attributable communications and escalation of overdue matters. The completed grievance implementation and policy text remain subject to owner and lawyer approval.
         </p>
       </InfoCard>
 
-      <InfoCard title="Cyber Security & Regulatory Escalations">
+      <InfoCard title="Security, privacy and regulatory notices">
         <p>
-          For security vulnerabilities, suspected data privacy incidents under the DPDP Act 2023, or CERT-In reporting coordination, notices may be served directly to the administrative desk with subject line <em>&quot;URGENT: Legal / Security Notice&quot;</em>.
+          The owner must publish a verified contact and incident-response procedure before accepting formal security, privacy or regulatory notices through this site. The staged commencement of India&apos;s data-protection framework and any incident-notification duties must be confirmed by qualified advisers; this page does not make a legal-compliance claim.
         </p>
       </InfoCard>
     </PublicInfoShell>

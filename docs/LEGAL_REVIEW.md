@@ -1,6 +1,8 @@
 # Public information pages — operator/legal review required
 
-These drafts are visible at `/about`, `/contact`, `/legal/terms`, `/legal/privacy`, `/legal/shipping` and `/legal/returns`. They explain the current *software behavior* and explicitly state where policy or operator data is unverified. They are **not** approved contracting, privacy, returns or statutory-disclosure documents. Remove the review notice only after the operator and appropriate Indian legal/tax professionals approve final content. Do not invent a name, registration, GSTIN, address, contact, certification, refund time or delivery ETA to fill a gap.
+These drafts are visible at `/about`, `/contact`, `/legal/terms`, `/legal/privacy`, `/legal/shipping`, `/legal/returns` and `/legal/grievance`. They explain the current *software behavior* and explicitly state where policy or operator data is unverified. They are **not** approved contracting, privacy, returns or statutory-disclosure documents. Remove the review notice only after the operator and appropriate Indian legal/tax professionals approve final content. Do not invent a name, registration, GSTIN, address, contact, certification, refund time or delivery ETA to fill a gap.
+
+The complete unpublished, versioned professional-review drafts are in [`docs/legal-review/README.md`](./legal-review/README.md). They include terms, privacy, shipping/delivery, cancellation/returns/refunds, grievance, marketplace seller agreement, seller declaration and authenticity/anti-counterfeit documents. They are review aids only and must not be copied to public routes before their individual publication controls are met.
 
 ## Authoritative sources consulted for the draft (2026-10-18 review)
 

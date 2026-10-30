@@ -30,6 +30,7 @@ import {
   type LooseTierDraft,
 } from '@/lib/retailer/case-pricing';
 import type { Database } from '@/types/database.types';
+import { checkAllowedCatalogCategory, checkProductCanBeSold } from '@/lib/compliance/catalog-compliance';
 
 export type ProductFormState = { error?: string; errors?: FieldErrors } | null;
 
@@ -116,6 +117,8 @@ export async function createProductAction(
   }
 
   const supabase = createClient();
+  const categoryGate = await checkAllowedCatalogCategory(supabase, categoryId);
+  if (!categoryGate.ok) return { error: categoryGate.error, errors: { categoryId: categoryGate.error } };
   const cost = d.costPrice;
   // The product `sku_code` is intentionally omitted — it was removed from the
   // workflow and the database fills in a generated default (migration 0023).
@@ -132,6 +135,9 @@ export async function createProductAction(
     barcode: d.barcode,
     lead_time_days: d.leadTimeDays,
     is_new_launch: isNewLaunch,
+    // Product records begin as non-public drafts. An approved 0086 compliance
+    // review is required before a separate publish action can activate it.
+    is_active: false,
     created_by: user.id,
   };
 
@@ -256,6 +262,8 @@ export async function updateProductAction(
   const isNewLaunch = formData.get('isNewLaunch') === 'on';
 
   const supabase = createClient();
+  const categoryGate = await checkAllowedCatalogCategory(supabase, categoryId);
+  if (!categoryGate.ok) return { error: categoryGate.error, errors: { categoryId: categoryGate.error } };
 
   // Price, GST, HSN, case size and cost are Admin decisions (`pricing.manage`).
   // Anyone else holding `products.edit` may only change operational fields;
@@ -335,6 +343,10 @@ export async function updateProductAction(
 export async function toggleProductActiveAction(productId: string, isActive: boolean) {
   await requirePermission('products.edit');
   const supabase = createClient();
+  if (isActive) {
+    const gate = await checkProductCanBeSold(supabase, productId);
+    if (!gate.ok) throw new Error(gate.error);
+  }
   const { error } = await supabase
     .from('products')
     .update({ is_active: isActive } as unknown as never)

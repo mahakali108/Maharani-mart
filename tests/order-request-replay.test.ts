@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   debit: vi.fn(),
   coinMovement: vi.fn(),
   resolveWarehouse: vi.fn(),
+  isOrderingReady: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -15,6 +16,10 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/orders/quote-order', () => ({ quoteOrderForRetailer: mocks.quote }));
 vi.mock('@/lib/coins/server', () => ({ debitCoinsForOrder: mocks.debit, getOrderCoinMovement: mocks.coinMovement }));
 vi.mock('@/lib/warehouse/resolver', () => ({ resolveActiveWarehouse: mocks.resolveWarehouse }));
+vi.mock('@/lib/compliance/ordering-readiness', () => ({
+  isOrderingReady: mocks.isOrderingReady,
+  ORDERING_NOT_ENABLED_MESSAGE: 'Ordering is not enabled because mandatory business compliance configuration is incomplete.',
+}));
 
 import { createOrderForRetailer } from '@/lib/orders/create-order';
 
@@ -79,6 +84,7 @@ beforeEach(() => {
   mocks.debit.mockReset();
   mocks.coinMovement.mockReset();
   mocks.resolveWarehouse.mockReset();
+  mocks.isOrderingReady.mockResolvedValue(true);
 });
 
 describe('salesman request-key replay', () => {
