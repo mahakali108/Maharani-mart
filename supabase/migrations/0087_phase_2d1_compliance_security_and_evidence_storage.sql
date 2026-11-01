@@ -8,7 +8,60 @@
 -- stamp: they fail closed until an authorized reviewer records a current review.
 -- Do not apply to a remote project without an owner-approved rollout, backup,
 -- PostgreSQL ACL/RLS verification, and the storage configuration review below.
+--
+-- Fail-closed rollout impact & required Super Admin sequence after 0087:
+--   1. Classify every saleable category (`compliance_scope` in `cosmetics` /
+--      `fmcg`, with reason) as an authenticated Super Admin.
+--   2. Classify every saleable product (`regulatory_classification` =
+--      `cosmetics` aligned with `cosmetics` category, or `non_food_fmcg`
+--      aligned with `fmcg` category, with reason) as Super Admin. Existing
+--      products default to `unclassified` and fail closed.
+--   3. Upload canonical private evidence objects into `compliance-evidence`
+--      and bind `storage_bucket_id = 'compliance-evidence'` on new evidence rows.
+--   4. Approve (or re-submit and re-approve) `product_compliance_reviews` and
+--      `seller_compliance_reviews` as Super Admin so `trg_0087_stamp_*` stamps
+--      `approved_product_revision` / `approved_seller_revision` and
+--      `approved_review_fingerprint` matching current `compliance_revision`.
 -- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 0. Pre-flight prerequisite check (fails fast before altering products/sellers)
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if to_regclass('public.product_compliance_reviews') is null
+     or to_regclass('public.product_compliance_evidence') is null
+     or to_regclass('public.product_compliance_review_audit') is null
+     or to_regclass('public.seller_compliance_reviews') is null
+     or to_regclass('public.seller_compliance_evidence') is null
+     or to_regclass('public.seller_compliance_review_audit') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0087 requires public.product_compliance_reviews and companion Phase 2D tables from 0086_catalog_seller_compliance_enforcement.sql. Apply 0086 first.'
+      using errcode = 'undefined_table';
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'categories' and column_name = 'compliance_scope'
+  ) then
+    raise exception 'MIGRATION ORDER VIOLATION: 0087 requires public.categories.compliance_scope from 0086_catalog_seller_compliance_enforcement.sql.'
+      using errcode = 'undefined_column';
+  end if;
+  if to_regprocedure('public.record_ordering_launch_readiness(jsonb, text)') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0087 requires public.record_ordering_launch_readiness(jsonb, text) from 0085_ordering_launch_readiness_atomic.sql. Apply 0085 first.'
+      using errcode = 'undefined_function';
+  end if;
+  if to_regprocedure('public.is_authenticated_super_admin()') is null
+     or to_regprocedure('public.product_is_sale_eligible(uuid)') is null
+     or to_regprocedure('public.seller_is_trade_eligible(uuid)') is null
+     or to_regprocedure('public.get_catalog_compliance_review_report()') is null
+     or to_regprocedure('public.marketplace_offer_quotes(uuid[])') is null
+     or to_regprocedure('public.marketplace_offers_for_product(uuid)') is null
+     or to_regprocedure('public.marketplace_offer_tiers(uuid[])') is null
+     or to_regprocedure('public.is_member_of_seller(uuid)') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0087 requires Phase 2D compliance and seller helper functions from 0062 and 0086.'
+      using errcode = 'undefined_function';
+  end if;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 1. Explicit product regulation classification and durable review revisions.

@@ -25,6 +25,29 @@
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
+-- 0. Pre-flight prerequisite check (read-only catalog check; fails before DML)
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if to_regclass('public.banners') is null then
+    raise exception 'MIGRATION PREREQUISITE MISSING: 0077 requires public.banners (0001_init.sql).'
+      using errcode = 'undefined_table';
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'banners' and column_name = 'status'
+  ) then
+    raise exception 'MIGRATION ORDER VIOLATION: 0077 requires public.banners.status from 0074_banner_lifecycle_and_variants.sql. Apply 0074 first.'
+      using errcode = 'undefined_column';
+  end if;
+  if to_regprocedure('public.is_admin_or_above()') is null then
+    raise exception 'MIGRATION PREREQUISITE MISSING: 0077 requires public.is_admin_or_above() (0001_init.sql).'
+      using errcode = 'undefined_function';
+  end if;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 1. The private bucket
 -- ---------------------------------------------------------------------------
 -- `on conflict (id) do nothing` never rewrites an existing bucket row: if the
@@ -32,6 +55,10 @@
 -- silently "fix" it, because changing visibility under live objects is an
 -- operator decision, not a migration side effect. The check below turns that
 -- situation into a loud failure instead of a quiet misconfiguration.
+-- (Buckets may also be pre-created via the Supabase Storage API or Dashboard
+-- with these exact settings; `storage.buckets` is owned by
+-- `supabase_storage_admin`, so no table-level DDL such as `COMMENT ON TABLE
+-- storage.buckets` may run here.)
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'banner-drafts',
@@ -43,20 +70,20 @@ values (
 on conflict (id) do nothing;
 
 do $$
+declare
+  v_bucket storage.buckets%rowtype;
 begin
-  if not exists (
-    select 1
-      from storage.buckets
-     where id = 'banner-drafts'
-       and public = false
-  ) then
-    raise exception 'banner-drafts exists but is not private. Refusing to continue: review the bucket configuration before re-running this migration.';
+  select * into v_bucket
+    from storage.buckets
+   where id = 'banner-drafts';
+  if not found
+     or v_bucket.public is distinct from false
+     or v_bucket.file_size_limit is distinct from 5242880
+     or v_bucket.allowed_mime_types is distinct from array['image/png', 'image/jpeg', 'image/webp']::text[] then
+    raise exception 'banner-drafts bucket is missing or does not match the required private 5 MiB PNG/JPEG/WebP configuration. Review bucket configuration before re-running 0077.';
   end if;
 end;
 $$;
-
-comment on table storage.buckets is
-  'Supabase-managed. banner-drafts (0077) is private and holds unpublished banner artwork.';
 
 -- ---------------------------------------------------------------------------
 -- 2. Storage policies — admin only, mirroring `banners.manage`

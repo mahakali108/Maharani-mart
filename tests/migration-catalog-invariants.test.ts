@@ -89,9 +89,16 @@ describe('SECURITY DEFINER hygiene', () => {
       'submit_supplier_application', // public supplier form; rate-limited server-side
       'can_current_staff_read_profile', // boolean predicate evaluated INSIDE a policy
     ]);
+    // Authenticated-only (anon=false) boolean predicates evaluated inside
+    // catalogue / seller-offer RLS policies (0086/0087); leak zero row/PII data.
+    const allowedAuthenticatedBooleanPredicates = new Set([
+      'product_is_sale_eligible',
+      'seller_is_trade_eligible',
+    ]);
     const guardTokens = [
       'auth.uid()', 'auth.jwt()', 'auth.role()', 'is_staff_or_above', 'is_admin_or_above',
-      'is_super_admin', 'current_user_role', 'is_active_account', 'require_', '_can_',
+      'is_super_admin', 'is_authenticated_super_admin', 'is_member_of_seller', 'is_active_seller_member',
+      'current_user_role', 'is_active_account', 'require_', '_can_',
       'is_retailer_assigned', 'is_area_assigned', 'is_order_assigned', 'is_warehouse_assigned',
       'is_transfer_', 'is_grn_', 'can_current', 'has_permission',
     ];
@@ -109,6 +116,7 @@ describe('SECURITY DEFINER hygiene', () => {
       .filter((r) => !r.is_trigger && (r.anon || r.authn))
       .filter((r) => !guardTokens.some((token) => r.src.includes(token)))
       .filter((r) => !allowedPublicEndpoints.has(r.proname))
+      .filter((r) => !(!r.anon && allowedAuthenticatedBooleanPredicates.has(r.proname)))
       .map((r) => `${r.proname}(${r.args}) anon=${r.anon} authenticated=${r.authn}`);
     expect(exposed).toEqual([]);
   });
@@ -143,6 +151,7 @@ describe('storage buckets and object policies', () => {
       banners: true,
       'brand-logos': true,
       'category-images': true,
+      'compliance-evidence': false,
       'delivery-proofs': false,
       'payment-proofs': false,
       'product-images': true,
@@ -155,11 +164,42 @@ describe('storage buckets and object policies', () => {
     const rows = await q<{ policyname: string; qual: string }>(`
       select policyname, qual from pg_policies
        where schemaname = 'storage' and tablename = 'objects' and cmd = 'SELECT'`);
-    const privateBuckets = ['banner-drafts', 'delivery-proofs', 'payment-proofs', 'retailer-documents', 'supplier-documents'];
+    const privateBuckets = [
+      'banner-drafts',
+      'compliance-evidence',
+      'delivery-proofs',
+      'payment-proofs',
+      'retailer-documents',
+      'supplier-documents',
+    ];
     const bare = rows.filter((row) =>
       privateBuckets.some((bucket) => row.qual === `(bucket_id = '${bucket}'::text)`)
     );
     expect(bare).toEqual([]);
+  });
+
+  it('never executes table-ownership DDL on storage.buckets in any migration', () => {
+    const ownershipPatterns = [
+      /\bcomment\s+on\s+(?:table|column)\s+storage\.buckets\b/i,
+      /\balter\s+table\s+(?:if\s+exists\s+)?storage\.buckets\b/i,
+      /\bdrop\s+table\s+(?:if\s+exists\s+)?storage\.buckets\b/i,
+      /\btruncate\s+(?:table\s+)?storage\.buckets\b/i,
+      /\b(?:grant|revoke)\b[\s\S]*?\bon\s+(?:table\s+)?storage\.buckets\b/i,
+      /\b(?:create|drop)\s+(?:policy|trigger)\b[\s\S]*?\bon\s+storage\.buckets\b/i,
+    ];
+    const offenders: string[] = [];
+    for (const file of migrationFiles()) {
+      const raw = readFileSync(join(ROOT, 'supabase', 'migrations', file), 'utf8');
+      const stripped = raw
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/--[^\n]*/g, '');
+      for (const pattern of ownershipPatterns) {
+        if (pattern.test(stripped)) {
+          offenders.push(`${file}: ${pattern.source}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('banner artwork writes require admin, not staff (0078)', async () => {
