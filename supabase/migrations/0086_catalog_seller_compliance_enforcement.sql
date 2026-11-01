@@ -15,7 +15,52 @@
 --   * Evidence references are private opaque storage keys, not public URLs.
 --   * Existing order rows are untouched. The final order-item insert boundary
 --     protects new orders without changing fulfilment of historical/pending rows.
+--
+-- Fail-closed rollout impact & required Super Admin onboarding sequence:
+--   * Applying 0086 sets every existing category's `compliance_scope` to
+--     `unapproved`. Until a Super Admin classifies each saleable category as
+--     `cosmetics` or `fmcg` (with a recorded reason), records required private
+--     compliance evidence, and approves each product's `product_compliance_reviews`
+--     row (and each marketplace seller's `seller_compliance_reviews` row),
+--     retailer catalogue SELECT policies (`categories_read`, `products_read`,
+--     `product_packs_read`, `seller_offers_trading_select`), marketplace offer
+--     RPCs, and new `order_items` inserts fail closed for unapproved items.
+--   * Use `select * from public.get_catalog_compliance_review_report();` as an
+--     authenticated Super Admin to enumerate every blocked category, product,
+--     and seller offer requiring review.
 -- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 0. Pre-flight prerequisite check (fails fast before any DDL or policy drop)
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if to_regclass('public.categories') is null
+     or to_regclass('public.products') is null
+     or to_regclass('public.product_packs') is null
+     or to_regclass('public.sellers') is null
+     or to_regclass('public.seller_members') is null
+     or to_regclass('public.seller_offers') is null
+     or to_regclass('public.seller_offer_tiers') is null
+     or to_regclass('public.order_items') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0086 requires catalogue, order_items, and seller marketplace tables from 0001–0069.'
+      using errcode = 'undefined_table';
+  end if;
+  if to_regprocedure('public.is_staff_or_above()') is null
+     or to_regprocedure('public.is_admin_or_above()') is null
+     or to_regprocedure('public.current_user_role()') is null
+     or to_regprocedure('public.is_active_account()') is null
+     or to_regprocedure('public.is_member_of_seller(uuid)') is null
+     or to_regprocedure('public.current_offer_floor_paise(uuid)') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0086 requires auth/seller helper functions from 0001, 0052, 0062, and 0063.'
+      using errcode = 'undefined_function';
+  end if;
+  if to_regprocedure('public.is_active_seller_member(uuid)') is null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0086 requires public.is_active_seller_member(uuid) from 0072_super_admin_seller_invitations.sql. Verify and apply 0072 before running 0086.'
+      using errcode = 'undefined_function';
+  end if;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 1. Authoritative category scope. Product/category names alone are not a
@@ -845,6 +890,18 @@ create policy "categories_read" on public.categories for select using (
   or (is_active and compliance_scope in ('cosmetics', 'fmcg'))
 );
 
+-- KNOWN UNRESOLVED ISSUE (anonymous catalogue SELECT compatibility):
+--   * Both `products_read` and `product_packs_read` below currently omit
+--     `TO authenticated`, so PostgreSQL's default policy role is `PUBLIC`,
+--     which includes `anon`.
+--   * The function `public.product_is_sale_eligible(uuid)` has `EXECUTE`
+--     revoked from `PUBLIC` and `anon` (in both 0086 and 0087).
+--   * Consequently, anonymous PostgREST `SELECT` requests against
+--     `public.products` or `public.product_packs` may fail with:
+--       `42501: permission denied for function product_is_sale_eligible`
+--   * This is a known unresolved issue requiring a separate security review
+--     and an explicit decision about anonymous catalogue browsing. Do not
+--     silently change these policies as part of a documentation fix.
 drop policy if exists "products_read" on public.products;
 create policy "products_read" on public.products for select using (
   public.is_staff_or_above() or public.product_is_sale_eligible(id)
@@ -893,14 +950,17 @@ grant select, insert, update on public.seller_compliance_reviews to authenticate
 grant select, insert on public.seller_compliance_evidence to authenticated;
 grant select on public.seller_compliance_review_audit to authenticated;
 
+drop policy if exists "product_compliance_reviews_super_admin" on public.product_compliance_reviews;
 create policy "product_compliance_reviews_super_admin"
 on public.product_compliance_reviews for all to authenticated
 using (public.is_authenticated_super_admin())
 with check (public.is_authenticated_super_admin());
+drop policy if exists "product_compliance_evidence_super_admin" on public.product_compliance_evidence;
 create policy "product_compliance_evidence_super_admin"
 on public.product_compliance_evidence for all to authenticated
 using (public.is_authenticated_super_admin())
 with check (public.is_authenticated_super_admin());
+drop policy if exists "product_compliance_evidence_seller_own" on public.product_compliance_evidence;
 create policy "product_compliance_evidence_seller_own"
 on public.product_compliance_evidence for insert to authenticated
 with check (
@@ -913,30 +973,38 @@ with check (
       and so.product_id = product_compliance_evidence.product_id
   )
 );
+drop policy if exists "product_compliance_evidence_seller_own_read" on public.product_compliance_evidence;
 create policy "product_compliance_evidence_seller_own_read"
 on public.product_compliance_evidence for select to authenticated
 using (seller_id is not null and public.is_member_of_seller(seller_id));
+drop policy if exists "product_compliance_review_audit_super_admin" on public.product_compliance_review_audit;
 create policy "product_compliance_review_audit_super_admin"
 on public.product_compliance_review_audit for select to authenticated
 using (public.is_authenticated_super_admin());
 
+drop policy if exists "seller_compliance_reviews_super_admin" on public.seller_compliance_reviews;
 create policy "seller_compliance_reviews_super_admin"
 on public.seller_compliance_reviews for all to authenticated
 using (public.is_authenticated_super_admin())
 with check (public.is_authenticated_super_admin());
+drop policy if exists "seller_compliance_reviews_seller_own_read" on public.seller_compliance_reviews;
 create policy "seller_compliance_reviews_seller_own_read"
 on public.seller_compliance_reviews for select to authenticated
 using (public.is_member_of_seller(seller_id));
+drop policy if exists "seller_compliance_evidence_super_admin" on public.seller_compliance_evidence;
 create policy "seller_compliance_evidence_super_admin"
 on public.seller_compliance_evidence for all to authenticated
 using (public.is_authenticated_super_admin())
 with check (public.is_authenticated_super_admin());
+drop policy if exists "seller_compliance_evidence_seller_own" on public.seller_compliance_evidence;
 create policy "seller_compliance_evidence_seller_own"
 on public.seller_compliance_evidence for select to authenticated
 using (public.is_member_of_seller(seller_id));
+drop policy if exists "seller_compliance_evidence_seller_own_insert" on public.seller_compliance_evidence;
 create policy "seller_compliance_evidence_seller_own_insert"
 on public.seller_compliance_evidence for insert to authenticated
 with check (public.is_member_of_seller(seller_id) and uploaded_by = auth.uid());
+drop policy if exists "seller_compliance_review_audit_super_admin" on public.seller_compliance_review_audit;
 create policy "seller_compliance_review_audit_super_admin"
 on public.seller_compliance_review_audit for select to authenticated
 using (public.is_authenticated_super_admin());
