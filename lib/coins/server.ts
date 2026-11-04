@@ -24,7 +24,7 @@ import { computeCoinPayment, coinBalancePaise, coinDebitKey, type CoinPayment } 
  * double-spend the same coins, and a retried checkout cannot spend twice.
  */
 
-export type SupabaseClient = ReturnType<typeof createClient>;
+export type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** Minimal shape of the RPC surface this module needs (avoids `any`). */
 interface RpcCapable {

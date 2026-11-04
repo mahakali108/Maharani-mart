@@ -57,7 +57,7 @@ interface CollectionRow {
   retailers: { shop_name: string } | null;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of MY collection history. RLS already scopes
@@ -116,7 +116,7 @@ function renderCollectionRows(rows: CollectionRow[]) {
 
 export default async function SalesmanCollectionsPage() {
   const user = await requirePagePermission('collections.record');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // My assigned retailers for the entry form.
   const { data: retailerRows } = await supabase
@@ -133,7 +133,7 @@ export default async function SalesmanCollectionsPage() {
   async function loadMoreCollections(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const caller = await requirePermission('collections.record');
-    const batch = await loadCollectionBatch(createClient(), caller.id, readCursor(cursor));
+    const batch = await loadCollectionBatch((await createClient()), caller.id, readCursor(cursor));
     return { rows: renderCollectionRows(batch.items), nextCursor: batch.nextCursor };
   }
 

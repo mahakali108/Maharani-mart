@@ -48,7 +48,7 @@ function pickHighestPriority(rows: ScopedPriceRow[]): Map<string, number> {
 }
 
 async function loadScopedOverrides(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productIds: string[],
   nowIso: string,
   scope: 'retailer' | 'area',
@@ -79,7 +79,7 @@ async function loadScopedOverrides(
  * filters — it does not invent extra override sources.
  */
 export async function getProductPriceOverrides(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productIds: string[],
   retailerId: string,
   areaId: string | null
@@ -106,7 +106,7 @@ export async function getProductPriceOverrides(
 }
 
 export async function getProductPriceOverride(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productId: string,
   retailerId: string,
   areaId: string | null
@@ -117,7 +117,7 @@ export async function getProductPriceOverride(
 
 /** Product IDs that currently have an active scheme/festival price row (badge only). */
 export async function getActiveOfferProductIds(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productIds: string[]
 ): Promise<Set<string>> {
   const unique = [...new Set(productIds.filter(Boolean))];

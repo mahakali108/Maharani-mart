@@ -30,7 +30,8 @@ export const dynamic = 'force-dynamic';
  *   4. AI copilot — executive tools are registered for the super_admin role
  *      only and are READ-only (see lib/ai/tools/super-admin.ts).
  */
-export default async function CommandCenterPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+export default async function CommandCenterPage({ searchParams: searchParamsPromise }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('command_center.view');
 
   const rawTab = typeof searchParams.tab === 'string' ? searchParams.tab : undefined;
@@ -46,7 +47,7 @@ export default async function CommandCenterPage({ searchParams }: { searchParams
   });
   const salesFilters: SalesIntelFilters = salesValidation.filters;
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [data, options] = await Promise.all([
     gatherCommandCenterData(supabase, { salesFilters }),
@@ -88,7 +89,7 @@ export default async function CommandCenterPage({ searchParams }: { searchParams
 }
 
 /** Filter dropdown options for the Sales Intelligence tab (bounded). */
-async function gatherSalesOptions(supabase: ReturnType<typeof createClient>): Promise<SalesOptions> {
+async function gatherSalesOptions(supabase: Awaited<ReturnType<typeof createClient>>): Promise<SalesOptions> {
   const [brands, categories, products, retailers, salesmen] = await Promise.all([
     supabase.from('brands').select('id, name').eq('is_active', true).order('name').limit(300),
     supabase.from('categories').select('id, name').eq('is_active', true).order('name').limit(300),

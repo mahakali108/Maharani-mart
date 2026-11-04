@@ -118,7 +118,7 @@ interface LedgerOrderRow {
  * @param page 1-based page of the entry list.
  */
 export async function loadRetailerLedger(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   page = 1
 ): Promise<LedgerData> {

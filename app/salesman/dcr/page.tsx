@@ -27,12 +27,13 @@ interface OrderRow {
 }
 
 export default async function DailyCallReportPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { date?: string };
+  searchParams: Promise<{ date?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const date = searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date) ? searchParams.date : indiaTodayDateKey();
   // Day window follows the Asia/Kolkata calendar day; timestamps stay UTC.

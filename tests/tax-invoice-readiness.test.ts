@@ -7,6 +7,7 @@ const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
 
 const configuredEnvironment: NodeJS.ProcessEnv = {
+  NODE_ENV: 'test',
   COMPANY_NAME: 'Ajay General',
   COMPANY_GSTIN: '10ABCDE1234F1Z5',
   COMPANY_ADDRESS: 'Verified principal place of business',

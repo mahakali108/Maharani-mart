@@ -117,7 +117,7 @@ beforeEach(() => {
 describe('GET /api/mobile/v1/orders/{id}/delivery', () => {
   it('returns the delivery record with the return window and the handed-over quantities', async () => {
     const response = await getDelivery(apiRequest(`/api/mobile/v1/orders/${ORDER}/delivery`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     const payload = await response.json() as {
       data: {
@@ -163,7 +163,7 @@ describe('GET /api/mobile/v1/orders/{id}/delivery', () => {
   it("signs private-bucket proof with the caller's own RLS-scoped client", async () => {
     const client = install();
     const response = await getDelivery(apiRequest(`/api/mobile/v1/orders/${ORDER}/delivery`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     const payload = await response.json() as { data: { proof: { signatureUrl: string | null; photoUrl: string | null; signatureCaptured: boolean; photoCaptured: boolean } } };
 
@@ -185,7 +185,7 @@ describe('GET /api/mobile/v1/orders/{id}/delivery', () => {
     });
 
     const response = await getDelivery(apiRequest(`/api/mobile/v1/orders/${ORDER}/delivery`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     expect(response.status).toBe(404);
     // Ownership is established before the dossier, so neither the delivery row
@@ -198,7 +198,7 @@ describe('GET /api/mobile/v1/orders/{id}/delivery', () => {
   it('answers 404 when the order has no delivery record at all', async () => {
     install({ orders: [{ id: ORDER, retailer_id: RETAILER, order_number: 'MT-1001', status: 'dispatched' }], order_deliveries: [] });
     const response = await getDelivery(apiRequest(`/api/mobile/v1/orders/${ORDER}/delivery`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     expect(response.status).toBe(404);
   });
@@ -206,7 +206,7 @@ describe('GET /api/mobile/v1/orders/{id}/delivery', () => {
   it('rejects a malformed id before reading the delivery tables', async () => {
     const client = install();
     const response = await getDelivery(apiRequest('/api/mobile/v1/orders/not-a-uuid/delivery'), {
-      params: { id: 'not-a-uuid' },
+      params: Promise.resolve({ id: 'not-a-uuid' }),
     });
     expect(response.status).toBe(404);
     expect(client.queries.filter((query) => query.table.startsWith('order_deliver'))).toEqual([]);
@@ -223,7 +223,7 @@ describe('GET /api/mobile/v1/orders/{id}/delivery', () => {
     mocks.client = client;
 
     const response = await getDelivery(apiRequest(`/api/mobile/v1/orders/${ORDER}/delivery`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     expect(response.status).toBe(403);
   });

@@ -36,13 +36,14 @@ const inr = (v: number) =>
  * not display invented supplier identities, GSTINs, payables or settlements.
  */
 export default async function SuppliersPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('suppliers.view');
   const query = parseSupplierQuery(searchParams);
-  const data = await loadSupplierDirectory(createClient(), query);
+  const data = await loadSupplierDirectory((await createClient()), query);
   const pages = totalPages(data.total);
   const currentPage = Math.min(query.page, pages);
 

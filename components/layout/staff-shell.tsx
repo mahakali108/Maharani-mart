@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { LayoutDashboard, ShoppingCart, Sparkles, Truck } from 'lucide-react';
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
+import { PolicyLinks } from '@/components/legal/policy-links';
 import type { UserRole } from '@/lib/auth/roles';
 import { can } from '@/lib/permissions/permissions';
 
@@ -48,6 +49,7 @@ export function StaffShell({
         <main className="w-full min-w-0 flex-1 p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8">
           {children}
         </main>
+        <footer className="border-t border-ink-100 px-4 py-3 sm:px-6"><PolicyLinks /></footer>
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ interface BrandRow {
 
 export default async function CategoriesPage() {
   await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   // Load both independent catalog dimensions together. The brand count comes
   // from the existing brands → active products relationship; no category
   // filter is applied, so brands remain an independent browse dimension.

@@ -17,7 +17,7 @@ export async function GET() {
     return NextResponse.json({ error: 'You do not have permission to export label data.' }, { status: 403 });
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: products }, { data: packs }] = await Promise.all([
     supabase

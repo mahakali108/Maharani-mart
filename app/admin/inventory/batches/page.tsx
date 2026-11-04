@@ -53,7 +53,7 @@ interface BatchFilters {
   expiry: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of live batches.
@@ -148,11 +148,12 @@ function renderBatchRows(rows: BatchRow[]) {
 }
 
 export default async function InventoryBatchesPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string; warehouse?: string; expiry?: string };
+  searchParams: Promise<{ q?: string; warehouse?: string; expiry?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
 
   const filters: BatchFilters = {
     q: (searchParams.q ?? '').trim(),
@@ -168,7 +169,7 @@ export default async function InventoryBatchesPage({
 
   async function loadMoreBatches(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadBatchPage(createClient(), filters, readCursor(cursor));
+    const batch = await loadBatchPage((await createClient()), filters, readCursor(cursor));
     return { rows: renderBatchRows(batch.items), nextCursor: batch.nextCursor };
   }
 

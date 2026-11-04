@@ -20,7 +20,7 @@ interface PackForCart {
 
 /** Validate one full intended persisted piece quantity against current server rules. */
 async function quantityError(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   pack: PackForCart,
   quantity: number,
@@ -39,7 +39,7 @@ async function quantityError(
 }
 
 export async function validatePackForCart(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   packId: string,
   quantity: number

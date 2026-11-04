@@ -29,7 +29,7 @@ async function logSuperAdminAction(
   afterData: Record<string, unknown> | null = null,
   reason: string | null = null,
 ) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   await supabase.from('super_admin_audit_logs').insert({
     actor_id: actorId,
     target_id: targetId,
@@ -44,7 +44,7 @@ async function logSuperAdminAction(
 
 export async function getFeatures(): Promise<PlatformFeature[]> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('platform_features')
     .select('*')
@@ -55,7 +55,7 @@ export async function getFeatures(): Promise<PlatformFeature[]> {
 
 export async function toggleFeature(featureId: string, enabled: boolean): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: feature } = await supabase
     .from('platform_features')
@@ -87,7 +87,7 @@ export async function updateFeature(
   updates: Partial<Pick<PlatformFeature, 'name' | 'description' | 'icon' | 'route' | 'is_implemented' | 'target_type' | 'target_roles' | 'target_user_id' | 'expires_at' | 'sort_order'>>,
 ): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: before } = await supabase
     .from('platform_features')
@@ -115,7 +115,7 @@ export async function createFeature(input: {
   is_implemented?: boolean;
 }): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { error } = await supabase.from('platform_features').insert({
     key: input.key,
@@ -139,7 +139,7 @@ export async function createFeature(input: {
 
 export async function removeFeature(featureId: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: feature } = await supabase
     .from('platform_features')
@@ -159,7 +159,7 @@ export async function removeFeature(featureId: string): Promise<void> {
 
 export async function getUserAccessPeriods(userId: string): Promise<UserAccessPeriod[]> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('user_access_periods')
     .select('*')
@@ -175,7 +175,7 @@ export async function grantAccess(input: {
   reason?: string;
 }): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Fetch target user's role
   const { data: profile } = await supabase
@@ -230,7 +230,7 @@ export async function grantAccess(input: {
 
 export async function extendAccess(userId: string, days: number, reason?: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -297,7 +297,7 @@ export async function extendAccess(userId: string, days: number, reason?: string
 
 export async function expireAccess(userId: string, reason?: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -346,7 +346,7 @@ export async function expireAccess(userId: string, reason?: string): Promise<voi
 
 export async function suspendUser(userId: string, reason?: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -388,7 +388,7 @@ export async function suspendUser(userId: string, reason?: string): Promise<void
 
 export async function reactivateUser(userId: string, reason?: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -426,7 +426,7 @@ export async function reactivateUser(userId: string, reason?: string): Promise<v
 
 export async function changeUserRole(userId: string, newRole: UserRole, reason?: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Prevent self-demotion from super_admin (safety)
   if (userId === user.id) {
@@ -476,7 +476,7 @@ export async function changeUserRole(userId: string, newRole: UserRole, reason?:
 
 export async function getUserFeatureOverrides(userId: string): Promise<UserFeatureOverride[]> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('user_feature_overrides')
     .select('*')
@@ -493,7 +493,7 @@ export async function setUserFeatureOverride(input: {
   reason?: string;
 }): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('user_feature_overrides')
@@ -550,7 +550,7 @@ export async function setUserFeatureOverride(input: {
 
 export async function removeUserFeatureOverride(userId: string, featureKey: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   await supabase
     .from('user_feature_overrides')
@@ -574,7 +574,7 @@ export async function removeUserFeatureOverride(userId: string, featureKey: stri
 
 export async function getPlatformSettings(): Promise<Record<string, unknown>> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase.from('platform_settings').select('key, value');
   if (error) throw new Error(`Failed to fetch settings: ${error.message}`);
   const settings: Record<string, unknown> = {};
@@ -586,7 +586,7 @@ export async function getPlatformSettings(): Promise<Record<string, unknown>> {
 
 export async function updatePlatformSetting(key: string, value: unknown, reason?: string): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: before } = await supabase
     .from('platform_settings')
@@ -613,7 +613,7 @@ export async function updatePlatformSetting(key: string, value: unknown, reason?
 
 export async function setMaintenanceMode(config: MaintenanceModeConfig): Promise<void> {
   const user = await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: before } = await supabase
     .from('platform_settings')
@@ -645,7 +645,7 @@ export async function setMaintenanceMode(config: MaintenanceModeConfig): Promise
 
 export async function getSuperAdminAuditLogs(limit = 50): Promise<SuperAdminAuditLog[]> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('super_admin_audit_logs')
     .select('*, actor:profiles!super_admin_audit_logs_actor_id_fkey(full_name), target:profiles!super_admin_audit_logs_target_id_fkey(full_name)')
@@ -671,7 +671,7 @@ export async function getSuperAdminAuditLogs(limit = 50): Promise<SuperAdminAudi
 
 export async function getControlCenterOverview(): Promise<ControlCenterOverview> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const now = new Date();
   // Expiry buckets use Asia/Kolkata calendar-day ends; timestamps stay UTC.
   const todayKey = indiaTodayDateKey(now);
@@ -764,7 +764,7 @@ export async function getControlCenterOverview(): Promise<ControlCenterOverview>
 
 export async function getUserManagementView(userId: string): Promise<UserManagementView> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [profileRes, accessRes, overridesRes, auditRes] = await Promise.all([
     supabase.from('profiles').select('id, full_name, phone, role, is_active, created_at').eq('id', userId).single(),
@@ -847,7 +847,7 @@ export async function getAllUsers(): Promise<Array<{
   access_expires_at: string | null;
 }>> {
   await requireSuperAdmin();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: profiles, error } = await supabase
     .from('profiles')

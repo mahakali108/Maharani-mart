@@ -87,7 +87,7 @@ interface CheckoutProfileRow {
 
 export default async function CheckoutPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: cartData }, { data: retailer }, { data: profile }, walletSummary, { data: addressRows }] = await Promise.all([
     supabase

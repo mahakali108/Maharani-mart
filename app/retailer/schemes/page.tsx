@@ -24,7 +24,7 @@ interface SchemeRow {
 
 export default async function RetailerSchemesPage() {
   await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const nowIso = new Date().toISOString();
   const { data } = await supabase
     .from('schemes')

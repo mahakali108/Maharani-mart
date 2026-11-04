@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unknown export kind.' }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const stamp = csvStamp(new Date().toISOString());
   let csv: string;
 

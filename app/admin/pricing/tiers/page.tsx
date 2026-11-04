@@ -24,7 +24,7 @@ interface CategoryPriceRow {
 
 export default async function CategoryTierPricingPage() {
   await requirePagePermission('pricing.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [packResult, priceResult, tierResult] = await Promise.all([
     supabase

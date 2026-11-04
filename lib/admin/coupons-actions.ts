@@ -79,7 +79,7 @@ export async function createCouponAction(input: CouponFormInput): Promise<Coupon
   const expiresAt = parseDateTime(parsed.data.expiresAt);
   if (!startsAt || !expiresAt) return { error: 'Choose valid start and expiry date/times.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const code = normalizeCouponCode(parsed.data.code);
 
   const { data: existing } = await supabase
@@ -136,7 +136,7 @@ export async function updateCouponAction(id: string, input: CouponFormInput): Pr
   const expiresAt = parseDateTime(parsed.data.expiresAt);
   if (!startsAt || !expiresAt) return { error: 'Choose valid start and expiry date/times.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const code = normalizeCouponCode(parsed.data.code);
 
   const { data: conflict } = await supabase
@@ -191,7 +191,7 @@ export async function toggleCouponAction(id: string, isActive: boolean): Promise
   const user = await requirePermission('pricing.manage');
   if (!user) return { error: 'You are not signed in.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('coupons').update({ is_active: isActive } as unknown as never).eq('id', id);
   if (error) return { error: error.message };
 

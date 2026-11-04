@@ -52,7 +52,7 @@ export async function upsertCategoryPriceAction(formData: FormData): Promise<Act
     return { error: parsed.error.issues[0]?.message ?? 'Check the price details.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('product_tier_prices' as never).upsert(
     {
       product_pack_id: parsed.data.packId,
@@ -87,7 +87,7 @@ export async function deactivateCategoryPriceAction(formData: FormData): Promise
   const parsed = z.object({ priceId: z.string().uuid() }).safeParse({ priceId: formData.get('priceId') });
   if (!parsed.success) return { error: 'Select a valid price row.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('product_tier_prices' as never)
     .update({ is_active: false } as never)

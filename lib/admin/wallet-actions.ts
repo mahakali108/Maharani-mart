@@ -56,7 +56,7 @@ export async function setCreditLimitAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await supabase.auth.getUser();
   const userId = user.data.user?.id;
   if (!userId) return { error: 'Not authenticated.' };
@@ -142,7 +142,7 @@ export async function recordPaymentAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid payment data.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await supabase.auth.getUser();
   const userId = user.data.user?.id;
   if (!userId) return { error: 'Not authenticated.' };
@@ -218,7 +218,7 @@ export async function recordAdjustmentAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid adjustment data.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await supabase.auth.getUser();
   const userId = user.data.user?.id;
   if (!userId) return { error: 'Not authenticated.' };
@@ -275,7 +275,7 @@ export async function reverseTransactionAction(
   await requirePermission('coins.manage');
   if (!reason || reason.trim().length < 5) return { error: 'Reason must be at least 5 characters.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await supabase.auth.getUser();
   const userId = user.data.user?.id;
   if (!userId) return { error: 'Not authenticated.' };
@@ -373,7 +373,7 @@ export async function setPaymentTermsAction(
   const parsed = paymentTermsSchema.safeParse({ retailerId, paymentTermsDays, reason });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData?.user?.id;
   if (!userId) return { error: 'Not authenticated.' };

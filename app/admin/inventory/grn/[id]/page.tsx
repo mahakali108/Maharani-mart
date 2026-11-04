@@ -25,9 +25,10 @@ interface ReceiptMovement {
   inventory_batches: { batch_number: string } | null;
 }
 
-export default async function GrnDetailPage({ params }: { params: { id: string } }) {
+export default async function GrnDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requirePagePermission('inventory.view');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: grnData, error: grnError }, { data: itemData }, { data: movementData }] = await Promise.all([
     supabase.from('grns').select('*, warehouses ( name )').eq('id', params.id).maybeSingle(),

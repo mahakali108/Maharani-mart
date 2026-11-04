@@ -113,12 +113,13 @@ function sameIdentity(a: StoredObjectInfo | undefined, b: StoredObjectInfo | und
 }
 
 /** Supabase-backed implementation of the narrow storage surface. */
-export function createSupabaseBannerArtworkStorage(
-  client: ReturnType<typeof createClient> = createClient(),
-): BannerArtworkStorage {
+export async function createSupabaseBannerArtworkStorage(
+  client?: Awaited<ReturnType<typeof createClient>>,
+): Promise<BannerArtworkStorage> {
+  const storageClient = client ?? await createClient();
   return {
     async list(bucket, folder, search) {
-      const { data, error } = await client.storage.from(bucket).list(folder, { search, limit: 100 });
+      const { data, error } = await storageClient.storage.from(bucket).list(folder, { search, limit: 100 });
       if (error) return { ok: false, message: error.message };
       return (data ?? []).map((entry) => ({
         name: entry.name,
@@ -127,16 +128,16 @@ export function createSupabaseBannerArtworkStorage(
       }));
     },
     async copy(fromBucket, path, toBucket) {
-      const { error } = await client.storage.from(fromBucket).copy(path, path, { destinationBucket: toBucket });
+      const { error } = await storageClient.storage.from(fromBucket).copy(path, path, { destinationBucket: toBucket });
       if (error) return { ok: false, message: error.message };
       return { ok: true };
     },
     async remove(bucket, path) {
-      const { error } = await client.storage.from(bucket).remove([path]);
+      const { error } = await storageClient.storage.from(bucket).remove([path]);
       return { ok: !error };
     },
     publicUrl(bucket, path) {
-      return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+      return storageClient.storage.from(bucket).getPublicUrl(path).data.publicUrl;
     },
   };
 }

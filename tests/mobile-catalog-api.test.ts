@@ -704,7 +704,7 @@ describe('GET /api/mobile/v1/catalog/products', () => {
 
 describe('GET /api/mobile/v1/catalog/products/{id}', () => {
   const detail = (id: string) =>
-    getProduct(request(`/api/mobile/v1/catalog/products/${id}`), { params: { id } });
+    getProduct(request(`/api/mobile/v1/catalog/products/${id}`), { params: Promise.resolve({ id }) });
 
   it('returns every active pack priced at its own MOQ', async () => {
     install(threeProductTables());
@@ -1222,7 +1222,7 @@ describe('the Android DTOs and the mobile catalogue payloads agree field for fie
   it('locks the product detail and pack detail shapes', async () => {
     install(threeProductTables());
     const payload = await body(
-      await getProduct(request(`/api/mobile/v1/catalog/products/${PRODUCT_1}`), { params: { id: PRODUCT_1 } })
+      await getProduct(request(`/api/mobile/v1/catalog/products/${PRODUCT_1}`), { params: Promise.resolve({ id: PRODUCT_1 }) })
     );
     const detail = payload.data as Wire;
 

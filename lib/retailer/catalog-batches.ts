@@ -51,7 +51,7 @@ import {
 } from '@/lib/infinite-scroll/keyset';
 import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** Bound on how many variant/barcode matches are folded into the search disjunction. */
 const PACK_MATCH_LIMIT = 150;

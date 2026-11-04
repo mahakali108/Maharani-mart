@@ -77,7 +77,7 @@ export async function createGrnAction(
     }
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   // Receiving site: the single ACTIVE warehouse, resolved server-side.
   const warehouse = await requireWarehouseId(supabase, parsed.data.warehouseId || null);
   if (!warehouse.ok) return { error: warehouse.error };
@@ -125,7 +125,7 @@ export async function confirmGrnAction(grnId: string): Promise<GrnActionResult> 
   await requirePermission('inventory.manage');
   if (!z.string().uuid().safeParse(grnId).success) return { error: 'Invalid GRN.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('confirm_grn' as never, { p_grn_id: grnId } as never);
   if (error) {
     return { error: error.message.replace(/^.*confirm_grn: /, '') };
@@ -143,7 +143,7 @@ export async function cancelGrnAction(grnId: string, reason: string): Promise<Gr
   await requirePermission('inventory.manage');
   if (!z.string().uuid().safeParse(grnId).success) return { error: 'Invalid GRN.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('cancel_grn' as never, {
     p_grn_id: grnId,
     p_reason: reason?.trim() || null,

@@ -6,7 +6,7 @@ interface MemoryRow { memory_key: string; memory_value: string; }
 
 /** Loads only allow-listed compact business preferences, never transcripts. */
 export async function loadBusinessMemory(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<string[]> {
   const { data } = await supabase
@@ -19,7 +19,7 @@ export async function loadBusinessMemory(
 }
 
 export async function resetBusinessMemory(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<boolean> {
   const { error } = await supabase.from('ai_business_memory' as never).delete().eq('user_id', userId);

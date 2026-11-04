@@ -30,9 +30,10 @@ interface OrderItemRow {
   product_packs: { pack_name: string } | null;
 }
 
-export default async function StaffOrderDetailPage({ params }: { params: { id: string } }) {
+export default async function StaffOrderDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requirePagePermission('orders.view.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: order, error: orderError }, { data: itemData }] = await Promise.all([
     supabase

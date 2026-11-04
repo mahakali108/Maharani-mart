@@ -27,9 +27,10 @@ interface RetailerRow {
   areas: { name: string } | null;
 }
 
-export default async function InvoicePage({ params }: { params: { id: string } }) {
+export default async function InvoicePage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: order }, { data: retailer }, { data: itemData }] = await Promise.all([
     supabase

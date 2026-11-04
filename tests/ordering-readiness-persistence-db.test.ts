@@ -89,7 +89,7 @@ describe('0085 ordering launch-readiness persistence', () => {
       ['seller', sellerId],
       ['staff', staffId],
       ['profileless authenticated user', profilelessAuthenticatedId],
-    ]) {
+    ] as const) {
       const denial = await errorOf(db, userId, (tx) => tx.query(
         `select public.record_ordering_launch_readiness($1::jsonb, null)`,
         [JSON.stringify(approvals())]

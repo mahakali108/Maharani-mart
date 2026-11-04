@@ -15,7 +15,8 @@ import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
  * the return window, and reorder. Read-only — retailers can never edit
  * delivery data (RLS: order_deliveries_read only).
  */
-export default async function RetailerDeliveryPage({ params }: { params: { id: string } }) {
+export default async function RetailerDeliveryPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
   if (user.role !== 'retailer') notFound();
 

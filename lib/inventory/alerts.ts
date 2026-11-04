@@ -41,7 +41,7 @@ export async function notifyLowStockIfNeeded(productIds: string[]): Promise<void
   if (unique.length === 0) return;
 
   try {
-    const supabase = createClient();
+    const supabase = (await createClient());
 
     const [{ data: settingsData }, { data: productData }, { data: stockData }] = await Promise.all([
       supabase.from('inventory_settings').select('low_stock_alert_cooldown_hours').maybeSingle(),

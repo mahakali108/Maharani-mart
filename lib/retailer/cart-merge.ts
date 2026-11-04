@@ -21,7 +21,7 @@ export interface CartMergeLine {
  * write; marketplace prices are never inferred from the pack price.
  */
 export async function mergeLinesIntoCart(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   lines: CartMergeLine[]
 ): Promise<void> {

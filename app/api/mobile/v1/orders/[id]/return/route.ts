@@ -16,13 +16,13 @@ const uuidSchema = z.string().uuid();
 const bodySchema = z.object({ reason: z.string().trim().min(1).max(1000) }).strict();
 
 /** Request a return for the caller's delivered order, within its server-owned deadline. */
-export async function POST(request: Request, context: { params: { id: string } }): Promise<Response> {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.return.request');
   if ('response' in auth) return auth.response;
   const limited = enforceRateLimit('write.orders', request, { requestId, keySuffix: auth.session.userId });
   if (limited) return limited;
-  if (!uuidSchema.safeParse(context.params.id).success) {
+  if (!uuidSchema.safeParse((await context.params).id).success) {
     return jsonError('invalid_request', 'Order id is invalid.', { status: 400, requestId });
   }
   const body = await parseJsonBody(request, bodySchema, requestId);
@@ -32,7 +32,7 @@ export async function POST(request: Request, context: { params: { id: string } }
   try {
     const { data: order, error: orderError } = await supabase.from('orders')
       .select('id, status')
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<{ id: string; status: string }>();
     if (orderError) throw orderError;

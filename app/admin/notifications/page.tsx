@@ -55,7 +55,7 @@ interface LogFilters {
   status: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of notification log rows, with the recipient names for THAT batch
@@ -127,11 +127,12 @@ function renderLogRows(rows: (LogRow & { recipientName: string | null })[]) {
 }
 
 export default async function AdminNotificationsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { channel?: string; status?: string };
+  searchParams: Promise<{ channel?: string; status?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
 
   const filters: LogFilters = {
     channel: searchParams.channel ?? '',
@@ -143,7 +144,7 @@ export default async function AdminNotificationsPage({
 
   async function loadMoreLogs(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadLogBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadLogBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderLogRows(batch.items), nextCursor: batch.nextCursor };
   }
 

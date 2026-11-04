@@ -7,11 +7,12 @@ const links = [
   { href: '/legal/shipping', label: 'Delivery' },
   { href: '/legal/returns', label: 'Returns' },
   { href: '/legal/grievance', label: 'Grievance' },
+  { href: '/legal/product-safety', label: 'Product safety' },
+  { href: '/legal/business-disclosure', label: 'Business disclosure' },
   { href: '/contact', label: 'Contact' },
 ];
 
-/** Accessible, responsive shell for public operational/legal information.
- * No invented legal-entity address, GSTIN, phone number or named officer. */
+/** Accessible, responsive shell for public operational/legal information. */
 export function PublicInfoShell({ title, eyebrow, intro, children }: {
   title: string;
   eyebrow: string;
@@ -35,7 +36,7 @@ export function PublicInfoShell({ title, eyebrow, intro, children }: {
           <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">{intro}</p>
         </div>
         <div role="note" className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
-          <strong>Publication review required.</strong> Legal entity identity, verified public contact and grievance details, tax/invoice responsibility, any final commercial timelines and the policies below require business and Indian legal/tax review before launch. This page does not replace applicable law or an agreed order record.
+          <strong>Publication review required.</strong> Business and contact details are owner-provided. The current sales model, contact availability, grievance timelines, tax/invoice responsibilities and these policies require operational verification and Indian legal/tax review before production publication. This page does not replace applicable law or an agreed order record.
         </div>
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-start">
           <div className="space-y-4">{children}</div>
@@ -48,7 +49,10 @@ export function PublicInfoShell({ title, eyebrow, intro, children }: {
         </div>
       </main>
       <footer className="border-t border-slate-200 bg-white px-4 py-7 text-center text-xs text-slate-500">
-        Maharani Traders · B2B wholesale web app · Order availability depends on verified service PINs.
+        <nav aria-label="Policy links" className="mx-auto flex max-w-5xl flex-wrap justify-center gap-x-4 gap-y-1">
+          {links.filter((item) => item.href.startsWith('/legal/')).map((item) => <Link key={item.href} href={item.href} className="inline-flex min-h-11 items-center text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">{item.label}</Link>)}
+        </nav>
+        <p className="mt-2">Maharani Traders · Availability depends on verified service PINs.</p>
       </footer>
     </div>
   );

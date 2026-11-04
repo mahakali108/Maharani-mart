@@ -55,7 +55,7 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
     return { fieldErrors };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
@@ -135,7 +135,7 @@ export async function loginWithPhoneAction(_prevState: FormState, formData: Form
       return genericError;
     }
 
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: parsed.data.password,
@@ -174,7 +174,7 @@ export async function requestPasswordResetAction(_prevState: FormState, formData
     return { fieldErrors };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
   // Use auth/callback?next=/reset-password so the recovery code is exchanged
   // server-side and the user lands on the reset form with an active session.
@@ -222,7 +222,7 @@ export async function resendConfirmationAction(
     return { fieldErrors };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
 
   const { error } = await supabase.auth.resend({
@@ -264,7 +264,7 @@ export async function updatePasswordAction(_prevState: FormState, formData: Form
     return { fieldErrors: { confirmPassword: 'Passwords do not match.' } };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return { error: 'Your reset link is invalid or has expired. Please request a new one.' };
@@ -286,7 +286,7 @@ export async function updatePasswordAction(_prevState: FormState, formData: Form
 }
 
 export async function logoutAction() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   await supabase.auth.signOut();
   revalidatePath('/', 'layout');
   redirect('/login');
@@ -328,7 +328,7 @@ export async function registerRetailerAction(
   }
 
   const { fullName, shopName, phone, email, areaId, address, password } = parsed.data;
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Proactive check so the common case (retrying registration, two
   // shops sharing a landline, testing the form twice) shows a normal

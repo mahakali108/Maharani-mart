@@ -28,7 +28,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.ok) return parsed.response;
 
   try {
-    const client = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const client = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const { data: retailer, error: retailerError } = await client
       .from('retailers')
       .select('area_id')
@@ -84,7 +84,7 @@ export async function DELETE(request: Request): Promise<Response> {
   if (limited) return limited;
 
   try {
-    const client = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const client = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const { error } = await client
       .from('retailer_active_coupons')
       .delete()

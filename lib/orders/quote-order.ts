@@ -203,12 +203,12 @@ export function normalizeQuoteLines(lines: RequestedQuoteLine[]): { error: strin
 export async function quoteOrderForRetailer({
   retailerId,
   lines,
-  supabase = createClient(),
+  supabase: providedSupabase,
   couponCode,
 }: {
   retailerId: string;
   lines: RequestedQuoteLine[];
-  supabase?: ReturnType<typeof createClient>;
+  supabase?: Awaited<ReturnType<typeof createClient>>;
   /**
    * Raw coupon code, if the retailer has one applied to the cart. The code is
    * REVALIDATED here against fresh database state — an expired, exhausted or
@@ -217,6 +217,7 @@ export async function quoteOrderForRetailer({
    */
   couponCode?: string | null;
 }): Promise<QuoteOrderResult> {
+  const supabase = providedSupabase ?? await createClient();
   // Split-order lines (same pack via a seller offer) need line-identity
   // normalisation and offer pricing; legacy callers take the original path
   // unchanged below.
@@ -408,14 +409,15 @@ export async function quoteOrderForRetailer({
 export async function quoteSplitOrderForRetailer({
   retailerId,
   lines,
-  supabase = createClient(),
+  supabase: providedSupabase,
   couponCode,
 }: {
   retailerId: string;
   lines: RequestedQuoteLine[];
-  supabase?: ReturnType<typeof createClient>;
+  supabase?: Awaited<ReturnType<typeof createClient>>;
   couponCode?: string | null;
 }): Promise<QuoteOrderResult> {
+  const supabase = providedSupabase ?? await createClient();
   const identities = new Map<string, { packId: string; sellerOfferId: string | null; quantity: number }>();
   if (lines.length === 0) return { error: 'Add at least one product to the order.' };
   if (lines.length > 200) return { error: 'An order can contain at most 200 different packs.' };

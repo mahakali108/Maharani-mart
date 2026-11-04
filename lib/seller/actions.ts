@@ -72,7 +72,7 @@ export async function updateSellerProfileAction(formData: FormData): Promise<Sel
     return { ok: false, error: 'Please fix the highlighted profile fields.', fieldErrors };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc(
     'seller_update_own_profile' as never,
     {
@@ -138,7 +138,7 @@ export async function sellerCreateOfferAction(formData: FormData): Promise<Selle
     return { ok: false, error: 'Please fix the highlighted offer fields.', fieldErrors };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: pack, error: packError } = await supabase
     .from('product_packs')
     .select('id, product_id, is_active')
@@ -201,7 +201,7 @@ export async function sellerUpdateOfferTermsAction(formData: FormData): Promise<
     return { ok: false, error: 'Seller SKU must be 64 characters or fewer.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   // Never send moderation_status from a seller client: trg_enforce_seller_offer_rules
   // forbids direct moderation column edits by non-admins, and
   // trg_zz_remoderate_seller_offer_terms automatically resets moderation_status
@@ -240,7 +240,7 @@ export async function sellerSetOfferStockAction(
     return { ok: false, error: 'Stock must be a whole number from 0 to 2,000,000,000.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc(
     'seller_set_offer_stock' as never,
     { p_offer_id: offerId, p_stock_quantity: stockQuantity } as never
@@ -263,7 +263,7 @@ export async function sellerSetOfferActiveAction(
     return { ok: false, error: 'Invalid offer identifier.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('seller_offers' as never)
     .update({ is_active: Boolean(isActive) } as never)
@@ -336,7 +336,7 @@ export async function sellerReplaceOfferTiersAction(
     }
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc(
     'seller_replace_offer_tiers' as never,
     { p_offer_id: offerId, p_tiers: payload } as never
@@ -364,7 +364,7 @@ export async function sellerUpdateSubOrderAction(
     return { ok: false, error: 'Unsupported seller fulfilment transition.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc(
     'seller_update_sub_order' as never,
     {

@@ -17,7 +17,7 @@ interface OrderForDelivery {
 
 export async function markDeliveredAction(orderId: string, deliveryNote: string): Promise<DeliveryResult> {
   const user = await requirePermission('orders.deliver');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order } = await supabase
     .from('orders')

@@ -61,8 +61,9 @@ interface OrderRow {
   placed_at: string;
 }
 
-export default async function AdminWalletDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function AdminWalletDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
 
   const [{ data: retailer, error: retailerError }, { data: creditAccount }, { data: ledgerData }, { data: orderData }, { data: profile }] =
     await Promise.all([

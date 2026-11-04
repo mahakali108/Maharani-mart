@@ -69,8 +69,9 @@ interface Option {
   name: string;
 }
 
-export default async function EditProductPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function EditProductPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
 
   const [
     { data: productRow, error: productError },

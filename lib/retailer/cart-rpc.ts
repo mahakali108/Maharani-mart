@@ -9,7 +9,7 @@ type CartMutationResponse = {
 
 /** Keep the Supabase schema quirk at one boundary while preserving the migration's exact RPC contract. */
 export async function mutateRetailerCartLine(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   args: CartMutationArgs
 ): Promise<CartMutationResponse> {
   const callerRpc = supabase as unknown as {
@@ -33,7 +33,7 @@ export interface CartMutationExArgs {
 }
 
 export async function mutateRetailerCartLineEx(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   args: CartMutationExArgs
 ): Promise<CartMutationResponse> {
   const callerRpc = supabase as unknown as {

@@ -32,7 +32,7 @@ export async function* runMaharaniAgent({
   history,
 }: {
   actor: AIActor;
-  supabase: ReturnType<typeof createClient>;
+  supabase: Awaited<ReturnType<typeof createClient>>;
   requestId: string;
   message: string;
   history: AIChatHistoryItem[];

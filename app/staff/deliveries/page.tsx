@@ -18,7 +18,7 @@ export default async function StaffDeliveriesPage() {
   // Fallback: RLS may also show unassigned tasks inside the caller's scope —
   // surface those so a dispatcher's colleague can pick them up after asking
   // an admin to reassign, and so nothing is silently invisible.
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: unassigned } = await supabase
     .from('order_deliveries')
     .select('order_id, delivery_status, orders ( order_number, retailers ( shop_name ) )')

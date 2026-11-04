@@ -52,7 +52,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: false },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of the salesman's orders.
@@ -128,7 +128,7 @@ function OrderSkeleton() {
 
 export default async function SalesmanOrdersPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [dispatched, others] = await Promise.all([
     loadOrderBatch(supabase, user.id, { dispatchedOnly: true }, null),
@@ -142,7 +142,7 @@ export default async function SalesmanOrdersPage() {
   async function loadMoreDispatched(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const caller = await requireUser();
-    const batch = await loadOrderBatch(createClient(), caller.id, { dispatchedOnly: true }, readCursor(cursor));
+    const batch = await loadOrderBatch((await createClient()), caller.id, { dispatchedOnly: true }, readCursor(cursor));
     return { rows: renderOrderCards(batch.items), nextCursor: batch.nextCursor };
   }
 
@@ -150,7 +150,7 @@ export default async function SalesmanOrdersPage() {
   async function loadMoreOthers(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const caller = await requireUser();
-    const batch = await loadOrderBatch(createClient(), caller.id, { dispatchedOnly: false }, readCursor(cursor));
+    const batch = await loadOrderBatch((await createClient()), caller.id, { dispatchedOnly: false }, readCursor(cursor));
     return { rows: renderOrderCards(batch.items), nextCursor: batch.nextCursor };
   }
 

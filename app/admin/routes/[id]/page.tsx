@@ -24,8 +24,9 @@ interface RetailerOption {
   shop_name: string;
 }
 
-export default async function AdminRouteDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function AdminRouteDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
 
   const [{ data: route, error: routeError }, { data: stopData }, { data: retailerData }] = await Promise.all([
     supabase.from('routes').select('id, name, profiles ( full_name )').eq('id', params.id).maybeSingle<RouteDetail>(),

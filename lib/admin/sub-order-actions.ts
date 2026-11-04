@@ -33,7 +33,7 @@ export async function adminTransitionSubOrderAction(
     return { ok: false, error: 'Unsupported sub-order status.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc(
     'set_sub_order_status' as never,
     {

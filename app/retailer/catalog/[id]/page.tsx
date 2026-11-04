@@ -120,9 +120,10 @@ interface SchemeLinkRow {
   schemes: { name: string; description: string | null; ends_at: string; is_festival: boolean; is_active: boolean } | null;
 }
 
-export default async function ProductDetailPage({ params }: { params: { id: string } }) {
+export default async function ProductDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   if (!isUuidLike(params.id)) notFound();
 

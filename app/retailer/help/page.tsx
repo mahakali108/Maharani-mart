@@ -34,11 +34,12 @@ const FAQ = [
   },
 ];
 
-export default function HelpPage({
-  searchParams,
+export default async function HelpPage({
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { topic?: string; order?: string };
+  searchParams: Promise<{ topic?: string; order?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const phone = process.env.COMPANY_PHONE?.trim();
   const company = process.env.COMPANY_NAME?.trim() || 'Maharani Traders';
   const topic = searchParams.topic ?? '';

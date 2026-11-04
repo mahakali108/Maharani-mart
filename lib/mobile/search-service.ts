@@ -52,7 +52,7 @@ import { sanitizeSearchTerm } from '@/lib/retailer/catalog-params';
 import { resolveMediaUrl } from '@/lib/media/refs';
 import type { MobileSession } from '@/lib/mobile/auth';
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** The caller's RLS-scoped client, typed the way `lib/retailer/*` expects. */
 function retailerSupabase(session: MobileSession): SupabaseClient {

@@ -28,7 +28,7 @@ function alertLink(kind: string, productId: string): string {
   return `/admin/inventory/forecast?risk=${kind}&product=${productId}`;
 }
 
-async function admins(supabase: ReturnType<typeof createClient>): Promise<string[]> {
+async function admins(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string[]> {
   const { data } = await supabase
     .from('profiles')
     .select('id')
@@ -44,7 +44,7 @@ async function admins(supabase: ReturnType<typeof createClient>): Promise<string
  */
 export async function notifyForecastSignalsIfNeeded(options: { days?: number } = {}): Promise<void> {
   try {
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { summary } = await runForecastPipeline(supabase, { days: options.days ?? 30, limit: 60 });
     const insights = generateForecastInsights(summary).filter(
       (insight) => insight.severity === 'critical' || insight.severity === 'warning'

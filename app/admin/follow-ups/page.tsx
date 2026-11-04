@@ -25,11 +25,12 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default async function AdminFollowUpsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string };
+  searchParams: Promise<{ status?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const status = searchParams.status ?? 'open';
 
   let query = supabase

@@ -28,11 +28,12 @@ export async function reverseOrderWalletDebit(
   retailerId: string,
   reason: string,
   createdBy: string | null,
-  callerClient?: ReturnType<typeof createClient>
+  callerClient?: Awaited<ReturnType<typeof createClient>>,
+  options?: { requireRefundRpc?: boolean }
 ): Promise<{ success: true; refundedPaise: number } | { error: string }> {
   // Mobile routes pass the already-verified bearer-scoped caller client. Web
   // actions keep their cookie-scoped default; neither path bypasses RLS.
-  const supabase = callerClient ?? createClient();
+  const supabase = callerClient ?? (await createClient());
 
   // PREFERRED PATH — the database function (0053). It is the only way a refund
   // can be written when the caller is the RETAILER (cancelling their own order)
@@ -55,6 +56,11 @@ export async function reverseOrderWalletDebit(
   if (!rpcResult.error) {
     return { success: true, refundedPaise: Number(rpcResult.data ?? 0) };
   }
+
+  // Cancellation must not use the legacy multi-request fallback: a credit and
+  // its debit flag could otherwise commit separately. Other callers retain the
+  // historical fallback until their own workflows are reviewed.
+  if (options?.requireRefundRpc) return { error: rpcResult.error.message };
 
   // A database that has not run 0053 yet (older deployment, or a mocked client
   // in tests) falls back to the direct write, which works for admin callers.

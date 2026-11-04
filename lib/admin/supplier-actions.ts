@@ -59,7 +59,7 @@ export async function submitSupplierApplicationAction(
   const errors = validateSupplierApplication(input);
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   // N1: the rate-limit RPC is server-only (EXECUTE granted to
   // service_role only in migration 0060), so the limiter uses the
   // privileged server client. The public submission RPC below stays on
@@ -71,7 +71,8 @@ export async function submitSupplierApplicationAction(
   // privileged-client factory reaches the limiter's documented
   // fail-open fallback instead of aborting the submission.
   const limiter = createSupplierSubmissionLimiterFromFactory(createServiceRoleClient);
-  const clientIdentity = clientIdentityFromHeaders((name) => headers().get(name));
+  const requestHeaders = await headers();
+  const clientIdentity = clientIdentityFromHeaders((name) => requestHeaders.get(name));
   const limit = await limiter.consume(input.phone, clientIdentity);
   if (!limit.allowed) {
     // Generic on purpose: the message must not reveal whether this phone
@@ -140,7 +141,7 @@ export async function reviewSupplierApplicationAction(
     return { ok: false, error: 'Give a short reason for rejection (the applicant may ask why).' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('suppliers' as never)
     .update({
@@ -180,7 +181,7 @@ export async function addSupplierDocumentAction(
   if (!fileUrl.startsWith(`suppliers/${supplierId}/documents/`)) {
     return { ok: false, error: 'Uploaded file does not belong to this application.' };
   }
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('supplier_documents' as never).insert({
     supplier_id: supplierId,
     doc_type: docType,

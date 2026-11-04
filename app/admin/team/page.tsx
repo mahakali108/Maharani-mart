@@ -51,7 +51,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: true },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * Email lives on auth.users, not any RLS-governed public table, so it can only
@@ -138,7 +138,7 @@ export default async function TeamPage() {
   const user = await requireUser();
   const canManage = can(user.role, 'team.manage');
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const firstBatch = await loadStaffBatch(supabase, { canManage }, null);
   const staff = firstBatch.items;
 
@@ -151,7 +151,7 @@ export default async function TeamPage() {
     'use server';
     const caller = await requireUser();
     const allowed = can(caller.role, 'team.manage');
-    const batch = await loadStaffBatch(createClient(), { canManage: allowed }, readCursor(cursor));
+    const batch = await loadStaffBatch((await createClient()), { canManage: allowed }, readCursor(cursor));
     return { rows: renderStaffRows(batch.items, allowed), nextCursor: batch.nextCursor };
   }
 

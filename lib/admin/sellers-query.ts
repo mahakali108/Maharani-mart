@@ -67,7 +67,7 @@ export async function listSellers({ q, status, page }: Required<SellerListParams
   failed: boolean;
   failureMessage: string | null;
 }> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   let query = supabase
     .from('sellers' as never)
     .select('*', { count: 'exact' });
@@ -104,7 +104,7 @@ export async function getSellerDetail(sellerId: string): Promise<{
   /** Set when the seller row read FAILED (as opposed to returning no row). */
   failureMessage: string | null;
 }> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [{ data: seller, error: sellerError }, { data: members }, { data: offers }, { data: invite }] = await Promise.all([
     supabase
       .from('sellers' as never)
@@ -184,7 +184,7 @@ export async function listOffers({
   failed: boolean;
   failureMessage: string | null;
 }> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   let query = supabase
     .from('seller_offers' as never)
     .select('*', { count: 'exact' });
@@ -215,7 +215,7 @@ export async function listOffers({
 }
 
 export async function listOfferFloors(packId: string): Promise<OfferPriceFloorRow[]> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('offer_price_floors' as never)
     .select('*')

@@ -49,11 +49,12 @@ function aggregate<T>(rows: T[], keyFn: (row: T) => string, valueFn: (row: T) =>
 // ---------------------------------------------------------------------------
 
 export default async function ReportsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { from?: string; to?: string };
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const from = searchParams.from || firstOfMonth();
   const to = searchParams.to || indiaTodayDateKey();
 

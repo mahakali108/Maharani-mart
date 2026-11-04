@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
  * by checking the Supabase session + role on every request.
  */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -49,7 +49,7 @@ export async function adminReviewApplicationAction(formData: FormData): Promise<
     return { error: parsed.error.issues[0]?.message ?? 'Check the review details.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('admin_review_retailer_application' as never, {
     p_retailer_id: parsed.data.retailerId,
     p_decision: parsed.data.decision,
@@ -82,7 +82,7 @@ export async function adminSetRetailerCategoryAction(formData: FormData): Promis
     return { error: parsed.error.issues[0]?.message ?? 'Check the category details.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('admin_set_retailer_category' as never, {
     p_retailer_id: parsed.data.retailerId,
     p_category: parsed.data.category,
@@ -112,7 +112,7 @@ export async function adminSetRetailerAccessAction(formData: FormData): Promise<
     return { error: parsed.error.issues[0]?.message ?? 'Check the access details.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('admin_set_retailer_access' as never, {
     p_retailer_id: parsed.data.retailerId,
     p_action: parsed.data.action,
@@ -139,7 +139,7 @@ export async function adminUpdateApprovalSettingsAction(formData: FormData): Pro
     });
   if (!parsed.success) return { error: 'Enter whole hours between 1 and 720.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('admin_update_approval_settings' as never, {
     p_review_target_hours: parsed.data.reviewTargetHours,
     p_reminder_hours: parsed.data.reminderHours,

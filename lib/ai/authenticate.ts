@@ -8,7 +8,7 @@ import { isRoleAuthorizedForAISurface } from '@/lib/ai/safety/auth';
 export type AIAuthResult = { actor: AIActor } | { error: string; status: number };
 
 export async function authenticateAIRequest(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   surface: AISurface
 ): Promise<AIAuthResult> {
   const { data: authData, error: authError } = await supabase.auth.getUser();

@@ -163,6 +163,21 @@ describe('sticky header and bottom navigation', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
     expect(document.activeElement).toBe(document.querySelector('#retailer-mobile-search input'));
   });
+  it('closes the mobile search on navigation and keeps it closed on return', async () => {
+    const view = render(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    const user = userEvent.setup();
+    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Search', expanded: false }));
+    expect(document.querySelector('#retailer-mobile-search')).not.toBeNull();
+    mocks.path = '/retailer/orders';
+    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    expect(document.querySelector('#retailer-mobile-search')).toBeNull();
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Search', expanded: false })).toBeTruthy();
+    mocks.path = '/retailer/home';
+    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    expect(document.querySelector('#retailer-mobile-search')).toBeNull();
+    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Search', expanded: false }));
+    expect(document.querySelector('#retailer-mobile-search')).not.toBeNull();
+  });
   it('has exactly Home, Catalogue, Cart, Orders, Account and marks Home active', () => {
     render(<RetailerShell fullName="Fixture owner" role="retailer" cartCount={2}><p>Content</p></RetailerShell>);
     const nav = within(screen.getByRole('navigation', { name: 'Primary navigation' }));

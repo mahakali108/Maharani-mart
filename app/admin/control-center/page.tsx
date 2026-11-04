@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 export default async function ControlCenterPage() {
   const user = await requireSuperAdminPage();
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [overview, features, users, auditLogs, settings, business, contact, marketplace] = await Promise.all([
     getControlCenterOverview(),
     getFeatures(),

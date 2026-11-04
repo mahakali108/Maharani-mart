@@ -37,7 +37,7 @@ interface RetailerStatusRow {
  * is_active_account() restrictive policies + current_user_role()).
  */
 export async function requireUser(): Promise<CurrentUser> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const {
     data: { user },
   } = await supabase.auth.getUser();

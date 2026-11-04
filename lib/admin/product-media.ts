@@ -31,7 +31,7 @@ import { deleteMedia } from '@/lib/media';
  *      with the old ref in old_data.
  */
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** Tables scanned by isMediaRefStillReferenced, with their ref column. */
 const REFERENCE_SOURCES = [

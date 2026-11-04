@@ -31,7 +31,7 @@ export interface TargetActual {
  * zero. Failures degrade to null so one bad query cannot break the page.
  */
 export async function computeTargetActual(target: TargetRow): Promise<TargetActual> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const fromIso = indiaDayStartIso(target.period_start);
   const toIso = indiaDayEndIso(target.period_end);
   if (!fromIso || !toIso) return { actual: null, pending: 'Invalid period.' };

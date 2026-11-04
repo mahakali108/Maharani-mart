@@ -53,9 +53,10 @@ interface ReorderItemRow {
   } | null;
 }
 
-export default async function ReorderPage({ params }: { params: { id: string } }) {
+export default async function ReorderPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order, error: orderError } = await supabase
     .from('orders')

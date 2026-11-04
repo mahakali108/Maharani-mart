@@ -35,7 +35,7 @@ export async function setOfferFloorAction(
   if (floorPaise === null) return { ok: false, error: 'Enter a valid floor price (₹ up to 2 decimals).' };
   const trimmedNote = (note ?? '').trim().slice(0, 300) || null;
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('offer_price_floors' as never)
     .insert({
@@ -68,7 +68,7 @@ export async function moderateOfferAction(
     return { ok: false, error: 'Give a short reason for rejection (the seller may ask why).' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('seller_offers' as never)
     .update({
@@ -98,7 +98,7 @@ export async function setOfferActiveAction(
   await requirePermission('sellers.offers.manage');
   if (!UUID_RE.test(offerId)) return { ok: false, error: 'Invalid offer.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('seller_offers' as never)
     .update({ is_active: isActive } as never)
@@ -142,7 +142,7 @@ export async function createOfferAction(formData: FormData): Promise<OfferAction
     }
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   // The pack owns its product identity — never trust a client-sent product id.
   const { data: pack, error: packError } = await supabase
     .from('product_packs')
@@ -201,7 +201,7 @@ export async function updateOfferAction(formData: FormData): Promise<OfferAction
   const stockQuantity = parsePositiveInt(formData.get('stockQuantity'));
   if (stockQuantity === null) return { ok: false, error: 'Stock must be a whole number of pieces.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('seller_offers' as never)
     .update({

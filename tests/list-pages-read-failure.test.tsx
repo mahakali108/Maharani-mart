@@ -107,14 +107,14 @@ describe('admin returns', () => {
 describe('admin seller-offer moderation queue', () => {
   it('reports the read failure instead of claiming there is nothing to review', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ seller_offers: [] }, { seller_offers: 'timeout' }));
-    render(await AdminOffersPage({ searchParams: {} }));
+    render(await AdminOffersPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('Seller offers could not be loaded.')).toBeDefined();
     expect(screen.queryByText('No offers to review')).toBeNull();
   });
 
   it('keeps the real empty state when the query works', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ seller_offers: [] }));
-    render(await AdminOffersPage({ searchParams: {} }));
+    render(await AdminOffersPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('No offers to review')).toBeDefined();
   });
 });
@@ -124,13 +124,13 @@ describe('admin wallets (credit)', () => {
     mocks.createClient.mockReturnValue(
       supabaseFixture({ retailers: [], retailer_credit_accounts: [] }, { retailers: 'timeout' })
     );
-    render(await AdminWalletsPage({ searchParams: {} }));
+    render(await AdminWalletsPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('Retailer credit accounts could not be loaded.')).toBeDefined();
   });
 
   it('shows no warning for a working query', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ retailers: [], retailer_credit_accounts: [] }));
-    render(await AdminWalletsPage({ searchParams: {} }));
+    render(await AdminWalletsPage({ searchParams: Promise.resolve({}) }));
     expect(screen.queryByText('Retailer credit accounts could not be loaded.')).toBeNull();
   });
 });

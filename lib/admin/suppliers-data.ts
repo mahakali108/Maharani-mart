@@ -12,7 +12,7 @@ import {
   type SupplierSummary,
 } from './suppliers-query';
 
-type Supabase = ReturnType<typeof createClient>;
+type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 export interface SupplierLedgerRow extends SupplierGrnRow {
   lines: number;

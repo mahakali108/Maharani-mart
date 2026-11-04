@@ -25,9 +25,10 @@ function BrandMonogram({ name }: { name: string }) {
   return <span className="text-lg font-black tracking-tight text-primary-700">{monogram || 'B'}</span>;
 }
 
-export default async function RetailerBrandDetailPage({ params }: { params: { id: string } }) {
+export default async function RetailerBrandDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const { user, retailer } = await getRetailerShoppingContext();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const canResolvePrices = !!retailer;
   const data = await loadBrandProducts(
     supabase,
@@ -49,7 +50,7 @@ export default async function RetailerBrandDetailPage({ params }: { params: { id
     'use server';
     const context = await getRetailerShoppingContext();
     const batch = await loadBrandProducts(
-      createClient(),
+      (await createClient()),
       context.user.id,
       context.retailer?.area_id ?? null,
       params.id,

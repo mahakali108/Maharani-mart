@@ -10,7 +10,7 @@ export async function markNotificationReadAction(notificationId: string): Promis
   const user = await requireUser();
   if (!notificationId) return { error: 'Notification not found.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('notifications')
     .update({ is_read: true } as unknown as never)
@@ -25,7 +25,7 @@ export async function markNotificationReadAction(notificationId: string): Promis
 
 export async function markAllNotificationsReadAction(): Promise<NotificationActionResult> {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('notifications')
     .update({ is_read: true } as unknown as never)

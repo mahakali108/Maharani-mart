@@ -133,8 +133,9 @@ export function buildSellerEvidenceObjectKey(input: {
  */
 export async function uploadComplianceEvidenceObject(
   input: { objectKey: string; file: Blob & { name?: string; type: string; size: number } },
-  client: ReturnType<typeof createClient> = createClient()
+  client?: Awaited<ReturnType<typeof createClient>>
 ): Promise<void> {
+  client ??= await createClient();
   const contentType = validateComplianceEvidenceFile({
     name: input.file.name ?? 'evidence',
     type: input.file.type,
@@ -161,8 +162,9 @@ export async function uploadComplianceEvidenceObject(
  */
 export async function createComplianceEvidenceSignedUrl(
   objectKey: string,
-  client: ReturnType<typeof createClient> = createClient()
+  client?: Awaited<ReturnType<typeof createClient>>
 ): Promise<string | null> {
+  client ??= await createClient();
   const { data: permitted, error: permissionError } = await client.rpc(
     'can_read_compliance_evidence_object' as never,
     { p_name: objectKey } as never

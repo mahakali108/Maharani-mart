@@ -36,7 +36,7 @@ interface OrderItemRow {
  */
 export async function dispatchOrderAction(orderId: string): Promise<DispatchResult> {
   const user = await requirePermission('orders.dispatch');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order } = await supabase
     .from('orders')

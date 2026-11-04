@@ -9,7 +9,7 @@ export const metadata = { title: 'Wholesale shopping | Maharani Traders' };
 
 export default async function RetailerHomePage() {
   const { user, retailer, areaName, profileUnavailable } = await getRetailerShoppingContext();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [data, wallet] = await Promise.all([
     loadRetailerHome(supabase, user.id, retailer?.area_id ?? null, process.env.NEXT_PUBLIC_SITE_URL, !!retailer && !profileUnavailable),
     retailer ? getRetailerWalletSummary(supabase, user.id).catch(() => null) : Promise.resolve(null),

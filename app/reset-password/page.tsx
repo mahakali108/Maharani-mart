@@ -6,11 +6,12 @@ import { ResetPasswordForm } from '@/components/auth/reset-password-form';
 export const metadata: Metadata = { title: 'Set new password — Maharani Traders' };
 
 export default async function ResetPasswordPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { code?: string; error?: string };
+  searchParams: Promise<{ code?: string; error?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const {
     data: { user },
   } = await supabase.auth.getUser();

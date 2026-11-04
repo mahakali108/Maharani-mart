@@ -81,7 +81,7 @@ interface SettingRow {
 
 /** Load authoritative business profile from platform_settings or fallback */
 export async function getAuthoritativeBusinessProfile(): Promise<BusinessProfileConfig> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('platform_settings' as never)
     .select('value')
@@ -96,7 +96,7 @@ export async function getAuthoritativeBusinessProfile(): Promise<BusinessProfile
 
 /** Load authoritative contact and grievance details */
 export async function getAuthoritativeContactGrievance(): Promise<ContactGrievanceConfig> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('platform_settings' as never)
     .select('value')
@@ -112,7 +112,7 @@ export async function getAuthoritativeContactGrievance(): Promise<ContactGrievan
 
 /** Load authoritative marketplace compliance settings */
 export async function getAuthoritativeMarketplaceCompliance(): Promise<MarketplaceComplianceConfig> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('platform_settings' as never)
     .select('value')
@@ -133,7 +133,7 @@ export async function getAuthoritativeMarketplaceCompliance(): Promise<Marketpla
  * callers must display a blocked/pending state rather than infer an approval.
  */
 export async function getAuthoritativeOrderingLaunchReadiness(): Promise<OrderingReadinessConfig | null> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('platform_settings' as never)
     .select('value')

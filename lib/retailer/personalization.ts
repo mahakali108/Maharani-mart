@@ -20,7 +20,7 @@ const OPEN_ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'packed', 'di
 export { OPEN_ORDER_STATUSES };
 
 export async function getRetailerOrderIds(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   limit = 40
 ): Promise<string[]> {
@@ -36,7 +36,7 @@ export async function getRetailerOrderIds(
 }
 
 export async function getOrderFrequencyMap(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<Map<string, number>> {
   const orderIds = await getRetailerOrderIds(supabase, retailerId, 40);
@@ -44,7 +44,7 @@ export async function getOrderFrequencyMap(
 }
 
 async function frequencyFromOrders(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   orderIds: string[]
 ): Promise<Map<string, number>> {
   const frequency = new Map<string, number>();
@@ -64,7 +64,7 @@ async function frequencyFromOrders(
 }
 
 export async function getFrequentlyOrderedCards(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   areaId: string | null,
   favoriteIds: Set<string>,
@@ -81,7 +81,7 @@ export async function getFrequentlyOrderedCards(
 }
 
 export async function getBuyAgainCards(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   areaId: string | null,
   favoriteIds: Set<string>,
@@ -110,7 +110,7 @@ export async function getBuyAgainCards(
 }
 
 export async function getCoPurchasedCards(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   areaId: string | null,
   productId: string,
@@ -150,7 +150,7 @@ export async function getCoPurchasedCards(
 }
 
 export async function getSimilarProductCards(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   areaId: string | null,
   product: { id: string; category_id: string | null; brand_id: string | null },

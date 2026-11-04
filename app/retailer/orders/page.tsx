@@ -95,7 +95,7 @@ interface OrderFilters {
   to: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of this retailer's orders. RLS scopes `orders` to the caller, and
@@ -208,12 +208,13 @@ function renderOrderCards(rows: OrderRow[]) {
 }
 
 export default async function OrdersPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string; q?: string; from?: string; to?: string };
+  searchParams: Promise<{ status?: string; q?: string; from?: string; to?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const allowedStatuses = STATUS_TABS.map((tab) => tab.value);
   const status = allowedStatuses.includes(searchParams.status as OrderStatus) ? searchParams.status ?? '' : '';
   const q = searchParams.q?.trim() ?? '';
@@ -229,7 +230,7 @@ export default async function OrdersPage({
   async function loadMoreOrders(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const caller = await requireUser();
-    const batch = await loadOrderBatch(createClient(), caller.id, filters, readCursor(cursor));
+    const batch = await loadOrderBatch((await createClient()), caller.id, filters, readCursor(cursor));
     return { rows: renderOrderCards(batch.items), nextCursor: batch.nextCursor };
   }
 

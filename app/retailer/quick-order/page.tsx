@@ -44,9 +44,10 @@ interface QuickOrderProductRow {
 
 const MAX_RESULTS = 30;
 
-export default async function QuickOrderPage({ searchParams }: { searchParams: { q?: string } }) {
+export default async function QuickOrderPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ q?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const q = sanitizeSearchTerm(searchParams.q ?? '');
 
   const { data: retailer } = await supabase

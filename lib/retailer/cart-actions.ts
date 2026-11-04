@@ -10,7 +10,7 @@ export type CartActionResult = { error?: string } | { success: true };
 
 export async function addToCartAction(packId: string, quantity: number): Promise<CartActionResult> {
   const user = await requirePermission('orders.create');
-  const result = await addCartLines(createClient(), user.id, [{ packId, quantity }]);
+  const result = await addCartLines((await createClient()), user.id, [{ packId, quantity }]);
   if ('error' in result) return result;
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer', 'layout');
@@ -23,7 +23,7 @@ export async function addSellerOfferToCartAction(
   sellerOfferId: string
 ): Promise<CartActionResult> {
   const user = await requirePermission('orders.create');
-  const result = await addCartLines(createClient(), user.id, [{ packId, quantity, sellerOfferId }]);
+  const result = await addCartLines((await createClient()), user.id, [{ packId, quantity, sellerOfferId }]);
   if ('error' in result) return result;
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer', 'layout');
@@ -38,7 +38,7 @@ export async function buyNowAction(packId: string, quantity: number): Promise<Ca
 
 export async function updateCartQuantityAction(cartItemId: string, quantity: number): Promise<CartActionResult> {
   const user = await requirePermission('orders.create');
-  const result = await updateCartLine(createClient(), user.id, cartItemId, quantity);
+  const result = await updateCartLine((await createClient()), user.id, cartItemId, quantity);
   if ('error' in result) return result;
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer', 'layout');
@@ -47,7 +47,7 @@ export async function updateCartQuantityAction(cartItemId: string, quantity: num
 
 export async function removeCartItemAction(cartItemId: string): Promise<CartActionResult> {
   const user = await requirePermission('orders.create');
-  const result = await removeCartLine(createClient(), user.id, cartItemId);
+  const result = await removeCartLine((await createClient()), user.id, cartItemId);
   if ('error' in result) return result;
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer', 'layout');
@@ -64,7 +64,7 @@ export async function removeCartItemAction(cartItemId: string): Promise<CartActi
  */
 export async function clearCartAction(): Promise<CartActionResult> {
   const user = await requirePermission('orders.create');
-  const result = await clearRetailerCart(createClient(), user.id);
+  const result = await clearRetailerCart((await createClient()), user.id);
   if ('error' in result) return result;
   revalidatePath('/retailer/cart');
   revalidatePath('/retailer/checkout');

@@ -40,7 +40,7 @@ export async function uploadToSupabaseStorage(
   input: SupabaseUploadInput,
 ): Promise<SupabaseUploadResult> {
   const config = MEDIA_KIND_CONFIG[input.kind];
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const fileId = newFileId();
   const path = buildMediaPath(input.kind, input.ownerId, fileId, input.file.mimeType);
@@ -97,7 +97,7 @@ export async function deleteFromSupabaseStorage(
   bucket: string,
   path: string,
 ): Promise<DeleteOutcome> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   try {
     const { error } = await supabase.storage.from(bucket).remove([path]);
     // Supabase reports no error for a missing object; either way this is safe.

@@ -34,7 +34,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: false },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of the retailer's own notifications.
@@ -72,7 +72,7 @@ async function loadNotificationBatch(
 
 export default async function RetailerAlertsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [firstBatch, { count: unreadCount }] = await Promise.all([
     loadNotificationBatch(supabase, user.id, null),
@@ -91,7 +91,7 @@ export default async function RetailerAlertsPage() {
   ): Promise<{ items: NotificationItem[]; nextCursor: string | null }> {
     'use server';
     const caller = await requireUser();
-    const batch = await loadNotificationBatch(createClient(), caller.id, readCursor(cursor));
+    const batch = await loadNotificationBatch((await createClient()), caller.id, readCursor(cursor));
     return { items: batch.items, nextCursor: batch.nextCursor };
   }
 

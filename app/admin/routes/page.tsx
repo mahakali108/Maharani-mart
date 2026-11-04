@@ -25,7 +25,7 @@ interface AreaOption {
 }
 
 export default async function AdminRoutesPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: routeData }, { data: salesmenData }, { data: areaData }] = await Promise.all([
     supabase

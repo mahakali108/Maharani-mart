@@ -24,7 +24,7 @@ const STATUS_STYLES: Record<ReturnRequestRow['status'], string> = {
 };
 
 export default async function ReturnsPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('return_requests')

@@ -9,7 +9,7 @@ import { validatePackForCart } from '@/lib/retailer/cart-service';
 import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import { isReturnWindowOpen } from '@/lib/delivery/return-window';
 import type { Database } from '@/types/database.types';
-import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
+import { restoreAndVerifyCancellationCoins } from '@/lib/orders/cancellation-coins';
 import { releaseOrderCoupon } from '@/lib/coupons/validate';
 
 type ReturnRequestInsert = Database['public']['Tables']['return_requests']['Insert'];
@@ -18,7 +18,7 @@ export type RetailerOrderActionResult = { error?: string } | { success: true; sk
 
 export async function cancelOrderAction(orderId: string, reason: string): Promise<RetailerOrderActionResult> {
   const user = await requirePermission('orders.cancel');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // RLS (orders_retailer_cancel) already restricts this to the
   // caller's own pending orders — the .eq() filters here just make
@@ -33,23 +33,26 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
     .select('id')
     .maybeSingle<{ id: string }>();
 
-  if (error) return { error: error.message };
-  if (!data) return { error: 'This order can no longer be cancelled — it may already be processing.' };
-
-  try {
-    await reverseOrderWalletDebit(orderId, user.id, reason || 'Retailer cancelled order', user.id);
-  } catch (err) {
-    console.warn('Wallet reversal failed (non-blocking):', err);
+  if (error) return { error: 'Cancellation could not be confirmed. Check the order and contact support if needed.' };
+  if (!data) {
+    // Only the owner can retry verification for their already-cancelled order.
+    const { data: existing, error: readError } = await supabase.from('orders')
+      .select('status').eq('id', orderId).eq('retailer_id', user.id)
+      .maybeSingle<{ status: string }>();
+    if (readError || existing?.status !== 'cancelled') {
+      return { error: 'This order can no longer be cancelled — it may already be processing.' };
+    }
   }
 
-  // A cancelled order no longer consumes its coupon (0051): the redemption is
-  // released so the retailer can reuse it within its own limits.
+  // The verifier calls reverseOrderWalletDebit using only the idempotent RPC,
+  // then checks that every visible debit has its matching credit.
+  const coins = await restoreAndVerifyCancellationCoins(supabase, orderId, user.id, reason || 'Retailer cancelled order', user.id);
   await releaseOrderCoupon(supabase, orderId);
-
   revalidatePath(`/retailer/orders/${orderId}`);
   revalidatePath('/retailer/orders');
   revalidatePath('/retailer/account/ledger');
   revalidatePath('/retailer/coupons');
+  if ('error' in coins) return coins;
   return { success: true };
 }
 
@@ -94,7 +97,7 @@ export async function addReorderLinesToCartAction(
   if (lines.length === 0) return { error: 'Select at least one item to reorder.' };
   if (lines.length > 200) return { error: 'Too many order lines.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order } = await supabase
     .from('orders')
@@ -199,7 +202,7 @@ export async function requestReturnAction(
 
   if (!reason.trim()) return { error: 'Please describe the reason for the return.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Return window (Phase 4): the deadline is snapshotted on the delivery at
   // completion. If the order predates the deliveries module (no delivery

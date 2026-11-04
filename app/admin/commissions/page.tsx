@@ -38,7 +38,7 @@ function paiseToRupees(paise: number): string {
 
 export default async function AdminCommissionsPage() {
   await requirePagePermission('commissions.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: memberData, error: memberError }, { data: commissionData, error: commissionError }] = await Promise.all([
     supabase

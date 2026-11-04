@@ -51,7 +51,7 @@ export async function createSellerAction(formData: FormData): Promise<SellerActi
     return { ok: false, error: 'Configure NEXT_PUBLIC_SITE_URL before inviting a seller.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase.rpc('reserve_seller_invite' as never, {
     p_email: input.email,
     p_business_name: input.businessName,
@@ -81,7 +81,7 @@ export async function createSellerAction(formData: FormData): Promise<SellerActi
 async function sendSellerInvite(
   sellerId: string,
   siteUrl: string,
-  supabase: ReturnType<typeof createClient>
+  supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<SellerActionResult> {
   const { data: claim, error: claimError } = await supabase.rpc(
     'claim_seller_invite_attempt' as never, { p_seller_id: sellerId } as never
@@ -138,7 +138,7 @@ export async function retrySellerInviteAction(sellerId: string): Promise<SellerA
   if (!siteUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { ok: false, error: 'Auth invitation settings are not configured.' };
   }
-  return sendSellerInvite(sellerId, siteUrl, createClient());
+  return sendSellerInvite(sellerId, siteUrl, (await createClient()));
 }
 
 export async function inviteExistingSellerAction(sellerId: string): Promise<SellerActionResult> {
@@ -150,7 +150,7 @@ export async function inviteExistingSellerAction(sellerId: string): Promise<Sell
   if (!siteUrl || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { ok: false, error: 'Auth invitation settings are not configured.' };
   }
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase.rpc(
     'attach_existing_seller_invite' as never, { p_seller_id: sellerId } as never
   );
@@ -181,7 +181,7 @@ export async function reviewSellerAction(
     return { ok: false, error: 'Give a short reason for rejection (the seller may ask why).' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   if (decision === 'active') {
     const { data: member, error: memberError } = await supabase
       .from('seller_members' as never)
@@ -223,7 +223,7 @@ export async function suspendSellerAction(
   const reasonError = validateSellerReason(reason, 'suspension');
   if (reasonError) return { ok: false, error: reasonError };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('sellers' as never)
     .update({
@@ -250,7 +250,7 @@ export async function reinstateSellerAction(sellerId: string): Promise<SellerAct
   await requirePermission('sellers.review');
   if (!UUID_RE.test(sellerId)) return { ok: false, error: 'Invalid seller record.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('sellers' as never)
     .update({ status: 'active' } as never)
@@ -282,7 +282,7 @@ export async function addSellerMemberAction(
   }
   const role = memberRole === 'owner' ? 'owner' : 'member';
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('id, role')
@@ -322,7 +322,7 @@ export async function removeSellerMemberAction(
     return { ok: false, error: 'Invalid seller or membership.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('seller_members' as never)
     .delete()

@@ -19,7 +19,7 @@ interface AreaOption {
 }
 
 export default async function WarehousesPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: warehouseData }, { data: areaData }] = await Promise.all([
     supabase

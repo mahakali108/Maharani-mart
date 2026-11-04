@@ -28,6 +28,13 @@ function isProtectedPath(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
+/** Preserve refreshed and cleared auth cookies across every middleware redirect. */
+function redirectWithCookies(url: URL, response: NextResponse) {
+  const redirect = NextResponse.redirect(url);
+  for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+  return redirect;
+}
+
 /**
  * Check if a user's access period is still valid.
  * Super Admin is NEVER blocked by the access period system.
@@ -64,7 +71,7 @@ export async function middleware(request: NextRequest) {
   if (!user && isProtectedPath(pathname)) {
     const redirectUrl = new URL('/login', request.url);
     redirectUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(redirectUrl);
+    return redirectWithCookies(redirectUrl, response);
   }
 
   // Logged in -> look up role + (if retailer) approval status, then
@@ -80,7 +87,7 @@ export async function middleware(request: NextRequest) {
       await supabase.auth.signOut();
       const redirectUrl = new URL('/login', request.url);
       redirectUrl.searchParams.set('error', 'account_inactive');
-      return NextResponse.redirect(redirectUrl);
+      return redirectWithCookies(redirectUrl, response);
     }
 
     const role = profile.role;
@@ -90,7 +97,7 @@ export async function middleware(request: NextRequest) {
     if (role !== 'super_admin' && isProtectedPath(pathname) && pathname !== '/access-expired') {
       const accessValid = await isAccessValid(supabase, user.id, role);
       if (!accessValid) {
-        return NextResponse.redirect(new URL('/access-expired', request.url));
+        return redirectWithCookies(new URL('/access-expired', request.url), response);
       }
     }
 
@@ -102,13 +109,13 @@ export async function middleware(request: NextRequest) {
         .single<RetailerStatusRow>();
 
       if (retailer?.status === 'pending_approval' && isProtectedPath(pathname)) {
-        return NextResponse.redirect(new URL('/pending-approval', request.url));
+        return redirectWithCookies(new URL('/pending-approval', request.url), response);
       }
       if (retailer?.status === 'suspended') {
         await supabase.auth.signOut();
         const redirectUrl = new URL('/login', request.url);
         redirectUrl.searchParams.set('error', 'account_suspended');
-        return NextResponse.redirect(redirectUrl);
+        return redirectWithCookies(redirectUrl, response);
       }
     }
 
@@ -120,28 +127,28 @@ export async function middleware(request: NextRequest) {
         .select('seller_id')
         .eq('profile_id', user.id)
         .maybeSingle<{ seller_id: string }>();
-      if (!membership) return NextResponse.redirect(new URL('/unauthorized', request.url));
+      if (!membership) return redirectWithCookies(new URL('/unauthorized', request.url), response);
       const { data: seller } = await supabase
         .from('sellers' as never)
         .select('status')
         .eq('id', membership.seller_id)
         .maybeSingle<{ status: string }>();
-      if (!seller) return NextResponse.redirect(new URL('/unauthorized', request.url));
+      if (!seller) return redirectWithCookies(new URL('/unauthorized', request.url), response);
       if (seller.status !== 'active' && pathname !== '/seller/status') {
-        return NextResponse.redirect(new URL('/seller/status', request.url));
+        return redirectWithCookies(new URL('/seller/status', request.url), response);
       }
       if (seller.status === 'active' && pathname === '/seller/status') {
-        return NextResponse.redirect(new URL('/seller/dashboard', request.url));
+        return redirectWithCookies(new URL('/seller/dashboard', request.url), response);
       }
     }
 
     // Already logged in, don't let them sit on login/register screens.
     if (pathname === '/login' || pathname === '/register-retailer' || pathname === '/register-seller') {
-      return NextResponse.redirect(new URL(homeForRole(role), request.url));
+      return redirectWithCookies(new URL(homeForRole(role), request.url), response);
     }
 
     if (isProtectedPath(pathname) && pathname !== '/pending-approval' && !isRoleAllowedForPath(role, pathname)) {
-      return NextResponse.redirect(new URL('/unauthorized', request.url));
+      return redirectWithCookies(new URL('/unauthorized', request.url), response);
     }
   }
 

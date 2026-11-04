@@ -29,7 +29,7 @@ export async function GET(): Promise<Response> {
   const startedAt = Date.now();
 
   try {
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { error } = await supabase.from('areas').select('id', { count: 'exact', head: true });
 
     if (error) {

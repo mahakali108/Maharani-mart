@@ -9,7 +9,7 @@ import { targetAttainmentPercent } from '@/lib/admin/targets-shared';
 
 export default async function SalesmanTargetsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('staff_targets')

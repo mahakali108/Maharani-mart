@@ -564,7 +564,7 @@ describe('cart mutations stay owner-scoped', () => {
 
   it('exposes clear-cart through the existing owner-scoped service', () => {
     expect(actions).toContain('export async function clearCartAction(');
-    expect(actions).toContain('clearRetailerCart(createClient(), user.id)');
+    expect(actions).toContain('clearRetailerCart((await createClient()), user.id)');
     expect(service).toContain("from('cart_items').delete().eq('retailer_id', retailerId)");
   });
 

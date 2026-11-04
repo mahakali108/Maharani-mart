@@ -50,7 +50,7 @@ export async function createStockAdjustmentAction(
   }
   const d = parsed.data;
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   // ONE active warehouse: the server resolves it. A stale/forged id posted by a
   // form is validated against the resolved warehouse and never trusted.
   const warehouse = await requireWarehouseId(supabase, String(formData.get('warehouseId') ?? ''));
@@ -96,7 +96,7 @@ export async function updateProductThresholdsAction(
     return { error: 'Invalid product.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('products')
     .update({
@@ -145,7 +145,7 @@ export async function updateInventorySettingsAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('inventory_settings')
     .update({
@@ -189,7 +189,7 @@ export async function recordBatchLossAction(
   }
   const d = parsed.data;
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('record_batch_loss' as never, {
     p_batch_id: d.batchId,
     p_quantity: d.quantity,

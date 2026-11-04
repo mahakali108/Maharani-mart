@@ -84,7 +84,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const supabase = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const supabase = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     if (typeRaw === 'orders') {
       const iterator = iteratePurchaseStatement(
         supabase,

@@ -50,7 +50,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: true },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** One batch of the dispatch queue. */
 async function loadQueueBatch(
@@ -95,7 +95,7 @@ function renderOrderCards(orders: OrderRow[]) {
 
 export default async function StaffOrdersPage() {
   await requirePagePermission('orders.view.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const firstBatch = await loadQueueBatch(supabase, null);
   const orders = firstBatch.items;
 
@@ -104,7 +104,7 @@ export default async function StaffOrdersPage() {
     'use server';
     // The same permission gate as the page: a cursor cannot widen access.
     await requirePermission('orders.view.all');
-    const batch = await loadQueueBatch(createClient(), readCursor(cursor));
+    const batch = await loadQueueBatch((await createClient()), readCursor(cursor));
     return { rows: renderOrderCards(batch.items), nextCursor: batch.nextCursor };
   }
 

@@ -82,7 +82,7 @@ function isFulfilmentType(value: string): value is 'seller' | 'maharani' {
 }
 
 async function loadOfferTiersMap(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   offerIds: string[]
 ): Promise<Map<string, MarketplaceOfferTier[]>> {
   const map = new Map<string, MarketplaceOfferTier[]>();
@@ -128,7 +128,7 @@ async function loadOfferTiersMap(
  * boundary.
  */
 export async function loadMarketplaceOfferQuotes(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   offerIds: string[]
 ): Promise<{ offers: MarketplaceOfferQuote[]; error: RpcError | null }> {
   const ids = [...new Set(offerIds.filter(Boolean))];
@@ -174,7 +174,7 @@ export async function loadMarketplaceOfferQuotes(
 
 /** Live, approved offers for one catalogue product, for retailer PDP choice. */
 export async function loadMarketplaceOffersForProduct(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productId: string
 ): Promise<{ offers: MarketplaceProductOffer[]; error: RpcError | null }> {
   const caller = supabase as unknown as {

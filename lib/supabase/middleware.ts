@@ -24,6 +24,7 @@ interface PendingCookie {
  */
 export async function updateSession(request: NextRequest) {
   const pending: PendingCookie[] = [];
+  let response: NextResponse | undefined;
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,10 +38,12 @@ export async function updateSession(request: NextRequest) {
           // Visible to the rest of this middleware run (later queries read it).
           request.cookies.set({ name, value, ...options });
           pending.push({ name, value, options });
+          response?.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
           request.cookies.set({ name, value: '', ...options });
           pending.push({ name, value: '', options });
+          response?.cookies.set({ name, value: '', ...options });
         },
       },
     }
@@ -50,7 +53,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const response = NextResponse.next({ request: { headers: request.headers } });
+  response = NextResponse.next({ request: { headers: request.headers } });
   for (const cookie of pending) {
     response.cookies.set({ name: cookie.name, value: cookie.value, ...cookie.options });
   }

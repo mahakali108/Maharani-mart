@@ -39,7 +39,7 @@ interface GrnListRow extends GrnRow {
   warehouses: { name: string } | null;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of GRNs. Line counts are resolved for the rows in THIS batch only
@@ -89,11 +89,12 @@ function renderGrnRows(rows: GrnListRow[], itemCounts: Map<string, number>) {
 }
 
 export default async function GrnListPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string };
+  searchParams: Promise<{ status?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const status = searchParams.status ?? '';
 
   const firstBatch = await loadGrnBatch(supabase, status, null);
@@ -101,7 +102,7 @@ export default async function GrnListPage({
 
   async function loadMoreGrns(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadGrnBatch(createClient(), status, readCursor(cursor));
+    const batch = await loadGrnBatch((await createClient()), status, readCursor(cursor));
     return { rows: renderGrnRows(batch.items, new Map(batch.itemCounts)), nextCursor: batch.nextCursor };
   }
 

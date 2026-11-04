@@ -20,7 +20,7 @@ export interface AILogEvent {
 
 /** Metadata only: no prompts, tool arguments/results, documents or credentials. */
 export async function logAIEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   event: AILogEvent
 ): Promise<void> {
   try {

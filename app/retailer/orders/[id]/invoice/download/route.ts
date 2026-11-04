@@ -33,13 +33,14 @@ interface RetailerRow {
  * come from the stored order/invoice rows; the tax split follows the same
  * GSTIN state-code rule as the on-screen invoice.
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
   if (user.role !== 'retailer') {
     return NextResponse.json({ error: 'Only retailers can download invoices.' }, { status: 403 });
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: order }, { data: retailer }, { data: itemData }] = await Promise.all([
     supabase

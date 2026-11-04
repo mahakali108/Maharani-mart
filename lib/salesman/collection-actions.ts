@@ -82,7 +82,7 @@ export async function recordCollectionAction(input: CollectionInput): Promise<Co
     return { error: 'Proof files must belong to this retailer — re-attach and try again.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Scope: a salesman may only collect for retailers assigned to them.
   // (RLS enforces this too — payment_collections_salesman_insert — this

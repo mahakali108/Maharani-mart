@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   const to = url.searchParams.get('to')?.trim() ?? '';
 
   await requirePermission('orders.view.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   let query = supabase
     .from('order_deliveries')

@@ -13,13 +13,14 @@ import { DeliveryAssignmentPanel } from '@/components/admin/delivery-assignment-
 import { Card } from '@/components/ui/card';
 import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 
-export default async function AdminDeliveredDetailPage({ params }: { params: { orderId: string } }) {
+export default async function AdminDeliveredDetailPage({ params: paramsPromise }: { params: Promise<{ orderId: string }> }) {
+  const params = await paramsPromise;
   const user = await requirePagePermission('orders.view.all');
   const detail = await fetchDeliveryDetail(params.orderId);
   if (!detail) notFound();
 
   const { delivery, order, items } = detail;
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Assignment options for the control panel.
   const { data: staffProfiles } = await supabase

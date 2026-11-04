@@ -19,10 +19,11 @@ interface BannerDetail {
   ends_at: string | null;
 }
 
-export default async function EditBannerPage({ params }: { params: { id: string } }) {
+export default async function EditBannerPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requirePagePermission('banners.manage');
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [{ data: banner, error: bannerError }, { data: areas }] = await Promise.all([
     supabase
       .from('banners')

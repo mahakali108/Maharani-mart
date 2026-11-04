@@ -33,7 +33,7 @@ import type {
   SectionStatus,
 } from './types';
 
-type Supabase = ReturnType<typeof createClient>;
+type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 const MAX_ORDERS = 5_000;
 const MAX_ITEMS = 20_000;

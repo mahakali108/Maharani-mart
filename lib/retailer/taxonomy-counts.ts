@@ -45,7 +45,7 @@ import type { createClient } from '@/lib/supabase/server';
  *     `activeOnly: false`.
  */
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** How many product rows one count-scan page reads. */
 export const TAXONOMY_COUNT_PAGE_SIZE = 500;

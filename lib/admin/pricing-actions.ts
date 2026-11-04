@@ -51,7 +51,7 @@ export async function createPriceListAction(
     return { error: 'Select a retailer for a retailer-scoped price.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: PriceListInsert = {
     product_id: d.productId,
     scope: d.scope,
@@ -86,7 +86,7 @@ export async function createPriceListAction(
 
 export async function deactivatePriceListAction(priceListId: string) {
   const user = await requirePermission('pricing.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Fetch the current price before deactivating, so we can record the
   // change in the audit log.
@@ -137,7 +137,7 @@ if (typeof productId !== 'string' || typeof retailerId !== 'string') {
   return { price: null, error: 'Select both a product and a retailer.' };
 }
 
-const supabase = createClient();
+const supabase = (await createClient());
 
 const { data, error } = await supabase.rpc('get_effective_price' as never, {
   p_product_id: productId,

@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 export async function getAuthoritativeActiveMembership(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<{ membership: ActiveMembershipInfo | null; error: string | null }> {
   try {
@@ -91,7 +91,7 @@ export async function getAuthoritativeActiveMembership(
 }
 
 export async function listAvailableMembershipPlans(
-  supabase: ReturnType<typeof createClient>
+  supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<{ plans: MembershipPlan[]; error: string | null }> {
   const { data, error } = await supabase
     .from('membership_plans' as never)
@@ -107,7 +107,7 @@ export async function listAvailableMembershipPlans(
 }
 
 export async function getRetailerMembershipHistory(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<{ history: RetailerMembership[]; error: string | null }> {
   const { data, error } = await supabase
@@ -124,7 +124,7 @@ export async function getRetailerMembershipHistory(
 }
 
 export async function getRetailerLoyaltyPosition(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<{ balance: number; error: string | null }> {
   const rawClient = supabase as unknown as {
@@ -143,7 +143,7 @@ export async function getRetailerLoyaltyPosition(
 }
 
 export async function getRetailerLoyaltyLedger(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   limit = 50
 ): Promise<{ entries: LoyaltyLedgerEntry[]; error: string | null }> {

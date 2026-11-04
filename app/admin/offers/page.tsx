@@ -33,10 +33,11 @@ const inr = (paise: number) =>
  * configuration (0063) — never derived from cost_price, never shown to sellers.
  */
 export default async function AdminOffersPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('sellers.offers.manage');
   const query = parseOfferListParams(searchParams);
   const sellerId = typeof searchParams.seller === 'string' ? searchParams.seller : null;
@@ -44,7 +45,7 @@ export default async function AdminOffersPage({
   const pages = Math.max(1, Math.ceil(total / OFFERS_PER_PAGE));
   const currentPage = Math.min(query.page, pages);
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: joined } = await supabase
     .from('seller_offers' as never)
     .select('id, pack_id, seller_id');

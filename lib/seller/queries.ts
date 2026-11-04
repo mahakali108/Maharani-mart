@@ -73,7 +73,7 @@ export interface CataloguePackOption {
 }
 
 export async function listSellerOffers(sellerId: string): Promise<SellerPortalOfferRow[]> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: rawOffers } = await supabase
     .from('seller_offers' as never)
     .select(
@@ -142,7 +142,7 @@ export async function listSellerOffers(sellerId: string): Promise<SellerPortalOf
 }
 
 export async function listCataloguePacksForSeller(): Promise<CataloguePackOption[]> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('product_packs')
     .select('id, product_id, pack_name, pack_sku_code, moq, is_active, products!inner ( name, is_active )')
@@ -168,7 +168,7 @@ export async function listCataloguePacksForSeller(): Promise<CataloguePackOption
 
 export async function listSellerOrders(sellerId: string, isSellerActive: boolean): Promise<SellerOrderHeaderRow[]> {
   if (!isSellerActive) return [];
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: headerData, error } = await supabase.rpc('seller_order_headers' as never);
   const rawHeaders = (headerData ?? []) as unknown[];
   if (error || !Array.isArray(rawHeaders) || rawHeaders.length === 0) {

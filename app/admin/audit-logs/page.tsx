@@ -78,7 +78,7 @@ interface AuditFilters {
   q: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of audit rows, with the editor names for THAT batch resolved in a
@@ -154,11 +154,12 @@ function renderAuditRows(rows: AuditLogRow[]) {
  * "Next" button.
  */
 export default async function AuditLogsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { table?: string; action?: string; q?: string };
+  searchParams: Promise<{ table?: string; action?: string; q?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
 
   const filters: AuditFilters = {
     table: searchParams.table ?? '',
@@ -172,7 +173,7 @@ export default async function AuditLogsPage({
 
   async function loadMoreAudit(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadAuditBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadAuditBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderAuditRows(batch.items), nextCursor: batch.nextCursor };
   }
 

@@ -32,9 +32,10 @@ interface CouponRow {
   created_at: string;
 }
 
-export default async function AdminCouponEditPage({ params }: { params: { id: string } }) {
+export default async function AdminCouponEditPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requirePagePermission('pricing.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: coupon, error: couponError }, { data: retailerData }, { data: categoryData }, { data: brandData }, { data: productData }] =
     await Promise.all([

@@ -46,7 +46,7 @@ export async function saveCurrentCartAction(rawName: string): Promise<SavedCartA
   if (name.length < 1) return { error: 'Give the saved cart a name.' };
   if (isSaveForLaterCartName(name)) return { error: 'That name is reserved for items saved for later.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { count } = await supabase
     .from('retailer_saved_carts')
@@ -155,7 +155,7 @@ export async function saveCartItemForLaterAction(cartItemId: string): Promise<Sa
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can save items for later.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: item } = await supabase
     .from('cart_items')
@@ -242,7 +242,7 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can restore saved carts.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: savedCart } = await supabase
     .from('retailer_saved_carts')
@@ -327,7 +327,7 @@ export async function restoreSavedCartItemAction(itemId: string): Promise<SavedC
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can restore saved items.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: item } = await supabase
     .from('retailer_saved_cart_items')
     .select('pack_id, seller_offer_id, source_type, quantity')
@@ -373,7 +373,7 @@ export async function restoreSavedCartItemAction(itemId: string): Promise<SavedC
 export async function removeSavedCartItemAction(itemId: string): Promise<SavedCartActionResult> {
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can edit saved carts.' };
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('retailer_saved_cart_items')
     .delete()
@@ -391,7 +391,7 @@ export async function renameSavedCartAction(savedCartId: string, rawName: string
   const name = sanitizeName(rawName);
   if (name.length < 1) return { error: 'Enter a name for the saved cart.' };
   if (isSaveForLaterCartName(name)) return { error: 'That name is reserved for items saved for later.' };
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: existing, error: lookupError } = await supabase
     .from('retailer_saved_carts')
     .select('id, name')
@@ -418,7 +418,7 @@ export async function renameSavedCartAction(savedCartId: string, rawName: string
 export async function deleteSavedCartAction(savedCartId: string): Promise<SavedCartActionResult> {
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can delete saved carts.' };
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: existing, error: lookupError } = await supabase
     .from('retailer_saved_carts')
     .select('id, name')

@@ -24,11 +24,12 @@ interface CreditAccountRow {
 }
 
 export default async function AdminWalletsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string };
+  searchParams: Promise<{ q?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const q = (searchParams.q ?? '').trim();
 
   let query = supabase

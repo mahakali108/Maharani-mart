@@ -39,7 +39,7 @@ export async function createSalesmanOrderAction(input: SalesmanOrderInput): Prom
   const parsed = createSalesmanOrderSchema.safeParse(input);
   if (!parsed.success) return { error: 'Check the retailer, request key and product quantities, then try again.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: assignedRetailer } = await supabase
     .from('retailers')
     .select('id')

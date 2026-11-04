@@ -32,7 +32,7 @@ const TIER_CHUNK = 80;
  * pre-existing slab/case rules are untouched.
  */
 export async function loadPackTiers(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   packIds: string[],
   retailerId?: string | null
 ): Promise<Map<string, PricingTier[]>> {

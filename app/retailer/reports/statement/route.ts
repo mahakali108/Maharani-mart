@@ -64,7 +64,7 @@ export async function GET(request: Request) {
   let csvStream: ReadableStream<Uint8Array>;
 
   try {
-    const supabase = createClient();
+    const supabase = (await createClient());
     if (type === 'orders') {
       const iterator = iteratePurchaseStatement(
         supabase,

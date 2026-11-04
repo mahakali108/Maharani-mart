@@ -8,7 +8,7 @@ import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
 export const metadata: Metadata = { title: 'Register your shop — Maharani Traders' };
 
 export default async function RegisterRetailerPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   // Areas are entered by the admin via the Admin Panel (Phase 2). This
   // reads whatever real areas currently exist — empty until configured.
   const { data: areas, error: areasError } = await supabase

@@ -38,7 +38,7 @@ function defaultPackSkuCode(productId: string) {
  * unorderable, which is worse than rejecting the row.
  */
 export async function seedDefaultPackForProduct(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productId: string,
   user: { id: string },
   d: {

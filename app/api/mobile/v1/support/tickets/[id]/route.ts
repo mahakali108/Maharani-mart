@@ -37,20 +37,20 @@ type MessageRow = {
 };
 
 /** GET one caller-owned ticket and its append-only conversation. */
-export async function GET(request: Request, context: { params: { id: string } }): Promise<Response> {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.view.own');
   if ('response' in auth) return auth.response;
   const limited = enforceRateLimit('read.orders', request, { requestId, keySuffix: auth.session.userId });
   if (limited) return limited;
-  if (!uuidSchema.safeParse(context.params.id).success) {
+  if (!uuidSchema.safeParse((await context.params).id).success) {
     return jsonError('invalid_request', 'Ticket id is invalid.', { status: 400, requestId });
   }
 
   try {
     const { data: ticket, error } = await auth.session.supabase.from('support_tickets')
       .select('id, ticket_number, subject, topic, priority, status, order_id, created_at, updated_at, orders ( order_number, status )')
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<TicketRow>();
     if (error) throw error;
@@ -94,13 +94,13 @@ export async function GET(request: Request, context: { params: { id: string } })
 }
 
 /** Append a message only while the caller's own ticket remains actionable. */
-export async function POST(request: Request, context: { params: { id: string } }): Promise<Response> {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.create');
   if ('response' in auth) return auth.response;
   const limited = enforceRateLimit('write.orders', request, { requestId, keySuffix: auth.session.userId });
   if (limited) return limited;
-  if (!uuidSchema.safeParse(context.params.id).success) {
+  if (!uuidSchema.safeParse((await context.params).id).success) {
     return jsonError('invalid_request', 'Ticket id is invalid.', { status: 400, requestId });
   }
   const body = await parseJsonBody(request, messageSchema, requestId);
@@ -109,7 +109,7 @@ export async function POST(request: Request, context: { params: { id: string } }
   try {
     const { data: ticket, error: ticketError } = await auth.session.supabase.from('support_tickets')
       .select('id, status')
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<{ id: string; status: SupportStatus }>();
     if (ticketError) throw ticketError;

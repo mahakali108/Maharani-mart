@@ -49,7 +49,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.ok) return parsed.response;
 
   try {
-    const client = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const client = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const result = await addCartLines(client, auth.session.userId, [
       { packId: parsed.data.packId, quantity: parsed.data.quantity },
     ]);

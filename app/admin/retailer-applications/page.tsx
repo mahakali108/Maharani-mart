@@ -61,7 +61,7 @@ function hoursSince(iso: string): number {
 
 export default async function RetailerApplicationsPage() {
   const user = await requirePagePermission('retailers.view');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [applicationsResult, settingsResult, eventsResult] = await Promise.all([
     supabase

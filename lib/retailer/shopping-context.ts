@@ -16,7 +16,7 @@ export interface ShoppingProfile {
  * a cross-retailer cache. Cart mutations still refresh the server layout. */
 export const getRetailerShoppingContext = cache(async () => {
   const user = await requireUser();
-  const { data, error } = await createClient()
+  const { data, error } = await (await createClient())
     .from('retailers')
     .select('area_id, shop_name, address, status, areas ( name, district )')
     .eq('id', user.id)

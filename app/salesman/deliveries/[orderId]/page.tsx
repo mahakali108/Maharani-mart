@@ -8,7 +8,8 @@ import { DeliveryExecutionForm } from '@/components/delivery/delivery-execution-
 import { Card } from '@/components/ui/card';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
-export default async function SalesmanDeliveryDetailPage({ params }: { params: { orderId: string } }) {
+export default async function SalesmanDeliveryDetailPage({ params: paramsPromise }: { params: Promise<{ orderId: string }> }) {
+  const params = await paramsPromise;
   const user = await requirePagePermission('deliveries.view.assigned');
   const detail = await fetchDeliveryDetail(params.orderId);
   if (!detail) notFound();

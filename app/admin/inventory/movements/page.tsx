@@ -86,7 +86,7 @@ interface MovementFilters {
   to: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of stock movements.
@@ -160,11 +160,12 @@ function renderMovementRows(rows: MovementRow[]) {
 }
 
 export default async function InventoryMovementsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { warehouse?: string; type?: string; q?: string; from?: string; to?: string };
+  searchParams: Promise<{ warehouse?: string; type?: string; q?: string; from?: string; to?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
 
   const filters: MovementFilters = {
     warehouse: searchParams.warehouse ?? '',
@@ -183,7 +184,7 @@ export default async function InventoryMovementsPage({
   /** Server Action for batches 2..n. Filters ride along encrypted. */
   async function loadMoreMovements(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadMovementBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadMovementBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderMovementRows(batch.items), nextCursor: batch.nextCursor };
   }
 

@@ -6,9 +6,10 @@ import { requireUser } from '@/lib/auth/session';
 import { StoredImage } from '@/components/media/stored-image';
 import { loadCategoryDetail } from '@/lib/retailer/category-detail';
 
-export default async function RetailerCategoryDetailPage({ params }: { params: { id: string } }) {
+export default async function RetailerCategoryDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const data = await loadCategoryDetail(supabase, params.id);
   // `errors.category` means the taxonomy read itself failed. 404ing here told
   // the customer the category had been removed; surface the failure instead.

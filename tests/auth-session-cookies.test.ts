@@ -27,6 +27,7 @@ vi.mock('@supabase/ssr', () => ({
     },
   ) => ({
     auth: {
+      signOut: async () => { opts.cookies.remove('sb-test-auth-token.0', { path: '/', maxAge: 0 }); },
       getUser: async () => {
         // Simulate a token refresh that rewrites a chunked session cookie.
         for (const [name, value] of [
@@ -87,6 +88,14 @@ describe('updateSession (middleware Supabase cookie handling)', () => {
       .find((c) => c.name === 'sb-test-stale-cookie');
     expect(removed).toBeDefined();
     expect(removed?.value).toBe('');
+  });
+
+  it('forwards cookie removals from sign-out after the refresh response is created', async () => {
+    const { response, supabase } = await updateSession(makeRequest());
+    await supabase.auth.signOut();
+    const removed = response.cookies.get('sb-test-auth-token.0');
+    expect(removed?.value).toBe('');
+    expect(removed?.maxAge).toBe(0);
   });
 
   it('exposes the refreshed user to the caller', async () => {

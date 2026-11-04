@@ -25,6 +25,7 @@ export function RetailerOrderActions({ orderId, status }: { orderId: string; sta
       if ('error' in result && result.error) setError(result.error);
       else {
         setShowCancelForm(false);
+        if (status === 'cancelled') setNotice('Coins restoration verified for this order.');
         router.refresh();
       }
     });
@@ -54,6 +55,7 @@ export function RetailerOrderActions({ orderId, status }: { orderId: string; sta
 
         {canCancel ? <button type="button" disabled={isPending} onClick={() => setShowCancelForm((open) => !open)} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 disabled:opacity-50"><XCircle className="h-4 w-4" /> Cancel order</button> : null}
         {canReturn ? <button type="button" disabled={isPending} onClick={() => setShowReturnForm((open) => !open)} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 transition hover:border-primary-200 hover:text-primary-600 disabled:opacity-50"><Undo2 className="h-4 w-4" /> Request return</button> : null}
+        {status === 'cancelled' ? <button type="button" disabled={isPending} onClick={handleCancel} className="flex min-h-10 w-full items-center justify-center rounded-xl border border-slate-200 text-xs font-bold text-slate-700 disabled:opacity-50">Check Coins restoration</button> : null}
 
         {showCancelForm ? (
           <div className="space-y-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">

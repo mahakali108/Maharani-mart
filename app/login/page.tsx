@@ -6,11 +6,12 @@ import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
 
 export const metadata: Metadata = { title: 'Sign in — Maharani Traders' };
 
-export default function LoginPage({
-  searchParams,
+export default async function LoginPage({
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { redirect?: string; error?: string };
+  searchParams: Promise<{ redirect?: string; error?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const errorMessages: Record<string, string> = {
     account_inactive: 'Your account has been deactivated. Contact your distributor.',
     account_suspended: 'Your retailer account is suspended. Contact your distributor.',

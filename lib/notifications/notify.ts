@@ -60,7 +60,7 @@ const PREFERENCE_COLUMNS: Partial<Record<NotificationCategory, PreferenceColumn>
  */
 
 export async function createInAppNotification(input: NotifyInput) {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const preferenceColumn = input.category ? PREFERENCE_COLUMNS[input.category] : undefined;
 
@@ -99,7 +99,7 @@ export async function queueChannelNotification(
   channel: Exclude<NotificationChannel, 'in_app'>,
   input: NotifyInput
 ) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: NotificationLogInsert = {
     recipient_id: input.recipientId,
     channel,

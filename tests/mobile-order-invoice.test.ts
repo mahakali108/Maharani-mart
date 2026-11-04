@@ -144,7 +144,7 @@ afterEach(() => {
 describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
   it('folds the stored order rows with the shared invoice helpers and returns integer paise', async () => {
     const response = await getOrderInvoice(apiRequest(`/api/mobile/v1/orders/${ORDER}/invoice`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     const payload = await response.json() as {
       data: {
@@ -209,7 +209,7 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
     const client = install({ orders: [{ ...ORDER_ROW, retailer_id: OTHER_RETAILER }] });
 
     const response = await getOrderInvoice(apiRequest(`/api/mobile/v1/orders/${ORDER}/invoice`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     expect(response.status).toBe(404);
     // Ownership is a query filter, not a post-hoc comparison.
@@ -226,7 +226,7 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
   it('rejects a malformed id before touching the database', async () => {
     const client = install();
     const response = await getOrderInvoice(apiRequest('/api/mobile/v1/orders/not-a-uuid/invoice'), {
-      params: { id: 'not-a-uuid' },
+      params: Promise.resolve({ id: 'not-a-uuid' }),
     });
     expect(response.status).toBe(404);
     // Session resolution is free to read the caller's own rows; the order and
@@ -245,7 +245,7 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
     mocks.client = client;
 
     const response = await getOrderInvoice(apiRequest(`/api/mobile/v1/orders/${ORDER}/invoice`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     expect(response.status).toBe(403);
   });
@@ -253,7 +253,7 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
   it('refuses a request with no bearer token', async () => {
     const response = await getOrderInvoice(
       new Request(`https://api.test/api/mobile/v1/orders/${ORDER}/invoice`, { method: 'GET' }),
-      { params: { id: ORDER } }
+      { params: Promise.resolve({ id: ORDER }) }
     );
     expect(response.status).toBe(401);
   });
@@ -262,7 +262,7 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
 describe('GET /api/mobile/v1/orders/{id} — detail extras', () => {
   it('returns the order status history in ascending order', async () => {
     const response = await getOrderDetail(apiRequest(`/api/mobile/v1/orders/${ORDER}`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     const payload = await response.json() as {
       data: { id: string; statusHistory: { status: string; note: string | null; createdAt: string }[] };
@@ -279,7 +279,7 @@ describe('GET /api/mobile/v1/orders/{id} — detail extras', () => {
 
   it("reports this order's own Coins movement from the ledger", async () => {
     const response = await getOrderDetail(apiRequest(`/api/mobile/v1/orders/${ORDER}`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     const payload = await response.json() as {
       data: { coinsSpentPaise: number; coinsRefundedPaise: number; coinsRefunded: boolean; balanceAfterCoinsPaise: number };
@@ -301,7 +301,7 @@ describe('GET /api/mobile/v1/orders/{id} — detail extras', () => {
     });
 
     const response = await getOrderDetail(apiRequest(`/api/mobile/v1/orders/${ORDER}`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     const payload = await response.json() as {
       data: { coinsSpentPaise: number; coinsRefundedPaise: number; coinsRefunded: boolean };
@@ -318,7 +318,7 @@ describe('GET /api/mobile/v1/orders/{id} — detail extras', () => {
     install({}, { retailer_wallet_ledger: 'ledger unavailable' });
 
     const response = await getOrderDetail(apiRequest(`/api/mobile/v1/orders/${ORDER}`), {
-      params: { id: ORDER },
+      params: Promise.resolve({ id: ORDER }),
     });
     const payload = await response.json() as { data: Record<string, unknown> };
 

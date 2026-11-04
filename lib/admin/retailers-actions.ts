@@ -24,7 +24,7 @@ async function callRetailerRpc(
   fn: 'admin_review_retailer_application' | 'admin_set_retailer_access',
   params: Record<string, unknown>
 ): Promise<void> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc(fn as never, params as never);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/retailers');
@@ -100,7 +100,7 @@ export async function assignSalesmanToRetailerAction(
     return { error: 'Select a valid salesman.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   if (salesmanId) {
     const { data: salesman } = await supabase
       .from('profiles')
@@ -135,7 +135,7 @@ export async function reassignRetailerAreaAction(
     .safeParse({ areaId: formData.get('areaId'), retailerId });
   if (!parsed.success) return { error: 'Select a valid area and retailer.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: area, error: areaError } = await supabase.from('areas')
     .select('id').eq('id', parsed.data.areaId).eq('is_active', true).maybeSingle<{ id: string }>();
   if (areaError) return { error: 'Service areas could not be verified. Please retry.' };
@@ -162,7 +162,7 @@ export async function addRetailerDocumentAction(
   fileName: string
 ) {
   const user = await requirePermission('retailers.approve');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const payload: RetailerDocumentInsert = {
     retailer_id: retailerId,
@@ -180,7 +180,7 @@ export async function addRetailerDocumentAction(
 
 export async function deleteRetailerDocumentAction(documentId: string, retailerId: string) {
   await requirePermission('retailers.approve');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('retailer_documents')

@@ -42,7 +42,7 @@ export async function setStaffTargetAction(input: {
   const period = validateTargetPeriod(input.periodType, input.periodStart, input.periodEnd);
   if (!period.ok) return { error: period.error };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // A target can only be set for a real staff/salesman profile — never for
   // a retailer or an arbitrary user id.
@@ -82,7 +82,7 @@ export async function deactivateStaffTargetAction(targetId: string): Promise<Tar
   await requirePermission('targets.manage');
   if (!targetId) return { error: 'Target not found.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('staff_targets')
     .update({ is_active: false, updated_at: new Date().toISOString() } as unknown as never)

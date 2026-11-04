@@ -461,6 +461,20 @@ describe('refund path (0053 database function)', () => {
     expect(db.balancePaise).toBe(50_000);
   });
 
+  it('does not use the multi-request fallback when cancellation requires the refund RPC', async () => {
+    const db = newDb(50_000);
+    const modules = await loadModules(db);
+    await modules.coins.debitCoinsForOrder(modules.client as never, {
+      retailerId: 'retailer-1', orderId: 'order-no-rpc', orderTotalPaise: 10_000,
+      createdBy: null, description: 'Order #no-rpc',
+    });
+    db.missingRefundRpc = true;
+    const result = await modules.reversal.reverseOrderWalletDebit('order-no-rpc', 'retailer-1', 'cancelled', 'admin-1', modules.client as never, { requireRefundRpc: true });
+    expect(result).toHaveProperty('error');
+    expect(db.ledger.filter((row) => row.transaction_type === 'ORDER_REVERSAL')).toHaveLength(0);
+    expect(db.ledger[0]?.is_reversed).toBe(false);
+  });
+
   it('surfaces a real database error instead of falling back silently', async () => {
     const db = newDb(50_000);
     const modules = await loadModules(db);

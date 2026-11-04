@@ -1,22 +1,28 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { PublicInfoShell, InfoCard } from '@/components/legal/public-info-shell';
+import { BusinessContact } from '@/components/legal/business-contact';
 
-export const metadata: Metadata = { title: 'Privacy information — Maharani Traders' };
+export const metadata: Metadata = { title: 'Privacy Policy — Maharani Traders' };
 
 export default function PrivacyPage() {
   return (
-    <PublicInfoShell eyebrow="Personal data · draft" title="Privacy information" intro="A practical summary of data used by this website. The operator must verify its legal identity, contact, retention schedule, processor arrangements and current obligations before publishing a final privacy notice.">
-      <InfoCard title="Data used by the service">
-        <p>Account creation and sign-in use email or phone, profile and role information. Retailer and seller workflows use shop/business and contact details, saved delivery addresses, purchase and payment/Coins records, support conversations, and seller offer and fulfilment information. Authentication is handled through Supabase Auth; the website is built on Next.js and hosted through Vercel when deployed.</p>
-        <p>Vercel Analytics is included in the site layout. The browser can store a dismissible installation-prompt preference. The service worker caches only public static assets and a generic offline page, not signed-in pages, orders, addresses, API replies or Supabase sessions.</p>
+    <PublicInfoShell eyebrow="Legal policies" title="Privacy Policy" intro="Effective date: 04 November 2026. This policy describes website privacy practices and contacts; all uses, including any marketplace processing, require verification before publication.">
+      <InfoCard title="Information we may collect">
+        <p>Depending on your use, we may collect your name, mobile number, email, billing and delivery addresses, order and purchase history, COD collection and payment status, support messages and complaints, account, login and device-related information, and information needed for tax, accounting, security, fraud prevention or legal compliance.</p>
+        <p>Do not send passwords, OTPs or unnecessary sensitive personal information through customer support.</p>
       </InfoCard>
-      <InfoCard title="Why this information is used">
-        <p>We use it to authenticate accounts, control roles and seller access, review retailer and seller onboarding, price and place orders, process fulfilment and Coins entries, respond to support requests, and protect the service from misuse. Sellers receive only data needed for their own sub-orders, including the delivery address where they fulfil an order; other seller tenants are not exposed by the intended database policies.</p>
+      <InfoCard title="How information is used and shared">
+        <p>Information may be used to manage accounts, confirm and deliver orders, communicate about orders and returns, maintain invoices and tax records, handle support and refunds, detect fraud and misuse, improve the website and comply with applicable law. Unrelated uses require an appropriate lawful basis.</p>
+        <p>Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. The application also supports third-party seller fulfilment: if used, the relevant seller may receive order and delivery information, including the recipient address and phone where provided. Marketplace data flows and disclosures require verification before any third-party operation. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication.</p>
       </InfoCard>
-      <InfoCard title="Choices and requests">
-        <p>Signed-in retailers can review their addresses, order history and support tickets and request help through the <Link href="/retailer/help" className="font-semibold text-primary-700 underline">Help centre</Link>. To request access, correction or erasure of personal data, use support and identify the relevant account. Requests are assessed against identity, order/tax recordkeeping and applicable law; no unverified completion timeline or universal deletion promise is given here.</p>
-        <p>The Digital Personal Data Protection Act and notified 2025 rules have phased commencement. A qualified Indian privacy reviewer should confirm the effective obligations, notice, consent/legitimate use, grievance and cross-border processing details for this deployment. See <Link href="/contact" className="font-semibold text-primary-700 underline">contact options</Link>.</p>
+      <InfoCard title="Cookies and security">
+        <p>The site may use cookies or similar technologies for login, cart functionality, security, preferences and performance. Any legally required consent mechanism must be implemented and verified before publication. Browser settings can control cookies, but disabling essential cookies may affect functionality.</p>
+        <p>Reasonable technical and organisational measures are intended to protect information, but no internet service can guarantee absolute security. Use strong passwords and do not share OTPs or login credentials.</p>
+      </InfoCard>
+      <InfoCard title="Retention, requests and updates">
+        <p>Information may be retained for fulfilment, accounting, tax, complaint handling, disputes and legal compliance. Retention periods and deletion procedures require verification; some transaction or tax records may need statutory retention.</p>
+        <p>For questions, corrections or other privacy requests, contact AJAY KUMAR, Proprietor, using the details below. Requests will be reviewed under applicable law. This policy may be updated when practices or requirements change; the latest version will carry its effective date.</p>
+        <BusinessContact />
       </InfoCard>
     </PublicInfoShell>
   );

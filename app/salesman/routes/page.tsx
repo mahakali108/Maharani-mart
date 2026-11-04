@@ -27,7 +27,7 @@ interface TodayVisitRow {
 
 export default async function SalesmanRoutesPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: routes } = await supabase
     .from('routes')

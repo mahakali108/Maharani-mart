@@ -25,7 +25,7 @@ async function recordSuperAdminAudit(
   afterData: Record<string, unknown> | null = null,
   reason: string | null = null
 ) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('super_admin_audit_logs').insert({
     actor_id: actorId,
     target_id: targetId,
@@ -51,7 +51,7 @@ export async function updateBusinessProfileAction(
       return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid business profile payload.' };
     }
 
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { data: before } = await supabase
       .from('platform_settings' as never)
       .select('value')
@@ -113,7 +113,7 @@ export async function updateContactGrievanceAction(
       return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid contact/grievance payload.' };
     }
 
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { data: before } = await supabase
       .from('platform_settings' as never)
       .select('value')
@@ -183,7 +183,7 @@ export async function updateMarketplaceComplianceAction(
       };
     }
 
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { data: before } = await supabase
       .from('platform_settings' as never)
       .select('value')
@@ -252,7 +252,7 @@ export async function updateOrderingLaunchReadinessAction(
       return { success: false, error: 'The owner-recorded approval validity policy must expire at a future UTC time.' };
     }
 
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { error } = await supabase.rpc('record_ordering_launch_readiness' as never, {
       p_approvals: parsed.data as never,
       p_reason: reason?.trim() || null,

@@ -42,7 +42,7 @@ export async function createSchemeAction(input: z.input<typeof schemeSchema>): P
   const endsAt = parseStartsAt(parsed.data.endsAt);
   if (!startsAt || !endsAt) return { error: 'Choose valid start and end date/times.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: SchemeInsert = {
     name: parsed.data.name,
     description: parsed.data.description || null,
@@ -75,7 +75,7 @@ export async function updateSchemeAction(
   const endsAt = parseStartsAt(parsed.data.endsAt);
   if (!startsAt || !endsAt) return { error: 'Choose valid start and end date/times.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('schemes')
     .update({
@@ -99,7 +99,7 @@ export async function toggleSchemeAction(schemeId: string, isActive: boolean): P
   await requirePermission('pricing.manage');
   if (!schemeId) return { error: 'Scheme not found.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('schemes')
     .update({ is_active: isActive } as unknown as never)

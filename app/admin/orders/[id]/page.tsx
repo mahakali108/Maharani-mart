@@ -46,9 +46,10 @@ interface HistoryRow {
   created_at: string;
 }
 
-export default async function AdminOrderDetailPage({ params }: { params: { id: string } }) {
+export default async function AdminOrderDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: order, error: orderError }, { data: itemData }, { data: historyData }, { data: deliveryData }, { data: staffData }] = await Promise.all([
     supabase
