@@ -11,6 +11,7 @@ import { WalletLimitForm } from '@/components/admin/wallet-limit-form';
 import { WalletTermsForm } from '@/components/admin/wallet-terms-form';
 import { rupeesToPaise, paiseToRupees, formatPaise } from '@/lib/retailer/wallet';
 import { computeAvailablePaise, computeOutstandingPaise, computeOverduePaise } from '@/lib/retailer/wallet-math';
+import { readAdminWalletOutstanding, type WalletBalanceRpcClient } from '@/lib/admin/wallet-balance';
 import { computeCreditDueDate } from '@/lib/retailer/credit-terms';
 import { formatIndiaDate, formatIndiaDateTime } from '@/lib/datetime/india';
 
@@ -65,7 +66,7 @@ export default async function AdminWalletDetailPage({ params: paramsPromise }: {
   const params = await paramsPromise;
   const supabase = (await createClient());
 
-  const [{ data: retailer, error: retailerError }, { data: creditAccount }, { data: ledgerData }, { data: orderData }, { data: profile }] =
+  const [{ data: retailer, error: retailerError }, { data: creditAccount, error: creditAccountError }, { data: ledgerData, error: ledgerError }, { data: orderData }, { data: profile }] =
     await Promise.all([
       supabase
         .from('retailers')
@@ -99,6 +100,9 @@ export default async function AdminWalletDetailPage({ params: paramsPromise }: {
   // Wallet/credit reads are money: a failure must never render as "not found".
   throwIfReadFailed(retailerError, 'Retailer wallet');
   if (!retailer) notFound();
+  throwIfReadFailed(creditAccountError, 'Retailer credit account');
+  throwIfReadFailed(ledgerError, 'Retailer wallet ledger');
+  const outstandingPaise = await readAdminWalletOutstanding(supabase as unknown as WalletBalanceRpcClient, retailer.id);
 
   const ledger = ledgerData ?? [];
   const orders = orderData ?? [];
@@ -117,7 +121,6 @@ export default async function AdminWalletDetailPage({ params: paramsPromise }: {
   const openingOutstandingPaise =
     creditAccount?.opening_outstanding_paise ?? rupeesToPaise(retailer.outstanding_balance);
   const limitPaise = creditAccount?.credit_limit_paise ?? rupeesToPaise(retailer.credit_limit);
-  const outstandingPaise = computeOutstandingPaise(openingOutstandingPaise, ledgerDebit, ledgerCredit);
   const availablePaise = computeAvailablePaise(limitPaise, outstandingPaise);
 
   const totalUsed = paiseToRupees(computeOutstandingPaise(openingOutstandingPaise, ledgerDebit, 0));
@@ -126,7 +129,7 @@ export default async function AdminWalletDetailPage({ params: paramsPromise }: {
 
   // Derived due date (same rule as the retailer ledger): oldest still-outstanding
   // debit + Net-N terms. Null fields mean "not set / nothing due" — never a guess.
-  const termsDueDate = creditAccount
+  const termsDueDate = creditAccount && ledger.length < 100
     ? computeCreditDueDate({
         entries: ledger.map((l) => ({
           created_at: l.created_at,
@@ -161,6 +164,10 @@ export default async function AdminWalletDetailPage({ params: paramsPromise }: {
         </p>
       </div>
 
+      <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+        Wallet balances may be incorrect for refunded orders because of a known legacy accounting defect.
+        Do not use these amounts for financial reconciliation until reviewed.
+      </p>
       <WalletBalanceCards
         creditLimit={paiseToRupees(limitPaise)}
         outstanding={paiseToRupees(outstandingPaise)}
@@ -208,7 +215,9 @@ export default async function AdminWalletDetailPage({ params: paramsPromise }: {
             </p>
             <p>
               <strong>Payment due:</strong>{' '}
-              {termsDueDate === null || termsDueDate.status === 'no_terms'
+              {ledger.length >= 100
+                ? 'Unavailable: ledger history may be incomplete'
+                : termsDueDate === null || termsDueDate.status === 'no_terms'
                 ? 'Set terms to derive due dates'
                 : termsDueDate.dueDateKey
                   ? formatIndiaDate(termsDueDate.dueDateKey)
