@@ -7,7 +7,8 @@
 - Admin wallet list and detail use the existing database balance RPC rather than aggregating an arbitrarily limited PostgREST response or the most recent 100 ledger entries. RPC errors and invalid/unsafe values fail closed. The account and profile reads are scoped to the displayed retailers.
 - Prominent notices warn of the existing legacy reversal accounting defect. The detail page labels its recent-entry summaries and does not derive a due date from potentially truncated history. A successful RPC still uses the current flawed reversal semantics and is not evidence of accounting correctness.
 - `tests/admin-wallet-balance-completeness.test.ts` tests validation and the real migrated balance RPC with 125 debit rows in disposable PGlite. The local PGlite harness is not Supabase Auth, Storage, or multi-session concurrency.
-- No schema migration, reset implementation, bootstrap implementation or production data change is included in this update. Existing `0055_data_retention_cleanup.sql` is not a reset and its dry run writes audit records: **do not use it as a reset**.
+- `scripts/reset-inventory-readonly.sql` inventories table names, FK edges, RLS flags and non-internal triggers, without modifying data. It is explicitly **not** a reset mechanism and omits storage bytes, row contents, routines and policy definitions. A PGlite test executes it inside a database-enforced read-only transaction against the migrated schema and verifies representative data remains unchanged.
+- No schema migration, executable reset mechanism, bootstrap implementation or production data change is included in this update. Existing `0055_data_retention_cleanup.sql` is not a reset and its dry run writes audit records: **do not use it as a reset**.
 
 ## Actual verification
 
@@ -20,6 +21,7 @@ All results below are local to this checkout, not production.
 | Lint on the five files added/changed by this update | Pass |
 | Full ESLint | Fail: 65 errors, 42 warnings; no suppression |
 | Focused wallet suite | 21 pass / 1 fail (22 total); original refund regression expected 0, actual −50,000 paise |
+| Read-only reset inventory test | 1 pass on a disposable migrated PGlite database; no reset or restore performed |
 | Full Vitest | 173 files pass / 19 fail; 2,780 tests pass, 13 fail, 213 skipped; 11 suite setup failures among failed files. Fixture compliance classification, seller compliance, catalog visibility/privileges, stale assertions and the financial regression remain. Not all failures have a proven pre-change baseline. |
 | Next production build | Pass using synthetic Supabase URL/keys; not a live integration test |
 | Production dependency audit | Fail: 5 high, 1 moderate; reachability and remedies require review |
