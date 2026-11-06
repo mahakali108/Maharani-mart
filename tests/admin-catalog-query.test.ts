@@ -61,11 +61,11 @@ describe('batch size', () => {
   it('has no page-based helpers left to misuse', async () => {
     // `?page=` is gone: nothing in the module may map a page number to a range
     // any more, so a stale deep link can only ever land on the first batch.
-    const module = await import('@/lib/admin/catalog-query');
-    expect(Object.keys(module)).not.toContain('parseAdminPage');
-    expect(Object.keys(module)).not.toContain('adminPageRange');
-    expect(Object.keys(module)).not.toContain('adminTotalPages');
-    expect(Object.keys(module)).not.toContain('adminCatalogPageHref');
+    const importedModule = await import('@/lib/admin/catalog-query');
+    expect(Object.keys(importedModule)).not.toContain('parseAdminPage');
+    expect(Object.keys(importedModule)).not.toContain('adminPageRange');
+    expect(Object.keys(importedModule)).not.toContain('adminTotalPages');
+    expect(Object.keys(importedModule)).not.toContain('adminCatalogPageHref');
   });
 });
 

@@ -103,7 +103,7 @@ async function main() {
           values ($1,$2,$3,$4,$5,'seller','seller',2,10,20,2,$6),($1,$2,$3,$7,null,'maharani','maharani',3,10,30,3,0)`, [f.order,product,pack,sellerChild,offer,shipped,maharaniChild]);
         await admin.query('commit');
       } catch (error) { await admin.query('rollback'); throw error; }
-      return { ...f, pack, offer };
+      return { ...f, pack, offer, seller, sellerChild, maharaniChild };
     }
     await test('split parent cancellation restores each stock owner and retries safely', async () => {
       const f = await splitStockFixture();
@@ -125,6 +125,177 @@ async function main() {
       assert.equal((await admin.query('select stock_quantity from public.product_packs where id=$1', [f.pack])).rows[0].stock_quantity, 7);
       assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1', [f.offer])).rows[0].stock_quantity, 2000000000);
       assert.deepEqual((await admin.query('select stock_restored_quantity from public.order_items where order_id=$1', [f.order])).rows.map(r => r.stock_restored_quantity), [0,0]);
+    });
+    await test('admin manual debit reversal is linked, atomic and idempotent', async () => {
+      const f = await fixture(); const operator = await fixture();
+      await admin.query("update public.profiles set role='admin' where id=$1", [operator.retailer]);
+      const id = randomUUID();
+      await admin.query(`insert into public.retailer_wallet_ledger
+        (id,retailer_id,transaction_type,amount_paise,direction,reference_type,description,idempotency_key)
+        values ($1,$2,'MANUAL_DEBIT',20000,'debit','adjustment','test',$3)`, [id,f.retailer,`manual:${id}`]);
+      const c = await client();
+      for (let i = 0; i < 2; i++) {
+        await asUser(c, operator.retailer);
+        await c.query('select public.reverse_manual_wallet_adjustment($1,$2,$3)', [f.retailer,id,'correct entry']);
+        await c.query('commit');
+      }
+      assert.equal(await balance(f.retailer), 50000);
+      const rows = (await admin.query('select direction,amount_paise,is_reversed from public.retailer_wallet_ledger where id=$1 or reversal_of=$1 order by direction', [id])).rows;
+      assert.deepEqual(rows, [{ direction:'credit', amount_paise:'20000', is_reversed:false },{ direction:'debit', amount_paise:'20000', is_reversed:false }]);
+      await asUser(c, operator.retailer);
+      await assert.rejects(c.query('select public.reverse_manual_wallet_adjustment($1,$2,$3)', [f.retailer,id,'another reason']), /retry conflicts/);
+      await c.query('rollback');
+    });
+    await test('manual reversal rejects non-admins and order debit even for an admin', async () => {
+      const f = await fixture(); const operator = await fixture(); const c = await client();
+      await asUser(c, f.retailer);
+      await assert.rejects(c.query('select public.reverse_manual_wallet_adjustment($1,$2,$3)', [f.retailer,f.debit,'valid reason']), /Active administrator required/);
+      await c.query('rollback');
+      await admin.query("update public.profiles set role='admin' where id=$1", [operator.retailer]);
+      await asUser(c, operator.retailer);
+      await assert.rejects(c.query('select public.reverse_manual_wallet_adjustment($1,$2,$3)', [f.retailer,f.debit,'valid reason']), /Only an unreversed manual adjustment/);
+      await c.query('rollback');
+      assert.equal(await balance(f.retailer), 50000);
+    });
+    await test('concurrent manual reversal replays serialize on the account', async () => {
+      const f = await fixture(); const operator = await fixture();
+      await admin.query("update public.profiles set role='admin' where id=$1", [operator.retailer]);
+      const id = randomUUID();
+      await admin.query(`insert into public.retailer_wallet_ledger
+        (id,retailer_id,transaction_type,amount_paise,direction,reference_type,description,idempotency_key)
+        values ($1,$2,'MANUAL_CREDIT',10000,'credit','adjustment','test',$3)`, [id,f.retailer,`manual:${id}`]);
+      const a = await client(), b = await client(); await asUser(a,operator.retailer); await asUser(b,operator.retailer);
+      const waitPid = (await b.query('select pg_backend_pid() pid')).rows[0].pid;
+      const blockPid = (await a.query('select pg_backend_pid() pid')).rows[0].pid;
+      const sql = 'select public.reverse_manual_wallet_adjustment($1,$2,$3) id';
+      const first = await a.query(sql,[f.retailer,id,'correct entry']);
+      const second = b.query(sql,[f.retailer,id,'correct entry']); second.catch(() => {});
+      let blocked = false;
+      for (let i = 0; i < 100; i++) {
+        if ((await admin.query('select pg_blocking_pids($1) pids',[waitPid])).rows[0].pids.includes(blockPid)) { blocked = true; break; }
+        await new Promise(resolve => setTimeout(resolve,20));
+      }
+      assert.equal(blocked,true); await a.query('commit');
+      assert.equal((await second).rows[0].id,first.rows[0].id); await b.query('commit');
+      assert.equal(await balance(f.retailer),50000);
+      assert.equal(Number((await admin.query('select count(*) n from public.retailer_wallet_ledger where reversal_of=$1',[id])).rows[0].n),1);
+    });
+    async function sellerCancellationFixture() {
+      const f = await splitStockFixture(); const actor = await fixture();
+      await admin.query("update public.profiles set role='seller' where id=$1", [actor.retailer]);
+      await admin.query('insert into public.seller_members(seller_id,profile_id) values ($1,$2)', [f.seller,actor.retailer]);
+      await admin.query('begin');
+      try {
+        await admin.query("set local session_replication_role = 'replica'");
+        await admin.query('update public.sub_orders set coins_share_paise=50000 where id=$1',[f.sellerChild]);
+        await admin.query('update public.retailer_wallet_ledger set idempotency_key=$1 where id=$2',[`order:${f.order}:${f.sellerChild}`,f.debit]);
+        await admin.query('commit');
+      } catch (error) { await admin.query('rollback'); throw error; }
+      return { ...f, actor: actor.retailer };
+    }
+    await test('seller child cancellation refunds its checkout share and stock atomically, replay safe', async () => {
+      const f = await sellerCancellationFixture(); const c = await client();
+      for (let i = 0; i < 2; i++) {
+        await asUser(c,f.actor); await c.query("select public.seller_update_sub_order($1,'cancelled',null,null)",[f.sellerChild]); await c.query('commit');
+      }
+      assert.equal(await balance(f.retailer),0);
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1',[f.offer])).rows[0].stock_quantity,10);
+      assert.equal((await admin.query('select stock_quantity from public.product_packs where id=$1',[f.pack])).rows[0].stock_quantity,7);
+      assert.equal((await admin.query('select status from public.sub_orders where id=$1',[f.sellerChild])).rows[0].status,'cancelled');
+      assert.equal((await admin.query('select status from public.orders where id=$1',[f.order])).rows[0].status,'pending');
+      assert.equal(Number((await admin.query('select count(*) n from public.retailer_wallet_ledger where reversal_of=$1',[f.debit])).rows[0].n),1);
+      assert.equal(Number((await admin.query('select count(*) n from public.seller_ledger where sub_order_id=$1',[f.sellerChild])).rows[0].n),0);
+    });
+    await test('seller child refund failure rolls back status, shipment and stock', async () => {
+      const f = await sellerCancellationFixture(); const c = await client();
+      await admin.query('update public.retailer_wallet_ledger set is_reversed=true where id=$1',[f.debit]);
+      await asUser(c,f.actor);
+      await assert.rejects(c.query("select public.seller_update_sub_order($1,'cancelled',null,null)",[f.sellerChild]),/Child debit does not match/);
+      await c.query('rollback');
+      assert.equal((await admin.query('select status from public.sub_orders where id=$1',[f.sellerChild])).rows[0].status,'pending');
+      assert.equal((await admin.query('select status from public.orders where id=$1',[f.order])).rows[0].status,'pending');
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1',[f.offer])).rows[0].stock_quantity,8);
+      assert.equal(Number((await admin.query('select count(*) n from public.seller_shipments where sub_order_id=$1',[f.sellerChild])).rows[0].n),0);
+      assert.equal(Number((await admin.query('select count(*) n from public.retailer_wallet_ledger where reversal_of=$1',[f.debit])).rows[0].n),0);
+    });
+    await test('seller cancellation after a linked partial refunds only remaining share', async () => {
+      const f = await sellerCancellationFixture(); const c = await client();
+      await admin.query(`insert into public.retailer_wallet_ledger
+        (retailer_id,transaction_type,amount_paise,direction,reference_type,reference_id,description,idempotency_key,reversal_of)
+        values ($1,'ORDER_REVERSAL',20000,'credit','order',$2,'test',$3,$4)`,[f.retailer,f.order,`partial:${f.debit}`,f.debit]);
+      assert.equal(await balance(f.retailer),30000);
+      await asUser(c,f.actor); await c.query("select public.seller_update_sub_order($1,'cancelled',null,null)",[f.sellerChild]); await c.query('commit');
+      assert.equal(await balance(f.retailer),0);
+      assert.equal(Number((await admin.query('select sum(amount_paise) n from public.retailer_wallet_ledger where reversal_of=$1',[f.debit])).rows[0].n),50000);
+    });
+    await test('seller may not cancel another seller child or call the private transition', async () => {
+      const f = await sellerCancellationFixture(); const other = await sellerCancellationFixture(); const c = await client();
+      await asUser(c,other.actor);
+      await assert.rejects(c.query("select public.seller_update_sub_order($1,'cancelled',null,null)",[f.sellerChild]),/Sub-order not found/); await c.query('rollback');
+      const grant = (await admin.query("select has_function_privilege('authenticated', 'public._seller_update_sub_order_before_atomic_refund(uuid,text,text,text)', 'EXECUTE') allowed")).rows[0].allowed;
+      assert.equal(grant,false);
+      assert.equal(await balance(f.retailer),50000);
+    });
+    await test('concurrent seller child cancellation retries serialize without extra credits or stock', async () => {
+      const f = await sellerCancellationFixture(); const a = await client(), b = await client();
+      await asUser(a,f.actor); await asUser(b,f.actor);
+      const waitPid = (await b.query('select pg_backend_pid() pid')).rows[0].pid;
+      const blockPid = (await a.query('select pg_backend_pid() pid')).rows[0].pid;
+      const sql = "select public.seller_update_sub_order($1,'cancelled',null,null)";
+      await a.query(sql,[f.sellerChild]); const waiting = b.query(sql,[f.sellerChild]); waiting.catch(() => {});
+      let blocked = false;
+      for (let i = 0; i < 100; i++) {
+        if ((await admin.query('select pg_blocking_pids($1) pids',[waitPid])).rows[0].pids.includes(blockPid)) { blocked = true; break; }
+        await new Promise(resolve => setTimeout(resolve,20));
+      }
+      assert.equal(blocked,true); await a.query('commit'); await waiting; await b.query('commit');
+      assert.equal(await balance(f.retailer),0);
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1',[f.offer])).rows[0].stock_quantity,10);
+      assert.equal(Number((await admin.query('select count(*) n from public.retailer_wallet_ledger where reversal_of=$1',[f.debit])).rows[0].n),1);
+    });
+    await test('seller refund does not grant the seller wallet-read privileges', async () => {
+      const f = await sellerCancellationFixture(); const c = await client();
+      await asUser(c,f.actor);
+      await assert.rejects(c.query('select public.get_retailer_outstanding_paise($1)',[f.retailer]),/Access denied/); await c.query('rollback');
+      assert.equal((await admin.query("select has_function_privilege('authenticated','public._wallet_outstanding_for_trigger(uuid)','EXECUTE') ok")).rows[0].ok,false);
+    });
+    await test('seller cancellation refuses allocated seller settlements without changing either plane', async () => {
+      const f = await sellerCancellationFixture(); const c = await client();
+      await admin.query("insert into public.seller_ledger(seller_id,sub_order_id,entry_type,amount_paise,idempotency_key) values ($1,$2,'ALLOCATION',1000,$3)", [f.seller,f.sellerChild,`allocation:${f.sellerChild}`]);
+      await asUser(c,f.actor); await assert.rejects(c.query("select public.seller_update_sub_order($1,'cancelled',null,null)",[f.sellerChild]),/Settled child requires administrator reconciliation/); await c.query('rollback');
+      assert.equal((await admin.query('select status from public.sub_orders where id=$1',[f.sellerChild])).rows[0].status,'pending');
+      assert.equal(await balance(f.retailer),50000);
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1',[f.offer])).rows[0].stock_quantity,8);
+      assert.equal(Number((await admin.query('select count(*) n from public.seller_ledger where sub_order_id=$1',[f.sellerChild])).rows[0].n),1);
+    });
+    await test('last child cancellation restores both stock owners and releases parent coupon', async () => {
+      const f = await sellerCancellationFixture(); const c = await client(); const coupon = randomUUID();
+      await admin.query("update public.sub_orders set status='cancelled' where id=$1",[f.maharaniChild]);
+      await admin.query("insert into public.coupons(id,code,title,discount_type,discount_value,expires_at,used_count) values ($1,$2,'Test','fixed',1,now()+interval '1 day',1)",[coupon,`TEST-${coupon}`]);
+      await admin.query('insert into public.coupon_redemptions(coupon_id,retailer_id,order_id,discount_amount) values ($1,$2,$3,1)',[coupon,f.retailer,f.order]);
+      await asUser(c,f.actor); await c.query("select public.seller_update_sub_order($1,'cancelled',null,null)",[f.sellerChild]); await c.query('commit');
+      assert.equal((await admin.query('select status from public.orders where id=$1',[f.order])).rows[0].status,'cancelled');
+      assert.equal((await admin.query('select stock_quantity from public.product_packs where id=$1',[f.pack])).rows[0].stock_quantity,10);
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1',[f.offer])).rows[0].stock_quantity,10);
+      assert.equal((await admin.query('select used_count from public.coupons where id=$1',[coupon])).rows[0].used_count,0);
+      assert.equal(Number((await admin.query('select count(*) n from public.coupon_redemptions where order_id=$1',[f.order])).rows[0].n),0);
+      assert.equal(await balance(f.retailer),0);
+    });
+    await test('partial replay rejects malformed linked history added after the first event', async () => {
+      const f = await fixture(); const c = await client();
+      await asService(c); await partial(c,f,20000,'replay'); await c.query('commit');
+      await admin.query(`insert into public.retailer_wallet_ledger
+        (retailer_id,transaction_type,amount_paise,direction,reference_type,reference_id,description,idempotency_key,reversal_of)
+        values ($1,'ADJUSTMENT',1,'debit','order',$2,'malformed',$3,$4)`,[f.retailer,f.order,`bad:${f.debit}`,f.debit]);
+      await asService(c); await assert.rejects(partial(c,f,20000,'replay'),/linked refund history requires reconciliation/); await c.query('rollback');
+      assert.equal(Number((await admin.query("select count(*) n from public.retailer_wallet_ledger where reversal_of=$1 and transaction_type='ORDER_REVERSAL'",[f.debit])).rows[0].n),1);
+    });
+    await test('child partial refund rejects a debit exceeding its immutable share', async () => {
+      const f = await fixture(); const child = randomUUID(); const c = await client();
+      await admin.query("insert into public.sub_orders(id,parent_order_id,fulfilment_type,status,coins_share_paise) values ($1,$2,'maharani','cancelled',20000)",[child,f.order]);
+      await admin.query('update public.retailer_wallet_ledger set idempotency_key=$1 where id=$2',[`order:${f.order}:${child}`,f.debit]);
+      await asService(c); await assert.rejects(c.query("select public.refund_sub_order_coins_event($1,20000,'part','test')",[child]),/Child debit does not match/); await c.query('rollback');
+      assert.equal(await balance(f.retailer),50000);
     });
     await test('refund grants deny anonymous callers and keep helper private', async () => {
       const names = ['refund_order_coins', 'refund_order_coins_partial', 'refund_sub_order_coins_event', 'cancel_order_coins_atomic'];

@@ -128,8 +128,8 @@ describe('2. the probe is anonymous and read-only', () => {
       '__future__', 'argparse', 'json', 'os', 're', 'socket', 'ssl', 'sys', 'time',
       'urllib', 'datetime', 'typing', 'ipaddress',
     ]);
-    for (const module of imports) {
-      expect(allowed.has(module as string), `unexpected dependency: ${module}`).toBe(true);
+    for (const importedModule of imports) {
+      expect(allowed.has(importedModule as string), `unexpected dependency: ${importedModule}`).toBe(true);
     }
   });
 });

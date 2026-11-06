@@ -87,7 +87,7 @@ export function WalletLedgerTable({ ledger, retailerId }: { ledger: LedgerRow[];
                 </td>
                 <td className="px-4 py-2 text-xs font-mono">{row.created_by?.slice(0, 8) ?? '—'}</td>
                 <td className="px-4 py-2">
-                  {!row.is_reversed && row.transaction_type !== 'CREDIT_LIMIT_CHANGE' ? (
+                  {!row.is_reversed && row.reference_type === 'adjustment' && ['MANUAL_CREDIT', 'MANUAL_DEBIT', 'ADJUSTMENT'].includes(row.transaction_type) ? (
                     <button
                       disabled={isPending}
                       onClick={() => handleReverse(row.id)}
@@ -105,7 +105,7 @@ export function WalletLedgerTable({ ledger, retailerId }: { ledger: LedgerRow[];
         </table>
       </div>
       <p className="px-1 text-[11px] text-ink-400">
-        Every balance-changing action requires amount, reason, confirmation, server-side authorization. Admin cannot delete transactions; use reversal.
+        Every balance-changing action requires amount, reason, confirmation, server-side authorization. Manual adjustments can be reversed here; order, payment and refund transactions require their own reviewed workflows.
       </p>
     </div>
   );

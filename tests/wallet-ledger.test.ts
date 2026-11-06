@@ -244,7 +244,8 @@ describe('wallet idempotency', () => {
     expect(walletActions).toContain("generateIdempotencyKey('adj'");
     // Reversals use a deterministic key (not a random timestamp) so a retried
     // reversal can never double-insert.
-    expect(walletActions).toContain('const key = `reversal:${transactionId}`');
+    expect(walletActions).toContain("rpc('reverse_manual_wallet_adjustment'");
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain("'manual-reversal-v1:' || p_transaction_id::text");
   });
 
   it('ledger table has unique idempotency_key constraint', () => {
@@ -397,10 +398,12 @@ describe('wallet cancellation reversal', () => {
     expect(forward).toContain('reversal_of');
   });
 
-  it('reversal marks original as is_reversed and creates credit', () => {
+  it('manual reversal uses an atomic linked entry without flagging the original', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
-    expect(walletActions).toContain('is_reversed: true');
-    expect(walletActions).toContain('reversal_of');
+    const migration = read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql');
+    expect(walletActions).toContain("rpc('reverse_manual_wallet_adjustment'");
+    expect(migration).toContain('reversal_of');
+    expect(migration).not.toContain('set is_reversed = true');
   });
 
   it('admin and retailer cancel both call reversal', () => {
@@ -412,14 +415,16 @@ describe('wallet cancellation reversal', () => {
 
   it('repeated reversal of same transaction is rejected', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
-    expect(walletActions).toContain('Transaction already reversed');
+    expect(walletActions).toContain('reverse_manual_wallet_adjustment');
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain('Reversal retry conflicts with existing history');
   });
 
   it('CREDIT_LIMIT_CHANGE cannot be reversed', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
     // 🪙 Coin wording for the same rule (a funding change is corrected by a
     // new funding value, never by reversing the historical entry).
-    expect(walletActions).toContain('Coin funding changes cannot be reversed');
+    expect(walletActions).toContain('reverse_manual_wallet_adjustment');
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain("v_original.transaction_type not in ('MANUAL_CREDIT', 'MANUAL_DEBIT', 'ADJUSTMENT')");
   });
 });
 
@@ -573,7 +578,8 @@ describe('wallet outstanding fix (0031)', () => {
     expect(reversal).not.toContain('Date.now()');
 
     const actions = read('lib/admin/wallet-actions.ts');
-    expect(actions).toContain('const key = `reversal:${transactionId}`');
+    expect(actions).toContain("rpc('reverse_manual_wallet_adjustment'");
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain("'manual-reversal-v1:' || p_transaction_id::text");
   });
 });
 
