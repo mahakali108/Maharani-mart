@@ -12,7 +12,7 @@ describe('read-only reset inventory (not a reset)', () => {
   it('reports actual migrated dependencies and leaves representative data unchanged', async () => {
     const db = await createMigratedDb();
     try {
-      await db.exec("insert into public.areas (name) values ('Inventory control');");
+      await db.exec("insert into public.areas (name) values ('Inventory control'); create schema external_dependency; create table external_dependency.area_refs (area_id uuid references public.areas(id));");
       const sql = readFileSync('scripts/reset-inventory-readonly.sql', 'utf8');
       const before = await db.query<{ count: number }>('select count(*)::int as count from public.areas');
       // Enforce read-only at the database level as well as reviewing the SQL.
@@ -30,6 +30,7 @@ describe('read-only reset inventory (not a reset)', () => {
       ]));
       expect(inventory.foreign_keys).toEqual(expect.arrayContaining([
         expect.objectContaining({ source_schema: 'public', source_table: 'profiles', target_schema: 'auth', target_table: 'users' }),
+        expect.objectContaining({ source_schema: 'external_dependency', source_table: 'area_refs', target_schema: 'public', target_table: 'areas' }),
       ]));
       expect(inventory.triggers.length).toBeGreaterThan(0);
     } finally {

@@ -71,13 +71,13 @@ export async function quoteCoinPayment(
 }
 
 export interface OrderCoinMovement {
-  /** Coins debited for this order (0 when it spent none). */
+  /** Net Coins spent by this order after verified linked refunds. */
   spentPaise: number;
   /** Coins given back when the order was cancelled/returned. */
   refundedPaise: number;
   /** What the order actually costs the shop in coins today. */
   netPaise: number;
-  /** True once the original debit row has been reversed. */
+  /** True when at least one active linked refund exists. */
   refunded: boolean;
 }
 
@@ -94,23 +94,39 @@ export async function getOrderCoinMovement(
   orderId: string,
   retailerId: string
 ): Promise<OrderCoinMovement> {
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from('retailer_wallet_ledger')
-    .select('transaction_type, amount_paise, is_reversed, reversal_of')
+    .select('id, transaction_type, amount_paise, is_reversed, reversal_of', { count: 'exact' })
     .eq('reference_id', orderId)
     .eq('retailer_id', retailerId)
-    .returns<{ transaction_type: string; amount_paise: number; is_reversed: boolean; reversal_of: string | null }[]>();
+    .returns<{ id: string; transaction_type: string; amount_paise: number; is_reversed: boolean; reversal_of: string | null }[]>();
 
-  if (error) throw new Error('Order coin movement could not be verified.');
-  const rows = data ?? [];
-  const debits = rows.filter((row) => row.transaction_type === 'ORDER_DEBIT');
-  const reversals = rows.filter((row) => row.transaction_type === 'ORDER_REVERSAL' && row.reversal_of !== null);
-  const spentPaise = debits
-    .filter((row) => !row.is_reversed)
-    .reduce((sum, row) => sum + row.amount_paise, 0);
-  const refundedPaise = reversals.reduce((sum, row) => sum + row.amount_paise, 0);
-  // A reversed debit is already excluded from `spentPaise`, so the net is the
-  // remaining spend; `refundedPaise` is reported separately for the audit line.
+  if (error || !data || count === null || count !== data.length) throw new Error('Order coin movement could not be verified.');
+  const debits = data.filter((row) => row.transaction_type === 'ORDER_DEBIT');
+  const reversals = data.filter((row) => row.transaction_type === 'ORDER_REVERSAL' && !row.is_reversed);
+  const debitById = new Map(debits.map((row) => [row.id, row]));
+  const activeCredits = new Map<string, number>();
+  let refundedPaise = 0;
+  for (const credit of reversals) {
+    const source = credit.reversal_of ? debitById.get(credit.reversal_of) : undefined;
+    const amount = Number(credit.amount_paise);
+    if (!source || !Number.isSafeInteger(amount) || amount <= 0) throw new Error('Order coin movement could not be verified.');
+    refundedPaise += amount;
+    if (!Number.isSafeInteger(refundedPaise)) throw new Error('Order coin movement could not be verified.');
+    if (!source.is_reversed) activeCredits.set(source.id, (activeCredits.get(source.id) ?? 0) + amount);
+  }
+  let spentPaise = 0;
+  for (const debit of debits) {
+    const amount = Number(debit.amount_paise);
+    const credited = activeCredits.get(debit.id) ?? 0;
+    if (!Number.isSafeInteger(amount) || amount <= 0 || !Number.isSafeInteger(credited) || credited > amount) {
+      throw new Error('Order coin movement could not be verified.');
+    }
+    // Preserve the existing display semantics for historical flagged debits;
+    // only new unflagged debit/credit pairs use debit minus linked credits.
+    if (!debit.is_reversed) spentPaise += amount - credited;
+    if (!Number.isSafeInteger(spentPaise)) throw new Error('Order coin movement could not be verified.');
+  }
   return { spentPaise, refundedPaise, netPaise: spentPaise, refunded: reversals.length > 0 };
 }
 

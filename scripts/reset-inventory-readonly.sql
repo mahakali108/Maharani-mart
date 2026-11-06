@@ -14,14 +14,17 @@ with target_tables as (
   join pg_catalog.pg_namespace n on n.oid = c.relnamespace
   where n.nspname in ('public', 'auth', 'storage') and c.relkind in ('r', 'p')
 ), foreign_keys as (
-  select src.schema_name as source_schema, src.table_name as source_table,
+  select sn.nspname as source_schema, src.relname as source_table,
          dn.nspname as target_schema, dst.relname as target_table,
          con.conname as constraint_name, con.confdeltype as delete_action
   from pg_catalog.pg_constraint con
-  join target_tables src on src.oid = con.conrelid
+  join pg_catalog.pg_class src on src.oid = con.conrelid
+  join pg_catalog.pg_namespace sn on sn.oid = src.relnamespace
   join pg_catalog.pg_class dst on dst.oid = con.confrelid
   join pg_catalog.pg_namespace dn on dn.oid = dst.relnamespace
   where con.contype = 'f'
+    and (con.conrelid in (select oid from target_tables)
+      or con.confrelid in (select oid from target_tables))
 ), triggers as (
   select tbl.schema_name, tbl.table_name, t.tgname as trigger_name,
          t.tgenabled as enabled

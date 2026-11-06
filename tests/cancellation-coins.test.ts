@@ -31,7 +31,6 @@ describe('cancellation and coin verification with a mocked ledger', () => {
     const client = supabaseFixture({ orders: [{ id: order, retailer_id: owner, status: 'pending' }], retailer_wallet_ledger: [debit()] });
     mocks.client = client;
     mocks.reverse.mockImplementation(async () => {
-      client.tables.retailer_wallet_ledger![0]!.is_reversed = true;
       client.tables.retailer_wallet_ledger!.push(credit());
       return { success: true, refundedPaise: 2500 };
     });
@@ -42,7 +41,7 @@ describe('cancellation and coin verification with a mocked ledger', () => {
   });
 
   it('retries an owned cancellation without adding a second reversal in the idempotent RPC model', async () => {
-    const client = supabaseFixture({ orders: [{ id: order, retailer_id: owner, status: 'cancelled' }], retailer_wallet_ledger: [{ ...debit(), is_reversed: true }, credit()] });
+    const client = supabaseFixture({ orders: [{ id: order, retailer_id: owner, status: 'cancelled' }], retailer_wallet_ledger: [debit(), credit()] });
     mocks.client = client;
     expect(await cancelOrderAction(order, '')).toEqual({ success: true });
     expect(await cancelOrderAction(order, '')).toEqual({ success: true });

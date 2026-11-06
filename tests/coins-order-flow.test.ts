@@ -91,7 +91,6 @@ function fakeSupabase(db: FakeDb) {
           reversal_of: original.id,
           metadata: { reversal_of: original.id, order_id: orderId },
         });
-        original.is_reversed = true;
         db.balancePaise += original.amount_paise;
         return { data: original.amount_paise, error: null };
       }
@@ -355,7 +354,7 @@ describe('refunds', () => {
       idempotency_key: `reversal:${db.ledger[0]?.id}`,
       created_by: 'admin-1',
     });
-    expect(db.ledger[0]?.is_reversed).toBe(true);
+    expect(db.ledger[0]?.is_reversed).toBe(false);
     expect(db.balancePaise).toBe(before + 40_000);
   });
 
@@ -419,7 +418,7 @@ describe('refunds', () => {
 
 describe('refund path (0053 database function)', () => {
   it('calls refund_order_coins so a retailer or staff cancellation can refund', async () => {
-    const { db, coins, reversal } = await (async () => {
+    const { db, reversal } = await (async () => {
       const database = newDb(50_000);
       const modules = await loadModules(database);
       await modules.coins.debitCoinsForOrder(modules.client as never, {
@@ -439,26 +438,19 @@ describe('refund path (0053 database function)', () => {
     expect(db.balancePaise).toBe(50_000);
   });
 
-  it('falls back to the direct write only when the function is missing', async () => {
+  it('fails closed without direct writes when the refund function is missing', async () => {
     const db = newDb(50_000);
     const modules = await loadModules(db);
     await modules.coins.debitCoinsForOrder(modules.client as never, {
-      retailerId: 'retailer-1',
-      orderId: 'order-old-db',
-      orderTotalPaise: 50_000,
-      createdBy: null,
-      description: 'Order #old',
+      retailerId: 'retailer-1', orderId: 'order-old-db', orderTotalPaise: 50_000,
+      createdBy: null, description: 'Order #old',
     });
     db.missingRefundRpc = true;
-
     const result = await modules.reversal.reverseOrderWalletDebit('order-old-db', 'retailer-1', 'returned', 'admin-1');
-    expect(result).toEqual({ success: true, refundedPaise: 50_000 });
-    expect(db.ledger.filter((row) => row.transaction_type === 'ORDER_REVERSAL')).toHaveLength(1);
-
-    // And the fallback is just as idempotent.
-    const again = await modules.reversal.reverseOrderWalletDebit('order-old-db', 'retailer-1', 'returned again', 'admin-1');
-    expect(again).toEqual({ success: true, refundedPaise: 0 });
-    expect(db.balancePaise).toBe(50_000);
+    expect(result).toHaveProperty('error');
+    expect(db.ledger.filter((row) => row.transaction_type === 'ORDER_REVERSAL')).toHaveLength(0);
+    expect(db.ledger[0]?.is_reversed).toBe(false);
+    expect(db.balancePaise).toBe(0);
   });
 
   it('does not use the multi-request fallback when cancellation requires the refund RPC', async () => {

@@ -93,8 +93,8 @@ export function serializeMobileOrder(row: MobileOrderRow, extras: MobileOrderExt
   const withExtras: Record<string, unknown> = { ...payload };
   if (extras.statusHistory) withExtras.statusHistory = extras.statusHistory;
   if (extras.coinMovement) {
-    // The order's own ledger movement (`spentPaise` already excludes reversed
-    // debits), so the detail screen reports what THIS order spent — or what was
+    // The order's own net ledger movement, so the detail screen reports what
+    // THIS order spent — or what was
     // refunded to the shop when it was cancelled/returned.
     withExtras.coinsSpentPaise = extras.coinMovement.spentPaise;
     withExtras.coinsRefundedPaise = extras.coinMovement.refundedPaise;

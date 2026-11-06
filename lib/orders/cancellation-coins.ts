@@ -13,7 +13,7 @@ type LedgerRow = {
 };
 
 /**
- * A conservative verification of the existing single-debit refund RPC.
+ * A conservative verification of linked refunds for one order debit.
  * This does NOT make cancellation and restoration one transaction. Multiple
  * child debits require a new transactional database design, not repeated calls
  * to the legacy RPC (which only examines the first debit).
@@ -51,14 +51,22 @@ export async function restoreAndVerifyCancellationCoins(
     if (!rows) return unverified;
     const finalDebits = rows.filter((row) => row.transaction_type === 'ORDER_DEBIT');
     const credits = rows.filter((row) => row.transaction_type === 'ORDER_REVERSAL');
-    if (finalDebits.length !== debits.length || finalDebits.length > 1 || credits.length !== finalDebits.length) return unverified;
+    if (finalDebits.length !== debits.length || finalDebits.length > 1) return unverified;
+    if (finalDebits.length === 0 && credits.length !== 0) return unverified;
     if (finalDebits.length === 1) {
       const debit = finalDebits[0];
-      const credit = credits[0];
-      if (!debit || !credit || debit.id !== debits[0]?.id || !debit.is_reversed || debit.direction !== 'debit'
-        || credit.direction !== 'credit' || credit.reversal_of !== debit.id
+      if (!debit || debit.id !== debits[0]?.id || debit.is_reversed || debit.direction !== 'debit'
         || !Number.isSafeInteger(Number(debit.amount_paise)) || Number(debit.amount_paise) <= 0
-        || Number(credit.amount_paise) !== Number(debit.amount_paise)) return unverified;
+        || credits.length === 0) return unverified;
+      let credited = 0;
+      for (const credit of credits) {
+        const amount = Number(credit.amount_paise);
+        if (credit.is_reversed || credit.direction !== 'credit' || credit.reversal_of !== debit.id
+          || !Number.isSafeInteger(amount) || amount <= 0) return unverified;
+        credited += amount;
+        if (!Number.isSafeInteger(credited)) return unverified;
+      }
+      if (credited !== Number(debit.amount_paise)) return unverified;
     }
     return { success: true };
   } catch {

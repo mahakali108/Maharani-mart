@@ -131,10 +131,8 @@ describe('the app uses the functions', () => {
     expect(reversal).toMatch(/p_created_by: createdBy/);
   });
 
-  it('falls back to the direct write only when the function is absent', () => {
-    expect(reversal).toMatch(/does not exist\|could not find the function\|schema cache/i);
-    // A real error (for example an authorization failure) must surface.
-    expect(reversal).toMatch(/return \{ error: rpcResult\.error\.message \}/);
-    expect(reversal).toContain('reversalIdempotencyKey(original.id)');
+  it('never falls back to separate direct ledger writes', () => {
+    expect(reversal).not.toMatch(/\.from\('retailer_wallet_ledger'\)/);
+    expect(reversal).toContain('if (result.error) return { error: result.error.message }');
   });
 });
