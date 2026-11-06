@@ -222,6 +222,27 @@ async function main() {
       await c.query('rollback'); assert.equal(await balance(f.retailer), before);
       assert.equal(Number((await admin.query('select count(*) n from public.retailer_wallet_ledger where reversal_of=$1', [f.debit])).rows[0].n), 1);
     });
+    await test('fully credited malformed history is rejected rather than treated as a replay', async () => {
+      const f = await fixture();
+      await admin.query(`insert into public.retailer_wallet_ledger
+        (retailer_id,transaction_type,amount_paise,direction,reference_type,reference_id,description,idempotency_key,reversal_of)
+        values ($1,'ORDER_REVERSAL',50000,'credit','order',$2,'malformed',$3,$4)`,
+        [f.retailer, randomUUID(), `malformed:${f.debit}`, f.debit]);
+      const before = await balance(f.retailer); const c = await client(); await asService(c);
+      await assert.rejects(c.query('select public.refund_order_coins($1)', [f.order]), /history requires reconciliation/);
+      await c.query('rollback'); assert.equal(await balance(f.retailer), before);
+    });
+    await test('unlinked credit blocks even a fully refunded replay', async () => {
+      const f = await fixture(); const c = await client(); await asService(c);
+      await c.query('select public.refund_order_coins($1)', [f.order]); await c.query('commit');
+      await admin.query(`insert into public.retailer_wallet_ledger
+        (retailer_id,transaction_type,amount_paise,direction,reference_type,reference_id,description,idempotency_key)
+        values ($1,'ORDER_REVERSAL',100,'credit','order',$2,'unlinked',$3)`,
+        [f.retailer, f.order, `unlinked:${f.order}`]);
+      const before = await balance(f.retailer); await asService(c);
+      await assert.rejects(c.query('select public.refund_order_coins($1)', [f.order]), /Ambiguous prior order credits/);
+      await c.query('rollback'); assert.equal(await balance(f.retailer), before);
+    });
     console.log(`Real PostgreSQL integration: ${passed} passed.`);
   } finally {
     for (const c of clients) await c.end().catch(() => {});

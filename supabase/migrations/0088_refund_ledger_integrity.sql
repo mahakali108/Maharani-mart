@@ -61,7 +61,7 @@ begin
   end if;
   select coalesce(sum(amount_paise) filter (where direction = 'credit' and transaction_type = 'ORDER_REVERSAL' and not is_reversed), 0),
          count(*) filter (where direction <> 'credit' or transaction_type <> 'ORDER_REVERSAL' or is_reversed
-           or retailer_id is distinct from v_debit.retailer_id or reference_id is distinct from p_order_id)
+           or retailer_id is distinct from v_debit.retailer_id or reference_type is distinct from 'order' or reference_id is distinct from p_order_id)
     into v_credited, v_bad from public.retailer_wallet_ledger where reversal_of = p_debit_id;
   if v_bad > 0 or v_credited > v_debit.amount_paise then
     raise exception 'Existing linked refund history requires reconciliation.' using errcode = '22023';
@@ -96,6 +96,7 @@ declare
   v_debit public.retailer_wallet_ledger%rowtype;
   v_actor uuid;
   v_paid bigint;
+  v_bad bigint;
   v_total bigint := 0;
   v_remaining bigint;
 begin
@@ -121,13 +122,31 @@ begin
   if not found and exists (select 1 from public.retailer_wallet_ledger where retailer_id = v_order.retailer_id and reference_id = p_order_id and transaction_type = 'ORDER_DEBIT') then
     raise exception 'Wallet account missing; reconciliation required.' using errcode = '22023';
   end if;
+  -- Check ambiguous credits even on a zero-remaining replay: otherwise the
+  -- wrapper could claim a completed refund while a separate credit overlaps it.
+  if exists (
+    select 1 from public.retailer_wallet_ledger l
+    join public.order_deliveries d on d.id = l.reference_id
+    where d.order_id = p_order_id and l.retailer_id = v_order.retailer_id
+      and l.transaction_type = 'REFUND_CREDIT' and l.reference_type = 'delivery'
+  ) or exists (
+    select 1 from public.retailer_wallet_ledger l
+    where l.retailer_id = v_order.retailer_id and l.reference_type = 'order'
+      and l.reference_id = p_order_id and l.transaction_type = 'ORDER_REVERSAL' and l.reversal_of is null
+  ) then
+    raise exception 'Ambiguous prior order credits require reconciliation.' using errcode = '22023';
+  end if;
   for v_debit in select * from public.retailer_wallet_ledger
     where retailer_id = v_order.retailer_id and reference_type = 'order' and reference_id = p_order_id
       and transaction_type = 'ORDER_DEBIT' order by id for update
   loop
     if v_debit.is_reversed then raise exception 'Historical reversed debit requires reconciliation.' using errcode = '22023'; end if;
-    select coalesce(sum(amount_paise), 0) into v_paid from public.retailer_wallet_ledger
-      where reversal_of = v_debit.id and direction = 'credit' and transaction_type = 'ORDER_REVERSAL' and not is_reversed;
+    select coalesce(sum(amount_paise) filter (where direction = 'credit' and transaction_type = 'ORDER_REVERSAL' and not is_reversed), 0),
+           count(*) filter (where direction <> 'credit' or transaction_type <> 'ORDER_REVERSAL' or is_reversed
+             or retailer_id is distinct from v_order.retailer_id or reference_type is distinct from 'order'
+             or reference_id is distinct from p_order_id)
+      into v_paid, v_bad from public.retailer_wallet_ledger where reversal_of = v_debit.id;
+    if v_bad > 0 then raise exception 'Existing linked refund history requires reconciliation.' using errcode = '22023'; end if;
     v_remaining := v_debit.amount_paise - v_paid;
     if v_remaining < 0 then raise exception 'Existing refunds exceed debit.' using errcode = '22023'; end if;
     if v_remaining > 0 then
