@@ -5,6 +5,8 @@ import { createMigratedDb } from './helpers/pg-harness';
 type Inventory = {
   tables: { schema_name: string; table_name: string; rls_enabled: boolean }[];
   foreign_keys: { source_schema: string; source_table: string; target_schema: string; target_table: string }[];
+  policies: { schema_name: string; table_name: string; policy_name: string }[];
+  routines: { schema_name: string; routine_name: string; security_definer: boolean }[];
   triggers: { schema_name: string; table_name: string; trigger_name: string }[];
 };
 
@@ -33,6 +35,12 @@ describe('read-only reset inventory (not a reset)', () => {
         expect.objectContaining({ source_schema: 'external_dependency', source_table: 'area_refs', target_schema: 'public', target_table: 'areas' }),
       ]));
       expect(inventory.triggers.length).toBeGreaterThan(0);
+      expect(inventory.policies).toEqual(expect.arrayContaining([
+        expect.objectContaining({ schema_name: 'public', table_name: 'profiles' }),
+      ]));
+      expect(inventory.routines).toEqual(expect.arrayContaining([
+        expect.objectContaining({ schema_name: 'public', routine_name: 'get_retailer_outstanding_paise', security_definer: true }),
+      ]));
     } finally {
       await db.close();
     }

@@ -268,7 +268,12 @@ function makeFakeSupabase(packs: Record<string, unknown>[]) {
     });
     return chain;
   };
-  return { from: (table: string) => builder(table) };
+  return {
+    rpc: async (name: string) => name === 'get_retailer_outstanding_paise'
+        ? { data: 0, error: null }
+        : { data: null, error: { message: 'not mocked' } },
+    from: (table: string) => builder(table),
+  };
 }
 
 describe('Phase 5 — persisted order lines reconcile (unit_price × quantity = line_total)', () => {

@@ -1,10 +1,10 @@
 -- READ-ONLY RESET INVENTORY — NOT A RESET SCRIPT.
 -- Returns metadata only for public, auth and storage tables, foreign keys,
--- row-security flags and non-internal triggers. Output can contain sensitive
+-- row-security flags, policies, routines and non-internal triggers. Output can contain sensitive
 -- schema names: store it in an access-controlled location. This intentionally
 -- cannot delete data, export Storage bytes, certify a backup, classify tables,
 -- discover external writers, or authorize a reset. Review against the actual
--- deployed project and supplement with policies, routines, configuration and a
+-- deployed project and supplement with configuration and a
 -- separately verified data/object inventory before any destructive design.
 -- Do not replace this with retention cleanup: even its dry run writes audit data.
 with target_tables as (
@@ -25,6 +25,18 @@ with target_tables as (
   where con.contype = 'f'
     and (con.conrelid in (select oid from target_tables)
       or con.confrelid in (select oid from target_tables))
+) , policies as (
+  select schemaname as schema_name, tablename as table_name, policyname as policy_name,
+         permissive, roles, cmd as command
+  from pg_catalog.pg_policies
+  where schemaname in ('public', 'auth', 'storage')
+), routines as (
+  select n.nspname as schema_name, p.proname as routine_name,
+         pg_catalog.pg_get_function_identity_arguments(p.oid) as arguments,
+         p.prosecdef as security_definer, p.prokind as kind
+  from pg_catalog.pg_proc p
+  join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+  where n.nspname in ('public', 'auth', 'storage')
 ), triggers as (
   select tbl.schema_name, tbl.table_name, t.tgname as trigger_name,
          t.tgenabled as enabled
@@ -35,5 +47,7 @@ with target_tables as (
 select jsonb_build_object(
   'tables', coalesce((select jsonb_agg(to_jsonb(t) - 'oid' order by schema_name, table_name) from target_tables t), '[]'::jsonb),
   'foreign_keys', coalesce((select jsonb_agg(to_jsonb(f) order by source_schema, source_table, constraint_name) from foreign_keys f), '[]'::jsonb),
+  'policies', coalesce((select jsonb_agg(to_jsonb(p) order by schema_name, table_name, policy_name) from policies p), '[]'::jsonb),
+  'routines', coalesce((select jsonb_agg(to_jsonb(r) order by schema_name, routine_name, arguments) from routines r), '[]'::jsonb),
   'triggers', coalesce((select jsonb_agg(to_jsonb(t) order by schema_name, table_name, trigger_name) from triggers t), '[]'::jsonb)
 ) as inventory;

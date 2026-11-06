@@ -1,5 +1,6 @@
 import 'server-only';
 import { paiseToRupees } from '@/lib/retailer/format';
+import { readWalletOutstanding, type WalletBalanceRpcClient } from '@/lib/retailer/wallet-balance';
 
 import {
   applyCursor,
@@ -91,24 +92,8 @@ export async function getRetailerOutstandingPaise(
   supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<number> {
-  // Authoritative DB function (integer paise), with a legacy-column fallback
-  // when the function is unavailable (not-yet-migrated DB or a mocked client).
-  try {
-    const { data, error } = await (
-      supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
-    ).rpc('get_retailer_outstanding_paise', {
-      p_retailer_id: retailerId,
-    });
-    if (!error && data !== null && data !== undefined) return Number(data);
-  } catch {
-    // fall through to legacy
-  }
-  const { data: retailer } = await supabase
-    .from('retailers')
-    .select('outstanding_balance')
-    .eq('id', retailerId)
-    .maybeSingle<{ outstanding_balance: number }>();
-  return rupeesToPaise(retailer?.outstanding_balance ?? 0);
+  // Missing or failed balance reads must not silently become stale mirror data or zero.
+  return readWalletOutstanding(supabase as unknown as WalletBalanceRpcClient, retailerId);
 }
 
 export async function getRetailerCreditLimitPaise(
@@ -141,8 +126,8 @@ export interface WalletPosition {
 }
 
 /**
- * Authoritative wallet position from the database RPCs (integer paise), with a
- * legacy-column fallback when the wallet functions have not been deployed yet.
+ * Wallet position from database RPCs (integer paise). Outstanding fails closed;
+ * the credit-limit reader still has a legacy-column fallback.
  * Used by the server-side order quote so the credit check reads the ledger, not
  * a client-supplied or stale balance.
  */

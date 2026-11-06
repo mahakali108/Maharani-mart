@@ -83,6 +83,49 @@ async function main() {
     async function partial(c, f, amount, key) {
       return c.query('select public.refund_order_coins_partial($1,$2,$3,$4,$5)', [f.order, f.debit, amount, key, 'test']);
     }
+    // Seed representative already-checked-out split lines with triggers disabled
+    // only inside this isolated cluster. Restore all triggers before exercising
+    // the real parent cancellation and stock routines. This tests restoration,
+    // not the checkout/compliance path which created these fixtures.
+    async function splitStockFixture(sellerStock = 8, shipped = 0) {
+      const f = await fixture('pending');
+      const product = randomUUID(), pack = randomUUID(), seller = randomUUID();
+      const offer = randomUUID(), sellerChild = randomUUID(), maharaniChild = randomUUID();
+      await admin.query('begin');
+      try {
+        await admin.query("set local session_replication_role = 'replica'");
+        await admin.query("insert into public.products(id,sku_code,name,unit,base_price) values ($1,$2,'Test product','PCS',10)", [product, product]);
+        await admin.query("insert into public.product_packs(id,product_id,pack_name,pack_sku_code,base_price,case_price,stock_quantity) values ($1,$2,'Test pack',$3,10,10,7)", [pack, product, pack]);
+        await admin.query("insert into public.sellers(id,business_name,status) values ($1,$2,'active')", [seller, `Seller ${seller}`]);
+        await admin.query("insert into public.seller_offers(id,seller_id,product_id,pack_id,fulfilment_type,unit_price_paise,stock_quantity) values ($1,$2,$3,$4,'seller',1000,$5)", [offer,seller,product,pack,sellerStock]);
+        await admin.query("insert into public.sub_orders(id,parent_order_id,seller_id,fulfilment_type) values ($1,$2,$3,'seller'),($4,$2,null,'maharani')", [sellerChild,f.order,seller,maharaniChild]);
+        await admin.query(`insert into public.order_items(order_id,product_id,pack_id,sub_order_id,seller_offer_id,source_type,fulfilment_type,quantity,unit_price,line_total,stock_deducted_quantity,shipped_quantity)
+          values ($1,$2,$3,$4,$5,'seller','seller',2,10,20,2,$6),($1,$2,$3,$7,null,'maharani','maharani',3,10,30,3,0)`, [f.order,product,pack,sellerChild,offer,shipped,maharaniChild]);
+        await admin.query('commit');
+      } catch (error) { await admin.query('rollback'); throw error; }
+      return { ...f, pack, offer };
+    }
+    await test('split parent cancellation restores each stock owner and retries safely', async () => {
+      const f = await splitStockFixture();
+      await admin.query("update public.orders set status='cancelled' where id=$1", [f.order]);
+      assert.equal((await admin.query('select stock_quantity from public.product_packs where id=$1', [f.pack])).rows[0].stock_quantity, 10);
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1', [f.offer])).rows[0].stock_quantity, 10);
+      assert.equal((await admin.query('select public.restore_simple_order_stock($1,null) n', [f.order])).rows[0].n, 0);
+    });
+    await test('split parent stock restoration excludes units still in transit', async () => {
+      const f = await splitStockFixture(8, 1);
+      await admin.query("update public.orders set status='cancelled' where id=$1", [f.order]);
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1', [f.offer])).rows[0].stock_quantity, 9);
+      assert.equal((await admin.query('select stock_quantity from public.product_packs where id=$1', [f.pack])).rows[0].stock_quantity, 10);
+    });
+    await test('split stock failure rolls back parent status and every stock change', async () => {
+      const f = await splitStockFixture(2000000000);
+      await assert.rejects(admin.query("update public.orders set status='cancelled' where id=$1", [f.order]), /Seller offer stock could not be restored/);
+      assert.equal((await admin.query('select status from public.orders where id=$1', [f.order])).rows[0].status, 'pending');
+      assert.equal((await admin.query('select stock_quantity from public.product_packs where id=$1', [f.pack])).rows[0].stock_quantity, 7);
+      assert.equal((await admin.query('select stock_quantity from public.seller_offers where id=$1', [f.offer])).rows[0].stock_quantity, 2000000000);
+      assert.deepEqual((await admin.query('select stock_restored_quantity from public.order_items where order_id=$1', [f.order])).rows.map(r => r.stock_restored_quantity), [0,0]);
+    });
     await test('refund grants deny anonymous callers and keep helper private', async () => {
       const names = ['refund_order_coins', 'refund_order_coins_partial', 'refund_sub_order_coins_event', 'cancel_order_coins_atomic'];
       for (const name of names) {
