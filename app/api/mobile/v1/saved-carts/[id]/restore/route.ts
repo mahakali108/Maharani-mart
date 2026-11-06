@@ -21,13 +21,13 @@ type PackForRestore = {
 };
 
 /** Restore an owner-owned saved cart by revalidating each line and merging it into the live server cart. */
-export async function POST(request: Request, context: { params: { id: string } }): Promise<Response> {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.create');
   if ('response' in auth) return auth.response;
   const limited = enforceRateLimit('write.cart', request, { requestId, keySuffix: auth.session.userId });
   if (limited) return limited;
-  if (!uuidSchema.safeParse(context.params.id).success) {
+  if (!uuidSchema.safeParse((await context.params).id).success) {
     return jsonError('invalid_request', 'Saved cart id is invalid.', { status: 400, requestId });
   }
 
@@ -35,7 +35,7 @@ export async function POST(request: Request, context: { params: { id: string } }
   try {
     const { data: savedCart, error: cartError } = await supabase.from('retailer_saved_carts')
       .select('id')
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<{ id: string }>();
     if (cartError) throw cartError;

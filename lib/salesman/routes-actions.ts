@@ -23,7 +23,7 @@ export async function reorderRouteStopAction(
   direction: 'up' | 'down'
 ): Promise<RouteResult> {
   await requireSalesman();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data } = await supabase
     .from('route_customers')

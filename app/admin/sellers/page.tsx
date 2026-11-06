@@ -28,10 +28,11 @@ export const dynamic = 'force-dynamic';
  * (/admin/suppliers/applications) — suppliers are upstream vendors.
  */
 export default async function SellersPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await searchParamsPromise;
   const viewer = await requirePagePermission('sellers.view');
   const query = parseSellerListParams(searchParams);
   const { sellers, total, failed, failureMessage } = await listSellers(query);

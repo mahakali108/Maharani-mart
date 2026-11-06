@@ -81,7 +81,7 @@ export async function createBannerAction(_prevState: BannerFormState, formData: 
   }
   const { title, subtitle, ctaLabel, imageUrl, imageUrlMobile, status, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const payload: BannerInsert = {
     title,
@@ -133,7 +133,7 @@ export async function updateBannerAction(
   }
   const { title, subtitle, ctaLabel, imageUrl, imageUrlMobile, status, linkUrl, areaId, sortOrder, startsAt, endsAt } = parsed.data;
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const schedule = bannerScheduleInstants(startsAt, endsAt);
   const payload: BannerUpdate = {
     title,
@@ -165,7 +165,7 @@ export async function setBannerStatusAction(bannerId: string, status: 'draft' | 
   const parsed = bannerStatusSchema.safeParse(status);
   if (!parsed.success) throw new Error('Choose draft or published.');
   await requirePermission('banners.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: BannerUpdate = { status: parsed.data };
   const { error } = await supabase.from('banners').update(payload as unknown as never).eq('id', bannerId);
   if (error) throw new Error(error.message);
@@ -175,7 +175,7 @@ export async function setBannerStatusAction(bannerId: string, status: 'draft' | 
 
 export async function toggleBannerActiveAction(bannerId: string, isActive: boolean) {
   await requirePermission('banners.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: BannerUpdate = { is_active: isActive };
   const { error } = await supabase.from('banners').update(payload as unknown as never).eq('id', bannerId);
   if (error) throw new Error(error.message);
@@ -185,7 +185,7 @@ export async function toggleBannerActiveAction(bannerId: string, isActive: boole
 
 export async function reorderBannerAction(bannerId: string, direction: 'up' | 'down') {
   await requirePermission('banners.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data } = await supabase.from('banners').select('id, sort_order').order('sort_order').order('id');
   const rows = (data ?? []) as unknown as { id: string; sort_order: number }[];
@@ -209,7 +209,7 @@ export async function reorderBannerAction(bannerId: string, direction: 'up' | 'd
 
 export async function deleteBannerAction(bannerId: string) {
   await requirePermission('banners.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('banners')

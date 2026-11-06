@@ -47,7 +47,7 @@ interface DeliveredFilters {
   to: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of completed deliveries.
@@ -134,12 +134,13 @@ function renderDeliveredRows(rows: DeliveredRow[]) {
 }
 
 export default async function AdminDeliveredPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string; outcome?: string; staff?: string; from?: string; to?: string };
+  searchParams: Promise<{ q?: string; outcome?: string; staff?: string; from?: string; to?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('orders.view.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const filters: DeliveredFilters = {
     q: searchParams.q?.trim() ?? '',
@@ -174,7 +175,7 @@ export default async function AdminDeliveredPage({
   async function loadMoreDelivered(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     await requirePermission('orders.view.all');
-    const batch = await loadDeliveredBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadDeliveredBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderDeliveredRows(batch.items), nextCursor: batch.nextCursor };
   }
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ArrowLeft,
   ClipboardList,
@@ -65,11 +65,13 @@ export function RetailerShell({
   // icon is a real control (never decorative) and the header stays compact.
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  // A navigation (including a search submit) always lands on a fresh page
-  // with the header row collapsed again.
-  useEffect(() => {
+  // Reset on a pathname change during render, before showing the next page.
+  // This also keeps search closed when returning to a previously visited path.
+  const [searchPathname, setSearchPathname] = useState(pathname);
+  if (pathname !== searchPathname) {
+    setSearchPathname(pathname);
     setSearchOpen(false);
-  }, [pathname]);
+  }
   function handleSearchToggle() {
     const next = !searchOpen;
     setSearchOpen(next);
@@ -269,7 +271,7 @@ export function RetailerShell({
       </header>
 
       <main id="retailer-main" tabIndex={-1} className="mx-auto min-w-0 w-full scroll-mt-20 lg:scroll-mt-32 max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-8">{children}</main>
-      <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-5 pb-24 pt-4 text-xs text-slate-500 lg:pb-5"><span>Maharani Traders · Wholesale PWA</span><nav aria-label="Support and policies" className="flex flex-wrap gap-x-4"><Link href="/retailer/help" className="inline-flex min-h-11 items-center hover:text-primary-600">Help</Link><Link href="/legal/terms" className="inline-flex min-h-11 items-center hover:text-primary-600">Terms</Link><Link href="/legal/privacy" className="inline-flex min-h-11 items-center hover:text-primary-600">Privacy</Link><Link href="/legal/shipping" className="inline-flex min-h-11 items-center hover:text-primary-600">Delivery</Link><Link href="/legal/returns" className="inline-flex min-h-11 items-center hover:text-primary-600">Returns</Link><Link href="/legal/grievance" className="inline-flex min-h-11 items-center hover:text-primary-600">Grievance</Link><Link href="/contact" className="inline-flex min-h-11 items-center hover:text-primary-600">Contact</Link></nav></footer>
+      <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-5 pb-24 pt-4 text-xs text-slate-500 lg:pb-5"><span>Maharani Traders · Wholesale PWA</span><nav aria-label="Support and policies" className="flex flex-wrap gap-x-4"><Link href="/retailer/help" className="inline-flex min-h-11 items-center hover:text-primary-600">Help</Link><Link href="/legal/terms" className="inline-flex min-h-11 items-center hover:text-primary-600">Terms</Link><Link href="/legal/privacy" className="inline-flex min-h-11 items-center hover:text-primary-600">Privacy</Link><Link href="/legal/shipping" className="inline-flex min-h-11 items-center hover:text-primary-600">Delivery</Link><Link href="/legal/returns" className="inline-flex min-h-11 items-center hover:text-primary-600">Returns</Link><Link href="/legal/grievance" className="inline-flex min-h-11 items-center hover:text-primary-600">Grievance</Link><Link href="/legal/product-safety" className="inline-flex min-h-11 items-center hover:text-primary-600">Product safety</Link><Link href="/legal/business-disclosure" className="inline-flex min-h-11 items-center hover:text-primary-600">Business disclosure</Link><Link href="/contact" className="inline-flex min-h-11 items-center hover:text-primary-600">Contact</Link></nav></footer>
       <MobileBottomNav navItems={mobileNav} marketplace />
     </div>
   );

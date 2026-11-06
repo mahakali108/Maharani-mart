@@ -21,7 +21,7 @@ export async function broadcastNotificationAction(input: BroadcastInput): Promis
   const parsed = broadcastSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the notification details.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   let recipientIds: string[] = [];
   if (parsed.data.audience === 'all_retailers') {

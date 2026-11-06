@@ -101,6 +101,11 @@ export function AdminShell({
           <Link href="/about" className="inline-flex min-h-11 items-center hover:text-primary-700">About</Link>
           <Link href="/legal/terms" className="inline-flex min-h-11 items-center hover:text-primary-700">Terms</Link>
           <Link href="/legal/privacy" className="inline-flex min-h-11 items-center hover:text-primary-700">Privacy</Link>
+          <Link href="/legal/shipping" className="inline-flex min-h-11 items-center hover:text-primary-700">Delivery</Link>
+          <Link href="/legal/returns" className="inline-flex min-h-11 items-center hover:text-primary-700">Returns</Link>
+          <Link href="/legal/grievance" className="inline-flex min-h-11 items-center hover:text-primary-700">Grievance</Link>
+          <Link href="/legal/product-safety" className="inline-flex min-h-11 items-center hover:text-primary-700">Product safety</Link>
+          <Link href="/legal/business-disclosure" className="inline-flex min-h-11 items-center hover:text-primary-700">Business disclosure</Link>
           <Link href="/contact" className="inline-flex min-h-11 items-center hover:text-primary-700">Contact</Link>
         </footer>
       </div>

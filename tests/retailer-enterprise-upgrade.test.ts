@@ -61,11 +61,11 @@ describe('catalog batching math', () => {
   it('has no page-based helpers left to misuse', async () => {
     // `?page=` is gone from the catalog: nothing may map a page number to a
     // range any more, so a stale deep link lands on the first batch.
-    const module = await import('@/lib/retailer/catalog-params');
-    expect(Object.keys(module)).not.toContain('parseCatalogPage');
-    expect(Object.keys(module)).not.toContain('catalogPageRange');
-    expect(Object.keys(module)).not.toContain('catalogTotalPages');
-    expect(Object.keys(module)).not.toContain('catalogPageHref');
+    const importedModule = await import('@/lib/retailer/catalog-params');
+    expect(Object.keys(importedModule)).not.toContain('parseCatalogPage');
+    expect(Object.keys(importedModule)).not.toContain('catalogPageRange');
+    expect(Object.keys(importedModule)).not.toContain('catalogTotalPages');
+    expect(Object.keys(importedModule)).not.toContain('catalogPageHref');
   });
 
   it('probes one row past the batch so "has more" needs no COUNT', () => {
@@ -564,7 +564,7 @@ describe('cart mutations stay owner-scoped', () => {
 
   it('exposes clear-cart through the existing owner-scoped service', () => {
     expect(actions).toContain('export async function clearCartAction(');
-    expect(actions).toContain('clearRetailerCart(createClient(), user.id)');
+    expect(actions).toContain('clearRetailerCart((await createClient()), user.id)');
     expect(service).toContain("from('cart_items').delete().eq('retailer_id', retailerId)");
   });
 

@@ -28,7 +28,7 @@ export const metadata = { title: 'Saved carts — Maharani Traders' };
 
 export default async function SavedCartsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: cartRows }, { data: itemRows }] = await Promise.all([
     supabase

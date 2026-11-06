@@ -49,10 +49,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
  * Same authorization as the queue (`suppliers.review` + RLS); document
  * downloads are signed URLs minted per-request for this reviewer only.
  */
-export default async function SupplierApplicationDetailPage({ params }: { params: { id: string } }) {
+export default async function SupplierApplicationDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requirePagePermission('suppliers.review');
   if (!UUID_RE.test(params.id)) notFound();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('suppliers' as never)

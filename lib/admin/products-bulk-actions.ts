@@ -48,7 +48,7 @@ async function bulkSetActive(formData: FormData): Promise<BulkResult> {
   if ('error' in selected) return { ok: false, error: selected.error };
   const isActive = formData.get('isActive') === 'true';
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('products')
     .update({ is_active: isActive } as never)
@@ -82,7 +82,7 @@ async function bulkAssignTaxonomy(formData: FormData): Promise<BulkResult> {
     return { ok: false, error: `Select the ${kind} to apply.` };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const table = kind === 'category' ? 'categories' : 'brands';
   const { data: target, error: targetError } = await supabase
     .from(table)
@@ -135,7 +135,7 @@ async function bulkSetGst(formData: FormData): Promise<BulkResult> {
     return { ok: false, error: 'Choose a valid GST slab.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('products')
     .update({ gst_percent: gst } as never)
@@ -171,7 +171,7 @@ async function bulkSetMoq(formData: FormData): Promise<BulkResult> {
     return { ok: false, error: 'MOQ must be a whole number of 1 piece or more.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('product_packs')
     .update({ moq } as never)
@@ -226,7 +226,7 @@ async function bulkAdjustPrice(formData: FormData): Promise<BulkResult> {
     return { ok: false, error: 'That price change is too large — check the amount.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: packs, error: packError } = await supabase
     .from('product_packs')

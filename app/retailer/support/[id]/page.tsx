@@ -69,9 +69,10 @@ interface LinkedOrderRow {
   placed_at: string;
 }
 
-export default async function SupportTicketDetailPage({ params }: { params: { id: string } }) {
+export default async function SupportTicketDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Ownership is enforced twice: the query itself (retailer_id = caller) and
   // RLS (0048) — a ticket id from another retailer resolves to notFound().

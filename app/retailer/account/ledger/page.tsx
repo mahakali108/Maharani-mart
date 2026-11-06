@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
  */
 export default async function RetailerCoinHistoryPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [walletSummary, walletLedger, legacyLedger, fullLedger] = await Promise.all([
     getRetailerWalletSummary(supabase, user.id),
@@ -64,7 +64,7 @@ export default async function RetailerCoinHistoryPage() {
   ): Promise<{ items: WalletTransaction[]; nextCursor: string | null }> {
     'use server';
     const caller = await requireUser();
-    const batch = await getRetailerLedgerBatch(createClient(), caller.id, readCursor(cursor));
+    const batch = await getRetailerLedgerBatch((await createClient()), caller.id, readCursor(cursor));
     return { items: batch.entries, nextCursor: batch.nextCursor };
   }
 

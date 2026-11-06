@@ -241,7 +241,10 @@ describe('offer moderation and floors', () => {
       product_packs: [{ id: PACK_ID, product_id: 'eeeeeeee-0000-4000-8000-000000000005', is_active: true }],
       seller_offers: [{ id: OFFER_ID }],
     });
-    mocks.client.mockReturnValue(fixture);
+    const eligibility = vi.fn(async (name: string) => ({
+      data: ['product_is_sale_eligible', 'seller_is_trade_eligible'].includes(name), error: null,
+    }));
+    mocks.client.mockReturnValue({ ...fixture, rpc: eligibility });
     const formData = new FormData();
     formData.set('sellerId', SELLER_ID);
     formData.set('packId', PACK_ID);
@@ -252,6 +255,8 @@ describe('offer moderation and floors', () => {
     formData.set('stockQuantity', '40');
     const result = await createOfferAction(formData);
     expect(result).toEqual({ ok: true });
+    expect(eligibility).toHaveBeenCalledWith('product_is_sale_eligible', { p_product_id: 'eeeeeeee-0000-4000-8000-000000000005' });
+    expect(eligibility).toHaveBeenCalledWith('seller_is_trade_eligible', { p_seller_id: SELLER_ID });
     const insert = fixture.queries.find((q) => q.operation === 'insert' && q.table === 'seller_offers');
     expect(insert?.payload).toMatchObject({
       seller_id: SELLER_ID,
@@ -299,7 +304,10 @@ describe('seller portal self-service actions and tier pricing', () => {
       product_packs: [{ id: PACK_ID, product_id: 'eeeeeeee-0000-4000-8000-000000000005', is_active: true }],
       seller_offers: [],
     });
-    mocks.client.mockReturnValue(fixture);
+    const eligibility = vi.fn(async (name: string) => ({
+      data: ['product_is_sale_eligible', 'seller_is_trade_eligible'].includes(name), error: null,
+    }));
+    mocks.client.mockReturnValue({ ...fixture, rpc: eligibility });
     const formData = new FormData();
     formData.set('packId', PACK_ID);
     formData.set('fulfilmentType', 'seller');
@@ -309,6 +317,8 @@ describe('seller portal self-service actions and tier pricing', () => {
     formData.set('sellerSku', 'SKU-1');
     const result = await sellerCreateOfferAction(formData);
     expect(result).toEqual({ ok: true });
+    expect(eligibility).toHaveBeenCalledWith('product_is_sale_eligible', { p_product_id: 'eeeeeeee-0000-4000-8000-000000000005' });
+    expect(eligibility).toHaveBeenCalledWith('seller_is_trade_eligible', { p_seller_id: SELLER_ID });
     expect(mocks.activeSellerGuard).toHaveBeenCalled();
     const insert = fixture.queries.find((q) => q.operation === 'insert' && q.table === 'seller_offers');
     expect(insert?.payload).toMatchObject({

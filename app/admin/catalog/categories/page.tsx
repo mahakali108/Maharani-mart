@@ -86,14 +86,15 @@ const STATUS_LABELS: Record<AdminStatusFilter, string> = {
  * operator needs before deactivating or deleting a category.
  */
 export default async function CategoriesPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
   const canManage = can(user.role, 'master_data.manage');
   const params = parseTaxonomyParams(searchParams);
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [firstBatch, { data: categoryOptions }] = await Promise.all([
     loadAdminCategoryBatch(supabase, params, null),
@@ -112,7 +113,7 @@ export default async function CategoriesPage({
   async function loadMoreCategories(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     await requireUser();
-    const batch = await loadAdminCategoryBatch(createClient(), params, readCursor(cursor));
+    const batch = await loadAdminCategoryBatch((await createClient()), params, readCursor(cursor));
     return { rows: renderCategoryRows(batch.items, canManage), nextCursor: batch.nextCursor };
   }
 

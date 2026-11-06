@@ -11,7 +11,7 @@ export type CartServiceResult = { error: string } | { success: true };
 
 /** Add to the shared piece cart after validating the final merged quantity. */
 export async function addCartLines(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   lines: CartMergeLine[]
 ): Promise<CartServiceResult> {
@@ -29,7 +29,7 @@ export async function addCartLines(
 }
 
 export async function updateCartLine(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   cartItemId: string,
   quantity: number
@@ -76,7 +76,7 @@ export async function updateCartLine(
 }
 
 export async function removeCartLine(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   cartItemId: string
 ): Promise<CartServiceResult> {
@@ -85,7 +85,7 @@ export async function removeCartLine(
 }
 
 export async function clearRetailerCart(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<CartServiceResult> {
   const { error } = await supabase.from('cart_items').delete().eq('retailer_id', retailerId);

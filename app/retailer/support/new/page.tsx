@@ -17,12 +17,13 @@ interface OrderOptionRow {
  * tampered value can never pre-select someone else's order.
  */
 export default async function NewSupportTicketPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { order?: string };
+  searchParams: Promise<{ order?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: orderData }, preselectedId] = await (async () => {
     const { data } = await supabase

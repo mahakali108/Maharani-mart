@@ -20,14 +20,15 @@ export const dynamic = 'force-dynamic';
  * honest states — never placeholder business records.
  */
 export default async function AdminDashboardPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { range?: string; from?: string; to?: string };
+  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requirePagePermission('dashboard.view');
   const visibility = dashboardVisibility(user.role);
   const range = parseDashboardRange(searchParams);
-  const supabase = createClient();
+  const supabase = (await createClient());
   const data = await gatherDashboardData(supabase, range);
 
   return <DashboardView data={data} visibility={visibility} />;

@@ -31,9 +31,10 @@ interface OrderItemRow {
   product_packs: { pack_name: string; units_per_case: number } | null;
 }
 
-export default async function SalesmanOrderDetailPage({ params }: { params: { id: string } }) {
+export default async function SalesmanOrderDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order, error: orderError } = await supabase
     .from('orders')

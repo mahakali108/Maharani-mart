@@ -51,7 +51,7 @@ interface CartRow {
  * The retailer id is always the caller's session id — passed by the server.
  */
 export async function loadCartCouponLines(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   areaId: string | null
 ): Promise<CartCouponLinesResult> {

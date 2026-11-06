@@ -8,8 +8,8 @@ import type { Database } from '@/types/database.types';
  * Actions, and Route Handlers. Reads/writes the auth cookie via
  * next/headers so the session survives across requests.
  */
-export function createClient() {
-  const cookieStore = cookies();
+export async function createClient() {
+  const cookieStore = await cookies();
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

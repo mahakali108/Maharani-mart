@@ -66,6 +66,15 @@ export default async function SellerPortalLayout({
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
+      <footer className="mx-auto flex max-w-6xl flex-wrap gap-x-4 border-t border-slate-200 px-4 py-4 text-xs text-slate-600 sm:px-6" aria-label="Public information">
+        <Link href="/legal/terms" className="inline-flex min-h-11 items-center hover:text-primary-700">Terms</Link>
+        <Link href="/legal/privacy" className="inline-flex min-h-11 items-center hover:text-primary-700">Privacy</Link>
+        <Link href="/legal/shipping" className="inline-flex min-h-11 items-center hover:text-primary-700">Delivery</Link>
+        <Link href="/legal/returns" className="inline-flex min-h-11 items-center hover:text-primary-700">Returns</Link>
+        <Link href="/legal/grievance" className="inline-flex min-h-11 items-center hover:text-primary-700">Grievance</Link>
+        <Link href="/legal/product-safety" className="inline-flex min-h-11 items-center hover:text-primary-700">Product safety</Link>
+        <Link href="/legal/business-disclosure" className="inline-flex min-h-11 items-center hover:text-primary-700">Business disclosure</Link>
+      </footer>
     </div>
   );
 }

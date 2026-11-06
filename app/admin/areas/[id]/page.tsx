@@ -35,10 +35,11 @@ interface ProductThresholdRow {
   reorder_level: number;
 }
 
-export default async function EditAreaPage({ params }: { params: { id: string } }) {
+export default async function EditAreaPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requirePagePermission('inventory.view');
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: area, error: areaError } = await supabase
     .from('areas')
     .select('id, name, district')

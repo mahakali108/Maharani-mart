@@ -73,7 +73,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: true },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * Strip the characters that could change the shape of a PostgREST `or=()`
@@ -263,9 +263,10 @@ function CardSkeleton() {
   );
 }
 
-export default async function SalesmanRetailersPage({ searchParams }: { searchParams: { q?: string } }) {
+export default async function SalesmanRetailersPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ q?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const q = searchParams.q?.trim().toLowerCase() ?? '';
 
   const firstBatch = await loadRetailerBatch(supabase, { salesmanId: user.id, q }, null);
@@ -279,7 +280,7 @@ export default async function SalesmanRetailersPage({ searchParams }: { searchPa
   async function loadMoreRetailers(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const caller = await requireUser();
-    const batch = await loadRetailerBatch(createClient(), { salesmanId: caller.id, q }, readCursor(cursor));
+    const batch = await loadRetailerBatch((await createClient()), { salesmanId: caller.id, q }, readCursor(cursor));
     return { rows: renderRetailerCards(batch.items), nextCursor: batch.nextCursor };
   }
 

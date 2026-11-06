@@ -40,7 +40,7 @@ import {
  * when the scan could not complete.
  */
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export interface AdminCategoryRow {
   id: string;

@@ -59,7 +59,7 @@ function CouponState({ coupon, now }: { coupon: CouponRow; now: number }) {
 
 export default async function AdminCouponsPage() {
   await requirePagePermission('pricing.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('coupons')

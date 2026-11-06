@@ -17,7 +17,7 @@ function todayDate(): string {
 
 export async function checkInAction(lat: number | null, lng: number | null): Promise<AttendanceResult> {
   const user = await requireSalesman();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('attendance')
@@ -45,7 +45,7 @@ export async function checkInAction(lat: number | null, lng: number | null): Pro
 
 export async function checkOutAction(lat: number | null, lng: number | null): Promise<AttendanceResult> {
   const user = await requireSalesman();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('attendance')

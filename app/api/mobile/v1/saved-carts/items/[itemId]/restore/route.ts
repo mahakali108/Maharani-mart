@@ -16,13 +16,13 @@ const uuidSchema = z.string().uuid();
 type PackRow = { id: string; moq: number; is_active: boolean; products: { is_active: boolean } | null };
 
 /** Restore one saved line through the same current-pack validation and cart merge as every other add. */
-export async function POST(request: Request, context: { params: { itemId: string } }): Promise<Response> {
+export async function POST(request: Request, context: { params: Promise<{ itemId: string }> }): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.create');
   if ('response' in auth) return auth.response;
   const limited = enforceRateLimit('write.cart', request, { requestId, keySuffix: auth.session.userId });
   if (limited) return limited;
-  if (!uuidSchema.safeParse(context.params.itemId).success) {
+  if (!uuidSchema.safeParse((await context.params).itemId).success) {
     return jsonError('invalid_request', 'Saved item id is invalid.', { status: 400, requestId });
   }
 
@@ -30,7 +30,7 @@ export async function POST(request: Request, context: { params: { itemId: string
   try {
     const { data: item, error: itemError } = await supabase.from('retailer_saved_cart_items')
       .select('pack_id, quantity')
-      .eq('id', context.params.itemId)
+      .eq('id', (await context.params).itemId)
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<{ pack_id: string; quantity: number }>();
     if (itemError) throw itemError;

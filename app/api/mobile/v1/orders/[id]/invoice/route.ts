@@ -49,8 +49,9 @@ interface RetailerInvoiceRow {
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await paramsPromise;
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.view.own');
   if ('response' in auth) return auth.response;
@@ -64,7 +65,7 @@ export async function GET(
   }
 
   try {
-    const supabase = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const supabase = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     // Ownership FIRST, children second: an order the caller does not own must
     // never cause a read of its items, even though RLS would return nothing.
     const orderResult = await supabase

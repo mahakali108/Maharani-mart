@@ -50,7 +50,7 @@ import { computeReturnDeadline, parseReturnWindowDays } from './return-window';
  * generated database types predate those functions; this keeps the call typed
  * without weakening the client for every other query.
  */
-function RpcCapable(client: ReturnType<typeof createClient>) {
+function RpcCapable(client: Awaited<ReturnType<typeof createClient>>) {
   return client as unknown as {
     rpc: (
       name: string,
@@ -118,7 +118,7 @@ function revalidateDeliveryPaths(orderId: string) {
 }
 
 async function fetchDeliveryWithOrder(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string
 ): Promise<{ delivery: DeliveryRow; order: OrderRow } | { error: string }> {
   const { data: delivery } = await supabase
@@ -188,7 +188,7 @@ export async function assignDeliveryStaffAction(
     return { error: 'You do not have permission to assign deliveries.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchDeliveryWithOrder(supabase, orderId);
   if ('error' in found) return { error: found.error };
   const { delivery } = found;
@@ -261,7 +261,7 @@ export async function regenerateDeliveryOtpAction(orderId: string): Promise<Deli
     return { error: 'You do not have permission to regenerate delivery OTPs.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchDeliveryWithOrder(supabase, orderId);
   if ('error' in found) return { error: found.error };
   const { delivery, order } = found;
@@ -311,7 +311,7 @@ export async function startDeliveryAction(orderId: string): Promise<DeliveryActi
     return { error: 'You do not have permission to execute deliveries.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchDeliveryWithOrder(supabase, orderId);
   if ('error' in found) return { error: found.error };
   const { delivery, order } = found;
@@ -367,7 +367,7 @@ export async function completeDeliveryAction(
     return { error: 'Delivery quantities for every order line are required.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchDeliveryWithOrder(supabase, orderId);
   if ('error' in found) return { error: found.error };
   const { delivery, order } = found;
@@ -608,7 +608,7 @@ export async function recordFailedDeliveryAction(
     return { error: 'Describe the failure in 3–500 characters.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchDeliveryWithOrder(supabase, orderId);
   if ('error' in found) return { error: found.error };
   const { delivery, order } = found;
@@ -683,7 +683,7 @@ export async function recordReturnToWarehouseAction(
     return { error: 'You do not have permission to manage returns.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchDeliveryWithOrder(supabase, orderId);
   if ('error' in found) return { error: found.error };
   const { delivery, order } = found;
@@ -737,7 +737,8 @@ export async function recordReturnToWarehouseAction(
   // Reverse the wallet debit for the FULL order; if a shortfall refund was
   // already credited at partial delivery, reverse that too so the retailer
   // is not credited twice for the same goods.
-  await reverseOrderWalletDebit(orderId, order.retailer_id, 'returned to warehouse', user.id);
+  const walletRefund = await reverseOrderWalletDebit(orderId, order.retailer_id, 'returned to warehouse', user.id);
+  if ('error' in walletRefund) return { error: 'The return status changed, but the wallet refund could not be verified. Contact support before retrying.' };
   // A shortfall credit for this delivery, if any, is reversed in the same
   // breath — the shop pays for the goods again because they came back. The
   // function is idempotent: a second return reverses nothing more.

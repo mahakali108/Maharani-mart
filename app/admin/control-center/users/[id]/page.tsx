@@ -6,7 +6,8 @@ import { UserManagementClient } from './client';
 
 export const dynamic = 'force-dynamic';
 
-export default async function UserManagementPage({ params }: { params: { id: string } }) {
+export default async function UserManagementPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requireSuperAdminPage();
 
   const [userView, overrides, accessPeriods, features] = await Promise.all([

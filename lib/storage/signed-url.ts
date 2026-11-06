@@ -41,9 +41,9 @@ export async function getSignedUrl(
   bucket: PrivateBucket,
   path: string,
   expiresInSeconds = 3600,
-  client?: ReturnType<typeof createClient>
+  client?: Awaited<ReturnType<typeof createClient>>
 ): Promise<string | null> {
-  const supabase = client ?? createClient();
+  const supabase = client ?? (await createClient());
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresInSeconds);
   if (error || !data) return null;
   return data.signedUrl;

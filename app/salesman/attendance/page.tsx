@@ -14,7 +14,7 @@ interface AttendanceRow {
 
 export default async function AttendancePage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // work_date is the Asia/Kolkata calendar date.
   const today = indiaTodayDateKey();

@@ -36,7 +36,7 @@ export async function createFollowUpAction(input: z.input<typeof createSchema>):
     return { error: 'Pick today or a future date for the reminder.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: assignedRetailer } = await supabase
     .from('retailers')
@@ -71,7 +71,7 @@ interface OpenFollowUpRow {
 }
 
 async function loadOwnFollowUp(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   followUpId: string,
   userId: string
 ): Promise<{ error: string } | { row: OpenFollowUpRow }> {
@@ -89,7 +89,7 @@ async function loadOwnFollowUp(
 /** open → done. Records when the salesman actually acted on it. */
 export async function completeFollowUpAction(followUpId: string): Promise<FollowUpResult> {
   const user = await requirePermission('followups.manage.own');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const found = await loadOwnFollowUp(supabase, followUpId, user.id);
   if ('error' in found) return { error: found.error };
@@ -117,7 +117,7 @@ export async function completeFollowUpAction(followUpId: string): Promise<Follow
 /** open → cancelled. History is kept — nothing is ever deleted. */
 export async function cancelFollowUpAction(followUpId: string): Promise<FollowUpResult> {
   const user = await requirePermission('followups.manage.own');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const found = await loadOwnFollowUp(supabase, followUpId, user.id);
   if ('error' in found) return { error: found.error };

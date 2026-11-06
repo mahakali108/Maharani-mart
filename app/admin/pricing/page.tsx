@@ -44,7 +44,7 @@ const SCOPE_LABELS: Record<PriceListRow['scope'], string> = {
 };
 
 export default async function PricingPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: productData, error: productError }, { data: areaData, error: areaError }, { data: retailerData, error: retailerError }, { data: priceListData, error: priceListError }] =
     await Promise.all([

@@ -9,7 +9,7 @@ export const metadata = { title: 'Address book — Maharani Traders' };
 
 export default async function AddressesPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: rows, error: addressError } = await supabase
     .from('retailer_addresses')

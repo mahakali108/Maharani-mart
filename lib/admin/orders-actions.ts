@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { notifyOrderEvent } from '@/lib/notifications/notify';
 import type { Database } from '@/types/database.types';
-import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
+import { restoreAndVerifyCancellationCoins } from '@/lib/orders/cancellation-coins';
 import { canTransitionOrderStatus, describeTransitionError } from '@/lib/orders/state-machine';
 import { releaseOrderCoupon } from '@/lib/coupons/validate';
 import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
@@ -16,7 +16,7 @@ export type OrderActionResult = { error?: string } | { success: true };
 
 export async function assignWarehouseAction(orderId: string, warehouseId: string): Promise<OrderActionResult> {
   await requirePermission('orders.assign');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order } = await supabase
     .from('orders')
@@ -56,7 +56,7 @@ export async function assignWarehouseAction(orderId: string, warehouseId: string
  */
 export async function approveOrderAction(orderId: string): Promise<OrderActionResult> {
   await requirePermission('orders.approve');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order } = await supabase
     .from('orders')
@@ -122,7 +122,7 @@ export async function approveOrderAction(orderId: string): Promise<OrderActionRe
  */
 export async function cancelOrderAction(orderId: string, reason: string): Promise<OrderActionResult> {
   await requirePermission('orders.cancel');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order } = await supabase
     .from('orders')
@@ -131,38 +131,37 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
     .maybeSingle<{ status: OrderStatusEnum; warehouse_id: string | null; retailer_id: string }>();
 
   if (!order) return { error: 'Order not found.' };
-  if (order.status === 'dispatched' || order.status === 'delivered') {
-    return { error: 'Dispatched or delivered orders cannot be cancelled — use a return request instead.' };
+  if (order.status === 'dispatched' || order.status === 'delivered' || order.status === 'returned') {
+    return { error: 'Dispatched, delivered or returned orders cannot be cancelled — use the appropriate return process.' };
   }
-  if (order.status === 'cancelled') return { error: 'This order is already cancelled.' };
-
-  const { error } = await supabase
-    .from('orders')
-    .update({ status: 'cancelled', cancelled_reason: reason || null } as unknown as never)
-    .eq('id', orderId);
-  if (error) return { error: error.message };
-
-  // Coin reversal: append an ORDER_REVERSAL credit entry; the original stays.
-  try {
-    const user = await supabase.auth.getUser();
-    await reverseOrderWalletDebit(orderId, order.retailer_id, reason || 'Order cancelled', user.data.user?.id ?? null);
-  } catch (err) {
-    console.warn('Wallet reversal failed (non-blocking):', err);
+  if (order.status !== 'cancelled') {
+    const { data: cancelled, error } = await supabase
+      .from('orders')
+      .update({ status: 'cancelled', cancelled_reason: reason || null } as unknown as never)
+      .eq('id', orderId).eq('status', order.status).select('id').maybeSingle<{ id: string }>();
+    if (error) return { error: 'Cancellation could not be confirmed. Check the order before retrying.' };
+    if (!cancelled) return { error: 'The order status changed; refresh before retrying.' };
   }
 
-  // A cancelled order no longer consumes its coupon (0051).
+  // This verifier calls reverseOrderWalletDebit through its atomic refund RPC
+  // and checks the ledger; it does not make status and refund one transaction.
+  const user = await supabase.auth.getUser();
+  const coins = await restoreAndVerifyCancellationCoins(supabase, orderId, order.retailer_id, reason || 'Order cancelled', user.data.user?.id ?? null);
   await releaseOrderCoupon(supabase, orderId);
 
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/admin/orders');
   revalidatePath('/admin/inventory');
   revalidatePath(`/admin/wallets/${order.retailer_id}`);
+  if ('error' in coins) return coins;
   return { success: true };
 }
 
 export async function updateOrderStatusAction(orderId: string, status: OrderStatusEnum): Promise<OrderActionResult> {
   await requirePermission('orders.approve');
-  const supabase = createClient();
+  // Never bypass cancellation's refund verification via the generic status UI.
+  if (status === 'cancelled') return cancelOrderAction(orderId, '');
+  const supabase = (await createClient());
 
   // Phase 4: transitions must follow the shared state machine
   // (lib/orders/state-machine.ts). The 0042 DB trigger enforces the same

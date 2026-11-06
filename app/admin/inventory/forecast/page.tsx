@@ -36,15 +36,16 @@ function directionIcon(direction: string) {
 }
 
 export default async function ForecastDashboardPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { days?: string; risk?: string };
+  searchParams: Promise<{ days?: string; risk?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('reports.view.all');
   const days = Math.min(365, Math.max(14, Number(searchParams.days ?? 30) || 30));
   const riskFilter = searchParams.risk ?? '';
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { summary } = await runForecastPipeline(supabase, { days, limit: 200 });
 
   let forecasts = summary.forecasts;

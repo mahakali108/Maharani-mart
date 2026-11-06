@@ -42,8 +42,9 @@ const STATUS_LABELS: Record<RetailerDetail['status'], string> = {
   suspended: 'Suspended',
 };
 
-export default async function RetailerDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function RetailerDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
 
   const [{ data: retailerBase, error: retailerError }, { data: areaData }, { data: docData }, { data: salesmanData }] = await Promise.all([
     supabase
@@ -220,7 +221,7 @@ interface RetailerOrder {
 }
 
 async function RetailerOrderHistory({ retailerId }: { retailerId: string }) {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: orderData }, { data: statsData }] = await Promise.all([
     supabase

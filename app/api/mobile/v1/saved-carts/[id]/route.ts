@@ -16,13 +16,13 @@ const uuidSchema = z.string().uuid();
 const renameSchema = z.object({ name: z.string().trim().min(1).max(60) }).strict();
 
 /** Rename or delete one saved cart owned by the bearer-session retailer. */
-export async function PATCH(request: Request, context: { params: { id: string } }): Promise<Response> {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.create');
   if ('response' in auth) return auth.response;
   const limited = enforceRateLimit('write.cart', request, { requestId, keySuffix: auth.session.userId });
   if (limited) return limited;
-  if (!uuidSchema.safeParse(context.params.id).success) {
+  if (!uuidSchema.safeParse((await context.params).id).success) {
     return jsonError('invalid_request', 'Saved cart id is invalid.', { status: 400, requestId });
   }
   const body = await parseJsonBody(request, renameSchema, requestId);
@@ -34,7 +34,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   try {
     const { data: existing, error: lookupError } = await auth.session.supabase.from('retailer_saved_carts')
       .select('id, name')
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<{ id: string; name: string }>();
     if (lookupError) throw lookupError;
@@ -43,7 +43,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
     }
     const { data, error } = await auth.session.supabase.from('retailer_saved_carts')
       .update({ name, updated_at: new Date().toISOString() } as unknown as never)
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .neq('name', SAVE_FOR_LATER_CART_NAME)
       .select('id')
@@ -57,19 +57,19 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   }
 }
 
-export async function DELETE(request: Request, context: { params: { id: string } }): Promise<Response> {
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.create');
   if ('response' in auth) return auth.response;
   const limited = enforceRateLimit('write.cart', request, { requestId, keySuffix: auth.session.userId });
   if (limited) return limited;
-  if (!uuidSchema.safeParse(context.params.id).success) {
+  if (!uuidSchema.safeParse((await context.params).id).success) {
     return jsonError('invalid_request', 'Saved cart id is invalid.', { status: 400, requestId });
   }
   try {
     const { data: existing, error: lookupError } = await auth.session.supabase.from('retailer_saved_carts')
       .select('id, name')
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .maybeSingle<{ id: string; name: string }>();
     if (lookupError) throw lookupError;
@@ -78,7 +78,7 @@ export async function DELETE(request: Request, context: { params: { id: string }
     }
     const { data, error } = await auth.session.supabase.from('retailer_saved_carts')
       .delete()
-      .eq('id', context.params.id)
+      .eq('id', (await context.params).id)
       .eq('retailer_id', auth.session.userId)
       .neq('name', SAVE_FOR_LATER_CART_NAME)
       .select('id')

@@ -34,7 +34,7 @@ async function loadSellerForUser(userId: string): Promise<{
   seller: SellerTenant;
   memberRole: 'owner' | 'member';
 } | null> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: membership } = await supabase
     .from('seller_members' as never)
     .select('seller_id, member_role')

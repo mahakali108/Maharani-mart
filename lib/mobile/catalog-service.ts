@@ -48,7 +48,7 @@ import {
 import type { ListCursor } from '@/lib/infinite-scroll/cursor';
 import type { MobileSession } from '@/lib/mobile/auth';
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * The caller's RLS-scoped client, typed the way `lib/retailer/*` expects.

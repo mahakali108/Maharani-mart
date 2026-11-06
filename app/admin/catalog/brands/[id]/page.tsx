@@ -10,8 +10,9 @@ interface BrandDetail {
   logo_url: string | null;
 }
 
-export default async function EditBrandPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function EditBrandPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
   const { data: brand, error: brandError } = await supabase.from('brands').select('id, name, logo_url').eq('id', params.id).single<BrandDetail>();
 
   // `.single()` also fails when the row is missing (PGRST116); a broken read

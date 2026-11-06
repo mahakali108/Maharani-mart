@@ -74,14 +74,14 @@ describe('admin banners list', () => {
 describe('admin orders list', () => {
   it('reports a failed read instead of "No orders yet"', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ orders: [] }, { orders: 'permission denied for table orders' }));
-    render(await AdminOrdersPage({ searchParams: {} }));
+    render(await AdminOrdersPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('Orders could not be loaded')).toBeDefined();
     expect(screen.queryByText('No orders yet')).toBeNull();
   });
 
   it('keeps the real empty state for a working query', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ orders: [] }));
-    render(await AdminOrdersPage({ searchParams: {} }));
+    render(await AdminOrdersPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('No orders yet')).toBeDefined();
     expect(screen.queryByText('Orders could not be loaded')).toBeNull();
   });
@@ -90,14 +90,14 @@ describe('admin orders list', () => {
 describe('admin sellers directory', () => {
   it('reports a failed read instead of "No sellers yet"', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ sellers: [] }, { sellers: 'timeout' }));
-    render(await SellersPage({ searchParams: {} }));
+    render(await SellersPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('Sellers could not be loaded')).toBeDefined();
     expect(screen.queryByText('No sellers yet')).toBeNull();
   });
 
   it('keeps the real empty state for a working query', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ sellers: [] }));
-    render(await SellersPage({ searchParams: {} }));
+    render(await SellersPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('No sellers yet')).toBeDefined();
     expect(screen.queryByText('Sellers could not be loaded')).toBeNull();
   });
@@ -106,13 +106,13 @@ describe('admin sellers directory', () => {
 describe('admin banner detail', () => {
   it('surfaces a read failure instead of pretending the banner is gone', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ banners: [], areas: [] }, { banners: FAILURE }));
-    await expect(EditBannerPage({ params: { id: 'banner-1' } })).rejects.toThrow(/could not be loaded/);
+    await expect(EditBannerPage({ params: Promise.resolve({ id: 'banner-1' }) })).rejects.toThrow(/could not be loaded/);
     expect(mocks.notFound).not.toHaveBeenCalled();
   });
 
   it('still 404s when the read succeeds and the row is genuinely absent', async () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ banners: [], areas: [] }));
-    await expect(EditBannerPage({ params: { id: 'missing' } })).rejects.toThrow('notFound');
+    await expect(EditBannerPage({ params: Promise.resolve({ id: 'missing' }) })).rejects.toThrow('notFound');
     expect(mocks.notFound).toHaveBeenCalled();
   });
 });

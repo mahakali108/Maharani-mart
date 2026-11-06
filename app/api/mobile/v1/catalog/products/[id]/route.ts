@@ -32,8 +32,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await paramsPromise;
   const requestId = newRequestId();
 
   const limited = enforceRateLimit('read.catalog', request, { requestId });

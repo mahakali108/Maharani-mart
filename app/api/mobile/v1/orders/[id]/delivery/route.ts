@@ -28,8 +28,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await paramsPromise;
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.view.own');
   if ('response' in auth) return auth.response;
@@ -46,7 +47,7 @@ export async function GET(
   }
 
   try {
-    const client = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const client = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     // Ownership FIRST: the delivery dossier reads the order's child rows, so an
     // order that is not the caller's must be refused before any of them is
     // touched (RLS would return nothing anyway; this keeps that explicit).

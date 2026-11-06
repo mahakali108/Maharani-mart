@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 
 export default async function StaffDashboardPage() {
   await requirePagePermission('orders.view.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // "Today" follows the Asia/Kolkata calendar day (00:00 IST), not server time.
   const todayIso = indiaDayStartIso(indiaTodayDateKey());

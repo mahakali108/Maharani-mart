@@ -41,12 +41,13 @@ interface BrandRow {
 const CATEGORY_ICONS = [Boxes, Cookie, Coffee, Milk, Soup, Package];
 
 export default async function RetailerCatalogPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: CatalogQuery;
+  searchParams: Promise<CatalogQuery>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const filters: CatalogFilterValues = {
     q: sanitizeSearchTerm(searchParams.q ?? ''),
@@ -119,7 +120,7 @@ export default async function RetailerCatalogPage({
   ): Promise<{ items: PricedCatalogCard[]; nextCursor: string | null }> {
     'use server';
     const caller = await requireUser();
-    const client = createClient();
+    const client = (await createClient());
     // A cursor the server cannot decode must END the list, never restart it.
     // `readContinuation(null)` means "first batch", so an undecodable
     // continuation cursor previously re-served batch #1 to a scrolling shopper

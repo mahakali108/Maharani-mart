@@ -32,13 +32,14 @@ interface SupplierRow {
  * database boundary — retailers, staff and salesmen can read nothing.
  */
 export default async function SupplierApplicationsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('suppliers.review');
   const query = parseSupplierReviewQuery(searchParams);
-  const supabase = createClient();
+  const supabase = (await createClient());
   const from = (query.page - 1) * SUPPLIER_REVIEW_PAGE_SIZE;
 
   const { data, count, error } = await supabase

@@ -20,10 +20,11 @@ interface AreaRow {
   created_at: string;
 }
 
-export default async function AreasPage({ searchParams }: { searchParams: { district?: string } }) {
+export default async function AreasPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ district?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
   const canManageDelivery = user.role === 'admin' || user.role === 'super_admin';
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase.from('areas').select('id, name, district, is_active, created_at').order('name');
   if (error) throw new Error('Service areas could not be loaded. Please retry.');
   const directory = (data ?? []) as AreaRow[];

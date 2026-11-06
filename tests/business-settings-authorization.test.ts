@@ -40,7 +40,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       role: 'admin',
       fullName: 'Regular Admin',
       phone: '+919999999999',
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof sessionModule.requireUser>>);
 
     const result = await updateBusinessProfileAction({
       legalEntityName: 'Unauthorized Update',
@@ -64,7 +64,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       role: 'retailer',
       fullName: 'Retailer Shop',
       phone: '+918888888888',
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof sessionModule.requireUser>>);
 
     const result = await updateContactGrievanceAction({
       officialPhone: '+919431000000',
@@ -109,7 +109,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       role: 'retailer',
       fullName: 'Retailer Shop',
       phone: '+918888888888',
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof sessionModule.requireUser>>);
     const retailer = await updateOrderingLaunchReadinessAction(readinessPayload);
     expect(retailer.success).toBe(false);
     expect(retailer.error).toMatch(/Super Admin authorization required/i);
@@ -138,8 +138,8 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       role: 'super_admin',
       fullName: 'Super Admin',
       phone: '+917777777777',
-    } as any);
-    vi.spyOn(supabaseServerModule, 'createClient').mockReturnValue({ rpc } as any);
+    } as unknown as Awaited<ReturnType<typeof sessionModule.requireUser>>);
+    vi.spyOn(supabaseServerModule, 'createClient').mockReturnValue({ rpc } as unknown as ReturnType<typeof supabaseServerModule.createClient>);
 
     const result = await updateOrderingLaunchReadinessAction(readinessPayload, '  Owner review complete  ');
 
@@ -159,7 +159,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       role: 'super_admin',
       fullName: 'Super Admin',
       phone: '+917777777777',
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof sessionModule.requireUser>>);
 
     const result = await updateMarketplaceComplianceAction({
       sellerFundedDiscountsAllowed: false,
@@ -180,7 +180,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       role: 'super_admin',
       fullName: 'Super Admin',
       phone: '+917777777777',
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof sessionModule.requireUser>>);
 
     const result = await updateMarketplaceComplianceAction({
       sellerFundedDiscountsAllowed: false,
@@ -202,7 +202,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       role: 'super_admin',
       fullName: 'Super Admin',
       phone: '+917777777777',
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof sessionModule.requireUser>>);
 
     const mockSupabase = {
       from: vi.fn((table: string) => {
@@ -223,7 +223,7 @@ describe('Super Admin Business Settings Authorization & Security Gates', () => {
       }),
     };
 
-    vi.spyOn(supabaseServerModule, 'createClient').mockReturnValue(mockSupabase as any);
+    vi.spyOn(supabaseServerModule, 'createClient').mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseServerModule.createClient>);
 
     const result = await updateBusinessProfileAction({
       legalEntityName: 'Ajay General',

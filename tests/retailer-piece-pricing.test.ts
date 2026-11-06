@@ -287,6 +287,9 @@ describe('server re-calculates the final price authoritatively', () => {
       })),
     };
     const supabase = {
+      rpc: async (name: string) => name === 'get_retailer_outstanding_paise'
+        ? { data: 0, error: null }
+        : { data: null, error: { message: 'not mocked' } },
       from: (table: string) => {
         const chain: Record<string, unknown> = {};
         const self = () => chain as never;

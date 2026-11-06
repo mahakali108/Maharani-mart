@@ -66,7 +66,7 @@ export interface AIToolResult<T = unknown> {
 
 export interface AIToolContext {
   actor: AIActor;
-  supabase: ReturnType<typeof createClient>;
+  supabase: Awaited<ReturnType<typeof createClient>>;
   requestId: string;
   confirmed: boolean;
 }

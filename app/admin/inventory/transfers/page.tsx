@@ -18,7 +18,7 @@ interface TransferListRow extends StockTransferRow {
 
 export default async function TransfersPage() {
   await requirePagePermission('inventory.view');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: transferData }, { data: warehouseData }, { data: batchData }] = await Promise.all([
     supabase

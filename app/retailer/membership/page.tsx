@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function RetailerCategoryPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [category, loyaltyBalRes, loyaltyLedgerRes] = await Promise.all([
     loadRetailerCategory(supabase, user.id).catch(() => 'general' as const),

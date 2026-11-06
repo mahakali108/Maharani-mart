@@ -156,7 +156,7 @@ export function homeCartSummary(
 }
 
 export async function loadRetailerHome(
-  supabase: ReturnType<typeof createClient>, retailerId: string, areaId: string | null,
+  supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string, areaId: string | null,
   siteUrl?: string, canResolvePrices = true
 ): Promise<RetailerHomeData> {
   const now = new Date();

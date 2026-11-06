@@ -42,12 +42,13 @@ interface CatalogProduct {
 }
 
 export default async function NewSalesmanOrderPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { retailer?: string };
+  searchParams: Promise<{ retailer?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: retailerData, error: retailerError } = await supabase
     .from('retailers')

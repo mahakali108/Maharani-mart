@@ -59,7 +59,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: false },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 interface TicketRow {
   id: string;
@@ -135,11 +135,12 @@ function renderTicketRows(tickets: TicketRow[]) {
 }
 
 export default async function AdminSupportPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string; topic?: string; priority?: string };
+  searchParams: Promise<{ status?: string; topic?: string; priority?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const status: SupportStatus | 'all' =
     SUPPORT_STATUSES.includes(searchParams.status as SupportStatus) || searchParams.status === 'all'
       ? (searchParams.status as SupportStatus | 'all')
@@ -161,7 +162,7 @@ export default async function AdminSupportPage({
   /** Server Action for the batches after the first; the filters are captured. */
   async function loadMoreTickets(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadTicketBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadTicketBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderTicketRows(batch.items), nextCursor: batch.nextCursor };
   }
 

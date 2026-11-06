@@ -34,11 +34,12 @@ function hoursBetween(punchIn: string, punchOut: string | null): number {
 }
 
 export default async function AdminAttendancePage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { date?: string; month?: string };
+  searchParams: Promise<{ date?: string; month?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const month = isMonthKey(searchParams.month) ? searchParams.month : null;
 
   // ------------------------------------------------------------------

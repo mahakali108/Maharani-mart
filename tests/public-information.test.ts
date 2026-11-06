@@ -4,10 +4,11 @@ import { join } from 'node:path';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
-const publicPages = ['about', 'contact', 'legal/terms', 'legal/privacy', 'legal/shipping', 'legal/returns', 'legal/grievance'];
+const policyRoutes = ['terms', 'privacy', 'shipping', 'returns', 'grievance', 'product-safety', 'business-disclosure'];
+const policyPaths = policyRoutes.map((route) => `/legal/${route}`);
 
-describe('public business information and review gates', () => {
-  it.each(publicPages)('%s has a buildable public route and shared review notice', (route) => {
+describe('public information and local policy review gates', () => {
+  it.each(['about', 'contact', ...policyRoutes.map((route) => `legal/${route}`)])('%s has a public route with the shared review shell', (route) => {
     const path = `app/${route}/page.tsx`;
     expect(existsSync(join(root, path))).toBe(true);
     const page = read(path);
@@ -15,59 +16,74 @@ describe('public business information and review gates', () => {
     expect(page).toContain('export const metadata');
   });
 
-  it('labels missing business/legal details rather than inventing them', () => {
+  it('retains the review gate and displays only the owner-provided contact information', () => {
     const shell = read('components/legal/public-info-shell.tsx');
-    const contact = read('app/contact/page.tsx');
+    const contact = read('components/legal/business-contact.tsx');
     expect(shell).toContain('Publication review required.');
-    expect(shell).toContain('tax/invoice responsibility');
-    expect(contact).toContain('have not been provided');
-    expect(contact).toContain('/retailer/help');
-    expect(contact).toContain('/forgot-password');
-  });
-
-  it('disclaims blanket Gaya PIN coverage, tracking and unapproved returns', () => {
-    expect(read('app/legal/shipping/page.tsx')).toContain('not all Gaya PINs are serviceable');
-    expect(read('app/legal/shipping/page.tsx')).toContain('not real-time location tracking');
-    expect(read('app/legal/returns/page.tsx')).toContain('No unverified blanket return period');
-  });
-
-  it('exposes terms, privacy and contact in anonymous and signed-in navigation', () => {
-    for (const path of ['components/auth/auth-frame.tsx', 'components/layout/retailer-shell.tsx', 'components/layout/admin-shell.tsx']) {
-      const nav = read(path);
-      for (const href of ['/legal/terms', '/legal/privacy', '/contact']) {
-        expect(nav).toContain(`href="${href}"`);
-      }
+    expect(shell).toContain('Indian legal/tax review');
+    for (const value of ['AJAY KUMAR', 'AJAY GENERAL', 'MAHARANI TRADERS', 'Plot No. 231', '804403', '8987023959', 'adinathsahu8987@gmail.com']) {
+      expect(contact).toContain(value);
     }
-    const seller = read('app/seller/layout.tsx');
-    expect(seller).toContain('href="/legal/terms"');
-    expect(seller).toContain('href="/contact"');
+    expect(contact).toContain('tel:8987023959');
+    expect(contact).toContain('mailto:adinathsahu8987@gmail.com');
+    expect(read('app/contact/page.tsx')).toContain('/retailer/help');
+    expect(read('app/contact/page.tsx')).toContain('/forgot-password');
+  });
+
+  it('shows the effective date on every policy and preserves relevant delivery and refund limits', () => {
+    for (const route of policyRoutes) expect(read(`app/legal/${route}/page.tsx`)).toContain('04 November 2026');
+    const shipping = read('app/legal/shipping/page.tsx');
+    expect(shipping).toMatch(/not all Gaya PINs are serviceable/i);
+    expect(shipping).toContain('not real-time location tracking');
+    const returns = read('app/legal/returns/page.tsx');
+    expect(returns).toContain('No unverified blanket return period');
+    expect(returns).toContain('order-specific deadline');
+    expect(returns).toContain('does not remove statutory rights or remedies');
+  });
+
+  it('discloses own-stock, food exclusion, seller policy boundary and actual checkout Coins behavior', () => {
+    const terms = read('app/legal/terms/page.tsx');
+    expect(terms).toContain('Food products are excluded');
+    expect(terms).toContain('application includes marketplace and seller features');
+    expect(terms).toContain('do not provide a complete set of terms for third-party seller transactions');
+    expect(terms).toContain('ongoing operation requires separately reviewed customer and seller terms');
+    expect(terms).toContain('Coins balance automatically');
+    expect(terms).toContain('Cash on Delivery (COD)');
+    expect(read('app/legal/business-disclosure/page.tsx')).toContain('not a separate incorporated company');
+    expect(read('app/legal/product-safety/page.tsx')).toContain('food is excluded');
+    const privacy = read('app/legal/privacy/page.tsx');
+    expect(privacy).toContain('third-party seller fulfilment');
+    expect(privacy).toContain('recipient address and phone');
+    expect(privacy).toContain('data flows and disclosures require verification');
+  });
+
+  it('exposes all seven policies in every existing public, retailer, admin and seller footer/navigation', () => {
+    for (const path of ['components/auth/auth-frame.tsx', 'components/layout/retailer-shell.tsx', 'components/layout/admin-shell.tsx', 'app/seller/layout.tsx', 'components/legal/public-info-shell.tsx', 'components/legal/policy-links.tsx']) {
+      const nav = read(path);
+      for (const href of policyPaths) expect(nav, `${path} missing ${href}`).toContain(href);
+    }
+    for (const path of ['components/layout/staff-shell.tsx', 'components/layout/salesman-shell.tsx']) expect(read(path)).toContain('<PolicyLinks />');
+    expect(read('components/auth/auth-frame.tsx')).toContain('aria-label="Public information"');
     const middleware = read('middleware.ts');
     expect(middleware).not.toMatch(/PROTECTED_PREFIXES = \[[^\]]*['"]\/legal['"]/);
   });
 
-  it('adds an accessible review-gated Grievance Redressal route to the shared authentication frame', () => {
-    const authFrame = read('components/auth/auth-frame.tsx');
+  it('identifies the proprietor as grievance officer and retains the owner-proposed timelines', () => {
     const grievance = read('app/legal/grievance/page.tsx');
-    expect(authFrame).toContain('aria-label="Public information"');
-    expect(authFrame).toContain('href="/legal/grievance"');
-    expect(authFrame).toContain('>Grievance Redressal</Link>');
-    expect(grievance).toContain('review-stage grievance information page');
-    expect(grievance).toContain('not represented as a statutory or operational SLA');
-    expect(grievance).not.toContain('e.g. grievance@');
-    expect(grievance).not.toContain('Gaya District, Bihar');
+    expect(grievance).toContain('BusinessContact officer');
+    expect(grievance).toContain('48 hours');
+    expect(grievance).toContain('within one month');
+    expect(grievance).toContain('require operational and legal verification');
+    expect(grievance).toContain('statutory rights and timelines are not affected');
   });
 
   it('keeps the professional-review legal pack unpublished and versioned', () => {
     const index = read('docs/legal-review/README.md');
-    expect(index).toContain('unpublished');
+    expect(index).toMatch(/unpublished/i);
     for (const document of [
-      'TERMS_AND_CONDITIONS.md',
-      'PRIVACY_POLICY.md',
-      'SHIPPING_AND_DELIVERY_POLICY.md',
-      'CANCELLATION_RETURNS_REFUNDS_POLICY.md',
-      'GRIEVANCE_REDRESSAL_POLICY.md',
-      'MARKETPLACE_SELLER_AGREEMENT.md',
-      'SELLER_COMPLIANCE_DECLARATION.md',
+      'TERMS_AND_CONDITIONS.md', 'PRIVACY_POLICY.md', 'SHIPPING_AND_DELIVERY_POLICY.md',
+      'CANCELLATION_RETURNS_REFUNDS_POLICY.md', 'GRIEVANCE_REDRESSAL_POLICY.md',
+      'MARKETPLACE_SELLER_AGREEMENT.md', 'SELLER_COMPLIANCE_DECLARATION.md',
       'PRODUCT_AUTHENTICITY_ANTI_COUNTERFEIT_POLICY.md',
     ]) {
       const content = read(`docs/legal-review/${document}`);

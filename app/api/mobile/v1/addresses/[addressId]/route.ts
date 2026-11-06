@@ -25,13 +25,13 @@ const addressIdSchema = z.string().uuid();
  */
 export async function PATCH(
   request: Request,
-  context: { params: { addressId: string } },
+  context: { params: Promise<{ addressId: string }> },
 ): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.create');
   if ('response' in auth) return auth.response;
 
-  const parsedId = addressIdSchema.safeParse(context.params.addressId);
+  const parsedId = addressIdSchema.safeParse((await context.params).addressId);
   if (!parsedId.success) {
     return jsonError('invalid_request', 'That address id is not valid.', { status: 400, requestId });
   }
@@ -53,13 +53,13 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  context: { params: { addressId: string } },
+  context: { params: Promise<{ addressId: string }> },
 ): Promise<Response> {
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.create');
   if ('response' in auth) return auth.response;
 
-  const parsedId = addressIdSchema.safeParse(context.params.addressId);
+  const parsedId = addressIdSchema.safeParse((await context.params).addressId);
   if (!parsedId.success) {
     return jsonError('invalid_request', 'That address id is not valid.', { status: 400, requestId });
   }

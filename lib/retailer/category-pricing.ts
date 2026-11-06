@@ -24,7 +24,7 @@ import {
 const PRICE_CHUNK = 80;
 
 export async function loadRetailerCategory(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string | null | undefined
 ): Promise<RetailerCategory> {
   if (!retailerId) return 'general';
@@ -49,7 +49,7 @@ interface CategoryPriceRow {
  * pricing configured" (the legacy slab / case-price rules still apply).
  */
 export async function loadCategoryPriceMap(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   packIds: string[],
   category: RetailerCategory
 ): Promise<Map<string, number>> {
@@ -90,7 +90,7 @@ export async function loadCategoryPriceMap(
 
 /** Convenience: retailer id -> effective category price map for the packs. */
 export async function loadEffectiveCategoryPrices(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   packIds: string[],
   retailerId: string | null | undefined
 ): Promise<{ category: RetailerCategory; prices: Map<string, number> }> {

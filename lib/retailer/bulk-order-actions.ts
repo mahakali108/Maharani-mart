@@ -57,7 +57,7 @@ export async function matchBulkLinesAction(raw: string): Promise<{ error?: strin
   const lines = parseBulkOrderLines(raw);
   if (lines.length === 0) return { error: 'Paste at least one line, e.g. `2 x tea 250g`.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: retailer } = await supabase
     .from('retailers')
     .select('area_id')
@@ -154,7 +154,7 @@ export async function addBulkLinesAction(lines: { packId: string; quantity: numb
   }
   if (byPack.size === 0) return { error: 'No valid lines to add.' };
 
-  const result = await addCartLines(createClient(), user.id, [...byPack.entries()].map(([packId, quantity]) => ({ packId, quantity })));
+  const result = await addCartLines((await createClient()), user.id, [...byPack.entries()].map(([packId, quantity]) => ({ packId, quantity })));
   if ('error' in result) return { error: result.error };
   return { addedCount: byPack.size };
 }

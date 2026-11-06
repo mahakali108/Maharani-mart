@@ -81,7 +81,7 @@ interface NameLookup {
 
 /** Case-insensitive name → id, active state, and authoritative category scope. */
 async function loadNameLookup(table: 'brands' | 'categories'): Promise<NameLookup> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const result = table === 'categories'
     ? await supabase.from('categories' as never).select('id, name, is_active, compliance_scope').returns<{ id: string; name: string; is_active: boolean; compliance_scope: string }[]>()
     : await supabase.from('brands' as never).select('id, name, is_active').returns<{ id: string; name: string; is_active: boolean }[]>();
@@ -128,7 +128,7 @@ export async function importProductsAction(formData: FormData): Promise<ImportRe
     return { stage: 'error', error: report.fatalErrors.join(' ') };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [brands, categories] = await Promise.all([loadNameLookup('brands'), loadNameLookup('categories')]);
 
   // Resolve brand/category names and check barcodes against the live catalog.

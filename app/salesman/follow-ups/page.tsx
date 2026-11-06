@@ -23,7 +23,7 @@ interface RetailerOption {
 
 export default async function SalesmanFollowUpsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const today = indiaTodayDateKey();
 
   const [{ data: retailerData }, { data: followUpData }] = await Promise.all([

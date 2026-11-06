@@ -97,6 +97,6 @@ describe('admin delivered report', () => {
     mocks.createClient.mockReturnValue(
       supabaseFixture({ order_deliveries: [], profiles: [] }, { order_deliveries: 'timeout' })
     );
-    await expect(AdminDeliveredPage({ searchParams: {} })).rejects.toThrow(/Deliveries could not be loaded/);
+    await expect(AdminDeliveredPage({ searchParams: Promise.resolve({}) })).rejects.toThrow(/Deliveries could not be loaded/);
   });
 });

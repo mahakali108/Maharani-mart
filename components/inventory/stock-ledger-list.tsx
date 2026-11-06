@@ -69,7 +69,7 @@ interface MovementRow {
   profiles: { full_name: string } | null;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 async function loadMovementBatch(
   supabase: SupabaseClient,
@@ -121,7 +121,7 @@ export async function StockLedgerList({
   permission?: Permission;
 }) {
   if (permission) await requirePermission(permission);
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [firstBatch, { data: warehouseData }] = await Promise.all([
     loadMovementBatch(supabase, warehouseFilter, null),
@@ -134,7 +134,7 @@ export async function StockLedgerList({
   async function loadMoreMovements(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     if (permission) await requirePermission(permission);
-    const batch = await loadMovementBatch(createClient(), warehouseFilter, readCursor(cursor));
+    const batch = await loadMovementBatch((await createClient()), warehouseFilter, readCursor(cursor));
     return { rows: renderMovementRows(batch.items), nextCursor: batch.nextCursor };
   }
 

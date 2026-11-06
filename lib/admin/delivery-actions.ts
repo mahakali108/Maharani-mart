@@ -46,7 +46,7 @@ export async function saveDeliveryPinAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the PIN and delivery terms.' };
 
   const value = parsed.data;
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload = {
     district: value.district,
     state: value.state,
@@ -76,7 +76,7 @@ export async function setDeliveryPinActiveAction(id: string, active: boolean): P
   const actor = await requirePermission('master_data.manage');
   if (actor.role !== 'admin' && actor.role !== 'super_admin') return { error: 'Only an Admin can manage delivery PINs.' };
   if (!z.string().uuid().safeParse(id).success || typeof active !== 'boolean') return { error: 'Invalid delivery PIN.' };
-  const { data, error } = await createClient().from('delivery_service_areas' as never)
+  const { data, error } = await (await createClient()).from('delivery_service_areas' as never)
     .update({ is_active: active, updated_by: actor.id, updated_at: new Date().toISOString() } as never)
     .eq('id', id).select('id').maybeSingle();
   if (error || !data) return { error: 'Delivery PIN could not be changed. Please retry.' };

@@ -82,7 +82,7 @@ async function loadRows(
 ) {
   const user = await requireUser();
   const includeCost = can(user.role, 'products.view_cost');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const relatedIds = params.q && needsRelatedIdLookup(params.field)
     ? await loadSearchRelatedIds(supabase, params.q, params.field === 'sku' ? 'sku' : 'all')

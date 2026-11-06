@@ -291,7 +291,7 @@ describe('priority end-to-end wiring', () => {
     expect(adminListPage).toMatch(/if \(filters\.status !== 'all'\) query = query\.eq\('status', filters\.status\);/);
     expect(adminListPage).toContain('priority');
     // The filters are captured by the Server Action, so scrolling keeps them.
-    expect(adminListPage).toContain("loadTicketBatch(createClient(), filters, readCursor(cursor))");
+    expect(adminListPage).toContain("loadTicketBatch((await createClient()), filters, readCursor(cursor))");
     expect(adminListPage).toContain('resetKey={`${status}|${topic}|${priority}`}');
   });
 

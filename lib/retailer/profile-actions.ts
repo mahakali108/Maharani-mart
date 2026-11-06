@@ -55,7 +55,7 @@ export async function updateShopProfileAction(_prev: ProfileActionResult, formDa
     return { error: parsed.error.issues[0]?.message ?? 'Please check the details.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   // Same raw-rpc pattern as the wallet accessors (client is created without
   // the Database generic, so typed .rpc() overloads resolve to never).
   const { error } = await (
@@ -86,7 +86,7 @@ export async function updateContactDetailsAction(_prev: ProfileActionResult, for
     return { error: parsed.error.issues[0]?.message ?? 'Please check the details.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('profiles')
     .update({ full_name: parsed.data.fullName, phone: parsed.data.phone } as unknown as never)
@@ -118,7 +118,7 @@ export async function changePasswordAction(_prev: ProfileActionResult, formData:
     return { error: 'New passwords do not match.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const email = user.email;
   if (!email) return { error: 'Your account has no sign-in email; contact support to change the password.' };
 
@@ -141,7 +141,7 @@ export async function changePasswordAction(_prev: ProfileActionResult, formData:
  * scope also revokes the refresh tokens server-side.
  */
 export async function logoutAllSessionsAction(): Promise<void> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   await supabase.auth.signOut({ scope: 'global' });
   revalidatePath('/', 'layout');
   const { redirect } = await import('next/navigation');
@@ -167,7 +167,7 @@ export async function saveNotificationPrefsAction(_prev: ProfileActionResult, fo
   });
   if (!parsed.success) return { error: 'Please check the settings.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('retailer_notification_prefs').upsert({
     retailer_id: user.id,
     ...parsed.data,
@@ -194,7 +194,7 @@ export async function requestAccountActionAction(
   if (!['account_deletion', 'data_export'].includes(requestType)) return { error: 'Unknown request type.' };
   const trimmedNote = note.trim().slice(0, 500);
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('retailer_account_requests').insert({
     retailer_id: user.id,
     request_type: requestType,

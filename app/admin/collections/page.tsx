@@ -65,7 +65,7 @@ interface CollectionFilters {
   q: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * The queue is oldest-first while triaging `pending` work and newest-first
@@ -153,12 +153,13 @@ function renderCollectionRows(rows: CollectionRow[]) {
 }
 
 export default async function AdminCollectionsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string; q?: string };
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('collections.verify');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const filters: CollectionFilters = {
     status: searchParams.status ?? 'pending',
@@ -189,7 +190,7 @@ export default async function AdminCollectionsPage({
   async function loadMoreCollections(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     await requirePermission('collections.verify');
-    const batch = await loadCollectionBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadCollectionBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderCollectionRows(batch.items), nextCursor: batch.nextCursor };
   }
 

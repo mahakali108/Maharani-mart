@@ -1,22 +1,26 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { PublicInfoShell, InfoCard } from '@/components/legal/public-info-shell';
+import { BusinessContact } from '@/components/legal/business-contact';
 
-export const metadata: Metadata = { title: 'Cancellations and returns — Maharani Traders' };
+export const metadata: Metadata = { title: 'Cancellation, Return and Refund Policy — Maharani Traders' };
 
 export default function ReturnsPage() {
   return (
-    <PublicInfoShell eyebrow="Order support · draft" title="Cancellations and returns" intro="What the current portal can do, not a promise that every order can be cancelled or that every return or reimbursement is automatic. Final eligibility and timings require operator and legal review.">
-      <InfoCard title="Before fulfilment">
-        <p>Retailers can request to cancel an order while the actual order status allows cancellation (for example, a pending order). A seller sub-order may have its own fulfilment progress; cancelling one part does not automatically cancel every other part of a mixed order. Check the order detail and request help if dispatch has already started.</p>
+    <PublicInfoShell eyebrow="Legal policies" title="Cancellation, Return and Refund Policy" intro="Effective date: 04 November 2026. Contact us as soon as reasonably possible about a cancellation or product issue.">
+      <InfoCard title="Order cancellation">
+        <p>Contact us as soon as possible to request cancellation. A request before dispatch may be accepted; an order already dispatched may not be cancellable through the ordinary process. Cancellation depends on order status and applicable law. If we cancel an order after collecting payment, the amount paid for the unfulfilled order will be refunded.</p>
       </InfoCard>
-      <InfoCard title="After delivery">
-        <p>The portal can submit a return request for a delivered order. Provide the order number, affected items and what happened in a support ticket. The team reviews the recorded delivery, item condition, fulfilling seller and applicable obligations before deciding the outcome. No unverified blanket return period or refund speed is advertised.</p>
-        <p>Coins and stock are adjusted through auditable order/return workflows when an approved reversal applies. Marketplace invoice or tax-credit-note obligations require merchant-of-record and tax review; an in-app status alone is not a tax credit note or proof of a bank refund.</p>
+      <InfoCard title="Product issues and return requests">
+        <p>Contact us if a product is damaged, defective, wrong, a wrong quantity, materially different from its description, suspected spurious or non-genuine, or has a relevant labelling, quality or legal issue. We will review the complaint and provide the remedy required by applicable law, which may include replacement, return, refund or another appropriate remedy.</p>
+        <p>Please provide your order number, name and mobile number, product and quantity, issue description and photographs or video if reasonably available. We may ask for additional information; a missing photograph alone does not automatically remove statutory rights.</p>
+        <p>The website return-request form may have an order-specific deadline. If the form is closed, contact support; an internal deadline does not remove statutory rights or remedies.</p>
       </InfoCard>
-      <InfoCard title="How to reach us">
-        <p>Sign in and open your <Link href="/retailer/orders" className="font-semibold text-primary-700 underline">order history</Link> or <Link href="/retailer/help" className="font-semibold text-primary-700 underline">Help centre</Link> to raise a support ticket. Statutory rights, where applicable, are not waived by this draft. Verified public grievance and contact details must be supplied before launch.</p>
+      <InfoCard title="Cosmetics, hygiene and refunds">
+        <p>A change-of-mind return for opened or used cosmetics may be refused for hygiene and safety where lawful. This does not prevent a legally available remedy for a defective, damaged, wrong, spurious or misdescribed product.</p>
+        <p>For an approved COD refund, support will arrange a reasonable and lawful refund method and verify necessary details. We will communicate an expected processing time after approval. Never share an OTP, password or card PIN to obtain a refund. No unverified blanket return period or automatic refund is promised.</p>
+        <p>Nothing in this policy limits rights or remedies available under applicable consumer-protection or other Indian law.</p>
       </InfoCard>
+      <InfoCard title="Return and refund contact"><BusinessContact /></InfoCard>
     </PublicInfoShell>
   );
 }

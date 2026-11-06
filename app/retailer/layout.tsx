@@ -9,7 +9,7 @@ export default async function RetailerLayout({ children }: { children: React.Rea
   if (user.role !== 'retailer') redirect('/unauthorized');
   if (retailer?.status === 'pending_approval') redirect('/pending-approval');
   if (retailer?.status === 'suspended') redirect('/login?error=account_suspended');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ count: cartCount }, { count: unreadCount }] = await Promise.all([
     supabase

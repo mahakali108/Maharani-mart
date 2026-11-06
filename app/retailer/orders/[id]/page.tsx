@@ -97,14 +97,16 @@ interface OrderProfileRow {
 }
 
 export default async function OrderDetailPage({
-  params,
-  searchParams,
+  params: paramsPromise,
+  searchParams: searchParamsPromise,
 }: {
-  params: { id: string };
-  searchParams: { placed?: string };
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ placed?: string }>;
 }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Estimated delivery: the company's CONFIGURED delivery estimate (env), shown
   // only when it exists — there is no per-order ETA column, and nothing is

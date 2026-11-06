@@ -81,7 +81,7 @@ export async function createAreaAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: AreaInsert = { name: parsed.data.name, district: parsed.data.district };
   const { error } = await supabase.from('areas').insert(payload as unknown as never);
   if (error) return { error: error.message.includes('duplicate') ? 'An area with this name already exists.' : error.message };
@@ -95,7 +95,7 @@ export async function createAreaAction(
 
 export async function toggleAreaActiveAction(areaId: string, isActive: boolean) {
   await requirePermission('master_data.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('areas').update({ is_active: isActive } as unknown as never).eq('id', areaId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/areas');
@@ -120,7 +120,7 @@ export async function updateAreaAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: Partial<AreaInsert> = { name: parsed.data.name, district: parsed.data.district };
   const { data: updated, error } = await supabase.from('areas').update(payload as unknown as never).eq('id', areaId).select('id').maybeSingle<{ id: string }>();
   if (error) {
@@ -137,7 +137,7 @@ export async function updateAreaAction(
 
 export async function deleteAreaAction(areaId: string) {
   await requirePermission('master_data.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('areas').delete().eq('id', areaId);
   if (error) {
     if (error.message.includes('foreign key') || error.message.includes('violates')) {
@@ -178,7 +178,7 @@ export async function createWarehouseAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: WarehouseInsert = {
     name: parsed.data.name,
     area_id: parsed.data.areaId || null,
@@ -193,7 +193,7 @@ export async function createWarehouseAction(
 
 export async function toggleWarehouseActiveAction(warehouseId: string, isActive: boolean) {
   await requirePermission('inventory.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('warehouses')
     .update({ is_active: isActive } as unknown as never)
@@ -218,7 +218,7 @@ export async function updateWarehouseAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: Partial<WarehouseInsert> = {
     name: parsed.data.name,
     area_id: parsed.data.areaId || null,
@@ -233,7 +233,7 @@ export async function updateWarehouseAction(
 
 export async function deleteWarehouseAction(warehouseId: string) {
   await requirePermission('inventory.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('warehouses').delete().eq('id', warehouseId);
   if (error) {
     if (error.message.includes('foreign key') || error.message.includes('violates')) {
@@ -269,7 +269,7 @@ export async function createBrandAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Case-insensitive duplicate pre-check. `brands.name` has only a
   // case-sensitive unique constraint (0001), so "Tata" and "tata" would
@@ -298,7 +298,7 @@ export async function createBrandAction(
 
 export async function toggleBrandActiveAction(brandId: string, isActive: boolean) {
   await requirePermission('master_data.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('brands').update({ is_active: isActive } as unknown as never).eq('id', brandId);
   if (error) throw new Error(error.message);
   revalidateTaxonomyConsumers();
@@ -319,7 +319,7 @@ export async function updateBrandAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Same duplicate rule as create, ignoring the brand's own current name.
   const duplicate = await findBrandNameDuplicate(supabase, parsed.data.name, brandId);
@@ -354,7 +354,7 @@ export async function updateBrandAction(
 
 export async function deleteBrandAction(brandId: string) {
   await requirePermission('master_data.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('brands')
@@ -422,7 +422,7 @@ export async function createCategoryAction(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const parentId = parsed.data.parentId || null;
 
   // Pre-check mirrors categories_name_parent_ci_uq (0027): same parent,
@@ -448,7 +448,7 @@ export async function createCategoryAction(
 
 export async function toggleCategoryActiveAction(categoryId: string, isActive: boolean) {
   await requirePermission('master_data.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('categories')
     .update({ is_active: isActive } as unknown as never)
@@ -476,7 +476,7 @@ export async function updateCategoryAction(
     return { error: 'A category cannot be its own parent.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const parentId = parsed.data.parentId || null;
 
   // Same duplicate rule as create, ignoring the category's own current name.
@@ -518,7 +518,7 @@ export async function updateCategoryAction(
 
 export async function deleteCategoryAction(categoryId: string) {
   await requirePermission('master_data.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('categories')

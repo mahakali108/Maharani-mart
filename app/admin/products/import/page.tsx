@@ -10,7 +10,7 @@ import { PRODUCT_CSV_COLUMNS } from '@/lib/admin/product-csv';
 
 export default async function ImportProductsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: brandData }, { data: categoryData }] = await Promise.all([
     supabase.from('brands').select('name').order('name').returns<{ name: string }[]>(),

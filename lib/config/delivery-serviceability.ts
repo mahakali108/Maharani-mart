@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { createClient } from '@/lib/supabase/server';
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export interface DeliveryDestination {
   district?: string | null;

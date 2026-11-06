@@ -28,9 +28,10 @@ interface RecentOrder {
   collected_by: string | null;
 }
 
-export default async function SalesmanRetailerDetailPage({ params }: { params: { id: string } }) {
+export default async function SalesmanRetailerDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // The explicit assignment filter is the application-level boundary;
   // retailers RLS repeats the same condition at the database boundary.

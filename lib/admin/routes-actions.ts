@@ -28,7 +28,7 @@ export async function createRouteAction(_prevState: RouteFormState, formData: Fo
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload: RouteInsert = {
     name: parsed.data.name,
     salesman_id: parsed.data.salesmanId,
@@ -44,7 +44,7 @@ export async function createRouteAction(_prevState: RouteFormState, formData: Fo
 
 export async function toggleRouteActiveAction(routeId: string, isActive: boolean) {
   await requirePermission('routes.manage.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('routes').update({ is_active: isActive } as unknown as never).eq('id', routeId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin/routes');
@@ -52,7 +52,7 @@ export async function toggleRouteActiveAction(routeId: string, isActive: boolean
 
 export async function addRetailerToRouteAction(routeId: string, retailerId: string, visitDay: number | null) {
   await requirePermission('routes.manage.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { count } = await supabase
     .from('route_customers')
@@ -74,7 +74,7 @@ export async function addRetailerToRouteAction(routeId: string, retailerId: stri
 
 export async function removeRetailerFromRouteAction(routeCustomerId: string, routeId: string) {
   await requirePermission('routes.manage.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.from('route_customers').delete().eq('id', routeCustomerId);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/routes/${routeId}`);

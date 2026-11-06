@@ -51,7 +51,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: false },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** One batch of the stock table. */
 async function loadStockBatch(
@@ -87,7 +87,7 @@ function renderStockRows(stock: StockRow[]) {
 
 export default async function StaffInventoryPage() {
   await requirePagePermission('inventory.view');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [firstBatch, { data: productData, error: productError }, warehouseResolution] = await Promise.all([
     loadStockBatch(supabase, null),
@@ -108,7 +108,7 @@ export default async function StaffInventoryPage() {
     'use server';
     // Same permission gate as the page: a cursor cannot widen access.
     await requirePermission('inventory.view');
-    const batch = await loadStockBatch(createClient(), readCursor(cursor));
+    const batch = await loadStockBatch((await createClient()), readCursor(cursor));
     return { rows: renderStockRows(batch.items), nextCursor: batch.nextCursor };
   }
 

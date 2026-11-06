@@ -57,7 +57,7 @@ interface CollectOptions {
 
 /** Fetch the active product master + the current authorized stock snapshot. */
 async function fetchProductsAndStock(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   explicitIds: string[] | undefined,
   limit: number
 ): Promise<{ products: ProductMasterRow[]; stock: Map<string, StockSnapshot> }> {
@@ -101,7 +101,7 @@ async function fetchProductsAndStock(
 
 /** Fetch per-day demand (RLS-guarded view) for the given products, paginated. */
 async function fetchDailyDemand(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productIds: string[],
   from: string,
   to: string
@@ -129,7 +129,7 @@ async function fetchDailyDemand(
  * product that has either an inventory row or at least one sale in the window.
  */
 export async function collectForecastInputs(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   options: CollectOptions
 ): Promise<{ series: DemandTimeSeries[]; stock: Map<string, StockSnapshot> }> {
   const limit = options.limit ?? 20;

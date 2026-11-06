@@ -88,7 +88,7 @@ interface ReportFilters {
   to: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** Column headers + already-formatted cells for one report batch. */
 interface ReportBatch {
@@ -333,12 +333,13 @@ function renderReportRows(rows: string[][]) {
 }
 
 export default async function InventoryReportsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { report?: string; warehouse?: string; q?: string; from?: string; to?: string };
+  searchParams: Promise<{ report?: string; warehouse?: string; q?: string; from?: string; to?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requirePagePermission('reports.view.all');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const filters: ReportFilters = {
     report: searchParams.report ?? 'valuation',
@@ -358,7 +359,7 @@ export default async function InventoryReportsPage({
   async function loadMoreReport(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     await requirePermission('reports.view.all');
-    const batch = await loadReportBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadReportBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderReportRows(batch.rows), nextCursor: batch.nextCursor };
   }
 

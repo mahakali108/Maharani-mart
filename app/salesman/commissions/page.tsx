@@ -28,7 +28,7 @@ function paiseToRupees(paise: number): string {
 
 export default async function SalesmanCommissionsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data } = await supabase
     .from('staff_commissions')

@@ -9,7 +9,7 @@ interface Option {
 }
 
 export default async function NewProductPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: brandData }, { data: categoryData }] = await Promise.all([
     supabase.from('brands').select('id, name').eq('is_active', true).order('name'),

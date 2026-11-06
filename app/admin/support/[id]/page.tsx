@@ -54,8 +54,9 @@ interface MessageRow {
   created_at: string;
 }
 
-export default async function AdminSupportTicketPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function AdminSupportTicketPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
 
   const { data: ticket, error: ticketError } = await supabase
     .from('support_tickets')

@@ -21,7 +21,7 @@ type ComplianceGate = { ok: true; scope: AllowedCatalogScope } | { ok: false; er
  * from category/product names.
  */
 export async function checkAllowedCatalogCategory(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   categoryId: string
 ): Promise<ComplianceGate> {
   if (!categoryId) return { ok: false, error: 'Select an owner-classified Cosmetics or FMCG category.' };
@@ -51,7 +51,7 @@ export async function checkAllowedCatalogCategory(
  * cannot bypass it.
  */
 export async function checkProductCanBeSold(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data, error } = await supabase.rpc(
@@ -66,7 +66,7 @@ export async function checkProductCanBeSold(
 
 /** Same preflight for offer writers; activation/moderation/order triggers remain authoritative. */
 export async function checkSellerCanTrade(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   sellerId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data, error } = await supabase.rpc(

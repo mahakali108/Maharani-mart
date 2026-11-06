@@ -11,7 +11,7 @@ import { formatAddressLine, type AddressPayload } from '@/lib/retailer/address-s
 import { checkDeliveryTerms, deliveryOrderBlocker } from '@/lib/config/delivery-serviceability';
 import { loadCatalogAvailability } from '@/lib/retailer/catalog';
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export type CommerceErrorCode =
   | 'invalid_request'

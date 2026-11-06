@@ -111,7 +111,7 @@ function purchasesSelect() {
   return 'status, subtotal, gst_total, discount_total, grand_total, collected_by, placed_at';
 }
 
-async function loadOrdersBetween(supabase: ReturnType<typeof createClient>, retailerId: string, startIso: string, endIso: string) {
+async function loadOrdersBetween(supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string, startIso: string, endIso: string) {
   const { data, error } = await supabase
     .from('orders')
     .select(purchasesSelect())
@@ -123,7 +123,7 @@ async function loadOrdersBetween(supabase: ReturnType<typeof createClient>, reta
 }
 
 async function loadTopProductsBetween(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   startIso: string,
   endIso: string,
@@ -171,7 +171,7 @@ async function loadTopProductsBetween(
  * Weekly (last 7 days incl. today) and monthly (current IST calendar month)
  * insight windows for the reports page.
  */
-export async function loadInsightWindows(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<{ week: InsightWindow; month: InsightWindow }> {
+export async function loadInsightWindows(supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string): Promise<{ week: InsightWindow; month: InsightWindow }> {
   const now = new Date();
   const weekStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
   weekStart.setUTCHours(0, 0, 0, 0);
@@ -194,7 +194,7 @@ export async function loadInsightWindows(supabase: ReturnType<typeof createClien
 }
 
 /** Six-month spend trend (cancelled excluded) for the reports page. */
-export async function loadSpendTrend(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<MonthTrendRow[]> {
+export async function loadSpendTrend(supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string): Promise<MonthTrendRow[]> {
   const { data, error } = await supabase
     .from('orders')
     .select('placed_at, status, subtotal, discount_total, gst_total')
@@ -206,7 +206,7 @@ export async function loadSpendTrend(supabase: ReturnType<typeof createClient>, 
 }
 
 /** Most purchased products across the account's full history. */
-export async function loadMostPurchased(supabase: ReturnType<typeof createClient>, retailerId: string, limit = 8): Promise<TopProductRow[]> {
+export async function loadMostPurchased(supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string, limit = 8): Promise<TopProductRow[]> {
   const nowIso = new Date().toISOString();
   const epochIso = '2000-01-01T00:00:00Z';
   return loadTopProductsBetween(supabase, retailerId, epochIso, nowIso, limit);
@@ -240,7 +240,7 @@ type PurchaseStatementDatabaseRow = {
 };
 
 async function fetchPurchaseStatementPage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   fromIso: string,
   toIso: string,
@@ -276,7 +276,7 @@ function mapPurchaseStatementRow(row: PurchaseStatementDatabaseRow): StatementRo
 
 /** Streamable purchase statement rows (own orders only, RLS-scoped). */
 export async function* iteratePurchaseStatement(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   fromIso: string,
   toIso: string
@@ -291,7 +291,7 @@ export async function* iteratePurchaseStatement(
 
 /** Collect all purchase statement rows for callers that explicitly need an array. */
 export async function loadPurchaseStatement(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   fromIso: string,
   toIso: string

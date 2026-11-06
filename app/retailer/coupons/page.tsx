@@ -51,7 +51,7 @@ function SectionHeading({ icon: Icon, title, subtitle }: { icon: typeof Ticket; 
 
 export default async function RetailerCouponsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const now = new Date();
 
   // RLS shows the caller only ACTIVE coupons (0051 keeps a 30-day expired tail

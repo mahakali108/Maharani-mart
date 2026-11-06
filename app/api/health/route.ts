@@ -15,7 +15,7 @@ export async function GET() {
   const startedAt = Date.now();
 
   try {
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { error } = await supabase.from('areas').select('id', { count: 'exact', head: true });
 
     if (error) {

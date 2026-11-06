@@ -26,7 +26,7 @@ export interface ActiveWarehouse {
 
 /** All ACTIVE warehouses. Inactive rows are never candidates. */
 export async function loadActiveWarehouses(
-  supabase: ReturnType<typeof createClient>
+  supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<{ warehouses: ActiveWarehouse[]; error: string | null }> {
   const { data, error } = await supabase
     .from('warehouses')
@@ -53,7 +53,7 @@ export type ActiveWarehouseResolution = WarehouseResolution<ActiveWarehouse> | {
  * DB error  → `{ ok: false, reason: 'unavailable', message }`
  */
 export async function resolveActiveWarehouse(
-  supabase: ReturnType<typeof createClient>
+  supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<ActiveWarehouseResolution> {
   const { warehouses, error } = await loadActiveWarehouses(supabase);
   if (error) {
@@ -73,7 +73,7 @@ export async function resolveActiveWarehouse(
  * fatal (GRN, stock adjustment) or best-effort (order auto-assignment).
  */
 export async function resolveActiveWarehouseId(
-  supabase: ReturnType<typeof createClient>
+  supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<string | null> {
   const resolved = await resolveActiveWarehouse(supabase);
   return resolved.ok ? resolved.warehouse.id : null;
@@ -85,7 +85,7 @@ export async function resolveActiveWarehouseId(
  * warehouse — a stale or forged id can never move stock into another depot.
  */
 export async function requireActiveWarehouse(
-  supabase: ReturnType<typeof createClient>
+  supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<{ ok: true; warehouse: ActiveWarehouse } | { ok: false; error: string }> {
   const resolved = await resolveActiveWarehouse(supabase);
   if (!resolved.ok) {
@@ -100,7 +100,7 @@ export async function requireActiveWarehouse(
  * the value is validated rather than trusted.
  */
 export async function requireWarehouseId(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   submittedId: string | null | undefined
 ): Promise<{ ok: true; warehouseId: string } | { ok: false; error: string }> {
   const resolved = await resolveActiveWarehouse(supabase);

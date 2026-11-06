@@ -60,7 +60,7 @@ export async function generateCommissionAction(input: {
     if (!month.ok) return { error: month.error };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: subject } = await supabase
     .from('profiles')
@@ -113,7 +113,7 @@ export async function generateCommissionAction(input: {
 /** Draft → approved. Only the one forward transition is allowed. */
 export async function approveCommissionAction(commissionId: string): Promise<CommissionActionResult> {
   const user = await requirePermission('commissions.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('staff_commissions')
@@ -146,7 +146,7 @@ export async function approveCommissionAction(commissionId: string): Promise<Com
 /** Approved → paid. Only the one forward transition is allowed. */
 export async function markCommissionPaidAction(commissionId: string): Promise<CommissionActionResult> {
   await requirePermission('commissions.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('staff_commissions')

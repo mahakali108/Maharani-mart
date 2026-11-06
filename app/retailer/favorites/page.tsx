@@ -10,7 +10,7 @@ export const metadata = { title: 'Favourites — Maharani Traders' };
 
 export default async function FavoritesPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [{ data: retailer }, favoriteIds] = await Promise.all([
     supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<{ area_id: string }>(),
     loadFavoriteIds(supabase, user.id),

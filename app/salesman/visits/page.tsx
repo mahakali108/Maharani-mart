@@ -46,7 +46,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: false },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** One batch of this salesman's visits (RLS also scopes this to the caller). */
 async function loadVisitBatch(supabase: SupabaseClient, salesmanId: string, cursor: ListCursor | null) {
@@ -89,7 +89,7 @@ function renderVisitRows(rows: VisitRow[]) {
 
 export default async function SalesmanVisitsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const firstBatch = await loadVisitBatch(supabase, user.id, null);
   const visits = firstBatch.items;
@@ -98,7 +98,7 @@ export default async function SalesmanVisitsPage() {
   async function loadMoreVisits(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const caller = await requireUser();
-    const batch = await loadVisitBatch(createClient(), caller.id, readCursor(cursor));
+    const batch = await loadVisitBatch((await createClient()), caller.id, readCursor(cursor));
     return { rows: renderVisitRows(batch.items), nextCursor: batch.nextCursor };
   }
 

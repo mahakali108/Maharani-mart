@@ -17,7 +17,7 @@ export const metadata = { title: 'Edit profile — Maharani Traders' };
 
 export default async function EditProfilePage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: retailer }, { data: profile }] = await Promise.all([
     supabase

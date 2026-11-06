@@ -24,7 +24,7 @@ function toDateTimeLocal(iso: string): string {
 
 export default async function AdminSchemesPage() {
   await requirePagePermission('pricing.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('schemes')

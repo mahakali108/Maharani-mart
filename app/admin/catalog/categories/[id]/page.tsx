@@ -11,8 +11,9 @@ interface CategoryDetail {
   image_url: string | null;
 }
 
-export default async function EditCategoryPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function EditCategoryPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
 
   const [{ data: category, error: categoryError }, { data: categoryData }] = await Promise.all([
     supabase.from('categories').select('id, name, parent_id, image_url').eq('id', params.id).single<CategoryDetail>(),

@@ -14,7 +14,7 @@ export { formatAddressLine, parseAddressForm };
  * saw when they picked the address.
  */
 /** Clears is_default on the retailer's other addresses (default is exclusive). */
-async function clearOtherDefaults(supabase: ReturnType<typeof createClient>, retailerId: string, keepId?: string) {
+async function clearOtherDefaults(supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string, keepId?: string) {
   const query = supabase.from('retailer_addresses').update({ is_default: false } as unknown as never).eq('retailer_id', retailerId);
   if (keepId) await query.neq('id', keepId);
   else await query;
@@ -29,7 +29,7 @@ async function clearOtherDefaults(supabase: ReturnType<typeof createClient>, ret
  * this internal helper (which receives an already-authorized client) must
  * never be one.
  */
-async function ensureDefaultAddress(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<void> {
+async function ensureDefaultAddress(supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string): Promise<void> {
   const { data: rows } = await supabase
     .from('retailer_addresses')
     .select('id, is_default')
@@ -49,7 +49,7 @@ export async function saveAddressAction(formData: FormData): Promise<AddressActi
   if (!parsed.ok) return { error: parsed.error };
   const value = parsed.value;
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const payload = {
     retailer_id: user.id,
     label: value.label,
@@ -99,7 +99,7 @@ export async function saveAddressAction(formData: FormData): Promise<AddressActi
 export async function setDefaultAddressAction(addressId: string): Promise<AddressActionResult> {
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can manage delivery addresses.' };
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('retailer_addresses')
     .update({ is_default: true } as unknown as never)
@@ -117,7 +117,7 @@ export async function setDefaultAddressAction(addressId: string): Promise<Addres
 export async function deleteAddressAction(addressId: string): Promise<AddressActionResult> {
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can manage delivery addresses.' };
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('retailer_addresses')
     .delete()

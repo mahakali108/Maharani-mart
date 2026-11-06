@@ -93,7 +93,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const supabase = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const supabase = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const query = supabase
       .from('orders')
       .select(ORDER_SELECT)
@@ -152,7 +152,7 @@ export async function POST(request: Request): Promise<Response> {
     notes,
     context: requestContext,
   });
-  const supabase = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+  const supabase = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
 
   try {
     // Recover before reading mutable cart/address/coupon state. If the previous

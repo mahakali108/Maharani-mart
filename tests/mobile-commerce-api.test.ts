@@ -604,7 +604,7 @@ describe('mobile order submit, retry and actual history', () => {
 
     const response = await recoverOrderRequest(
       apiRequest(`/api/mobile/v1/orders/requests/${REQUEST_KEY}`),
-      { params: { requestKey: REQUEST_KEY } },
+      { params: Promise.resolve({ requestKey: REQUEST_KEY }) },
     );
     const payload = await json(response);
     expect(response.status).toBe(200);
@@ -652,7 +652,7 @@ describe('mobile order submit, retry and actual history', () => {
 
     const response = await recoverOrderRequest(
       apiRequest(`/api/mobile/v1/orders/requests/${REQUEST_KEY}`),
-      { params: { requestKey: REQUEST_KEY } },
+      { params: Promise.resolve({ requestKey: REQUEST_KEY }) },
     );
     const payload = await json(response);
     expect(response.status).toBe(200);
@@ -683,7 +683,7 @@ describe('mobile order submit, retry and actual history', () => {
 
     const response = await recoverOrderRequest(
       apiRequest(`/api/mobile/v1/orders/requests/${REQUEST_KEY}`),
-      { params: { requestKey: REQUEST_KEY } },
+      { params: Promise.resolve({ requestKey: REQUEST_KEY }) },
     );
     expect(response.status).toBe(503);
     expect((await json(response)).error).toMatchObject({ code: 'database_unavailable' });

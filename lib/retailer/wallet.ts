@@ -1,5 +1,6 @@
 import 'server-only';
 import { paiseToRupees } from '@/lib/retailer/format';
+import { readWalletOutstanding, type WalletBalanceRpcClient } from '@/lib/retailer/wallet-balance';
 
 import {
   applyCursor,
@@ -76,7 +77,7 @@ export function formatPaise(paise: number): string {
 }
 
 export async function getRetailerCreditAccount(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<CreditAccount | null> {
   const { data } = await supabase
@@ -88,31 +89,15 @@ export async function getRetailerCreditAccount(
 }
 
 export async function getRetailerOutstandingPaise(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<number> {
-  // Authoritative DB function (integer paise), with a legacy-column fallback
-  // when the function is unavailable (not-yet-migrated DB or a mocked client).
-  try {
-    const { data, error } = await (
-      supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }
-    ).rpc('get_retailer_outstanding_paise', {
-      p_retailer_id: retailerId,
-    });
-    if (!error && data !== null && data !== undefined) return Number(data);
-  } catch {
-    // fall through to legacy
-  }
-  const { data: retailer } = await supabase
-    .from('retailers')
-    .select('outstanding_balance')
-    .eq('id', retailerId)
-    .maybeSingle<{ outstanding_balance: number }>();
-  return rupeesToPaise(retailer?.outstanding_balance ?? 0);
+  // Missing or failed balance reads must not silently become stale mirror data or zero.
+  return readWalletOutstanding(supabase as unknown as WalletBalanceRpcClient, retailerId);
 }
 
 export async function getRetailerCreditLimitPaise(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<number> {
   // Authoritative DB function (integer paise), with a legacy-column fallback.
@@ -141,13 +126,13 @@ export interface WalletPosition {
 }
 
 /**
- * Authoritative wallet position from the database RPCs (integer paise), with a
- * legacy-column fallback when the wallet functions have not been deployed yet.
+ * Wallet position from database RPCs (integer paise). Outstanding fails closed;
+ * the credit-limit reader still has a legacy-column fallback.
  * Used by the server-side order quote so the credit check reads the ledger, not
  * a client-supplied or stale balance.
  */
 export async function getRetailerWalletPosition(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<WalletPosition> {
   const [creditLimitPaise, outstandingPaise] = await Promise.all([
@@ -162,7 +147,7 @@ export async function getRetailerWalletPosition(
 }
 
 export async function getRetailerWalletSummary(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<WalletSummary> {
   const [limitPaise, outstandingPaise, account] = await Promise.all([
@@ -189,7 +174,7 @@ export async function getRetailerWalletSummary(
 }
 
 export async function getRetailerLedger(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   limit = 100
 ): Promise<WalletTransaction[]> {
@@ -229,7 +214,7 @@ export const WALLET_LEDGER_ORDER: { column: string; ascending: boolean }[] = [
 export const WALLET_LEDGER_STATEMENT_PAGE_SIZE = 500;
 
 async function fetchRetailerLedgerStatementPage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   fromIso: string,
   toIso: string,
@@ -258,7 +243,7 @@ async function fetchRetailerLedgerStatementPage(
  * is reused, and `(created_at, id)` is a unique cursor even for tied times.
  */
 export function iterateRetailerLedgerStatement(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   fromIso: string,
   toIso: string
@@ -275,7 +260,7 @@ export function iterateRetailerLedgerStatement(
 }
 
 export async function getRetailerLedgerBatch(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   cursor: ListCursor | null,
   pageSize: number = WALLET_LEDGER_BATCH_SIZE

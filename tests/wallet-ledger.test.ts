@@ -178,15 +178,7 @@ describe('wallet transaction types', () => {
     expect(calcOutstanding(0, ledger)).toBe(rupeesToPaise(30));
   });
 
-  it('ORDER_REVERSAL (credit) cancels previous debit', () => {
-    const ledger: LedgerEntry[] = [
-      { transaction_type: 'ORDER_DEBIT', amount_paise: rupeesToPaise(500), direction: 'debit', is_reversed: true }, // original marked reversed
-      { transaction_type: 'ORDER_REVERSAL', amount_paise: rupeesToPaise(500), direction: 'credit', is_reversed: false },
-    ];
-    // Original reversed so ignored, reversal credit 500 => outstanding = -500? But in real flow legacy+debit-credit: reversed original not counted, reversal credit counted
-    // For cancellation test: legacy 0, original debit reversed (ignored), reversal credit 500 => outstanding = -500 (which reduces outstanding)
-    // Actually after reversal, net should be 0 if we had 500 debit then reversal. So we need original debit NOT reversed in calc, but we mark reversed and add credit.
-    // Simpler: after reversal, outstanding should decrease by 500
+  it('preserves legacy flagged balance semantics and correctly offsets an unflagged debit', () => {
     const beforeReversal: LedgerEntry[] = [
       { transaction_type: 'ORDER_DEBIT', amount_paise: rupeesToPaise(500), direction: 'debit', is_reversed: false },
     ];
@@ -196,8 +188,11 @@ describe('wallet transaction types', () => {
     ];
     expect(calcOutstanding(0, beforeReversal)).toBe(rupeesToPaise(500));
     expect(calcOutstanding(0, afterReversal)).toBe(rupeesToPaise(-500)); // in real system reversal_of would be used to track, but net effect is outstanding decreases
-    // In production, reversal logic marks original is_reversed and creates credit, so net outstanding goes from 500 to -500 if no other entries
-    // The important invariant: after reversal, available credit increases
+    const newRefund: LedgerEntry[] = [
+      { transaction_type: 'ORDER_DEBIT', amount_paise: rupeesToPaise(500), direction: 'debit', is_reversed: false },
+      { transaction_type: 'ORDER_REVERSAL', amount_paise: rupeesToPaise(500), direction: 'credit', is_reversed: false },
+    ];
+    expect(calcOutstanding(0, newRefund)).toBe(0);
   });
 
   it('ADJUSTMENT can be debit or credit', () => {
@@ -249,7 +244,8 @@ describe('wallet idempotency', () => {
     expect(walletActions).toContain("generateIdempotencyKey('adj'");
     // Reversals use a deterministic key (not a random timestamp) so a retried
     // reversal can never double-insert.
-    expect(walletActions).toContain('const key = `reversal:${transactionId}`');
+    expect(walletActions).toContain("rpc('reverse_manual_wallet_adjustment'");
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain("'manual-reversal-v1:' || p_transaction_id::text");
   });
 
   it('ledger table has unique idempotency_key constraint', () => {
@@ -392,17 +388,22 @@ describe('wallet admin authorization', () => {
 // 9. Cancellation reversal and repeated request safety
 // ---------------------------------------------------------------------------
 describe('wallet cancellation reversal', () => {
-  it('reversal helper finds original ORDER_DEBIT and creates ORDER_REVERSAL', () => {
+  it('the guarded refund RPC links a credit to its original debit without a flag update', () => {
     const reversal = read('lib/orders/wallet-reversal.ts');
-    expect(reversal).toContain('ORDER_DEBIT');
-    expect(reversal).toContain('ORDER_REVERSAL');
-    expect(reversal).toContain('is_reversed');
+    const forward = read('supabase/migrations/0088_refund_ledger_integrity.sql');
+    expect(reversal).toContain("rpc('refund_order_coins'");
+    expect(reversal).not.toContain(".from('retailer_wallet_ledger')");
+    expect(forward).toContain("v_debit.transaction_type <> 'ORDER_DEBIT'");
+    expect(forward).toContain("'ORDER_REVERSAL', p_amount_paise, 'credit'");
+    expect(forward).toContain('reversal_of');
   });
 
-  it('reversal marks original as is_reversed and creates credit', () => {
+  it('manual reversal uses an atomic linked entry without flagging the original', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
-    expect(walletActions).toContain('is_reversed: true');
-    expect(walletActions).toContain('reversal_of');
+    const migration = read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql');
+    expect(walletActions).toContain("rpc('reverse_manual_wallet_adjustment'");
+    expect(migration).toContain('reversal_of');
+    expect(migration).not.toContain('set is_reversed = true');
   });
 
   it('admin and retailer cancel both call reversal', () => {
@@ -414,14 +415,16 @@ describe('wallet cancellation reversal', () => {
 
   it('repeated reversal of same transaction is rejected', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
-    expect(walletActions).toContain('Transaction already reversed');
+    expect(walletActions).toContain('reverse_manual_wallet_adjustment');
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain('Reversal retry conflicts with existing history');
   });
 
   it('CREDIT_LIMIT_CHANGE cannot be reversed', () => {
     const walletActions = read('lib/admin/wallet-actions.ts');
     // 🪙 Coin wording for the same rule (a funding change is corrected by a
     // new funding value, never by reversing the historical entry).
-    expect(walletActions).toContain('Coin funding changes cannot be reversed');
+    expect(walletActions).toContain('reverse_manual_wallet_adjustment');
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain("v_original.transaction_type not in ('MANUAL_CREDIT', 'MANUAL_DEBIT', 'ADJUSTMENT')");
   });
 });
 
@@ -569,11 +572,14 @@ describe('wallet outstanding fix (0031)', () => {
 
   it('reversals use a deterministic idempotency key (no Date.now drift)', () => {
     const reversal = read('lib/orders/wallet-reversal.ts');
-    expect(reversal).toContain('reversalIdempotencyKey(original.id)');
+    const forward = read('supabase/migrations/0088_refund_ledger_integrity.sql');
+    expect(forward).toContain("'order-refund-v1:' || p_debit_id::text || ':' || p_event_key");
+    expect(forward).toContain('Refund event key conflicts with an existing request');
     expect(reversal).not.toContain('Date.now()');
 
     const actions = read('lib/admin/wallet-actions.ts');
-    expect(actions).toContain('const key = `reversal:${transactionId}`');
+    expect(actions).toContain("rpc('reverse_manual_wallet_adjustment'");
+    expect(read('supabase/migrations/0090_atomic_manual_wallet_reversal.sql')).toContain("'manual-reversal-v1:' || p_transaction_id::text");
   });
 });
 

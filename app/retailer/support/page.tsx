@@ -70,7 +70,7 @@ function supportHref(status: string): string {
   return `/retailer/support${query ? `?${query}` : ''}`;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of this retailer's tickets. `support_tickets` RLS already scopes
@@ -153,12 +153,13 @@ function renderTicketCards(rows: TicketRow[]) {
 }
 
 export default async function RetailerSupportPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string };
+  searchParams: Promise<{ status?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const status = SUPPORT_STATUSES.includes(searchParams.status as SupportStatus) ? (searchParams.status as SupportStatus) : '';
 
@@ -169,7 +170,7 @@ export default async function RetailerSupportPage({
   async function loadMoreTickets(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     const caller = await requireUser();
-    const batch = await loadTicketBatch(createClient(), caller.id, status, readCursor(cursor));
+    const batch = await loadTicketBatch((await createClient()), caller.id, status, readCursor(cursor));
     return { rows: renderTicketCards(batch.items), nextCursor: batch.nextCursor };
   }
 

@@ -63,7 +63,7 @@ interface Option {
   name: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * The ORDER BY for each DB-sortable admin sort, and — in the same breath — the
@@ -229,13 +229,14 @@ async function loadAdminProductBatch(
  * below for how the cap is disclosed.
  */
 export default async function ProductsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
   const params = parseAdminCatalogParams(searchParams);
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const canEdit = can(user.role, 'products.edit');
   const canDelete = can(user.role, 'products.delete');
@@ -267,7 +268,7 @@ export default async function ProductsPage({
     'use server';
     const caller = await requireUser();
     const batch = await loadAdminProductBatch(
-      createClient(),
+      (await createClient()),
       params,
       { canViewCost: can(caller.role, 'products.view_cost') },
       readCursor(cursor)

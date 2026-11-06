@@ -163,6 +163,9 @@ function makeFakeSupabase(options: {
   }
 
   return {
+    rpc: async (name: string) => name === 'get_retailer_outstanding_paise'
+        ? { data: 0, error: null }
+        : { data: null, error: { message: 'not mocked' } },
     from: (table: string) => makeBuilder(table),
   };
 }

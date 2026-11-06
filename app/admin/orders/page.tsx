@@ -64,7 +64,7 @@ interface OrderFilters {
   status: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of orders.
@@ -119,11 +119,12 @@ function renderOrderRows(rows: OrderRow[]) {
 }
 
 export default async function AdminOrdersPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string; status?: string };
+  searchParams: Promise<{ q?: string; status?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
 
   const filters: OrderFilters = {
     q: searchParams.q?.trim() ?? '',
@@ -142,7 +143,7 @@ export default async function AdminOrdersPage({
    */
   async function loadMoreOrders(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadOrderBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadOrderBatch((await createClient()), filters, readCursor(cursor));
     if (batch.failed) {
       // Do not pretend the list ended normally: surface the failure so the
       // client shows its error row instead of "No more orders".

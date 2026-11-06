@@ -43,7 +43,7 @@ const MOVEMENT_LABEL: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [
     { data: totalsData },

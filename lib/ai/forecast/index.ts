@@ -28,7 +28,7 @@ export interface ForecastPipelineResult {
  * it may do so through an explicit, permission-checked server action.
  */
 export async function runForecastPipeline(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   options: {
     productIds?: string[];
     days?: number;

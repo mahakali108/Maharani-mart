@@ -71,7 +71,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: false },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * Strip the characters that could change the shape of a PostgREST `or=()`
@@ -230,8 +230,9 @@ function RetailerTableShell({ children }: { children: ReactNode }) {
   );
 }
 
-export default async function RetailersPage({ searchParams }: { searchParams: { q?: string; district?: string } }) {
-  const supabase = createClient();
+export default async function RetailersPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ q?: string; district?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const q = searchParams.q?.trim() ?? '';
   const district = searchParams.district ?? '';
   const { data: directory, error: directoryError } = await supabase.from('areas').select('id, district').order('district').returns<{ id: string; district: string }[]>();
@@ -256,14 +257,14 @@ export default async function RetailersPage({ searchParams }: { searchParams: { 
    */
   async function loadMorePending(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadRetailerBatch(createClient(), { q, areaIds, pendingOnly: true }, readCursor(cursor));
+    const batch = await loadRetailerBatch((await createClient()), { q, areaIds, pendingOnly: true }, readCursor(cursor));
     return { rows: renderRetailerRows(batch.items), nextCursor: batch.nextCursor };
   }
 
   /** Server Action for the "All Retailers" batches after the first. */
   async function loadMoreOthers(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadRetailerBatch(createClient(), { q, areaIds, pendingOnly: false }, readCursor(cursor));
+    const batch = await loadRetailerBatch((await createClient()), { q, areaIds, pendingOnly: false }, readCursor(cursor));
     return { rows: renderRetailerRows(batch.items), nextCursor: batch.nextCursor };
   }
 

@@ -23,7 +23,7 @@ export async function toggleFavoriteAction(productId: string): Promise<FavoriteA
   if (user.role !== 'retailer') return { error: 'Only retailers can manage favourites.' };
   if (!productId) return { error: 'Product not found.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('retailer_favorites')

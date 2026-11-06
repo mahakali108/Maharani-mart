@@ -52,7 +52,7 @@ function signalLink(kind: string, entityId: string): string {
   return `${DEDUPE_LINK_PREFIX}${encodeURIComponent(`${kind}:${entityId}`)}`;
 }
 
-async function collectSignals(supabase: ReturnType<typeof createClient>): Promise<SmartAlertSignal[]> {
+async function collectSignals(supabase: Awaited<ReturnType<typeof createClient>>): Promise<SmartAlertSignal[]> {
   const now = new Date();
   const d30 = addDays(now, -30);
   const d7 = addDays(now, -7);
@@ -184,7 +184,7 @@ export async function runCommandCenterSmartAlerts(): Promise<RunAlertsResult> {
     return { ok: false, sent: 0, deduped: 0, signals: [], error: 'Super Admin access is required.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   let signals: SmartAlertSignal[];
   try {
     signals = await collectSignals(supabase);

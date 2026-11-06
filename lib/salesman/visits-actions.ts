@@ -15,7 +15,7 @@ export async function checkInVisitAction(
   lng: number | null
 ): Promise<VisitResult> {
   const user = await requireSalesman();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: assignedRetailer } = await supabase
     .from('retailers')
@@ -49,7 +49,7 @@ export async function checkInVisitAction(
 
 export async function checkOutVisitAction(visitId: string, notes: string): Promise<VisitResult> {
   const user = await requireSalesman();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { error } = await supabase
     .from('visits')
@@ -70,7 +70,7 @@ export async function checkOutVisitAction(visitId: string, notes: string): Promi
 
 export async function skipVisitAction(retailerId: string, notes: string): Promise<VisitResult> {
   const user = await requireSalesman();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: assignedRetailer } = await supabase
     .from('retailers')

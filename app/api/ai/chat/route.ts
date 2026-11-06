@@ -47,7 +47,7 @@ function eventStream(events: AsyncGenerator<AgentEvent>) {
   });
 }
 
-async function consumeDistributedRateLimit(supabase: ReturnType<typeof createClient>, userId: string) {
+async function consumeDistributedRateLimit(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const local = localAIRateLimiter.consume(userId);
   if (!local.allowed) return local;
   const { data, error } = await supabase.rpc('consume_ai_rate_limit' as never, { p_bucket: 'chat', p_limit: 20, p_window_seconds: 60 } as never);
@@ -60,7 +60,7 @@ async function* confirmedActionEvents(
   surface: AISurface,
   token: string,
   actor: Extract<Awaited<ReturnType<typeof authenticateAIRequest>>, { actor: unknown }>['actor'],
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   requestId: string
 ): AsyncGenerator<AgentEvent> {
   try {
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Untrusted request origin.' }, { status: 403 });
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: authData } = await supabase.auth.getUser();
   if (!authData.user) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 

@@ -35,7 +35,7 @@ interface CollectionRow {
 }
 
 async function fetchCollection(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   collectionId: string
 ): Promise<CollectionRow | { error: string }> {
   const { data } = await supabase
@@ -62,7 +62,7 @@ export async function verifyCollectionAction(collectionId: string): Promise<Coll
     return { error: 'Only finance/admin can verify collections.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchCollection(supabase, collectionId);
   if ('error' in found) return { error: found.error };
   const collection = found;
@@ -167,7 +167,7 @@ export async function rejectCollectionAction(collectionId: string, reason: strin
     return { error: 'Provide a rejection reason of 3–500 characters.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const found = await fetchCollection(supabase, collectionId);
   if ('error' in found) return { error: found.error };
   const collection = found;

@@ -9,7 +9,7 @@ export default async function NewStaffPage() {
   // flow that isn't useful in a read-only view.
   await requirePagePermission('team.manage');
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [{ data: areas }, { data: warehouses }] = await Promise.all([
     supabase.from('areas').select('id, name').eq('is_active', true).order('name'),
     supabase.from('warehouses').select('id, name').eq('is_active', true).order('name'),

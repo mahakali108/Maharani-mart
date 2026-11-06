@@ -88,7 +88,7 @@ function toListRow(raw: RawListRow): DeliveryListRow {
 
 /** Open tasks assigned to a staff/salesman member (assigned + in progress). */
 export async function listOpenDeliveriesForUser(userId: string): Promise<DeliveryListRow[]> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('order_deliveries')
     .select(LIST_SELECT)
@@ -105,7 +105,7 @@ export async function listOpenDeliveriesForUser(userId: string): Promise<Deliver
 
 /** Recently completed/failed tasks assigned to a user (last 20). */
 export async function listRecentDeliveriesForUser(userId: string): Promise<DeliveryListRow[]> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('order_deliveries')
     .select(LIST_SELECT)
@@ -175,9 +175,9 @@ export interface DeliveryDetail {
  */
 export async function fetchDeliveryDetail(
   orderId: string,
-  client?: ReturnType<typeof createClient>
+  client?: Awaited<ReturnType<typeof createClient>>
 ): Promise<DeliveryDetail | null> {
-  const supabase = client ?? createClient();
+  const supabase = client ?? (await createClient());
 
   const deliveryResult = await supabase
     .from('order_deliveries')

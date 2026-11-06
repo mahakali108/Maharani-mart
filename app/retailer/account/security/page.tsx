@@ -27,7 +27,7 @@ const REQUEST_STATUS_LABEL: Record<RequestRow['status'], string> = {
 
 export default async function SecurityPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: requestRows } = await supabase
     .from('retailer_account_requests')

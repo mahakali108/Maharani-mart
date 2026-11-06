@@ -71,14 +71,15 @@ const STATUS_LABELS: Record<AdminStatusFilter, string> = {
  * deactivate or delete.
  */
 export default async function BrandsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const searchParams = await searchParamsPromise;
   const user = await requireUser();
   const canManage = can(user.role, 'master_data.manage');
   const params = parseTaxonomyParams(searchParams);
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const firstBatch = await loadAdminBrandBatch(supabase, params, null);
   const rows = firstBatch.items;
@@ -90,7 +91,7 @@ export default async function BrandsPage({
   async function loadMoreBrands(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
     await requireUser();
-    const batch = await loadAdminBrandBatch(createClient(), params, readCursor(cursor));
+    const batch = await loadAdminBrandBatch((await createClient()), params, readCursor(cursor));
     return { rows: renderBrandRows(batch.items, canManage), nextCursor: batch.nextCursor };
   }
 

@@ -56,7 +56,7 @@ export async function setCreditLimitAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await supabase.auth.getUser();
   const userId = user.data.user?.id;
   if (!userId) return { error: 'Not authenticated.' };
@@ -142,7 +142,7 @@ export async function recordPaymentAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid payment data.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await supabase.auth.getUser();
   const userId = user.data.user?.id;
   if (!userId) return { error: 'Not authenticated.' };
@@ -218,7 +218,7 @@ export async function recordAdjustmentAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid adjustment data.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await supabase.auth.getUser();
   const userId = user.data.user?.id;
   if (!userId) return { error: 'Not authenticated.' };
@@ -273,79 +273,24 @@ export async function reverseTransactionAction(
   reason: string
 ): Promise<WalletActionResult> {
   await requirePermission('coins.manage');
-  if (!reason || reason.trim().length < 5) return { error: 'Reason must be at least 5 characters.' };
-
-  const supabase = createClient();
-  const user = await supabase.auth.getUser();
-  const userId = user.data.user?.id;
-  if (!userId) return { error: 'Not authenticated.' };
-
-  const { data: original, error: fetchError } = await supabase
-    .from('retailer_wallet_ledger')
-    .select('id, retailer_id, amount_paise, direction, transaction_type, is_reversed')
-    .eq('id', transactionId)
-    .eq('retailer_id', retailerId)
-    .maybeSingle<{
-      id: string;
-      retailer_id: string;
-      amount_paise: number;
-      direction: string;
-      transaction_type: string;
-      is_reversed: boolean;
-    }>();
-
-  if (fetchError || !original) return { error: 'Transaction not found.' };
-  if (original.is_reversed) return { error: 'Transaction already reversed.' };
-  if (original.transaction_type === 'CREDIT_LIMIT_CHANGE') return { error: 'Coin funding changes cannot be reversed; set new funding instead.' };
-
-  // Create reversal entry with opposite direction
-  const reversalDirection = original.direction === 'debit' ? 'credit' : 'debit';
-  const reversalType = original.transaction_type === 'ORDER_DEBIT' ? 'ORDER_REVERSAL' : 'ADJUSTMENT';
-  // Deterministic key: a retried reversal maps to the same key and the ledger's
-  // unique idempotency_key constraint blocks a duplicate reversal entry.
-  const key = `reversal:${transactionId}`;
-
-  const { data: account } = await supabase
-    .from('retailer_credit_accounts')
-    .select('id')
-    .eq('retailer_id', retailerId)
-    .maybeSingle<{ id: string }>();
-
-  const { error: insertError } = await supabase.from('retailer_wallet_ledger').insert({
-    retailer_id: retailerId,
-    account_id: account?.id ?? null,
-    transaction_type: reversalType,
-    amount_paise: original.amount_paise,
-    direction: reversalDirection,
-    reference_type: 'reversal',
-    reference_id: original.id,
-    description: `Reversal of ${original.transaction_type} ${original.id}`,
-    reason,
-    created_by: userId,
-    notes: `Reverses transaction ${original.id}`,
-    idempotency_key: key,
-    metadata: {
-      reversal_of: original.id,
-      original_type: original.transaction_type,
-    },
-    reversal_of: original.id,
-  } as never);
-
-  if (insertError) {
-    // A concurrent/retried reversal already created the entry with the same
-    // deterministic key — treat as success rather than double-reversing.
-    if (insertError.code === '23505') return { success: true, message: 'Transaction already reversed.' };
-    return { error: insertError.message };
+  const normalizedReason = reason.trim();
+  if (normalizedReason.length < 5 || normalizedReason.length > 500) {
+    return { error: 'Reason must be 5 to 500 characters.' };
   }
-
-  // Mark original as reversed
-  await supabase
-    .from('retailer_wallet_ledger')
-    .update({ is_reversed: true, reversed_by: userId, reversed_at: new Date().toISOString() } as never)
-    .eq('id', original.id);
-
+  const supabase = await createClient();
+  // One DB transaction locks the account and original, validates prior
+  // history, and appends the compensating entry without flagging the original.
+  // Order debits, payments, and refunds require their own reviewed workflows.
+  const { error } = await supabase.rpc('reverse_manual_wallet_adjustment' as never, {
+    p_retailer_id: retailerId,
+    p_transaction_id: transactionId,
+    p_reason: normalizedReason,
+  } as never);
+  if (error) return { error: 'Reversal could not be confirmed. Check the ledger and contact support before retrying.' };
   revalidatePath(`/admin/wallets/${retailerId}`);
-  return { success: true, message: 'Transaction reversed.' };
+  revalidatePath('/admin/wallets');
+  revalidatePath('/retailer/account/ledger');
+  return { success: true, message: 'Manual adjustment reversed.' };
 }
 
 const paymentTermsSchema = z.object({
@@ -373,7 +318,7 @@ export async function setPaymentTermsAction(
   const parsed = paymentTermsSchema.safeParse({ retailerId, paymentTermsDays, reason });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData?.user?.id;
   if (!userId) return { error: 'Not authenticated.' };

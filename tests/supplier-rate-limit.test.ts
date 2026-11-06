@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import {
   BoundedWindowLimiter,
   FALLBACK_MAX_ENTRIES,
@@ -54,7 +55,6 @@ describe('F1 — keyed hashes', () => {
     // a different secret (e.g. after rotation) yields a different bucket
     expect(hmacLimiterKey('phone', '9876543210', deriveLimiterKey('another-secret'))).not.toBe(h);
     // and it is NOT the predictable unsalted SHA-256 of the phone
-    const { createHash } = require('node:crypto') as typeof import('node:crypto');
     expect(h).not.toBe(createHash('sha256').update('supplier-app:v1:phone:9876543210').digest('hex'));
   });
   it('missing secret yields null — never a predictable hash', () => {

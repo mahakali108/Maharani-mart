@@ -34,7 +34,7 @@ interface PackMatchRow {
 }
 
 async function loadSearchSuggestions(q: string): Promise<SearchSuggestionResult> {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const like = `"%${q}%"`;
 
   const [{ data: products }, { data: packMatches }, { data: brands }, { data: categories }] = await Promise.all([
@@ -108,7 +108,7 @@ export async function loadPricedProductsAction(productIds: string[]): Promise<Pr
   const safeIds = productIds.filter((id) => UUID_RE.test(id)).slice(0, 20);
   if (safeIds.length === 0) return [];
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const [{ data: retailer }, favoriteIds] = await Promise.all([
     supabase.from('retailers').select('area_id').eq('id', user.id).maybeSingle<{ area_id: string }>(),
     loadFavoriteIds(supabase, user.id),

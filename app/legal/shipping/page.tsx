@@ -1,22 +1,24 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PublicInfoShell, InfoCard } from '@/components/legal/public-info-shell';
+import { BusinessContact } from '@/components/legal/business-contact';
 
-export const metadata: Metadata = { title: 'Delivery areas and order status — Maharani Traders' };
+export const metadata: Metadata = { title: 'Shipping and Delivery Policy — Maharani Traders' };
 
 export default function ShippingPage() {
   return (
-    <PublicInfoShell eyebrow="Delivery · no invented coverage" title="Delivery areas and fulfilment" intro="Online delivery is limited to explicitly active district/state/PIN combinations. Gaya, Bihar is only the initial district default; not all Gaya PINs are serviceable.">
-      <InfoCard title="Check your exact PIN">
-        <p>Add a saved delivery address with its real district, state and six-digit PIN. Checkout checks an admin-verified active PIN, any configured minimum order amount and a zero delivery fee. It repeats this validation inside the order transaction. If no matching PIN is configured, the address has missing fields, or coverage changes, online checkout will not place the order.</p>
-        <p>An inventory/pricing area selected during retailer registration is separate from delivery-PIN coverage. An old order with no structured PIN is not evidence that a location remains serviceable.</p>
+    <PublicInfoShell eyebrow="Legal policies" title="Shipping and Delivery Policy" intro="Effective date: 04 November 2026. Delivery is limited to local serviceable areas in and around Belaganj, Gaya, Bihar.">
+      <InfoCard title="Serviceability, charges and estimates">
+        <p>Delivery is available only when the address is confirmed as serviceable by the website or support. Not all Gaya PINs are serviceable; we do not promise delivery throughout Gaya district or Bihar. An active serviceable PIN and applicable minimum order are checked at checkout.</p>
+        <p>Delivery or other compulsory charges will be disclosed before confirmation. If no charge is shown, confirm it with support before placing an order. The current checkout blocks online ordering for PINs configured with a positive delivery fee until that fee can be accounted for correctly.</p>
+        <p>Estimated timing will be communicated at checkout or confirmation, depending on availability and location. Estimates can be affected by weather, local conditions or operational issues. Contact support about significant delays; order status is not real-time location tracking.</p>
       </InfoCard>
-      <InfoCard title="After an order is placed">
-        <p>Orders and seller sub-orders show recorded processing, dispatch and delivery statuses as updates are entered. This is not real-time location tracking. We do not promise a delivery date, a particular courier or universal coverage; the actual arrangements depend on the order, stock and fulfilling party.</p>
-        <p>When a PIN has a non-zero delivery fee configured, online checkout is blocked until the fee can be accurately included in parent/sub-order totals. Contact support for clarification before arranging anything outside the online flow; the website does not create an unquoted charge.</p>
+      <InfoCard title="Address and delivery inspection">
+        <p>Provide an accurate address and reachable phone number. You or your authorised recipient should be available to receive the order and pay the confirmed COD balance. Support may contact you if the address is incorrect, the recipient is unavailable or the order is refused.</p>
+        <p>Check the package and quantity at delivery. Report visible damage to the representative and contact support promptly. This does not affect statutory rights concerning defective, damaged, wrong, spurious or misdescribed products.</p>
       </InfoCard>
-      <InfoCard title="Need a correction?">
-        <p>Change the saved address before placing a new order. An address recorded on a placed order is a historical snapshot. For a placed order, use your signed-in <Link href="/retailer/help" className="font-semibold text-primary-700 underline">Help centre</Link> and include the order number. For public contact information, see <Link href="/contact" className="font-semibold text-primary-700 underline">Contact</Link>.</p>
+      <InfoCard title="Delivery contact">
+        <p>Use the <Link href="/retailer/help" className="font-semibold text-primary-700 underline">Help centre</Link> for an existing order, or contact us:</p><BusinessContact />
       </InfoCard>
     </PublicInfoShell>
   );

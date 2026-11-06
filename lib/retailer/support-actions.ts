@@ -31,7 +31,7 @@ function randomTicketSuffix(): string {
 }
 
 /** Best-effort: wake every admin/super_admin so a new ticket is seen. */
-async function notifyAdmins(supabase: ReturnType<typeof createClient>, ticket: { ticketNumber: string; subject: string; id: string }): Promise<void> {
+async function notifyAdmins(supabase: Awaited<ReturnType<typeof createClient>>, ticket: { ticketNumber: string; subject: string; id: string }): Promise<void> {
   try {
     // Targeted cast: the supabase-js generated-types overload resolves this
     // chain to `never` (same quirk the rest of the codebase works around).
@@ -90,7 +90,7 @@ export async function createSupportTicketAction(input: {
     return { error: 'Describe the issue in 10–3,000 characters.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // When an order is attached it must be the caller's own order.
   if (input.orderId) {
@@ -168,7 +168,7 @@ export async function replyToSupportTicketAction(
   const text = body?.trim() ?? '';
   if (text.length < 5 || text.length > 3000) return { error: 'Message must be 5–3,000 characters.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: ticket } = await supabase
     .from('support_tickets')

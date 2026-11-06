@@ -4,7 +4,7 @@ import { supabaseFixture } from './helpers/supabase-fixture';
 const mocks = vi.hoisted(() => ({
   client: null as unknown,
   reportClient: null as unknown,
-  reverseOrderWalletDebit: vi.fn(),
+  restoreAndVerifyCancellationCoins: vi.fn(),
   releaseOrderCoupon: vi.fn(),
   createMobileAnonClient: vi.fn(),
   gotrueFetch: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock('@/lib/mobile/clients', () => ({
   gotrueFetch: mocks.gotrueFetch,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: () => mocks.reportClient }));
-vi.mock('@/lib/orders/wallet-reversal', () => ({ reverseOrderWalletDebit: mocks.reverseOrderWalletDebit }));
+vi.mock('@/lib/orders/cancellation-coins', () => ({ restoreAndVerifyCancellationCoins: mocks.restoreAndVerifyCancellationCoins }));
 vi.mock('@/lib/coupons/validate', () => ({ releaseOrderCoupon: mocks.releaseOrderCoupon }));
 
 import { GET as getProfile, PATCH as patchProfile } from '@/app/api/mobile/v1/profile/route';
@@ -81,7 +81,7 @@ async function json(response: Response) {
 
 beforeEach(() => {
   resetRateLimits();
-  mocks.reverseOrderWalletDebit.mockReset().mockResolvedValue({ ok: true });
+  mocks.restoreAndVerifyCancellationCoins.mockReset().mockResolvedValue({ success: true });
   mocks.releaseOrderCoupon.mockReset().mockResolvedValue(undefined);
   mocks.gotrueFetch.mockReset().mockResolvedValue({ ok: true, status: 200 });
   mocks.signInWithPassword.mockReset().mockResolvedValue({
@@ -217,7 +217,7 @@ describe('mobile retailer upgrade routes', () => {
     install({ tables: { support_tickets: [{
       id: TICKET, retailer_id: RETAILER, ticket_number: 'MT-TKT-20261006-ABCD', subject: 'Closed case', topic: 'order', priority: 'normal', status: 'closed', created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', order_id: null, orders: null,
     }] } });
-    const reply = await replyToTicket(request('POST', `/api/mobile/v1/support/tickets/${TICKET}`, { body: 'A new update for the closed support case.' }), { params: { id: TICKET } });
+    const reply = await replyToTicket(request('POST', `/api/mobile/v1/support/tickets/${TICKET}`, { body: 'A new update for the closed support case.' }), { params: Promise.resolve({ id: TICKET }) });
     expect(reply.status).toBe(409);
   });
 
@@ -226,13 +226,13 @@ describe('mobile retailer upgrade routes', () => {
       support_tickets: [{ id: TICKET, retailer_id: RETAILER, ticket_number: 'MT-TKT-20261006-ABCD', subject: 'Delivery issue', topic: 'delivery', priority: 'high', status: 'in_progress', created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T01:00:00Z', order_id: null, orders: null }],
       support_ticket_messages: [{ id: 'message-1', ticket_id: TICKET, author_id: RETAILER, author_role: 'retailer', body: 'My delivery has not arrived.', created_at: '2026-10-01T00:30:00Z' }],
     } });
-    const detail = await json(await getTicket(request('GET', `/api/mobile/v1/support/tickets/${TICKET}`), { params: { id: TICKET } }));
+    const detail = await json(await getTicket(request('GET', `/api/mobile/v1/support/tickets/${TICKET}`), { params: Promise.resolve({ id: TICKET }) }));
     expect(detail.data.canReply).toBe(true);
     expect(detail.data.messages[0]).toMatchObject({ authorRole: 'retailer', isOwn: true });
     expect(client.queries.some((query) => query.table === 'support_tickets' && query.filters.some((filter) => filter.column === 'retailer_id' && filter.value === RETAILER))).toBe(true);
 
     install({ tables: { support_tickets: [{ id: TICKET, retailer_id: OTHER_RETAILER, status: 'open', orders: null }] } });
-    const foreign = await getTicket(request('GET', `/api/mobile/v1/support/tickets/${TICKET}`), { params: { id: TICKET } });
+    const foreign = await getTicket(request('GET', `/api/mobile/v1/support/tickets/${TICKET}`), { params: Promise.resolve({ id: TICKET }) });
     expect(foreign.status).toBe(404);
   });
 
@@ -244,9 +244,9 @@ describe('mobile retailer upgrade routes', () => {
     expect(payload.data.savedCarts[0].name).toBe('Saved for later');
     expect(client.queries.find((query) => query.table === 'retailer_saved_carts')?.filters)
       .toContainEqual({ op: 'eq', column: 'retailer_id', value: RETAILER });
-    const blocked = await deleteSavedCart(request('DELETE', `/api/mobile/v1/saved-carts/${SAVED_CART}`), { params: { id: SAVED_CART } });
+    const blocked = await deleteSavedCart(request('DELETE', `/api/mobile/v1/saved-carts/${SAVED_CART}`), { params: Promise.resolve({ id: SAVED_CART }) });
     expect(blocked.status).toBe(404);
-    const rename = await renameSavedCart(request('PATCH', `/api/mobile/v1/saved-carts/${SAVED_CART}`, { name: 'Restock list' }), { params: { id: SAVED_CART } });
+    const rename = await renameSavedCart(request('PATCH', `/api/mobile/v1/saved-carts/${SAVED_CART}`, { name: 'Restock list' }), { params: Promise.resolve({ id: SAVED_CART }) });
     expect(rename.status).toBe(404);
 
     install({ tables: { cart_items: [{ id: 'cart-line', retailer_id: RETAILER, pack_id: 'pack-1', product_id: 'product-1', quantity: 6 }] } });
@@ -259,25 +259,40 @@ describe('mobile retailer upgrade routes', () => {
       orders: [{ id: ORDER, retailer_id: RETAILER, status: 'delivered' }],
       order_deliveries: [{ order_id: ORDER, return_deadline: '2099-12-31' }],
     } });
-    const response = await requestReturn(request('POST', `/api/mobile/v1/orders/${ORDER}/return`, { reason: 'Several items arrived damaged.' }), { params: { id: ORDER } });
+    const response = await requestReturn(request('POST', `/api/mobile/v1/orders/${ORDER}/return`, { reason: 'Several items arrived damaged.' }), { params: Promise.resolve({ id: ORDER }) });
     expect(response.status).toBe(200);
     expect(client.queries.find((query) => query.table === 'return_requests' && query.operation === 'insert')?.payload)
       .toMatchObject({ order_id: ORDER, retailer_id: RETAILER, reason: 'Several items arrived damaged.' });
 
     install({ tables: { orders: [{ id: ORDER, retailer_id: OTHER_RETAILER, status: 'delivered' }] } });
-    const foreign = await requestReturn(request('POST', `/api/mobile/v1/orders/${ORDER}/return`, { reason: 'Damaged item.' }), { params: { id: ORDER } });
+    const foreign = await requestReturn(request('POST', `/api/mobile/v1/orders/${ORDER}/return`, { reason: 'Damaged item.' }), { params: Promise.resolve({ id: ORDER }) });
     expect(foreign.status).toBe(404);
   });
 
   it('cancels only the caller pending order and passes its verified Supabase client to reversals', async () => {
     const client = install({ tables: { orders: [{ id: ORDER, retailer_id: RETAILER, status: 'pending' }] } });
-    const response = await cancelOrder(request('POST', `/api/mobile/v1/orders/${ORDER}/cancel`, { reason: 'Duplicate order.' }), { params: { id: ORDER } });
+    const response = await cancelOrder(request('POST', `/api/mobile/v1/orders/${ORDER}/cancel`, { reason: 'Duplicate order.' }), { params: Promise.resolve({ id: ORDER }) });
     expect(response.status).toBe(200);
-    expect(mocks.reverseOrderWalletDebit).toHaveBeenCalledWith(ORDER, RETAILER, 'Duplicate order.', RETAILER, client);
+    expect(mocks.restoreAndVerifyCancellationCoins).toHaveBeenCalledWith(client, ORDER, RETAILER, 'Duplicate order.', RETAILER);
     const update = client.queries.find((query) => query.table === 'orders' && query.operation === 'update');
     expect(update?.filters).toContainEqual({ op: 'eq', column: 'retailer_id', value: RETAILER });
     expect(update?.filters).toContainEqual({ op: 'eq', column: 'status', value: 'pending' });
     expect(mocks.releaseOrderCoupon).toHaveBeenCalledWith(client, ORDER);
+  });
+
+  it('does not report success when cancellation committed but coin restoration is unverified, and allows an owned retry', async () => {
+    const client = install({ tables: { orders: [{ id: ORDER, retailer_id: RETAILER, status: 'pending' }] } });
+    mocks.restoreAndVerifyCancellationCoins.mockResolvedValueOnce({ error: 'The order is cancelled, but Coins restoration could not be verified. Contact support before retrying.' });
+    const failed = await cancelOrder(request('POST', `/api/mobile/v1/orders/${ORDER}/cancel`, { reason: 'Duplicate order.' }), { params: Promise.resolve({ id: ORDER }) });
+    expect(failed.status).toBe(503);
+    expect(client.tables.orders?.[0]?.status).toBe('cancelled');
+    const retry = await cancelOrder(request('POST', `/api/mobile/v1/orders/${ORDER}/cancel`, { reason: 'Duplicate order.' }), { params: Promise.resolve({ id: ORDER }) });
+    expect(retry.status).toBe(200);
+    expect(mocks.restoreAndVerifyCancellationCoins).toHaveBeenCalledTimes(2);
+    install({ tables: { orders: [{ id: ORDER, retailer_id: OTHER_RETAILER, status: 'cancelled' }] } });
+    const foreign = await cancelOrder(request('POST', `/api/mobile/v1/orders/${ORDER}/cancel`, {}), { params: Promise.resolve({ id: ORDER }) });
+    expect(foreign.status).toBe(409);
+    expect(mocks.restoreAndVerifyCancellationCoins).toHaveBeenCalledTimes(2);
   });
 
   it('records account requests without accepting a caller-supplied owner', async () => {

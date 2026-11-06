@@ -21,10 +21,11 @@ interface AssignmentRow {
   warehouse_id: string | null;
 }
 
-export default async function EditStaffPage({ params }: { params: { id: string } }) {
+export default async function EditStaffPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   await requirePagePermission('team.manage');
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: staffMember, error: staffMemberError } = await supabase
     .from('profiles')
     .select('id, full_name, phone, role')

@@ -56,7 +56,7 @@ export async function GET(request: Request): Promise<Response> {
   if (limited) return limited;
 
   try {
-    const supabase = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const supabase = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const [windows, trend, mostPurchased, wallet] = await Promise.all([
       loadInsightWindows(supabase, auth.session.userId),
       loadSpendTrend(supabase, auth.session.userId),

@@ -85,7 +85,7 @@ function Breadcrumb() {
 
 export default async function CartPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: cartData }, { data: retailer }, favoriteIds, walletSummary] = await Promise.all([
     supabase

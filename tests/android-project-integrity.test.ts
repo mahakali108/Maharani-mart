@@ -257,9 +257,9 @@ describe('Android project integrity', () => {
 
     expect(includes.length).toBeGreaterThan(0);
 
-    for (const module of includes) {
-      const dir = join(ANDROID, module.replace(/:/g, '/'));
-      expect(statSync(dir).isDirectory(), `${module} directory`).toBe(true);
+    for (const includedModule of includes) {
+      const dir = join(ANDROID, includedModule.replace(/:/g, '/'));
+      expect(statSync(dir).isDirectory(), `${includedModule} directory`).toBe(true);
       expect(
         ['build.gradle.kts', 'build.gradle'].some((name) => {
           try {
@@ -268,7 +268,7 @@ describe('Android project integrity', () => {
             return false;
           }
         }),
-        `${module} build script`,
+        `${includedModule} build script`,
       ).toBe(true);
     }
   });

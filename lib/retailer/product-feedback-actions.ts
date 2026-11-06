@@ -51,7 +51,7 @@ export async function reportProductIssueAction(input: {
   }
   if (!isIssueType(parsed.data.issueType)) return { error: 'Please choose a problem type.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: product } = await supabase
     .from('products')
     .select('id')
@@ -103,7 +103,7 @@ export async function toggleStockAlertAction(packId: string, subscribe: boolean)
     return { error: 'Invalid pack.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: pack } = await supabase
     .from('product_packs')
     .select('id')

@@ -18,7 +18,7 @@ interface ReturnRequestRow {
 
 export async function approveReturnAction(returnId: string, note: string): Promise<ReturnActionResult> {
   const user = await requirePermission('orders.return.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('return_requests')
@@ -67,7 +67,7 @@ export async function approveReturnAction(returnId: string, note: string): Promi
 
 export async function rejectReturnAction(returnId: string, note: string): Promise<ReturnActionResult> {
   const user = await requirePermission('orders.return.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: existing } = await supabase
     .from('return_requests')

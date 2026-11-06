@@ -31,7 +31,7 @@ const COUPON_SELECT =
   'id, code, title, description, discount_type, discount_value, minimum_order_value, maximum_discount, usage_limit, per_retailer_limit, used_count, starts_at, expires_at, is_active, first_order_only, retailer_id, category_id, brand_id, product_id';
 
 export async function loadCouponByCode(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   rawCode: string
 ): Promise<{ coupon: CouponRow | null; error: boolean }> {
   const code = normalizeCouponCode(rawCode);
@@ -46,7 +46,7 @@ export async function loadCouponByCode(
 }
 
 async function loadRetailerRedemptionCount(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   couponId: string,
   retailerId: string
 ): Promise<{ count: number; error: boolean }> {
@@ -60,7 +60,7 @@ async function loadRetailerRedemptionCount(
 }
 
 async function loadRetailerOrderCount(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<{ count: number; error: boolean }> {
   const { count, error } = await supabase
@@ -81,7 +81,7 @@ function reject(code: string, reason: CouponInvalidReason, message: string): Cou
  * discount. See the module doc for the trust model.
  */
 export async function validateCouponForOrder(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   input: CouponValidationInput
 ): Promise<CouponValidationResult> {
   const code = normalizeCouponCode(input.code);
@@ -162,7 +162,7 @@ export async function validateCouponForOrder(
  * billed to an order.
  */
 export async function loadActiveCouponForRetailer(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string
 ): Promise<{ coupon: CouponRow | null; error: boolean }> {
   const { data, error } = await supabase
@@ -180,7 +180,7 @@ export async function loadActiveCouponForRetailer(
  * is audited; support can reconcile).
  */
 export async function releaseOrderCoupon(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string
 ): Promise<void> {
   try {

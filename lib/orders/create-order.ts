@@ -10,7 +10,7 @@ import { checkDeliveryTerms, deliveryOrderBlocker, type DeliveryDestination } fr
 import { isOrderingReady, ORDERING_NOT_ENABLED_MESSAGE } from '@/lib/compliance/ordering-readiness';
 import type { Database } from '@/types/database.types';
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export interface RequestedOrderLine {
   packId: string;
@@ -324,7 +324,7 @@ export async function createOrderForRetailer({
   const normalizedNotes = (notes ?? '').trim();
   if (normalizedNotes.length > 1000) return { error: 'Order notes must be 1000 characters or fewer.', code: 'internal_error' };
 
-  const supabase = suppliedClient ?? createClient();
+  const supabase = suppliedClient ?? (await createClient());
   const effectiveRequestKey = requestKey ?? randomUUID();
   if (!UUID_RE.test(effectiveRequestKey)) return { error: 'Invalid order request key.', code: 'internal_error' };
 

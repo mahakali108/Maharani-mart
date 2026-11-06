@@ -28,7 +28,7 @@ import {
  * empty, and the UI renders "—" for that cell instead of a plausible guess.
  */
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** Columns the admin list reads directly from `products` plus its relations. */
 export const ADMIN_PRODUCT_SELECT =

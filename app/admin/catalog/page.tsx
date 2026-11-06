@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
  * can see the shape of the catalog before drilling in.
  */
 export default async function CatalogPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [categoryCounts, brandCounts] = await Promise.all([
     loadCategoryCounts(supabase),

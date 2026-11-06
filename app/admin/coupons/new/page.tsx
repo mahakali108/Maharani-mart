@@ -5,7 +5,7 @@ import { CouponForm, type Option } from '@/components/admin/coupon-form';
 
 export default async function AdminNewCouponPage() {
   await requirePagePermission('pricing.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: retailerData }, { data: categoryData }, { data: brandData }, { data: productData }] = await Promise.all([
     supabase.from('retailers').select('id, shop_name').eq('status', 'active').order('shop_name'),

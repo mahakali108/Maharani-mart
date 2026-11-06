@@ -15,11 +15,12 @@ const BUCKETS: { key: 'expired' | 'critical' | 'warning' | 'healthy'; label: str
 ];
 
 export default async function InventoryExpiryPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { bucket?: string; warehouse?: string };
+  searchParams: Promise<{ bucket?: string; warehouse?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
 
   const [{ data: expiryData }, { data: settingsData }, { data: warehouseData }] = await Promise.all([
     supabase.from('inventory_expiry_report').select('*').order('expiry_date', { ascending: true, nullsFirst: false }),

@@ -55,7 +55,7 @@ interface ProductFilters {
   status: string;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * One batch of `inventory_product_totals` rows. The view is already
@@ -115,11 +115,12 @@ function renderProductRows(rows: ProductTotalsViewRow[]) {
 }
 
 export default async function InventoryProductsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string; status?: string };
+  searchParams: Promise<{ q?: string; status?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
 
   const filters: ProductFilters = {
     q: (searchParams.q ?? '').trim(),
@@ -131,7 +132,7 @@ export default async function InventoryProductsPage({
 
   async function loadMoreProducts(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadProductBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadProductBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderProductRows(batch.items), nextCursor: batch.nextCursor };
   }
 

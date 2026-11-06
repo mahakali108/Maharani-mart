@@ -82,7 +82,7 @@ function generatePackSkuCode(productId: string) {
  * identified by `pack_sku_code === products.sku_code`; ordering is now the
  * stable link between the product form and the pack it keeps in sync.
  */
-async function findDefaultPackId(supabase: ReturnType<typeof createClient>, productId: string) {
+async function findDefaultPackId(supabase: Awaited<ReturnType<typeof createClient>>, productId: string) {
   const { data } = await supabase
     .from('product_packs')
     .select('id')
@@ -116,7 +116,7 @@ export async function createProductAction(
     return { error: firstError(errors), errors };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const categoryGate = await checkAllowedCatalogCategory(supabase, categoryId);
   if (!categoryGate.ok) return { error: categoryGate.error, errors: { categoryId: categoryGate.error } };
   const cost = d.costPrice;
@@ -181,7 +181,7 @@ type ValidatedProductDraft = Extract<ReturnType<typeof validateProductDraft>, { 
  * columns — cost is never read or written on this path (0025 hides it).
  */
 async function updateProductOperationalFields(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   productId: string,
   d: ValidatedProductDraft,
   extra: { brandId: string; categoryId: string; isNewLaunch: boolean }
@@ -261,7 +261,7 @@ export async function updateProductAction(
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const isNewLaunch = formData.get('isNewLaunch') === 'on';
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const categoryGate = await checkAllowedCatalogCategory(supabase, categoryId);
   if (!categoryGate.ok) return { error: categoryGate.error, errors: { categoryId: categoryGate.error } };
 
@@ -342,7 +342,7 @@ export async function updateProductAction(
 
 export async function toggleProductActiveAction(productId: string, isActive: boolean) {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   if (isActive) {
     const gate = await checkProductCanBeSold(supabase, productId);
     if (!gate.ok) throw new Error(gate.error);
@@ -357,7 +357,7 @@ export async function toggleProductActiveAction(productId: string, isActive: boo
 
 export async function deleteProductAction(productId: string) {
   await requirePermission('products.delete');
-  const supabase = createClient();
+  const supabase = (await createClient());
   // The FKs (0001/0004/0028) cascade the gallery rows away, but Postgres
   // cannot delete Storage objects — collect the refs first so the files can
   // be cleaned up afterwards instead of orphaning them forever.
@@ -383,7 +383,7 @@ export async function addProductImageAction(productId: string, imageUrl: string,
   // absolute URL. Anything else (blob:, data:, appwrite://, garbage) is
   // rejected before it can reach the column.
   if (!isRenderableMediaRef(imageUrl)) throw new Error('Invalid image reference.');
-  const supabase = createClient();
+  const supabase = (await createClient());
   // The product must exist — a stale admin tab or a wrong id would otherwise
   // surface as a raw FK violation.
   const { data: product } = await supabase
@@ -403,7 +403,7 @@ export async function addProductImageAction(productId: string, imageUrl: string,
 
 export async function removeProductImageAction(imageId: string, productId: string) {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Scoped to the product, exactly like the pack-gallery delete: a mismatched
   // imageId/productId pair must remove nothing, not "the image anyway".
@@ -428,7 +428,7 @@ export async function removeProductImageAction(imageId: string, productId: strin
 
 export async function reorderProductImageAction(productId: string, imageId: string, direction: 'up' | 'down') {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('product_images')
     .select('id, sort_order')
@@ -442,7 +442,7 @@ export async function reorderProductImageAction(productId: string, imageId: stri
 
 export async function setProductImagePrimaryAction(productId: string, imageId: string) {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: rows, error } = await supabase
     .from('product_images')
     .select('id, sort_order')
@@ -473,7 +473,7 @@ type PackImageInsert = Database['public']['Tables']['product_pack_images']['Inse
 export async function addPackImageAction(packId: string, productId: string, imageUrl: string, sortOrder: number) {
   await requirePermission('products.edit');
   if (!isRenderableMediaRef(imageUrl)) throw new Error('Invalid image reference.');
-  const supabase = createClient();
+  const supabase = (await createClient());
   // Validate pack belongs to product
   const { data: pack, error: packErr } = await supabase
     .from('product_packs')
@@ -492,7 +492,7 @@ export async function addPackImageAction(packId: string, productId: string, imag
 
 export async function removePackImageAction(imageId: string, packId: string, productId: string) {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase
     .from('product_pack_images')
     .delete()
@@ -515,7 +515,7 @@ export async function reorderPackImageAction(
   direction: 'up' | 'down'
 ) {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('product_pack_images')
     .select('id, sort_order')
@@ -528,7 +528,7 @@ export async function reorderPackImageAction(
 
 export async function setPackImagePrimaryAction(packId: string, productId: string, imageId: string) {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: pack } = await supabase
     .from('product_packs')
     .select('id, product_id')
@@ -600,7 +600,7 @@ export async function addProductPackAction(
     packSkuCode: parsed.data.packSkuCode || generatePackSkuCode(productId),
   };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Size labels are the retailer-facing variant identity. Prevent duplicates
   // before insert so the UI returns a useful message instead of a raw index
@@ -691,7 +691,7 @@ export async function addProductPackAction(
 
 export async function togglePackActiveAction(packId: string, productId: string, isActive: boolean) {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('product_packs')
     .update({ is_active: isActive } as unknown as never)
@@ -702,7 +702,7 @@ export async function togglePackActiveAction(packId: string, productId: string, 
 
 export async function deleteProductPackAction(packId: string, productId: string) {
   await requirePermission('products.delete');
-  const supabase = createClient();
+  const supabase = (await createClient());
   // Collect the pack's gallery refs before the FK cascade removes the rows
   // (0028), so the files can be cleaned up afterwards.
   const refs = await collectPackMediaRefs(supabase, packId);
@@ -730,7 +730,7 @@ export async function setPackImageAction(packId: string, productId: string, imag
     throw new Error('Invalid image reference.');
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: pack, error: fetchError } = await supabase
     .from('product_packs')
     .select('id, product_id, image_url')
@@ -774,7 +774,7 @@ async function swapSortOrder(
   rowId: string,
   direction: 'up' | 'down'
 ) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const index = rows.findIndex((r) => r.id === rowId);
   const swapIndex = direction === 'up' ? index - 1 : index + 1;
   if (index === -1 || swapIndex < 0 || swapIndex >= rows.length) return;
@@ -797,7 +797,7 @@ async function swapSortOrder(
 
 export async function movePackAction(productId: string, packId: string, direction: 'up' | 'down') {
   await requirePermission('products.edit');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data } = await supabase
     .from('product_packs')
     .select('id, sort_order')
@@ -910,7 +910,7 @@ export async function savePackPricingAction(input: z.input<typeof packPricingSch
     };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // The pack must belong to this product — never trust the id pair alone.
   const { data: existingPack, error: packReadError } = await supabase
@@ -1043,7 +1043,7 @@ export async function savePackPricingAction(input: z.input<typeof packPricingSch
  */
 export async function duplicatePackAction(packId: string, productId: string) {
   const user = await requirePermission('pricing.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Fetch the source pack with its tiers.
   //
@@ -1158,7 +1158,7 @@ export async function setProductPackStockAction(
     return { error: 'Enter a whole stock quantity from 0 to 2,000,000,000.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: pack } = await supabase
     .from('product_packs')
     .select('product_id')

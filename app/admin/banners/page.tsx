@@ -22,7 +22,7 @@ interface BannerRow {
 }
 
 export default async function BannersPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Separate queries rather than an embed — same reasoning as the fix
   // in app/admin/retailers/page.tsx.

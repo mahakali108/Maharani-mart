@@ -31,7 +31,7 @@ export async function placeOrderAction(notes: string, addressId?: string): Promi
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can check out this cart.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Read the persisted basket without clearing it. `create_order_atomic` takes
   // the same per-retailer cart lock as every add/update/remove, verifies that

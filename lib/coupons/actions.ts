@@ -29,7 +29,7 @@ export async function applyCouponAction(rawCode: string): Promise<CouponActionRe
   if (!code) return { error: 'Enter a coupon code to apply.' };
   if (code.length > 40) return { error: 'That coupon code is too long.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Price overrides are area-scoped, so the retailer's area is read first —
   // the same order of operations as the quote path.
@@ -73,7 +73,7 @@ export async function removeCouponAction(): Promise<CouponActionResult> {
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can change this cart.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase
     .from('retailer_active_coupons')
     .delete()

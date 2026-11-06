@@ -25,10 +25,11 @@ const inr = (paise: number) =>
  * tenant-guarded portal; they cannot access this admin page.
  */
 export default async function SellerDetailPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const params = await paramsPromise;
   await requirePagePermission('sellers.view');
   const { seller, members, offers, invite, failureMessage } = await getSellerDetail(params.id);
   // A failed read is not a missing seller: 404 would tell the operator the
@@ -38,7 +39,7 @@ export default async function SellerDetailPage({
 
   // Active packs for the admin-managed offer form (server-fetched; the pack
   // owns its product identity and the server re-reads it on submit).
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: packRows } = await supabase
     .from('product_packs')
     .select('id, product_id, pack_name, is_active, products ( name, is_active )')

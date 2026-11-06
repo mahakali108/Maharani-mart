@@ -17,7 +17,7 @@ interface MemberRow {
 
 export default async function AdminTargetsPage() {
   await requirePagePermission('targets.manage');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: memberData, error: memberError }, { data: targetData, error: targetError }] = await Promise.all([
     supabase

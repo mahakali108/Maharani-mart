@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Config-level redirects run before rendering, so legacy requests receive
+  // actual HTTP 308 responses rather than streamed HTML meta refreshes.
+  async redirects() {
+    return ['privacy', 'terms', 'shipping', 'returns'].map((page) => ({
+      source: `/${page}`,
+      destination: `/legal/${page}`,
+      permanent: true,
+    }));
+  },
   images: {
     remotePatterns: [
       {
@@ -9,10 +18,6 @@ const nextConfig = {
         pathname: '/storage/v1/object/public/**',
       },
     ],
-  },
-  eslint: {
-    // Linting is run separately in CI; do not block production builds on it.
-    ignoreDuringBuilds: false,
   },
 };
 

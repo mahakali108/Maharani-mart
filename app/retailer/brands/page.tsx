@@ -8,12 +8,13 @@ import type { BrandCardData } from '@/components/retailer/brand-card';
 import { loadBrandDirectory } from '@/lib/retailer/brand-detail';
 
 export default async function RetailerBrandsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { category?: string };
+  searchParams: Promise<{ category?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const categoryId = searchParams.category?.trim() ?? '';
   const directory = await loadBrandDirectory(supabase, categoryId || undefined);
 

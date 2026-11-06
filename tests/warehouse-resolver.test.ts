@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   classifyWarehouseConfig,
   resolveSingleWarehouse,
@@ -159,7 +160,7 @@ describe('resolveActiveWarehouse against the database', () => {
 // Surfaces: no pickers for the customer, a status field for the operator
 // ---------------------------------------------------------------------------
 describe('warehouse surfaces', () => {
-  const read = (path: string) => require('node:fs').readFileSync(path, 'utf8') as string;
+  const read = (path: string) => readFileSync(path, 'utf8');
 
   it('never asks a customer to choose a warehouse', async () => {
     const { readdirSync, statSync } = await import('node:fs');

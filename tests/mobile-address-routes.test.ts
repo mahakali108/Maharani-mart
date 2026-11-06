@@ -155,7 +155,7 @@ describe('mobile address routes', () => {
 
     const response = await patchAddress(
       apiRequest('PATCH', `/api/mobile/v1/addresses/${ADDRESS}`, { ...validBody, label: 'Main godown' }),
-      { params: { addressId: ADDRESS } },
+      { params: Promise.resolve({ addressId: ADDRESS }) },
     );
 
     expect(response.status).toBe(200);
@@ -174,13 +174,13 @@ describe('mobile address routes', () => {
 
     const foreign = await patchAddress(
       apiRequest('PATCH', `/api/mobile/v1/addresses/${ADDRESS}`, validBody),
-      { params: { addressId: ADDRESS } },
+      { params: Promise.resolve({ addressId: ADDRESS }) },
     );
     expect(foreign.status).toBe(404);
 
     const malformed = await deleteAddress(
       apiRequest('DELETE', '/api/mobile/v1/addresses/not-a-uuid'),
-      { params: { addressId: 'not-a-uuid' } },
+      { params: Promise.resolve({ addressId: 'not-a-uuid' }) },
     );
     expect(malformed.status).toBe(400);
   });
@@ -203,7 +203,7 @@ describe('mobile address routes', () => {
 
     const response = await setDefaultAddress(
       apiRequest('POST', `/api/mobile/v1/addresses/${ADDRESS}/default`),
-      { params: { addressId: ADDRESS } },
+      { params: Promise.resolve({ addressId: ADDRESS }) },
     );
 
     expect(response.status).toBe(200);
@@ -225,7 +225,7 @@ describe('mobile address routes', () => {
 
     const response = await deleteAddress(
       apiRequest('DELETE', `/api/mobile/v1/addresses/${ADDRESS}`),
-      { params: { addressId: ADDRESS } },
+      { params: Promise.resolve({ addressId: ADDRESS }) },
     );
     const payload = await json(response);
 

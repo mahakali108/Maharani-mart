@@ -11,7 +11,7 @@ interface TodayOrder {
 
 export default async function SalesmanDashboardPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
   // "Today" follows the Asia/Kolkata calendar day (00:00 IST), not server time.
   const todayIso = indiaDayStartIso(indiaTodayDateKey());
 

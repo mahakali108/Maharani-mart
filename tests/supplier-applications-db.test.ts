@@ -7,6 +7,7 @@
  * never against a production project.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { as, createMigratedDb, createUser, errorOf, type Db } from './helpers/pg-harness';
 
 let db: Db;
@@ -269,7 +270,6 @@ describe('0059 supplier document storage deletion (audit Fix M-1)', () => {
 
 describe('0059 rollback guard (disposable PGlite only)', () => {
   it('contains fail-safe guards and never deletes the bucket row', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
     const sql = readFileSync('supabase/rollbacks/0059_supplier_applications.down.sql', 'utf8');
     expect(sql).toContain('ROLLBACK ABORTED: supplier application/document records exist');
     expect(sql).toContain('ROLLBACK ABORTED: storage objects exist in bucket supplier-documents');

@@ -64,7 +64,7 @@ export interface BrandDirectoryData {
  * brands present in that category's scope and scopes the product counts.
  */
 export async function loadBrandDirectory(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   categoryId?: string
 ): Promise<BrandDirectoryData> {
   const [brandResult, categoryResult, globalCounts] = await Promise.all([
@@ -153,7 +153,7 @@ export interface BrandDetailData {
  * once, and never a page number in the URL.
  */
 export async function loadBrandProducts(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   retailerId: string,
   areaId: string | null,
   brandId: string,

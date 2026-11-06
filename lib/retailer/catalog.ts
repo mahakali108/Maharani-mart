@@ -200,7 +200,7 @@ export function toPricedCard(
 }
 
 /** Sanctioned pack-level RPC only. Failed reads stay unknown, never “in stock”. */
-export async function loadCatalogAvailability(supabase: ReturnType<typeof createClient>, packIds: string[]) {
+export async function loadCatalogAvailability(supabase: Awaited<ReturnType<typeof createClient>>, packIds: string[]) {
   const ids = [...new Set(packIds)];
   const availability = new Map<string, PackAvailability>();
   for (let i = 0; i < ids.length; i += 100) {
@@ -227,7 +227,7 @@ export async function loadCatalogAvailability(supabase: ReturnType<typeof create
 }
 
 export async function loadCatalogPricing(
-  supabase: ReturnType<typeof createClient>, products: CatalogProductRow[], retailerId: string, areaId: string | null
+  supabase: Awaited<ReturnType<typeof createClient>>, products: CatalogProductRow[], retailerId: string, areaId: string | null
 ): Promise<CatalogPricingData> {
   const ids = products.map((product) => product.id);
   const packIds = products.flatMap((product) =>
@@ -255,13 +255,13 @@ export function priceCatalogRows(
 }
 
 export async function priceCatalogProducts(
-  supabase: ReturnType<typeof createClient>, products: CatalogProductRow[], retailerId: string, areaId: string | null,
+  supabase: Awaited<ReturnType<typeof createClient>>, products: CatalogProductRow[], retailerId: string, areaId: string | null,
   favoriteIds: Set<string> = new Set(), frequency: Map<string, number> = new Map()
 ): Promise<PricedCatalogCard[]> {
   return priceCatalogRows(products, await loadCatalogPricing(supabase, products, retailerId, areaId), favoriteIds, frequency);
 }
 
-export async function loadProductsByIds(supabase: ReturnType<typeof createClient>, productIds: string[]): Promise<CatalogProductRow[]> {
+export async function loadProductsByIds(supabase: Awaited<ReturnType<typeof createClient>>, productIds: string[]): Promise<CatalogProductRow[]> {
   const unique = [...new Set(productIds.filter(Boolean))];
   const products: CatalogProductRow[] = [];
   for (let i = 0; i < unique.length; i += 80) {
@@ -278,7 +278,7 @@ export function discountForCard(card: Pick<PricedCatalogCard, 'mrp' | 'fromPrice
   return calcDiscountPercent(card.mrp, card.fromPrice);
 }
 
-export async function loadFavoriteIds(supabase: ReturnType<typeof createClient>, retailerId: string): Promise<Set<string>> {
+export async function loadFavoriteIds(supabase: Awaited<ReturnType<typeof createClient>>, retailerId: string): Promise<Set<string>> {
   const { data } = await supabase.from('retailer_favorites').select('product_id').eq('retailer_id', retailerId).returns<{ product_id: string }[]>();
   return new Set((data ?? []).map((row) => row.product_id));
 }

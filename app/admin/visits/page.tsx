@@ -41,7 +41,7 @@ const ORDER: KeysetColumn[] = [
   { column: 'id', ascending: false },
 ];
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 interface VisitRow {
   id: string;
@@ -104,11 +104,12 @@ function renderVisitRows(visits: VisitRow[]) {
 }
 
 export default async function AdminVisitsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { status?: string; date?: string };
+  searchParams: Promise<{ status?: string; date?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const status = searchParams.status ?? '';
   const date = searchParams.date || indiaTodayDateKey();
 
@@ -119,7 +120,7 @@ export default async function AdminVisitsPage({
   /** Server Action for the batches after the first; the filters are captured. */
   async function loadMoreVisits(cursor: string | null): Promise<InfiniteScrollBatch> {
     'use server';
-    const batch = await loadVisitBatch(createClient(), filters, readCursor(cursor));
+    const batch = await loadVisitBatch((await createClient()), filters, readCursor(cursor));
     return { rows: renderVisitRows(batch.items), nextCursor: batch.nextCursor };
   }
 

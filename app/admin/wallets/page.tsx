@@ -4,7 +4,9 @@ import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { rupeesToPaise, paiseToRupees } from '@/lib/retailer/wallet';
-import { computeAvailablePaise, computeOutstandingPaise } from '@/lib/retailer/wallet-math';
+import { computeAvailablePaise } from '@/lib/retailer/wallet-math';
+import { readAdminWalletOutstanding, type WalletBalanceRpcClient } from '@/lib/admin/wallet-balance';
+import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 
 interface RetailerRow {
   id: string;
@@ -24,11 +26,12 @@ interface CreditAccountRow {
 }
 
 export default async function AdminWalletsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string };
+  searchParams: Promise<{ q?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await searchParamsPromise;
+  const supabase = (await createClient());
   const q = (searchParams.q ?? '').trim();
 
   let query = supabase
@@ -41,48 +44,35 @@ export default async function AdminWalletsPage({
     query = query.ilike('shop_name', `%${q}%`);
   }
 
-  const [{ data: retailers, error: retailersError }, { data: creditAccounts }] = await Promise.all([
-    query.returns<RetailerRow[]>(),
-    supabase
-      .from('retailer_credit_accounts')
-      .select('retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue')
-      .returns<CreditAccountRow[]>(),
-  ]);
-
-  // Fetch profiles separately to avoid join issues
+  const { data: retailers, error: retailersError } = await query.returns<RetailerRow[]>();
   const retailerIds = (retailers ?? []).map((r) => r.id);
-  const { data: profileData } =
-    retailerIds.length > 0
-      ? await supabase
-          .from('profiles')
-          .select('id, full_name, phone')
-          .in('id', retailerIds)
-          .returns<{ id: string; full_name: string; phone: string }[]>()
-      : { data: [] as { id: string; full_name: string; phone: string }[] };
+  // Restrict both related reads to the visible retailers; an unfiltered account
+  // query can itself be silently truncated by the PostgREST row limit.
+  const [accountResult, profileResult] = retailerIds.length > 0
+    ? await Promise.all([
+        supabase.from('retailer_credit_accounts')
+          .select('retailer_id, credit_limit_paise, opening_outstanding_paise, allow_overdue')
+          .in('retailer_id', retailerIds).returns<CreditAccountRow[]>(),
+        supabase.from('profiles').select('id, full_name, phone')
+          .in('id', retailerIds).returns<{ id: string; full_name: string; phone: string }[]>(),
+      ])
+    : [{ data: [] as CreditAccountRow[], error: null },
+       { data: [] as { id: string; full_name: string; phone: string }[], error: null }];
+  throwIfReadFailed(accountResult.error, 'Retailer credit accounts');
+  throwIfReadFailed(profileResult.error, 'Retailer profiles');
+  const creditAccounts = accountResult.data;
+  const profileData = profileResult.data;
 
   const readFailed = Boolean(retailersError);
   const profileById = new Map((profileData ?? []).map((p) => [p.id, p]));
   const accountByRetailer = new Map((creditAccounts ?? []).map((a) => [a.retailer_id, a]));
 
-  // Calculate outstanding from ledger for each retailer (using DB function per retailer would be N+1, so we aggregate)
-  const ledgerByRetailer = new Map<string, { debit: number; credit: number }>();
-  if (retailerIds.length > 0) {
-    const { data: ledgerRows } = await supabase
-      .from('retailer_wallet_ledger')
-      .select('retailer_id, amount_paise, direction, transaction_type, is_reversed')
-      .in('retailer_id', retailerIds)
-      .eq('is_reversed', false)
-      .neq('transaction_type', 'CREDIT_LIMIT_CHANGE')
-      .returns<
-        { retailer_id: string; amount_paise: number; direction: string; transaction_type: string; is_reversed: boolean }[]
-      >();
-    for (const row of ledgerRows ?? []) {
-      const agg = ledgerByRetailer.get(row.retailer_id) ?? { debit: 0, credit: 0 };
-      if (row.direction === 'debit') agg.debit += Number(row.amount_paise);
-      else agg.credit += Number(row.amount_paise);
-      ledgerByRetailer.set(row.retailer_id, agg);
-    }
-  }
+  // The RPC sums the entire ledger on the database, avoiding PostgREST row
+  // limits. It still has the known legacy reversal-flag defect; see notice.
+  const balanceByRetailer = new Map(await Promise.all(retailerIds.map(async (id) => [
+    id,
+    await readAdminWalletOutstanding(supabase as unknown as WalletBalanceRpcClient, id),
+  ] as const)));
 
   return (
     <div className="space-y-6">
@@ -94,6 +84,10 @@ export default async function AdminWalletsPage({
         </p>
       </div>
 
+      <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+        Wallet balances may be incorrect for refunded orders because of a known legacy accounting defect.
+        Do not use these amounts for financial reconciliation until reviewed.
+      </p>
       <Card>
         <CardHeader>
           <CardTitle>Find a shop by name</CardTitle>
@@ -142,13 +136,8 @@ export default async function AdminWalletsPage({
                 const profile = profileById.get(r.id);
                 const account = accountByRetailer.get(r.id);
                 const limitPaise = account?.credit_limit_paise ?? rupeesToPaise(r.credit_limit);
-                const ledgerAgg = ledgerByRetailer.get(r.id) ?? { debit: 0, credit: 0 };
-                // Authoritative: outstanding = frozen opening baseline + ledger
-                // delta. The legacy mirror column is only used as the opening
-                // fallback when the credit account row hasn't been created yet
-                // (a brand-new retailer with no ledger entries).
-                const openingPaise = account?.opening_outstanding_paise ?? rupeesToPaise(r.outstanding_balance);
-                const outstandingPaise = computeOutstandingPaise(openingPaise, ledgerAgg.debit, ledgerAgg.credit);
+                const outstandingPaise = balanceByRetailer.get(r.id);
+                if (outstandingPaise === undefined) throw new Error('Retailer wallet balance is unavailable.');
                 const availablePaise = computeAvailablePaise(limitPaise, outstandingPaise);
                 const limitRupees = paiseToRupees(limitPaise);
                 const outstandingRupees = paiseToRupees(outstandingPaise);

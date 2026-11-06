@@ -69,7 +69,7 @@ const ACCOUNT_LINKS = [
 
 export default async function RetailerAccountPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [retailerResult, profileResult, { count: orderCount }, { count: unreadCount }, walletSummary, { count: addressCount }] =
     await Promise.all([

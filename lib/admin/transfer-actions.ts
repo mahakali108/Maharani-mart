@@ -59,7 +59,7 @@ export async function createTransferAction(
   if (lines.length === 0) return { error: 'Add at least one batch line.' };
   if (lines.length > 200) return { error: 'A transfer can contain at most 200 lines.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Server-side sanity check: every selected batch must live in the source
   // warehouse (the RPC re-validates this under lock — this only produces a
@@ -117,7 +117,7 @@ export async function executeTransferAction(transferId: string): Promise<Transfe
   await requirePermission('inventory.manage');
   if (!z.string().uuid().safeParse(transferId).success) return { error: 'Invalid transfer.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('execute_stock_transfer' as never, { p_transfer_id: transferId } as never);
   if (error) {
     const msg = error.message;
@@ -135,7 +135,7 @@ export async function cancelTransferAction(transferId: string, reason: string): 
   await requirePermission('inventory.manage');
   if (!z.string().uuid().safeParse(transferId).success) return { error: 'Invalid transfer.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { error } = await supabase.rpc('cancel_stock_transfer' as never, {
     p_transfer_id: transferId,
     p_reason: reason?.trim() || null,

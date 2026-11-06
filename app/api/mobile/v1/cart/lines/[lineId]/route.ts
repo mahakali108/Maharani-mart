@@ -36,8 +36,9 @@ function mapQuantityError(message: string, requestId: string): Response {
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { lineId: string } }
+  { params: paramsPromise }: { params: Promise<{ lineId: string }> }
 ): Promise<Response> {
+  const params = await paramsPromise;
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, ['orders.create', 'orders.view.own']);
   if ('response' in auth) return auth.response;
@@ -50,7 +51,7 @@ export async function PATCH(
   const parsed = await parseJsonBody(request, updateSchema, requestId);
   if (!parsed.ok) return parsed.response;
   try {
-    const client = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const client = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const result = await updateCartLine(client, auth.session.userId, params.lineId, parsed.data.quantity);
     if ('error' in result) return mapQuantityError(result.error, requestId);
     return jsonOk(await loadMobileCart(auth.session), { requestId });
@@ -65,8 +66,9 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { lineId: string } }
+  { params: paramsPromise }: { params: Promise<{ lineId: string }> }
 ): Promise<Response> {
+  const params = await paramsPromise;
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, ['orders.create', 'orders.view.own']);
   if ('response' in auth) return auth.response;
@@ -77,7 +79,7 @@ export async function DELETE(
   }
 
   try {
-    const client = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const client = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const result = await removeCartLine(client, auth.session.userId, params.lineId);
     if ('error' in result) return mapQuantityError(result.error, requestId);
     return jsonOk(await loadMobileCart(auth.session), { requestId });

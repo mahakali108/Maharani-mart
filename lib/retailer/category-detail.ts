@@ -76,7 +76,7 @@ export interface CategoryDetailData {
  * caller renders the not-found state.
  */
 export async function loadCategoryDetail(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   categoryId: string
 ): Promise<CategoryDetailData> {
   if (!categoryId) {

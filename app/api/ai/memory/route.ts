@@ -18,7 +18,7 @@ export async function DELETE(request: NextRequest) {
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }); }
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
-  const supabase = createClient();
+  const supabase = (await createClient());
   const auth = await authenticateAIRequest(supabase, parsed.data.surface);
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const started = Date.now();

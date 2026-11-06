@@ -17,8 +17,9 @@ const ORDER_SELECT = 'id, order_number, status, subtotal, gst_total, discount_to
  */
 export async function GET(
   request: Request,
-  { params }: { params: { requestKey: string } }
+  { params: paramsPromise }: { params: Promise<{ requestKey: string }> }
 ): Promise<Response> {
+  const params = await paramsPromise;
   const requestId = newRequestId();
   const auth = await requireRetailerCommerceSession(request, requestId, 'orders.view.own');
   if ('response' in auth) return auth.response;
@@ -29,7 +30,7 @@ export async function GET(
   }
 
   try {
-    const supabase = auth.session.supabase as unknown as ReturnType<typeof createClient>;
+    const supabase = auth.session.supabase as unknown as Awaited<ReturnType<typeof createClient>>;
     const { data, error } = await supabase
       .from('orders')
       .select(ORDER_SELECT)

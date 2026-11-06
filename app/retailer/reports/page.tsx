@@ -47,7 +47,7 @@ function StatCard({
 
 export default async function ReportsPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [windows, trend, mostPurchased, walletSummary] = await Promise.all([
     loadInsightWindows(supabase, user.id),

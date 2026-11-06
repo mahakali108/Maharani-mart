@@ -11,8 +11,9 @@ interface WarehouseDetail {
   address: string | null;
 }
 
-export default async function EditWarehousePage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function EditWarehousePage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  const supabase = (await createClient());
 
   const [{ data: warehouse, error: warehouseError }, { data: areaData }] = await Promise.all([
     supabase.from('warehouses').select('id, name, area_id, address').eq('id', params.id).single<WarehouseDetail>(),

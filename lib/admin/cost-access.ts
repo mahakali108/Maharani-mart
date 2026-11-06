@@ -33,7 +33,7 @@ import type { createClient } from '@/lib/supabase/server';
  * reads, so no role loses an existing capability.
  */
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** Purchase cost of one product, or null when unset / caller is below admin. */
 export async function loadProductCost(

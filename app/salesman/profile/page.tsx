@@ -19,7 +19,7 @@ interface AssignmentRow {
 
 export default async function SalesmanProfilePage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: profile }, { data: assignment }] = await Promise.all([
     supabase

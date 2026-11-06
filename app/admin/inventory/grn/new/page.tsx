@@ -8,7 +8,7 @@ import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
 
 export default async function NewGrnPage() {
   await requirePagePermission('inventory.view');
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const [{ data: productData }, warehouseResolution] = await Promise.all([
     supabase.from('products').select('id, name, sku_code').eq('is_active', true).order('name'),

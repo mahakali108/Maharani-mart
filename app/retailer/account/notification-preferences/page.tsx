@@ -15,7 +15,7 @@ export const metadata = { title: 'Notification settings — Maharani Traders' };
 
 export default async function NotificationPreferencesPage() {
   const user = await requireUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: row } = await supabase
     .from('retailer_notification_prefs')

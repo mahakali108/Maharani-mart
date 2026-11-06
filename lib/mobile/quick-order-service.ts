@@ -29,7 +29,7 @@ import { parseBulkOrderLines, type ParsedBulkLine } from '@/lib/retailer/bulk-sh
 import type { MobilePriceTier } from '@/lib/mobile/catalog';
 import type { MobileSession } from '@/lib/mobile/auth';
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /** The web quick-order search's cap (`MAX_RESULTS = 30`). */
 export const QUICK_ORDER_MAX_RESULTS = 30;

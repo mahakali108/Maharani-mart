@@ -31,7 +31,7 @@ async function advanceFulfilmentStatus(
   await requirePermission('orders.dispatch');
   if (!orderId) return { error: 'Order not found.' };
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: order } = await supabase
     .from('orders')

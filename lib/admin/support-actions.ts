@@ -35,7 +35,7 @@ export async function adminReplyToTicketAction(
     return { success: false, error: 'Message must be 5–3,000 characters.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: ticket } = await supabase
     .from('support_tickets')
@@ -93,7 +93,7 @@ export async function updateTicketStatusAction(
     return { success: false, error: 'Unknown status.' };
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: ticket } = await supabase
     .from('support_tickets')
