@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Business Disclosure — Maharani Tra
 
 export default function BusinessDisclosurePage() {
   return (
-    <PublicInfoShell eyebrow="Legal policies" title="Business Disclosure" intro="Effective date: 04 November 2026. Maharani Traders is the customer-facing brand of AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL.">
+    <PublicInfoShell documentKey="business-disclosure" eyebrow="Legal policies" title="Business Disclosure" intro="Effective date: 04 November 2026. Maharani Traders is the customer-facing brand of AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL.">
       <InfoCard title="Business details"><BusinessContact /><p><strong>Business activity:</strong> Wholesale and retail trading of own-stock cosmetics and non-food FMCG products. Maharani Traders is not a separate incorporated company or legal entity.</p></InfoCard>
       <InfoCard title="Tax and policy scope">
         <p>The owner reports that the business is registered for GST as an active regular taxpayer. The GST certificate, GSTIN, registration status and invoice configuration have not been independently verified. Any applicable GST details should be provided on invoices and other statutory documents as required by law.</p>

@@ -17,7 +17,12 @@ vi.mock('@/lib/mobile/clients', () => ({
   gotrueFetch: mocks.gotrueFetch,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: () => mocks.reportClient }));
-vi.mock('@/lib/orders/cancellation-coins', () => ({ restoreAndVerifyCancellationCoins: mocks.restoreAndVerifyCancellationCoins }));
+// tryAtomicOrderCancellation (added with the atomic-cancel wiring) reports "not
+// committed" here so these tests keep exercising the guarded fallback path.
+vi.mock('@/lib/orders/cancellation-coins', () => ({
+  restoreAndVerifyCancellationCoins: mocks.restoreAndVerifyCancellationCoins,
+  tryAtomicOrderCancellation: async () => false,
+}));
 vi.mock('@/lib/coupons/validate', () => ({ releaseOrderCoupon: mocks.releaseOrderCoupon }));
 
 import { GET as getProfile, PATCH as patchProfile } from '@/app/api/mobile/v1/profile/route';

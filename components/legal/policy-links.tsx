@@ -8,6 +8,7 @@ const policies = [
   { href: '/legal/grievance', label: 'Grievance' },
   { href: '/legal/product-safety', label: 'Product safety' },
   { href: '/legal/business-disclosure', label: 'Business disclosure' },
+  { href: '/legal', label: 'All policies' },
 ];
 
 export function PolicyLinks() {

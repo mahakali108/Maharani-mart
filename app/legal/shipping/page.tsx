@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Shipping and Delivery Policy — Mah
 
 export default function ShippingPage() {
   return (
-    <PublicInfoShell eyebrow="Legal policies" title="Shipping and Delivery Policy" intro="Effective date: 04 November 2026. Delivery is limited to local serviceable areas in and around Belaganj, Gaya, Bihar.">
+    <PublicInfoShell documentKey="shipping" eyebrow="Legal policies" title="Shipping and Delivery Policy" intro="Effective date: 04 November 2026. Delivery is limited to local serviceable areas in and around Belaganj, Gaya, Bihar.">
       <InfoCard title="Serviceability, charges and estimates">
         <p>Delivery is available only when the address is confirmed as serviceable by the website or support. Not all Gaya PINs are serviceable; we do not promise delivery throughout Gaya district or Bihar. An active serviceable PIN and applicable minimum order are checked at checkout.</p>
         <p>Delivery or other compulsory charges will be disclosed before confirmation. If no charge is shown, confirm it with support before placing an order. The current checkout blocks online ordering for PINs configured with a positive delivery fee until that fee can be accounted for correctly.</p>

@@ -20,9 +20,8 @@
  * could be brute-forced offline in well under a second. The stored value is
  * therefore HMAC-SHA256 under a server-only key: DELIVERY_OTP_SECRET when set,
  * otherwise a key derived from SUPABASE_SERVICE_ROLE_KEY (already a required
- * server-only secret). Without either, hashing fails closed. Hashes written
- * before this change (plain SHA-256) are still ACCEPTED by verify so
- * in-flight deliveries keep working; every new or regenerated OTP is keyed.
+ * server-only secret). Without either, hashing fails closed. Legacy plain
+ * SHA-256 hashes are NOT accepted by verify (see verifyDeliveryOtp).
  * Rotating the key invalidates open OTPs (regenerate them).
  *
  * Never imported from client components (node:crypto).
@@ -57,12 +56,12 @@ function otpKey(): Buffer {
   throw new Error('Delivery OTP key is not configured (set DELIVERY_OTP_SECRET or SUPABASE_SERVICE_ROLE_KEY).');
 }
 
-/** Legacy unkeyed SHA-256: kept for compatibility checks and test assertions. */
+/** Legacy unkeyed SHA-256. NEVER accepted for verification; kept only so tests can prove rejection. */
 export function plainSha(orderId: string, otp: string): string {
   return createHash('sha256').update(`${orderId}:${otp}`, 'utf8').digest('hex');
 }
 
-/** Backward-compatibility alias for legacy OTP hashes written before the keyed migration. */
+/** Alias of plainSha, for tests asserting that legacy hashes are rejected. */
 export function legacyHashDeliveryOtp(orderId: string, otp: string): string {
   return plainSha(orderId, otp);
 }
@@ -79,10 +78,15 @@ function safeEqualHex(actualHex: string, expectedHex: string): boolean {
   return timingSafeEqual(actual, expected);
 }
 
-/** Constant-time comparison against the keyed hash only. */
+/**
+ * Constant-time comparison against the KEYED hash only.
+ *
+ * Legacy unkeyed SHA-256 hashes are rejected: an unkeyed hash of a 6-digit OTP
+ * can be computed by anyone who knows the order id, so accepting one would let
+ * a delivery be completed without the retailer's OTP. A delivery that still
+ * carries a legacy hash must have its OTP regenerated from the dispatch desk.
+ */
 export function verifyDeliveryOtp(orderId: string, otp: string, expectedHash: string): boolean {
-  const keyed = safeEqualHex(hashDeliveryOtp(orderId, otp), expectedHash);
-  const legacy = safeEqualHex(legacyHashDeliveryOtp(orderId, otp), expectedHash);
-  return keyed || legacy;
+  if (!isValidOtpFormat(otp) || typeof expectedHash !== 'string' || expectedHash.length === 0) return false;
+  return safeEqualHex(hashDeliveryOtp(orderId, otp), expectedHash);
 }
-

@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export default async function GrievancePage() {
   const configuredContact = await getAuthoritativeContactGrievance();
   return (
-    <PublicInfoShell eyebrow="Legal policies" title="Customer Support and Grievance Redressal Policy" intro="Effective date: 04 November 2026. Contact us about products, orders, delivery, payment, returns, refunds or website services.">
+    <PublicInfoShell documentKey="grievance" eyebrow="Legal policies" title="Customer Support and Grievance Redressal Policy" intro="Effective date: 04 November 2026. Contact us about products, orders, delivery, payment, returns, refunds or website services.">
       <InfoCard title="Grievance Officer">
         <BusinessContact officer />
         {configuredContact.isConfigured && (

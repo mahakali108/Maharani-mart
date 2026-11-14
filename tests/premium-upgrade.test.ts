@@ -294,7 +294,13 @@ describe('premium upgrade — migration hygiene', () => {
     const latest = migrations[migrations.length - 1] as string;
     expect(latest > '0036_order_shipping_address.sql').toBe(true); // later phases append, never reorder
     for (const file of migrations.slice(-5)) {
-      const sql = read(`supabase/migrations/${file}`);
+      // Comments are ignored, and REVOKING the truncate privilege from API
+      // roles (0094) is the opposite of truncating a table, so the privilege
+      // keyword in a `revoke …` statement is not treated as destructive. A
+      // real `truncate <table>` statement still fails this check.
+      const sql = read(`supabase/migrations/${file}`)
+        .split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n')
+        .replace(/revoke truncate, references, trigger on/gi, 'revoke <privileges> on');
       expect(sql).not.toMatch(/drop table|truncate\b|alter table .* drop column/i);
     }
   });

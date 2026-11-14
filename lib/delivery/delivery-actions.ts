@@ -44,6 +44,7 @@ import {
 import { generateDeliveryOtp, hashDeliveryOtp, isValidOtpFormat, verifyDeliveryOtp, MAX_OTP_ATTEMPTS } from './otp';
 import { computePartialSettlement, type SettlementLine } from './settlement';
 import { computeReturnDeadline, parseReturnWindowDays } from './return-window';
+import { createTrustedDeliveryWriter, TRUSTED_WRITER_UNAVAILABLE } from './trusted-writer';
 
 /**
  * Minimal RPC surface for the 🪙 coin functions added in migration 0053. The
@@ -138,6 +139,17 @@ async function fetchDeliveryWithOrder(
   return { delivery, order };
 }
 
+/**
+ * Client for writes that migration 0094 reserves to trusted paths. Admins keep
+ * their own session (they pass the database guard and stay the audited actor);
+ * everyone else needs the server-side writer, used only after the action's
+ * own permission, assignee and OTP checks.
+ */
+function trustedWriterFor(user: CurrentUser, own: Awaited<ReturnType<typeof createClient>>) {
+  if (isAdminLike(user)) return own;
+  return createTrustedDeliveryWriter();
+}
+
 function isAdminLike(user: CurrentUser): boolean {
   return user.role === 'admin' || user.role === 'super_admin';
 }
@@ -163,7 +175,7 @@ function staffDeliveryLink(userRole: string, orderId: string): string {
   return userRole === 'salesman' ? `/salesman/deliveries/${orderId}` : `/staff/deliveries/${orderId}`;
 }
 
-/** Value paise per order line + the pieces snapshot, for settlement math. */
+/** Order line value (RUPEES, as stored) + the pieces snapshot, for settlement math. */
 interface OrderLineValue {
   id: string;
   line_total: number;
@@ -220,7 +232,9 @@ export async function assignDeliveryStaffAction(
   // The .in() guard makes this claim atomic against a concurrent reassignment
   // or completion; a 0-row update returns NO error, so the returned row is
   // the proof the claim landed.
-  const { data: claimed, error } = await supabase
+  const assignWriter = trustedWriterFor(user, supabase);
+  if (!assignWriter) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data: claimed, error } = await assignWriter
     .from('order_deliveries')
     .update({
       assigned_staff_id: staffId,
@@ -272,7 +286,9 @@ export async function regenerateDeliveryOtpAction(orderId: string): Promise<Deli
   if (delivery.otp_verified_at) return { error: 'This delivery was already verified with an OTP.' };
 
   const otp = generateDeliveryOtp();
-  const { data: claimed, error } = await supabase
+  const otpWriter = trustedWriterFor(user, supabase);
+  if (!otpWriter) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data: claimed, error } = await otpWriter
     .from('order_deliveries')
     .update({
       otp_hash: hashDeliveryOtp(orderId, otp),
@@ -448,7 +464,8 @@ export async function completeDeliveryAction(
 
     const value = values.get(line.order_item_id);
     settlementLines.push({
-      lineTotalPaise: value?.line_total ?? 0,
+      // order_items.line_total is rupees numeric(12,2); settlement works in paise.
+      lineTotalPaise: Math.round(Number(value?.line_total ?? 0) * 100),
       quantityOrdered: line.quantity_ordered,
       quantityMissing: missing,
       quantityDamaged: damaged,
@@ -477,8 +494,12 @@ export async function completeDeliveryAction(
   const returnWindowDays = parseReturnWindowDays(setting?.value);
 
   const nowIso = new Date().toISOString();
+  // The OTP was verified above. Completion fields are closed to staff sessions
+  // at the database (0094), so they are written through the trusted writer.
+  const completionWriter = trustedWriterFor(user, supabase);
+  if (!completionWriter) return { error: TRUSTED_WRITER_UNAVAILABLE };
   // Atomic claim: only an open task can transition to a completed status.
-  const { data: claimedDelivery, error: deliveryError } = await supabase
+  const { data: claimedDelivery, error: deliveryError } = await completionWriter
     .from('order_deliveries')
     .update({
       delivery_status: finalStatus,
@@ -506,7 +527,7 @@ export async function completeDeliveryAction(
   // order is already 'delivered' (manual admin path), the update is skipped —
   // the delivery record is the missing piece, not the status. ---
   if (order.status === 'dispatched') {
-    const { data: claimedOrder, error: orderError } = await supabase
+    const { data: claimedOrder, error: orderError } = await completionWriter
       .from('orders')
       .update({ status: 'delivered', delivered_at: nowIso } as unknown as never)
       .eq('id', orderId)

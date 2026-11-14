@@ -9,7 +9,7 @@ import {
 } from '@/lib/mobile';
 import { requireRetailerCommerceSession } from '@/lib/mobile/commerce-route';
 import { releaseOrderCoupon } from '@/lib/coupons/validate';
-import { restoreAndVerifyCancellationCoins } from '@/lib/orders/cancellation-coins';
+import { restoreAndVerifyCancellationCoins, tryAtomicOrderCancellation } from '@/lib/orders/cancellation-coins';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +30,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!body.ok) return body.response;
 
   try {
+    // Preferred path: one transaction for status, Coins refund and coupon release.
+    await tryAtomicOrderCancellation(
+      auth.session.supabase as never,
+      (await context.params).id,
+      body.data.reason || 'Retailer cancelled order',
+    );
     const { data: cancelled, error } = await auth.session.supabase.from('orders')
       .update({ status: 'cancelled', cancelled_reason: body.data.reason || null } as unknown as never)
       .eq('id', (await context.params).id)

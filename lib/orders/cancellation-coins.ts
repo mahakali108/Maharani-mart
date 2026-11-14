@@ -73,3 +73,38 @@ export async function restoreAndVerifyCancellationCoins(
     return unverified;
   }
 }
+
+/**
+ * Cancel an order and restore its Coins and coupon in ONE database transaction
+ * through `cancel_order_coins_atomic` (0088). Returns true only when the RPC
+ * succeeded AND the order row now reads `cancelled`. Returns false — never throws — when the RPC is unavailable,
+ * rejects the caller, or declines the order (for example a split marketplace
+ * order, which it refuses by design); the caller then continues with the
+ * guarded status update followed by `restoreAndVerifyCancellationCoins`.
+ *
+ * Authorisation is enforced inside the function (owner of a pending order, or
+ * Admin for pre-dispatch states), so calling it first cannot widen access.
+ */
+export async function tryAtomicOrderCancellation(
+  supabase: SupabaseClient,
+  orderId: string,
+  reason: string,
+): Promise<boolean> {
+  try {
+    const rpc = (supabase as unknown as {
+      rpc?: (fn: string, args: Record<string, unknown>) => PromiseLike<{ error: { message?: string } | null }>;
+    }).rpc;
+    if (typeof rpc !== 'function') return false;
+    const { error } = await rpc.call(supabase, 'cancel_order_coins_atomic', {
+      p_order_id: orderId,
+      p_reason: reason.slice(0, 500),
+    });
+    if (error) return false;
+    // Never trust the call alone: the order row is the proof it committed.
+    const { data: row, error: readError } = await supabase.from('orders')
+      .select('status').eq('id', orderId).maybeSingle<{ status: string }>();
+    return !readError && row?.status === 'cancelled';
+  } catch {
+    return false;
+  }
+}

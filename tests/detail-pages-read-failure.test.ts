@@ -42,6 +42,10 @@ const THROWING_LOADERS = ['fetchDeliveryDetail', 'getSellerDetail'];
  */
 const ALLOWED = new Map<string, string>([
   [
+    'app/legal/[slug]/page.tsx',
+    'makes no database query: the slug is looked up in a compiled-in registry, so a 404 can only mean an unknown document',
+  ],
+  [
     'app/admin/banners/[id]/page.tsx',
     'throws its own Error with the 0074 schema hint before the 404 (see §6.1 of the audit doc)',
   ],

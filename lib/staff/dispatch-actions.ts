@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createTrustedDeliveryWriter, TRUSTED_WRITER_UNAVAILABLE } from '@/lib/delivery/trusted-writer';
 import { requirePermission } from '@/lib/admin/guard';
 import { notifyOrderEvent } from '@/lib/notifications/notify';
 import { notifyLowStockIfNeeded } from '@/lib/inventory/alerts';
@@ -93,7 +94,10 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
   let deliveryId: string;
   if (existingDelivery) {
     // Re-dispatch after a failed attempt: reset the same task row.
-    const { data: reset, error: resetError } = await supabase
+    // Re-dispatch rewrites OTP/assignment fields that 0094 reserves to trusted paths.
+    const resetWriter = user.role === 'super_admin' || user.role === 'admin' ? supabase : createTrustedDeliveryWriter();
+    if (!resetWriter) return { error: TRUSTED_WRITER_UNAVAILABLE };
+    const { data: reset, error: resetError } = await resetWriter
       .from('order_deliveries')
       .update({
         delivery_status: 'assigned',

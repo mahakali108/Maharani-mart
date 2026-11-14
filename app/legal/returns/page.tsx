@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Cancellation, Return and Refund Poli
 
 export default function ReturnsPage() {
   return (
-    <PublicInfoShell eyebrow="Legal policies" title="Cancellation, Return and Refund Policy" intro="Effective date: 04 November 2026. Contact us as soon as reasonably possible about a cancellation or product issue.">
+    <PublicInfoShell documentKey="returns" eyebrow="Legal policies" title="Cancellation, Return and Refund Policy" intro="Effective date: 04 November 2026. Contact us as soon as reasonably possible about a cancellation or product issue.">
       <InfoCard title="Order cancellation">
         <p>Contact us as soon as possible to request cancellation. A request before dispatch may be accepted; an order already dispatched may not be cancellable through the ordinary process. Cancellation depends on order status and applicable law. If we cancel an order after collecting payment, the amount paid for the unfulfilled order will be refunded.</p>
       </InfoCard>

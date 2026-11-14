@@ -130,9 +130,14 @@ describe('keyed OTP hash (Phase 0 / SEC-8)', () => {
     expect(() => hashDeliveryOtp(ORDER_ID, '424242')).toThrow(/not configured/);
   });
 
-  it('rejects legacy unkeyed SHA-256 hashes because they permit offline OTP brute force', () => {
-    const legacy = '0'.repeat(64);
+  it('rejects a REAL legacy unkeyed SHA-256 hash of the correct OTP', () => {
+    // sha256(orderId:otp) is computable by anyone who knows the order id, so a
+    // stored legacy hash must never verify — even for the matching OTP.
+    const legacy = plainSha(ORDER_ID, '135790');
+    expect(legacy).toMatch(/^[0-9a-f]{64}$/);
+    expect(legacy).not.toBe(hashDeliveryOtp(ORDER_ID, '135790'));
     expect(verifyDeliveryOtp(ORDER_ID, '135790', legacy)).toBe(false);
+    expect(verifyDeliveryOtp(ORDER_ID, '135790', hashDeliveryOtp(ORDER_ID, '135790'))).toBe(true);
   });
 });
 

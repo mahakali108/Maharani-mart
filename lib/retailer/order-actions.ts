@@ -9,7 +9,7 @@ import { validatePackForCart } from '@/lib/retailer/cart-service';
 import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import { isReturnWindowOpen } from '@/lib/delivery/return-window';
 import type { Database } from '@/types/database.types';
-import { restoreAndVerifyCancellationCoins } from '@/lib/orders/cancellation-coins';
+import { restoreAndVerifyCancellationCoins, tryAtomicOrderCancellation } from '@/lib/orders/cancellation-coins';
 import { releaseOrderCoupon } from '@/lib/coupons/validate';
 
 type ReturnRequestInsert = Database['public']['Tables']['return_requests']['Insert'];
@@ -19,6 +19,11 @@ export type RetailerOrderActionResult = { error?: string } | { success: true; sk
 export async function cancelOrderAction(orderId: string, reason: string): Promise<RetailerOrderActionResult> {
   const user = await requirePermission('orders.cancel');
   const supabase = (await createClient());
+
+  // Preferred path: status, Coins refund and coupon release in one database
+  // transaction. When it commits, the guarded update below matches no row and
+  // the already-cancelled branch continues to ledger verification.
+  await tryAtomicOrderCancellation(supabase, orderId, reason || 'Retailer cancelled order');
 
   // RLS (orders_retailer_cancel) already restricts this to the
   // caller's own pending orders — the .eq() filters here just make

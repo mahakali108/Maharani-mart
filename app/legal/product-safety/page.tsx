@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Product Authenticity and Safety Poli
 
 export default function ProductSafetyPage() {
   return (
-    <PublicInfoShell eyebrow="Legal policies" title="Product Authenticity and Product Safety Policy" intro="Effective date: 04 November 2026. Maharani Traders intends to source products through lawful suppliers and offer genuine products.">
+    <PublicInfoShell documentKey="product-safety" eyebrow="Legal policies" title="Product Authenticity and Product Safety Policy" intro="Effective date: 04 November 2026. Maharani Traders intends to source products through lawful suppliers and offer genuine products.">
       <InfoCard title="Product information and safety">
         <p>We will take reasonable steps to offer products that are lawfully sourced, carry applicable manufacturer, packer or importer information and declarations such as batch, quantity, MRP, manufacturing and expiry or use-before details, and display applicable warnings and usage information.</p>
         <p>We will not knowingly offer products after expiry or where sale is prohibited by law. Customers should check labels and instructions before use, stop using a product if they discover a safety, quality or labelling concern, and contact support.</p>

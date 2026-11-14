@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Privacy Policy — Maharani Traders'
 
 export default function PrivacyPage() {
   return (
-    <PublicInfoShell eyebrow="Legal policies" title="Privacy Policy" intro="Effective date: 04 November 2026. This policy describes website privacy practices and contacts; all uses, including any marketplace processing, require verification before publication.">
+    <PublicInfoShell documentKey="privacy" eyebrow="Legal policies" title="Privacy Policy" intro="Effective date: 04 November 2026. This policy describes website privacy practices and contacts; all uses, including any marketplace processing, require verification before publication.">
       <InfoCard title="Information we may collect">
         <p>Depending on your use, we may collect your name, mobile number, email, billing and delivery addresses, order and purchase history, COD collection and payment status, support messages and complaints, account, login and device-related information, and information needed for tax, accounting, security, fraud prevention or legal compliance.</p>
         <p>Do not send passwords, OTPs or unnecessary sensitive personal information through customer support.</p>
