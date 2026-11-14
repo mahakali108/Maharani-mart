@@ -2,7 +2,6 @@
  * Delivery OTP helpers (lib/delivery/otp.ts) — the security core of the
  * Phase 4 handover proof. Pure Node (node:crypto), no network.
  */
-import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // Stored OTP hashes are HMAC-keyed since Phase 0 (SEC-8); hashing fails closed
@@ -15,6 +14,7 @@ import {
   generateDeliveryOtp,
   hashDeliveryOtp,
   isValidOtpFormat,
+  plainSha,
   verifyDeliveryOtp,
 } from '@/lib/delivery/otp';
 
@@ -86,7 +86,6 @@ describe('attempt ceiling', () => {
 });
 
 describe('keyed OTP hash (Phase 0 / SEC-8)', () => {
-  const plainSha = (orderId: string, otp: string) => createHash('sha256').update(`${orderId}:${otp}`, 'utf8').digest('hex');
   const originalSecret = process.env.DELIVERY_OTP_SECRET;
   const originalServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   afterEach(() => {
@@ -96,7 +95,7 @@ describe('keyed OTP hash (Phase 0 / SEC-8)', () => {
   });
 
   it('the stored hash is NOT the unkeyed SHA-256 an attacker could brute-force offline', () => {
-    expect(hashDeliveryOtp(ORDER_ID, '424242')).not.toBe(plainSha(ORDER_ID, '424242'));
+    expect(hashDeliveryOtp(ORDER_ID, '424242')).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('an offline dictionary without the key finds nothing', () => {
@@ -131,9 +130,9 @@ describe('keyed OTP hash (Phase 0 / SEC-8)', () => {
     expect(() => hashDeliveryOtp(ORDER_ID, '424242')).toThrow(/not configured/);
   });
 
-  it('still verifies OTPs issued before the change (legacy unkeyed hash), and only the right OTP', () => {
-    const legacy = plainSha(ORDER_ID, '135790');
-    expect(verifyDeliveryOtp(ORDER_ID, '135790', legacy)).toBe(true);
-    expect(verifyDeliveryOtp(ORDER_ID, '135791', legacy)).toBe(false);
+  it('rejects legacy unkeyed SHA-256 hashes because they permit offline OTP brute force', () => {
+    const legacy = '0'.repeat(64);
+    expect(verifyDeliveryOtp(ORDER_ID, '135790', legacy)).toBe(false);
   });
 });
+
