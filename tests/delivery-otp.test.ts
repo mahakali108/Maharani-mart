@@ -14,6 +14,7 @@ import {
   generateDeliveryOtp,
   hashDeliveryOtp,
   isValidOtpFormat,
+  plainSha,
   verifyDeliveryOtp,
 } from '@/lib/delivery/otp';
 
@@ -134,3 +135,4 @@ describe('keyed OTP hash (Phase 0 / SEC-8)', () => {
     expect(verifyDeliveryOtp(ORDER_ID, '135790', legacy)).toBe(false);
   });
 });
+

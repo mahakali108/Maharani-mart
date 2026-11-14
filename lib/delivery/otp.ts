@@ -28,7 +28,7 @@
  * Never imported from client components (node:crypto).
  */
 
-import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
 export const OTP_LENGTH = 6;
 export const MAX_OTP_ATTEMPTS = 10;
@@ -57,6 +57,16 @@ function otpKey(): Buffer {
   throw new Error('Delivery OTP key is not configured (set DELIVERY_OTP_SECRET or SUPABASE_SERVICE_ROLE_KEY).');
 }
 
+/** Legacy unkeyed SHA-256: kept for compatibility checks and test assertions. */
+export function plainSha(orderId: string, otp: string): string {
+  return createHash('sha256').update(`${orderId}:${otp}`, 'utf8').digest('hex');
+}
+
+/** Backward-compatibility alias for legacy OTP hashes written before the keyed migration. */
+export function legacyHashDeliveryOtp(orderId: string, otp: string): string {
+  return plainSha(orderId, otp);
+}
+
 /** HMAC-SHA256(key, orderId:otp) as lowercase hex — the value to store. */
 export function hashDeliveryOtp(orderId: string, otp: string): string {
   return createHmac('sha256', otpKey()).update(`${orderId}:${otp}`, 'utf8').digest('hex');
@@ -75,3 +85,4 @@ export function verifyDeliveryOtp(orderId: string, otp: string, expectedHash: st
   const legacy = safeEqualHex(legacyHashDeliveryOtp(orderId, otp), expectedHash);
   return keyed || legacy;
 }
+
