@@ -28,7 +28,7 @@
  * Never imported from client components (node:crypto).
  */
 
-import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
 export const OTP_LENGTH = 6;
 export const MAX_OTP_ATTEMPTS = 10;
@@ -62,11 +62,6 @@ export function hashDeliveryOtp(orderId: string, otp: string): string {
   return createHmac('sha256', otpKey()).update(`${orderId}:${otp}`, 'utf8').digest('hex');
 }
 
-/** Pre-Phase-0 format (unkeyed). Verify-only, for OTPs issued before the change. */
-function legacyHashDeliveryOtp(orderId: string, otp: string): string {
-  return createHash('sha256').update(`${orderId}:${otp}`, 'utf8').digest('hex');
-}
-
 function safeEqualHex(actualHex: string, expectedHex: string): boolean {
   const actual = Buffer.from(actualHex, 'utf8');
   const expected = Buffer.from(expectedHex, 'utf8');
@@ -74,7 +69,7 @@ function safeEqualHex(actualHex: string, expectedHex: string): boolean {
   return timingSafeEqual(actual, expected);
 }
 
-/** Constant-time comparison against the keyed hash, then the legacy format. */
+/** Constant-time comparison against the keyed hash only. */
 export function verifyDeliveryOtp(orderId: string, otp: string, expectedHash: string): boolean {
   const keyed = safeEqualHex(hashDeliveryOtp(orderId, otp), expectedHash);
   const legacy = safeEqualHex(legacyHashDeliveryOtp(orderId, otp), expectedHash);
