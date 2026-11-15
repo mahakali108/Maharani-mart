@@ -217,7 +217,11 @@ describe('dispatchOrderAction — one transaction', () => {
     const call = vi.mocked(notifyOrderEvent).mock.calls[0]![0] as { recipientId: string; body: string; channelBody: string };
     const otp = /OTP is (\d{6})/.exec(call.body)![1]!;
     expect(call.recipientId).toBe(f.retailer);
-    expect(call.channelBody).not.toMatch(/\d{6}/);
+    // The push/SMS body must not carry the OTP. Assert on the OTP itself, not on
+    // "any six digits": generated order numbers (e.g. F-846304f1) contain six
+    // digits of their own, which made this assertion fail at random.
+    expect(call.channelBody).not.toContain(otp);
+    expect(call.channelBody).not.toMatch(/OTP is \d{6}/);
     expect(s.delivery!.h).toBe(hashDeliveryOtp(f.orderId, otp));
     expect(JSON.stringify(state.rpcCalls[0]!.args)).not.toContain(otp);
   });

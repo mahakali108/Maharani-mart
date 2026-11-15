@@ -653,7 +653,9 @@ describe('migration hygiene', () => {
     //   0076 — banner alt_text proposal, deliberately deferred.
     // 0077 (banner draft artwork) skips over them rather than taking a number
     // that a reviewed, pending change has already been designed against.
-    expect(missing).toEqual([61, 75, 76]);
+    // 0103 is reserved by the open security-advisor branch (PR #127); the website
+    // content migrations deliberately start at 0104 so the two never collide.
+    expect(missing).toEqual([61, 75, 76, 103]);
   });
 
   it('keeps the case/loose pricing migration and adds Powder catalog integrity plus variant gallery plus wallet ledger plus security hardening as the latest migrations', () => {

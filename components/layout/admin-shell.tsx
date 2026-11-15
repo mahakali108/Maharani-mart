@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import {
   PackageCheck, BadgeIndianRupee,
   LayoutDashboard,
@@ -32,11 +31,14 @@ import {
   Ticket,
   ClipboardCheck,
   Scale,
+  FileText,
 } from 'lucide-react';
 
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import type { UserRole } from '@/lib/auth/roles';
+import { PolicyLinks } from '@/components/legal/policy-links';
+import type { FooterLink } from '@/lib/site-content/types';
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
@@ -65,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Commissions', href: '/admin/commissions', icon: IndianRupee },
   { label: 'Follow-ups', href: '/admin/follow-ups', icon: BellRing },
   { label: 'Support', href: '/admin/support', icon: Headset },
+  { label: 'Website Content', href: '/admin/content', icon: FileText, roles: ['super_admin'] },
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },
@@ -76,10 +79,13 @@ const NAV_ITEMS: NavItem[] = [
 export function AdminShell({
   fullName,
   role,
+  footerLinks,
   children,
 }: {
   fullName: string;
   role: UserRole;
+  /** Footer navigation from managed website content (loadFooterLinks()). */
+  footerLinks: FooterLink[];
   children: React.ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -98,16 +104,12 @@ export function AdminShell({
         <main className="w-full min-w-0 flex-1 p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8">
           {children}
         </main>
-        <footer className="flex flex-wrap items-center gap-x-4 border-t border-ink-100 px-4 py-3 text-xs text-ink-600 sm:px-6" aria-label="Public information">
-          <Link href="/about" className="inline-flex min-h-11 items-center hover:text-primary-700">About</Link>
-          <Link href="/legal/terms" className="inline-flex min-h-11 items-center hover:text-primary-700">Terms</Link>
-          <Link href="/legal/privacy" className="inline-flex min-h-11 items-center hover:text-primary-700">Privacy</Link>
-          <Link href="/legal/shipping" className="inline-flex min-h-11 items-center hover:text-primary-700">Delivery</Link>
-          <Link href="/legal/returns" className="inline-flex min-h-11 items-center hover:text-primary-700">Returns</Link>
-          <Link href="/legal/grievance" className="inline-flex min-h-11 items-center hover:text-primary-700">Grievance</Link>
-          <Link href="/legal/product-safety" className="inline-flex min-h-11 items-center hover:text-primary-700">Product safety</Link>
-          <Link href="/legal/business-disclosure" className="inline-flex min-h-11 items-center hover:text-primary-700">Business disclosure</Link>
-          <Link href="/contact" className="inline-flex min-h-11 items-center hover:text-primary-700">Contact</Link>
+        <footer className="flex flex-wrap items-center gap-x-4 border-t border-ink-100 px-4 py-3 text-xs text-ink-600 sm:px-6">
+          <PolicyLinks
+            links={footerLinks}
+            ariaLabel="Public information"
+            linkClassName="inline-flex min-h-11 items-center hover:text-primary-700"
+          />
         </footer>
       </div>
     </div>

@@ -4,6 +4,8 @@ import { requireSellerPage } from '@/lib/seller/guard';
 import { logoutAction } from '@/lib/auth/actions';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { Button } from '@/components/ui/button';
+import { PolicyLinks } from '@/components/legal/policy-links';
+import { loadFooterLinks } from '@/lib/site-content/nav';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +15,8 @@ export default async function SellerPortalLayout({
   children: React.ReactNode;
 }) {
   const { seller } = await requireSellerPage({ allowInactive: true });
+  // Footer navigation is managed content (0104), not a code list.
+  const footerLinks = await loadFooterLinks();
 
   const navItems = [
     { href: '/seller/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -54,8 +58,6 @@ export default async function SellerPortalLayout({
                 </Link>
               );
             }) : null}
-            <Link href="/legal/terms" className="inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-primary-600">Terms</Link>
-            <Link href="/contact" className="inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-primary-600">Contact</Link>
             <form action={logoutAction}>
               <Button type="submit" variant="outline" size="sm" className="ml-1 gap-1.5 text-xs">
                 <LogOut className="h-3.5 w-3.5" /> Sign out
@@ -66,14 +68,8 @@ export default async function SellerPortalLayout({
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
-      <footer className="mx-auto flex max-w-6xl flex-wrap gap-x-4 border-t border-slate-200 px-4 py-4 text-xs text-slate-600 sm:px-6" aria-label="Public information">
-        <Link href="/legal/terms" className="inline-flex min-h-11 items-center hover:text-primary-700">Terms</Link>
-        <Link href="/legal/privacy" className="inline-flex min-h-11 items-center hover:text-primary-700">Privacy</Link>
-        <Link href="/legal/shipping" className="inline-flex min-h-11 items-center hover:text-primary-700">Delivery</Link>
-        <Link href="/legal/returns" className="inline-flex min-h-11 items-center hover:text-primary-700">Returns</Link>
-        <Link href="/legal/grievance" className="inline-flex min-h-11 items-center hover:text-primary-700">Grievance</Link>
-        <Link href="/legal/product-safety" className="inline-flex min-h-11 items-center hover:text-primary-700">Product safety</Link>
-        <Link href="/legal/business-disclosure" className="inline-flex min-h-11 items-center hover:text-primary-700">Business disclosure</Link>
+      <footer className="mx-auto max-w-6xl border-t border-slate-200 px-4 py-4 text-xs text-slate-600 sm:px-6">
+        <PolicyLinks links={footerLinks} ariaLabel="Public information" linkClassName="inline-flex min-h-11 items-center hover:text-primary-700" />
       </footer>
     </div>
   );

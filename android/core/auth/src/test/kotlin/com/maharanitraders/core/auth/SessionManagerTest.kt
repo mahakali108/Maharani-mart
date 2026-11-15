@@ -1068,6 +1068,13 @@ class SessionManagerTest {
     }
     val session = manager(api, FakeTokenStore())
 
+    // A brand-new SessionManager starts in `Restoring` (the splash). Put the shell
+    // in the state a login screen actually has — restore with no stored tokens
+    // publishes `SignedOut(NEVER_SIGNED_IN)` — so this test measures what it claims
+    // to measure: that a rejected password does not REPLACE an existing shell
+    // state. Without this line the assertion compared against the splash.
+    assertEquals(SessionState.SignedOut(SignOutReason.NEVER_SIGNED_IN), session.restore())
+
     val returned = session.signIn("gupta@example.com", "wrong")
 
     assertTrue(returned is SessionState.Unavailable)

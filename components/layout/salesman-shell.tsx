@@ -6,6 +6,7 @@ import { Topbar } from '@/components/layout/topbar';
 import { PolicyLinks } from '@/components/legal/policy-links';
 import { MobileBottomNav, type NavItem } from '@/components/layout/mobile-bottom-nav';
 import type { UserRole } from '@/lib/auth/roles';
+import type { FooterLink } from '@/lib/site-content/types';
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/salesman/dashboard', icon: LayoutDashboard },
@@ -23,10 +24,13 @@ const NAV_ITEMS: NavItem[] = [
 export function SalesmanShell({
   fullName,
   role,
+  footerLinks,
   children,
 }: {
   fullName: string;
   role: UserRole;
+  /** Footer navigation from managed website content (loadFooterLinks()). */
+  footerLinks: FooterLink[];
   children: React.ReactNode;
 }) {
   return (
@@ -34,7 +38,7 @@ export function SalesmanShell({
       <Topbar fullName={fullName} role={role} />
       <div className="mx-auto flex w-full max-w-6xl justify-end px-4 pt-3 sm:px-6"><Link href="/salesman/ai" className="flex h-9 items-center gap-1.5 rounded-xl bg-sky-700 px-3 text-[10px] font-bold text-white shadow-sm"><Sparkles className="h-3.5 w-3.5" /> Sales Copilot</Link></div>
       <main className="mx-auto w-full min-w-0 max-w-6xl p-4 sm:p-6">{children}</main>
-      <footer className="mx-auto max-w-6xl border-t border-ink-100 px-4 py-3 sm:px-6"><PolicyLinks /></footer>
+      <footer className="mx-auto max-w-6xl border-t border-ink-100 px-4 py-3 sm:px-6"><PolicyLinks links={footerLinks} /></footer>
       <MobileBottomNav navItems={NAV_ITEMS} />
     </div>
   );

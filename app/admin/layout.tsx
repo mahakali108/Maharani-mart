@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth/session';
 import { isRoleAllowedForPath } from '@/lib/auth/roles';
 import { AdminShell } from '@/components/layout/admin-shell';
+import { loadFooterLinks } from '@/lib/site-content/nav';
 
 /**
  * Admin/Super Admin shell.
@@ -27,8 +28,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!isRoleAllowedForPath(user.role, '/admin')) {
     redirect('/unauthorized');
   }
+  const footerLinks = await loadFooterLinks();
   return (
-    <AdminShell fullName={user.fullName} role={user.role}>
+    <AdminShell fullName={user.fullName} role={user.role} footerLinks={footerLinks}>
       {children}
     </AdminShell>
   );

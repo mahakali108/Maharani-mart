@@ -152,7 +152,7 @@ describe('homepage navigation and profile', () => {
 
 describe('sticky header and bottom navigation', () => {
   it('opens and focuses header search and exposes functional logo, notification, cart and account links', async () => {
-    render(<RetailerShell fullName="Fixture owner" role="retailer" cartCount={2} unreadCount={3}><p>Content</p></RetailerShell>);
+    render(<RetailerShell fullName="Fixture owner" role="retailer" cartCount={2} unreadCount={3} footerLinks={[]}><p>Content</p></RetailerShell>);
     const header = within(screen.getByRole('banner'));
     expect(screen.getByRole('main').getAttribute('tabindex')).toBe('-1');
     expect(header.getByRole('link', { name: 'Maharani Traders home' }).getAttribute('href')).toBe('/retailer/home');
@@ -164,22 +164,22 @@ describe('sticky header and bottom navigation', () => {
     expect(document.activeElement).toBe(document.querySelector('#retailer-mobile-search input'));
   });
   it('closes the mobile search on navigation and keeps it closed on return', async () => {
-    const view = render(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    const view = render(<RetailerShell fullName="Fixture owner" role="retailer" footerLinks={[]}><p>Content</p></RetailerShell>);
     const user = userEvent.setup();
     await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Search', expanded: false }));
     expect(document.querySelector('#retailer-mobile-search')).not.toBeNull();
     mocks.path = '/retailer/orders';
-    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer" footerLinks={[]}><p>Content</p></RetailerShell>);
     expect(document.querySelector('#retailer-mobile-search')).toBeNull();
     expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Search', expanded: false })).toBeTruthy();
     mocks.path = '/retailer/home';
-    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer" footerLinks={[]}><p>Content</p></RetailerShell>);
     expect(document.querySelector('#retailer-mobile-search')).toBeNull();
     await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Search', expanded: false }));
     expect(document.querySelector('#retailer-mobile-search')).not.toBeNull();
   });
   it('has exactly Home, Catalogue, Cart, Orders, Account and marks Home active', () => {
-    render(<RetailerShell fullName="Fixture owner" role="retailer" cartCount={2}><p>Content</p></RetailerShell>);
+    render(<RetailerShell fullName="Fixture owner" role="retailer" cartCount={2} footerLinks={[]}><p>Content</p></RetailerShell>);
     const nav = within(screen.getByRole('navigation', { name: 'Primary navigation' }));
     expect(nav.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/retailer/home', '/retailer/catalog', '/retailer/cart', '/retailer/orders', '/retailer/account']);
     expect(nav.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
@@ -187,10 +187,10 @@ describe('sticky header and bottom navigation', () => {
   });
   it('highlights nested Orders and Account routes correctly', () => {
     mocks.path = `/retailer/orders/${ORDER}`;
-    const view = render(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    const view = render(<RetailerShell fullName="Fixture owner" role="retailer" footerLinks={[]}><p>Content</p></RetailerShell>);
     expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Orders' }).getAttribute('aria-current')).toBe('page');
     mocks.path = '/retailer/account/edit';
-    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer"><p>Content</p></RetailerShell>);
+    view.rerender(<RetailerShell fullName="Fixture owner" role="retailer" footerLinks={[]}><p>Content</p></RetailerShell>);
     expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Account' }).getAttribute('aria-current')).toBe('page');
   });
 });
@@ -380,7 +380,7 @@ describe('product purchase, cart feedback and wholesale deal', () => {
       const [quantity, setQuantity] = useState(0);
       mocks.add.mockImplementation(async (_pack: string, added: number) => { setQuantity((value) => value + added); return { success: true }; });
       const cart = homeCartSummary(quantity ? [{ id: 'cart', pack_id: PACK, product_id: PRODUCT, quantity }] : [], [product], pricingData());
-      return <RetailerShell fullName="Fixture owner" role="retailer" cartCount={quantity ? 1 : 0}><ProductCard {...card()} /><HomeCartSummary cart={cart} /></RetailerShell>;
+      return <RetailerShell fullName="Fixture owner" role="retailer" cartCount={quantity ? 1 : 0} footerLinks={[]}><ProductCard {...card()} /><HomeCartSummary cart={cart} /></RetailerShell>;
     }
     render(<CartFlow />);
     expect(screen.getByText('Your cart is empty')).toBeTruthy();

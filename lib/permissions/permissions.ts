@@ -83,6 +83,13 @@ export type Permission =
   | 'suppliers.review'
   /** Upload staff-managed supplier documents (private bucket, 0059). V1 has no document deletion. */
   | 'suppliers.documents.manage'
+  /**
+   * Website Content / Pages Management (/admin/content, migration 0104).
+   * Super Admin ONLY: publishing a legal page is a public promise, and the
+   * permission matrix has no wider holder. RLS enforces the same rule
+   * (`site_pages` writes go through publish_site_page()/is_super_admin()).
+   */
+  | 'content.manage'
   | 'sellers.view'
   | 'sellers.review'
   | 'sellers.manage'
@@ -100,6 +107,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'reports.view.all', 'banners.manage', 'routes.manage.all',
     'command_center.view', 'dashboard.view', 'cleanup.view', 'support.manage', 'suppliers.view', 'suppliers.review', 'suppliers.documents.manage',
     'sellers.view', 'sellers.review', 'sellers.manage', 'sellers.offers.manage',
+    'content.manage',
   ],
   admin: [
     'products.view', 'products.view_cost', 'products.create', 'products.edit', 'products.delete', 'master_data.manage',

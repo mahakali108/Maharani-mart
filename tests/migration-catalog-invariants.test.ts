@@ -88,6 +88,13 @@ describe('SECURITY DEFINER hygiene', () => {
       'is_phone_registered',        // public registration phone pre-check (0057 decision)
       'submit_supplier_application', // public supplier form; rate-limited server-side
       'can_current_staff_read_profile', // boolean predicate evaluated INSIDE a policy
+      // 0104: anonymous readers of the published website content. Both return
+      // ONLY the published snapshot (or the "unpublished"/"missing" state) and
+      // cannot reach a draft, an internal note, an owner decision or a history
+      // row. Justification and negative tests: docs/SITE_CONTENT_MANAGEMENT.md §3
+      // and tests/site-content-db.test.ts.
+      'published_page',
+      'published_pages',
     ]);
     // Authenticated-only (anon=false) boolean predicates evaluated inside
     // catalogue / seller-offer RLS policies (0086/0087); leak zero row/PII data.
@@ -297,7 +304,10 @@ describe('application references resolve against the schema', () => {
     // 0061 was never committed; 0075 is the on-hold retention archive and 0076
     // the deferred banner alt_text. Anything else appearing here is a numbering
     // accident that must be reviewed before it is applied.
-    expect(gaps).toEqual(['0061', '0075', '0076']);
+    // 0103 is reserved by the open security-advisor branch (PR #127) and is
+    // deliberately skipped by the website content migrations (0104/0105), which
+    // are independent of it and must not renumber around an unmerged branch.
+    expect(gaps).toEqual(['0061', '0075', '0076', '0103']);
   });
 
   it('never ships two migrations with the same version', () => {
