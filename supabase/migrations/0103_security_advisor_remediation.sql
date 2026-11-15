@@ -113,8 +113,15 @@ revoke all on function public.sync_product_pack_primary_image()
   from public, anon, authenticated;
 
 -- rls_auto_enable is an event-trigger function, not an application RPC.
-revoke all on function public.rls_auto_enable()
-  from public, anon, authenticated;
+do $
+begin
+  -- Some local test fixtures do not install the optional event trigger.
+  -- Revoke direct API access when the function exists in the target database.
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke all on function public.rls_auto_enable() from public, anon, authenticated';
+  end if;
+end;
+$;
 
 -- Post-migration invariants (also covered by tests):
 --  * all four views have security_invoker=true;
