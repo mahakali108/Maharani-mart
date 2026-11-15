@@ -1,6 +1,6 @@
 # Website content module — phase report (2026-11-15)
 
-Branch `arena/1c8f9eed-maharani-mart` (head `eeaeceb`, then the CI fix commit).
+Branch `arena/1c8f9eed-maharani-mart` (head `60ff20f`).
 Base `main` @ `656a6a4` (merge of PR #126). **Nothing here has been applied to a
 live Supabase project, deployed to production, merged, or published to Google
 Play.** This report separates what is *implemented*, what was *actually executed
@@ -72,27 +72,51 @@ branch and #127 cannot conflict.
 | Production build | `pnpm run build` | **PASS** |
 | New suites | — | `site-content-db` 14, `site-content-public`+`site-content-admin` 23, `site-content-seed` 10, `site-content-footer-nav` 6, `site-content-editor-reads` 6, `legal-registry` 6, `public-information` 6, `mobile-pages-api` 8 |
 
-CI, run [43737805333](https://github.com/mahakali108/Maharani-mart/actions/runs/43737805333)
-(commit `e2030d6`, `workflow_dispatch` on this branch):
+CI, run [43741769331](https://github.com/mahakali108/Maharani-mart/actions/runs/43741769331)
+(commit `60ff20f`, `workflow_dispatch` on this branch) — **whole workflow SUCCESS** in 18 m 55 s:
 
-| Job | Result |
+| Job / step | Result |
 | --- | --- |
 | Production probe (maharanitraders.vercel.app) | **SUCCESS** |
-| Web typecheck, lint, tests, build | **SUCCESS** |
-| Android unit tests | **SUCCESS** — 43/43 in `:core:auth`, including the previously failing "wrong password" case |
-| Android APK identity check | **FAILURE — a defect in the workflow, not the app** (fixed, rerun pending) |
+| Web typecheck | **SUCCESS** |
+| Web lint | **SUCCESS** |
+| Web tests (full suite) | **SUCCESS** |
+| Next.js production build | **SUCCESS** |
+| Android unit tests, lint, assemble debug APK | **SUCCESS** |
+| Debug APK identity / version / signing check | **SUCCESS** |
+| Artifact version against the declared policy | **SUCCESS** |
+| Unsigned release APK + AAB for size measurement | **SUCCESS** (correctly reports "unsigned; no keystore") |
+| Keystore-dependent steps (signed artifacts) | skipped — no signing secrets exist |
+| Build diagnostics bundle uploaded | **SUCCESS** |
 
-Two defects were found and fixed *because* this ran:
+Artifacts of that run (downloadable from the run page; this sandbox cannot fetch
+GitHub artifact blobs):
+
+| Artifact | Size |
+| --- | --- |
+| `maharani-traders-debug-apk` (installable debug APK) | 15,602,680 B ≈ 14.9 MB |
+| `maharani-traders-release-artifacts` (unsigned release APK + AAB) | 8,524,131 B ≈ 8.1 MB |
+| `android-reports` (unit-test + lint reports) | 447,259 B |
+| `android-build-diagnostics` | 4,693 B |
+
+Three defects were found and fixed **because** this ran end to end:
 
 1. **`SessionManagerTest`** asserted against a fresh manager (`Restoring`) instead
    of a restored session; production code was correct. Fixed by calling
-   `session.restore()` first. Confirmed green in CI.
+   `session.restore()` first. Green in CI.
 2. **The debug-APK identity step** parsed `versionCode = <number>` and
    `versionName = "…"` out of `build.gradle.kts`, but both are now derived from
    `android/version.properties`, so the expectation was blank and the `aapt`
    greps failed although the APK was correct. It now reads the same
    `version.properties` the next step verifies against, rejects a blank field,
    and prints the tool paths and installed build-tools.
+3. **`tests/infinite-scroll-ui.test.tsx` was flaky** (2 of 10 tests, twice in CI):
+   it fired the fake `IntersectionObserver` immediately after render/await, when
+   the sentinel's observer — registered in an effect after the previous batch
+   commits — did not exist yet, so the scroll was a silent no-op. `scrollToBottom()`
+   now waits for a live sentinel; the one test whose point is "extra scrolls change
+   nothing" uses `scrollToBottomIfObserved()`, which is deliberately a no-op when
+   the sentinel is unmounted.
 
 ## 6. CI status elsewhere (not caused by this branch)
 
