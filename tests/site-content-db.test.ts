@@ -85,10 +85,17 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
     expect(draftCount[0]!.n).toBe('0');
   });
 
-  it('lets a plain admin read published pages but not edit them (super admin only)', async () => {
-    const rows = await as(db, admin, async (tx: Tx) =>
-      (await tx.query<{ n: string }>(`select count(*)::text as n from public.site_pages where status = 'published'`)).rows);
-    expect(Number(rows[0]!.n)).toBeGreaterThan(0);
+  it('lets a plain admin read the published output but not the draft table, and never edit', async () => {
+    // A plain admin reads exactly what a customer reads (the SECURITY DEFINER
+    // snapshot functions) — not the draft columns, which are super-admin only.
+    expect((await publishedPage('admin', 'about')).state).toBe('published');
+    const indexRows = await as(db, admin, async (tx: Tx) =>
+      (await tx.query<{ pages: Array<{ slug: string }> }>(`select public.published_pages() as pages`)).rows);
+    expect(indexRows[0]!.pages.length).toBeGreaterThan(0);
+
+    const visible = await as(db, admin, async (tx: Tx) =>
+      (await tx.query<{ n: string }>(`select count(*)::text as n from public.site_pages`)).rows);
+    expect(visible[0]!.n).toBe('0');
 
     // RLS filters the row out of the UPDATE: nothing changes, and nothing errors.
     await as(db, admin, (tx) => tx.query(`update public.site_pages set title = 'Admin edit' where slug = 'about'`));
@@ -123,6 +130,41 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
     expect(history.some((row) => row.event === 'published')).toBe(true);
   });
 
+  it('no API role can read a draft column of a published page', async () => {
+    // The page is PUBLISHED, so a row-level policy would say "yes". The draft
+    // columns must still be unreachable: a column grant cannot be made
+    // row-conditional, which is why anon has no grant at all and authenticated
+    // reads are super-admin only. A regression here means unpublished legal text
+    // is readable through the Data API before the operator publishes it.
+    const id = await pageId('shipping');
+    await as(db, superAdmin, (tx) =>
+      tx.query(`update public.site_pages set intro = 'UNPUBLISHED DRAFT SENTENCE' where id = $1`, [id]));
+    await as(db, superAdmin, (tx) =>
+      tx.query(
+        `insert into public.site_page_sections (page_id, heading, body, is_visible) values ($1, 'Draft heading', array['DRAFT BODY TEXT'], false)`,
+        [id],
+      ));
+
+    for (const role of ['anon'] as const) {
+      expect(await errorOf(db, role, (tx) => tx.query(`select intro from public.site_pages where id = $1`, [id])), role)
+        .toMatch(/permission denied/i);
+      expect(await errorOf(db, role, (tx) => tx.query(`select body from public.site_page_sections where page_id = $1`, [id])), role)
+        .toMatch(/permission denied/i);
+    }
+
+    // An authenticated non-super-admin gets the table but no rows.
+    const retailerRows = await as(db, retailer, async (tx: Tx) =>
+      (await tx.query<{ n: string }>(`select count(*)::text as n from public.site_pages where id = $1`, [id])).rows);
+    expect(retailerRows[0]!.n).toBe('0');
+    const sectionRows = await as(db, retailer, async (tx: Tx) =>
+      (await tx.query<{ n: string }>(`select count(*)::text as n from public.site_page_sections where page_id = $1`, [id])).rows);
+    expect(sectionRows[0]!.n).toBe('0');
+
+    // The published output still carries the last PUBLISHED text, not the draft.
+    expect(JSON.stringify(await publishedPage('anon', 'shipping'))).not.toContain('UNPUBLISHED DRAFT SENTENCE');
+    expect(JSON.stringify(await publishedPage('anon', 'shipping'))).not.toContain('DRAFT BODY TEXT');
+  });
+
   it('unpublishes without leaving any content readable, and answers "not published" instead of 404', async () => {
     const id = await pageId('cookies');
     await as(db, superAdmin, (tx) => tx.query(`select public.unpublish_site_page($1)`, [id]));
@@ -132,9 +174,10 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
     expect(page).not.toHaveProperty('page');
     expect(JSON.stringify(page)).not.toContain('device storage');
 
-    const rows = await as(db, 'anon', async (tx: Tx) =>
-      (await tx.query<{ n: string }>(`select count(*)::text as n from public.site_pages where slug = 'cookies'`)).rows);
-    expect(rows[0]!.n).toBe('0');
+    // Guests have no SELECT privilege on the draft table at all, so this is a
+    // permission error rather than "0 rows" (see the next test).
+    expect(await errorOf(db, 'anon', (tx) => tx.query(`select title from public.site_pages where slug = 'cookies'`)))
+      .toMatch(/permission denied/i);
 
     // Publishing again restores it, so the action is reversible.
     await as(db, superAdmin, (tx) => tx.query(`select public.publish_site_page($1)`, [id]));

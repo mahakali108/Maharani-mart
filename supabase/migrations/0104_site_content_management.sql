@@ -36,6 +36,8 @@
 -- ----------------
 --   * RLS on every table. Anonymous and authenticated callers see only pages
 --     whose `status = 'published'` AND whose snapshot exists.
+--   * Draft columns have no anon grant at all: a published page cannot leak the
+--     draft title/intro/sections through the Data API (see §6).
 --   * Writes are super_admin-only (`public.is_super_admin()`), enforced in the
 --     database, not only in the UI.
 --   * Internal notes live in a separate table with no anonymous or
@@ -64,7 +66,7 @@ $$;
 --    website content is restricted to `super_admin` only.
 -- ----------------------------------------------------------------------------
 create or replace function public.is_super_admin() returns boolean
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select coalesce(public.current_user_role() = 'super_admin', false)
 $$;
 revoke all on function public.is_super_admin() from public, anon;
@@ -228,16 +230,26 @@ comment on table public.site_page_revisions is
 create index if not exists idx_site_page_revisions_page on public.site_page_revisions (page_id, created_at desc);
 
 -- ----------------------------------------------------------------------------
--- 6. Grants. Read is granted; every write is filtered by RLS below.
+-- 6. Grants.
+--
+-- Draft columns deliberately have NO anon grant. A row-level policy can only
+-- answer "may this row be read", not "which columns", so granting anon SELECT on
+-- site_pages would expose the DRAFT title/intro of a page that is currently
+-- published (and, via the sections table, section text that has not been
+-- published and blocks marked invisible). The public reads the published
+-- snapshot through published_page()/published_pages(), which are SECURITY
+-- DEFINER and return the snapshot only; authenticated users get these tables
+-- only through a super-admin policy (the editor). Guests therefore have no
+-- column of the draft at all, and a bug cannot turn "published" into "draft is
+-- readable". Regression: tests/site-content-db.test.ts (“no API role can read a
+-- draft column of a published page”).
 -- ----------------------------------------------------------------------------
 revoke all on table public.site_pages from public, anon, authenticated;
-grant select on table public.site_pages to anon, authenticated;
-grant insert, update, delete on table public.site_pages to authenticated;
+grant select, insert, update, delete on table public.site_pages to authenticated;
 grant all on table public.site_pages to service_role;
 
 revoke all on table public.site_page_sections from public, anon, authenticated;
-grant select on table public.site_page_sections to anon, authenticated;
-grant insert, update, delete on table public.site_page_sections to authenticated;
+grant select, insert, update, delete on table public.site_page_sections to authenticated;
 grant all on table public.site_page_sections to service_role;
 
 revoke all on table public.site_page_admin_notes from public, anon, authenticated;
@@ -256,18 +268,16 @@ alter table public.site_page_sections enable row level security;
 alter table public.site_page_admin_notes enable row level security;
 alter table public.site_page_revisions enable row level security;
 
+-- No anon SELECT policy exists, by design (see §6). If an older revision of this
+-- file created one, it is dropped here so re-applying the migration closes the
+-- hole instead of leaving it behind.
 drop policy if exists "site_pages_public_read" on public.site_pages;
-create policy "site_pages_public_read" on public.site_pages
-  for select to anon
-  using (status = 'published' and published_at is not null and published_snapshot is not null and published_at <= now());
 
+-- The editor is the only authenticated reader of the draft table.
 drop policy if exists "site_pages_authenticated_read" on public.site_pages;
-create policy "site_pages_authenticated_read" on public.site_pages
+create policy "site_pages_super_admin_read" on public.site_pages
   for select to authenticated
-  using (
-    (status = 'published' and published_at is not null and published_snapshot is not null and published_at <= now())
-    or public.is_super_admin()
-  );
+  using (public.is_super_admin());
 
 drop policy if exists "site_pages_super_admin_insert" on public.site_pages;
 create policy "site_pages_super_admin_insert" on public.site_pages
@@ -282,31 +292,11 @@ create policy "site_pages_super_admin_delete" on public.site_pages
   for delete to authenticated using (public.is_super_admin());
 
 drop policy if exists "site_page_sections_public_read" on public.site_page_sections;
-create policy "site_page_sections_public_read" on public.site_page_sections
-  for select to anon
-  using (exists (
-    select 1 from public.site_pages p
-     where p.id = site_page_sections.page_id
-       and p.status = 'published'
-       and p.published_at is not null
-       and p.published_snapshot is not null
-       and p.published_at <= now()
-  ));
 
 drop policy if exists "site_page_sections_authenticated_read" on public.site_page_sections;
-create policy "site_page_sections_authenticated_read" on public.site_page_sections
+create policy "site_page_sections_super_admin_read" on public.site_page_sections
   for select to authenticated
-  using (
-    public.is_super_admin()
-    or exists (
-      select 1 from public.site_pages p
-       where p.id = site_page_sections.page_id
-         and p.status = 'published'
-         and p.published_at is not null
-         and p.published_snapshot is not null
-         and p.published_at <= now()
-    )
-  );
+  using (public.is_super_admin());
 
 drop policy if exists "site_page_sections_super_admin_write" on public.site_page_sections;
 create policy "site_page_sections_super_admin_write" on public.site_page_sections
