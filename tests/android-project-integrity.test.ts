@@ -670,7 +670,12 @@ describe('Android test doubles keep up with the main sources', () => {
     const offenders: string[] = [];
     for (const file of testSources()) {
       const source = readFileSync(file, 'utf8');
-      for (const match of source.matchAll(/class\s+(\w+)\s*(?:\([^)]*\))?\s*:\s*([\w.]+)/g)) {
+      // Comments are blanked BEFORE matching: a doc comment inside a constructor
+      // parameter list can contain a `)`, which used to end the parameter match
+      // early and made the whole class invisible to this check (that is exactly
+      // how `FakeMaharaniApi` kept a stale member list).
+      const code = stripKotlinComments(source);
+      for (const match of code.matchAll(/class\s+(\w+)\s*(?:\([^)]*\))?\s*:\s*([\w.]+)/g)) {
         const className = match[1]!;
         const interfaceName = match[2]!.split('.').pop()!;
         const declaration = interfaces.get(interfaceName);

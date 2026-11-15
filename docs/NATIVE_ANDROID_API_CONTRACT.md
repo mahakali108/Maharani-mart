@@ -464,6 +464,21 @@ and `tests/site-content-db.test.ts`):
 - Paragraph text may contain `[label](/path)`; the app renders the label as text
   and opens the path in the in-app page viewer. No HTML is sent.
 
+**Native client (delivered, `feature/engagement`).** `ManagedContentRepository`
+wraps the two calls; `LegalCentreViewModel` / `ManagedPageViewModel` own the four
+states (loading, published, empty, error+retry) and a fifth *unavailable* state
+for the server's `404`, which is rendered with the website's own sentence and
+**no** retry button, because retrying cannot publish a page. Screens:
+`LegalCentreScreen` (index) and `ManagedPageScreen` (one page), reached from
+Account → *Policies & information* and Help → *Policies & information*
+(`MaharaniRoutes.LEGAL`, `MaharaniRoutes.LEGAL_PAGE`). An on-site link
+(`/contact`) opens the same page inside the app; only `https`, `mailto:` and
+`tel:` are handed to the platform; any other scheme becomes plain text. Section
+`imageUrl` is carried by the contract but **not rendered** in this release (no
+published page uses one). Contract tests:
+`android/core/network/src/test/.../ManagedContentSerializationTest.kt` and
+`android/feature/engagement/src/test/.../ManagedContentViewModelTest.kt`.
+
 ### 2.5 PLANNED — Phase F (coins, notifications, banners, account)
 
 | Method | Path | Auth/role | Reuse |
