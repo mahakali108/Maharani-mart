@@ -18,6 +18,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createMigratedDb, migrationFiles, type Db } from './helpers/pg-harness';
+import { classifyMigrationGaps } from './helpers/migration-reservations';
 
 const ROOT = join(__dirname, '..');
 let db: Db;
@@ -290,25 +291,17 @@ describe('application references resolve against the schema', () => {
     });
   }, 60_000);
 
-  it('the migration set is contiguous apart from the documented gaps', () => {
-    const versions = migrationFiles().map((file) => file.slice(0, 4));
-    const numeric = versions.map((v) => Number(v));
-    const gaps: string[] = [];
-    for (let i = 1; i < numeric.length; i += 1) {
-      if (numeric[i]! - numeric[i - 1]! > 1) {
-        for (let missing = numeric[i - 1]! + 1; missing < numeric[i]!; missing += 1) {
-          gaps.push(String(missing).padStart(4, '0'));
-        }
-      }
-    }
-    // 0061 was never committed; 0075 is the on-hold retention archive and 0076
-    // the deferred banner alt_text. Anything else appearing here is a numbering
-    // accident that must be reviewed before it is applied.
-    // 0103 belongs to the security-advisor work (PR #127). It is excluded from
-    // this contiguity assertion rather than pinned present or absent: the
-    // website content migrations (0104/0105) are independent of it and must not
-    // renumber around a branch that may or may not have merged yet.
-    expect(gaps.filter((gap) => gap !== '0103')).toEqual(['0061', '0075', '0076']);
+  it('the migration set is contiguous apart from the documented reservations', () => {
+    const numbers = migrationFiles().map((file) => Number(file.slice(0, 4)));
+    // The one registry of allowed skips: tests/helpers/migration-reservations.ts
+    // A number that is missing without an entry there fails here; a
+    // 'never-authored' number that suddenly has a file also fails, so a
+    // reservation can never become a licence to reuse a number.
+    const gaps = classifyMigrationGaps(numbers);
+    expect({
+      undocumented: gaps.undocumented,
+      presentDespiteReservation: gaps.presentDespiteReservation,
+    }).toEqual({ undocumented: [], presentDespiteReservation: [] });
   });
 
   it('never ships two migrations with the same version', () => {

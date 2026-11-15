@@ -6,6 +6,7 @@ import {
   CATALOG_PAGE_SIZE,
 } from '@/lib/retailer/catalog-params';
 import { decodeCursor, encodeCursor, toListBatch, toOffsetBatch } from '@/lib/infinite-scroll/cursor';
+import { classifyMigrationGaps } from './helpers/migration-reservations';
 import { buildKeysetPredicate, type KeysetColumn } from '@/lib/infinite-scroll/keyset';
 import {
   LEDGER_EXCLUDED_STATUSES,
@@ -641,22 +642,16 @@ describe('migration hygiene', () => {
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
 
-    const present = new Set(numbers);
-    const missing = Array.from(
-      { length: Math.max(...numbers) },
-      (_, index) => index + 1
-    ).filter((number) => !present.has(number));
-    // Documented gaps, never reused:
-    //   0061 — deliberately never shipped; deployed 0062–0068 identities
-    //          cannot be renumbered without corrupting migration history.
-    //   0075 — data-retention archive, ON HOLD pending review.
-    //   0076 — banner alt_text proposal, deliberately deferred.
-    // 0077 (banner draft artwork) skips over them rather than taking a number
-    // that a reviewed, pending change has already been designed against.
-    // 0103 belongs to the security-advisor work (PR #127); the website content
-    // migrations start at 0104 and never collide with it, whether or not that
-    // branch has merged yet.
-    expect(missing.filter((prefix) => prefix !== 103)).toEqual([61, 75, 76]);
+    // 0061 (never authored; 0062–0068 were applied under those identities),
+    // 0075 (retention archive, on hold) and 0076 (banner alt_text, deferred) may
+    // never appear; 0103 (PR #127 security advisor) may appear or not depending
+    // on merge order. Both rules live in tests/helpers/migration-reservations.ts,
+    // which also fails on any gap that is NOT reserved.
+    const gaps = classifyMigrationGaps(numbers);
+    expect({
+      undocumented: gaps.undocumented,
+      presentDespiteReservation: gaps.presentDespiteReservation,
+    }).toEqual({ undocumented: [], presentDespiteReservation: [] });
   });
 
   it('keeps the case/loose pricing migration and adds Powder catalog integrity plus variant gallery plus wallet ledger plus security hardening as the latest migrations', () => {
