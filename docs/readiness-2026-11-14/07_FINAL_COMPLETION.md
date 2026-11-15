@@ -196,16 +196,19 @@ reaches typecheck, tests or build. Those were run in the sandbox only.
 
 ## 7. Deployment checks
 
-**Vercel.** GitHub status `success` for the previous head. Browser
+**Vercel.** GitHub reports the Vercel deployment as passing for `9c4834d` and for this pass's commit `5993b16`. Browser
 verification NOT DONE (see Verdict).
 
 **Cloudflare "Workers Builds: maharani-mart".** Evidence:
 
-- The check appears only on this PR's commits `78a570e` and `9c4834d`. It is
+- The check appears only on this PR's commits `78a570e`, `9c4834d` and `5993b16`. It is
   absent from `main` (last 6 commits), from PR #125, and from this PR's first
   commit — so the Cloudflare connection was made, or its branch builds switched
   on, on 15 Nov 2026.
-- It fails in under one second (start and end time identical), so no build ran.
+- On the latest push (`5993b16`) the check stayed pending for between one and
+  three minutes and then failed, so Cloudflare does attempt something. (The
+  check's recorded start and end times are identical, which says nothing about
+  how long it ran.) The exact error is unknown without the log.
 - The repository has no `wrangler.toml` / `wrangler.jsonc`, no OpenNext or
   Cloudflare adapter, no Cloudflare dependency and no workflow that mentions
   it. `README.md` and `vercel.json` name Vercel as the only deployment target.
