@@ -129,18 +129,20 @@ class ManagedPageViewModel @Inject constructor(
           }
 
         is AppResult.Failure -> {
+          // `AppResult.error` is declared in another module, so it must be bound
+          // to a local before it can be smart-cast (SMARTCAST_IMPOSSIBLE).
+          val failure = result.error
           // "Not published" is the server's 404; a draft is never distinguishable
           // from a page that does not exist, which is exactly the intent.
-          val unavailable = result.error is AppError.Api &&
-            result.error.code == ApiErrorCode.NOT_FOUND
+          val unavailable = failure is AppError.Api && failure.code == ApiErrorCode.NOT_FOUND
           _state.update {
             it.copy(
               loading = false,
               unavailable = unavailable,
               // The server's message is the website's own sentence for an
               // unpublished page; an error banner is only for real failures.
-              error = if (unavailable) null else result.error.message,
-              retryable = result.error.retryable,
+              error = if (unavailable) null else failure.message,
+              retryable = failure.retryable,
             )
           }
         }
