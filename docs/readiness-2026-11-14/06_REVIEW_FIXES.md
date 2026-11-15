@@ -91,8 +91,20 @@ Root cause: the first commit on this branch was authored as
 `Arena Agent <agent@arena.ai>`, which GitHub cannot match to an account, so
 Vercel declined to build it. No Vercel setting or environment variable was
 changed. The fix commit is authored and committed as the repository owner's
-verified GitHub identity. The result of that deployment is recorded in the PR
-description, because it is only known after the push.
+verified GitHub identity. Result on commit `78a570e`: the GitHub "Vercel" status changed from failure to
+**success — "Deployment has completed"**.
+
+Limits of that statement:
+- It was read from the GitHub commit status. The Vercel connector refused the
+  read ("Access denied"), so the deployment state and preview URL were not
+  confirmed inside Vercel itself.
+- **No page of the preview was opened.** The sandbox cannot reach
+  `*.vercel.app`. Browser verification is therefore still NOT DONE.
+- "Web checks" still fails at the Lint step (48 errors that exist on `main`);
+  because lint fails first, CI never runs the tests or the build.
+- A "Workers Builds: maharani-mart" (Cloudflare) check appeared on this commit
+  and failed. It was not present on the previous commit or on `main`'s latest
+  check list, its log is not readable from here, and it was not investigated.
 
 ## Real PostgreSQL results (PostgreSQL 17.11, migrations 0001–0098, several sessions)
 
