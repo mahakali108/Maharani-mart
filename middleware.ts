@@ -17,12 +17,7 @@ interface AccessPeriodRow {
   expires_at: string | null;
 }
 
-const PUBLIC_PATHS = ['/login', '/register-retailer', '/register-seller', '/auth/callback', '/unauthorized', '/access-expired'];
 const PROTECTED_PREFIXES = ['/admin', '/staff', '/salesman', '/retailer', '/seller', '/pending-approval'];
-
-function isPublicPath(pathname: string) {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
-}
 
 function isProtectedPath(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));

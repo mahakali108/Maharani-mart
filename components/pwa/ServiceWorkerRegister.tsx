@@ -29,7 +29,7 @@ export default function ServiceWorkerRegister() {
         .register('/sw.js', { scope: '/' })
         .catch((err) => {
           // Never let SW issues affect the app.
-          // eslint-disable-next-line no-console
+           
           console.error('[PWA] Service worker registration failed:', err);
         });
     };

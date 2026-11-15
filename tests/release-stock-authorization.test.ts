@@ -23,7 +23,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { as, createArea, createMigratedDb, createUser, errorOf, type Db } from './helpers/pg-harness';
+import { approveAndActivateSeller, as, createArea, createMigratedDb, createUser, errorOf, type Db } from './helpers/pg-harness';
 
 let db: Db;
 let superAdmin: string;
@@ -67,8 +67,10 @@ beforeAll(async () => {
 
   // Marketplace side: one seller with a member, and an unrelated seller member.
   const seller = await db.query<{ id: string }>(
-    `insert into sellers (business_name, status) values ('Matrix Seller', 'active') returning id`
+    `insert into sellers (business_name, status) values ('Matrix Seller', 'pending') returning id`
   );
+  // A seller becomes active only after its compliance review (0086 / 0087).
+  await approveAndActivateSeller(db, seller.rows[0]!.id);
   sellerId = seller.rows[0]!.id;
   sellerMember = await createUser(db, 'seller', 'Seller Member');
   outsiderSellerMember = await createUser(db, 'seller', 'Outsider Seller Member');
@@ -77,8 +79,10 @@ beforeAll(async () => {
     sellerMember,
   ]);
   const other = await db.query<{ id: string }>(
-    `insert into sellers (business_name, status) values ('Other Seller', 'active') returning id`
+    `insert into sellers (business_name, status) values ('Other Seller', 'pending') returning id`
   );
+  // A seller becomes active only after its compliance review (0086 / 0087).
+  await approveAndActivateSeller(db, other.rows[0]!.id);
   await db.query(`insert into seller_members (seller_id, profile_id, member_role) values ($1, $2, 'owner')`, [
     other.rows[0]!.id,
     outsiderSellerMember,
@@ -228,46 +232,48 @@ describe('the check does not change what the function does', () => {
     ).toMatch(/not permitted to release stock for this order/);
   });
 
-  it('a retailer cancelling through RLS still releases, exactly once', async () => {
+  // Since 0097 an order is cancelled only through cancel_order_coins_atomic,
+  // which returns Coins, stock and coupon in one transaction. A direct
+  // `update orders set status = 'cancelled'` from any API session is refused
+  // (CANCEL_GUARD). The cases below keep the original point of this block —
+  // the release check must not stand in the way of a legitimate cancellation —
+  // on the route that now exists.
+  const cancelDirect = (who: string, order: string) =>
+    errorOf(db, who, (tx) => tx.query(`update orders set status = 'cancelled' where id = $1`, [order]));
+  const cancelAtomic = (who: string, order: string) =>
+    errorOf(db, who, (tx) => tx.query(`select public.cancel_order_coins_atomic($1, 'test cancellation')`, [order]));
+  const statusOf = async (order: string) =>
+    (await db.query<{ status: string }>(`select status from orders where id = $1`, [order])).rows[0]!.status;
+
+  it('a retailer cancels their own order through the atomic function; the release check does not block it; a repeat changes nothing', async () => {
     const order = await seedOrder(retailerA);
-    const updated = await as(db, retailerA, async (tx) => {
-      const { rows } = await tx.query<{ id: string }>(
-        `update orders set status = 'cancelled' where id = $1 returning id`,
-        [order]
-      );
-      return rows;
-    });
-    expect(updated).toHaveLength(1);
-    const { rows } = await db.query<{ status: string }>(
-      `select status from orders where id = $1`,
-      [order]
-    );
-    expect(rows[0]!.status).toBe('cancelled');
+    expect(await cancelDirect(retailerA, order)).toMatch(/CANCEL_GUARD/);
+    expect(await statusOf(order)).toBe('pending');
+    expect(await cancelAtomic(retailerA, order)).toBeNull();
+    expect(await statusOf(order)).toBe('cancelled');
+    // already cancelled: refused or a no-op, never an error from the release check
+    expect((await cancelAtomic(retailerA, order)) ?? '').not.toMatch(/not permitted to release stock/);
+    expect(await statusOf(order)).toBe('cancelled');
+    await expect(releaseAs(retailerA, order)).resolves.toMatchObject({ status: 'released', units_released: 0 });
   });
 
-  it('a salesman cancelling an assigned order is not blocked by the release check', async () => {
-    // Regression found in review: 0079 v1 refused this with 42501 even though
-    // 0009's orders_salesman_update policy allows the UPDATE itself.
+  it('a salesman is not stopped by the release check: release still works for an assigned order; cancelling is no longer a salesman action (0097)', async () => {
+    // Regression found in review: 0079 v1 refused the release with 42501 even
+    // though 0009's orders_salesman_update policy allowed the UPDATE itself.
     const order = await seedOrder(retailerA);
-    const updated = await as(db, salesManA, async (tx) => {
-      const { rows } = await tx.query<{ id: string }>(
-        `update orders set status = 'cancelled' where id = $1 returning id`,
-        [order]
-      );
-      return rows;
-    });
-    expect(updated).toHaveLength(1);
+    await expect(releaseAs(salesManA, order)).resolves.toMatchObject({ status: 'released' });
+    // The cancellation itself now belongs to the retailer or an Admin.
+    expect(await cancelDirect(salesManA, order)).toMatch(/CANCEL_GUARD/);
+    expect(await cancelAtomic(salesManA, order)).toMatch(/Access denied/);
+    expect(await statusOf(order)).toBe('pending');
   });
 
-  it('an admin cancelling somebody else’s order still releases', async () => {
+  it('an admin cancels somebody else’s order through the atomic function; another retailer cannot', async () => {
     const order = await seedOrder(retailerB);
-    const updated = await as(db, admin, async (tx) => {
-      const { rows } = await tx.query<{ id: string }>(
-        `update orders set status = 'cancelled' where id = $1 returning id`,
-        [order]
-      );
-      return rows;
-    });
-    expect(updated).toHaveLength(1);
+    expect(await cancelDirect(admin, order)).toMatch(/CANCEL_GUARD/);
+    expect(await cancelAtomic(retailerA, order)).toMatch(/Access denied/);
+    expect(await statusOf(order)).toBe('pending');
+    expect(await cancelAtomic(admin, order)).toBeNull();
+    expect(await statusOf(order)).toBe('cancelled');
   });
 });

@@ -46,7 +46,7 @@ describe('district vocabulary and existing assignments', () => {
     const web = parseAddressForm(form(payload));
     expect(web.ok && web.value.district).toBe('Patna');
     expect(addressPayloadSchema.parse(payload).district).toBe('Patna');
-    const { district: _, ...noDistrict } = payload;
+    const noDistrict = Object.fromEntries(Object.entries(payload).filter(([key]) => key !== 'district'));
     expect(addressPayloadSchema.parse(noDistrict).district).toBeUndefined();
   });
 });

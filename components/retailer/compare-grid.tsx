@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { GitCompareArrows, Scale, X } from 'lucide-react';
@@ -12,14 +12,57 @@ import { cn } from '@/lib/utils/cn';
 const COMPARE_KEY = 'maharani.compareIds.v1';
 const MAX_COMPARE = 4;
 
-function readStoredIds(): string[] {
-  if (typeof window === 'undefined') return [];
+function parseStoredIds(raw: string): string[] {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(COMPARE_KEY) ?? '[]') as unknown;
+    const parsed = JSON.parse(raw) as unknown;
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string').slice(0, MAX_COMPARE) : [];
   } catch {
     return [];
   }
+}
+
+// The comparison selection lives in browser storage; React reads it through
+// useSyncExternalStore. The server snapshot is null, which is also how the
+// component knows it has not hydrated yet.
+const compareListeners = new Set<() => void>();
+/** Used only when browser storage refuses the write (private mode, quota). */
+let compareFallbackRaw: string | null = null;
+
+function subscribeCompare(onChange: () => void): () => void {
+  compareListeners.add(onChange);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === COMPARE_KEY) onChange();
+  };
+  window.addEventListener('storage', onStorage);
+  return () => {
+    compareListeners.delete(onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+function readCompareRaw(): string {
+  if (compareFallbackRaw !== null) return compareFallbackRaw;
+  try {
+    return window.localStorage.getItem(COMPARE_KEY) ?? '[]';
+  } catch {
+    return '[]';
+  }
+}
+
+function readCompareRawOnServer(): string | null {
+  return null;
+}
+
+function writeCompareIds(ids: string[]): void {
+  const raw = JSON.stringify(ids);
+  try {
+    window.localStorage.setItem(COMPARE_KEY, raw);
+    compareFallbackRaw = null;
+  } catch {
+    // private-mode storage failure is non-fatal: keep the selection for this page
+    compareFallbackRaw = raw;
+  }
+  for (const listener of compareListeners) listener();
 }
 
 /**
@@ -63,26 +106,19 @@ export function CompareGrid({
     return merged;
   }, [cards, list.items]);
 
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const storedRaw = useSyncExternalStore(subscribeCompare, readCompareRaw, readCompareRawOnServer);
+  const hydrated = storedRaw !== null;
+  // Only products that are on this grid can be selected here.
+  const selectedIds = useMemo(
+    () => (storedRaw === null ? [] : parseStoredIds(storedRaw).filter((id) => gridCards.some((card) => card.id === id))),
+    [storedRaw, gridCards]
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setSelectedIds(readStoredIds().filter((id) => gridCards.some((card) => card.id === id)));
-    setHydrated(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function toggle(id: string) {
-    setSelectedIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id].slice(0, MAX_COMPARE);
-      try {
-        window.localStorage.setItem(COMPARE_KEY, JSON.stringify(next));
-      } catch {
-        // private-mode storage failure is non-fatal
-      }
-      return next;
-    });
+    writeCompareIds(
+      selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id].slice(0, MAX_COMPARE)
+    );
   }
 
   const selected = useMemo(

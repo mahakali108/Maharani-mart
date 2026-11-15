@@ -7,7 +7,7 @@ const config: AIConfig = { provider: 'openai-compatible', apiKey: 'server-secret
 describe('AI provider failure handling', () => {
   it('maps provider HTTP failures without exposing response bodies or API keys', async () => {
     const provider = new OpenAICompatibleProvider(config, vi.fn(async () => new Response('echo server-secret and private prompt', { status: 500 })) as typeof fetch);
-    const consume = async () => { for await (const _event of provider.stream([{ role: 'user', content: 'private' }], [])) { /* consume */ } };
+    const consume = async () => { for await (const event of provider.stream([{ role: 'user', content: 'private' }], [])) { void event; } };
     await expect(consume()).rejects.toBeInstanceOf(AIProviderError);
     await expect(consume()).rejects.not.toThrow(/server-secret|private prompt/);
   });

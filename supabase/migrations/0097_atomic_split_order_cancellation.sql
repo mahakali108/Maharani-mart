@@ -426,7 +426,11 @@ declare
   v_status text;
 begin
   if auth.role() = 'authenticated' and not public.is_admin_or_above() then
-    if (to_jsonb(new) - 'stock_quantity' - 'updated_at') = (to_jsonb(old) - 'stock_quantity' - 'updated_at') then
+    -- The exemption never applies when seller_replace_offer_tiers has asked for
+    -- re-moderation: that function signals a change of tier terms by touching
+    -- only updated_at with app.remoderate_offer = 'on'.
+    if coalesce(current_setting('app.remoderate_offer', true), '') <> 'on'
+       and (to_jsonb(new) - 'stock_quantity' - 'updated_at') = (to_jsonb(old) - 'stock_quantity' - 'updated_at') then
       return new;
     end if;
     select status into v_status from public.sellers where id = new.seller_id;

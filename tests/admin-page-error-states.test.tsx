@@ -10,7 +10,6 @@
  * below pin the corrected behaviour, using the repo's existing fluent query
  * double (tests/helpers/supabase-fixture.ts) with per-table error injection.
  */
-import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 

@@ -25,6 +25,8 @@ function writeRecent(term: string) {
   try { window.localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* Storage is optional; search still works. */ }
 }
 
+const EMPTY_SUGGESTIONS: SearchSuggestionResult = { products: [], brands: [], categories: [] };
+
 export function SearchField({
   initialQuery = '',
   variant = 'header',
@@ -42,41 +44,52 @@ export function SearchField({
   const [value, setValue] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<SearchSuggestionResult>({ products: [], brands: [], categories: [] });
+  // The outcome of the last finished suggestion request, tagged with the query
+  // it answered. Everything the panel shows is derived from it during render.
+  const [settled, setSettled] = useState<
+    { query: string; suggestions: SearchSuggestionResult | null } | null
+  >(null);
   const panelId = useId();
-  const [loading, setLoading] = useState(false);
-  const [searchError, setSearchError] = useState(false);
 
-  useEffect(() => {
+  const query = value.trim();
+  const searching = open && query.length >= 2;
+  const answer = searching && settled?.query === query ? settled : null;
+  const suggestions = answer?.suggestions ?? EMPTY_SUGGESTIONS;
+  const loading = searching && answer === null;
+  const searchError = answer !== null && answer.suggestions === null;
+
+  /** Opening the panel reads the recent searches (browser storage) at that moment. */
+  function openPanel() {
     setRecent(readRecent());
-  }, []);
+    setOpen(true);
+  }
+
+  /** Closing the panel discards the last answer, so reopening searches afresh. */
+  function closePanel() {
+    setOpen(false);
+    setSettled(null);
+  }
 
   useEffect(() => {
-    const query = value.trim();
+    if (!searching) return;
     let cancelled = false;
-    setSearchError(false);
-    setSuggestions({ products: [], brands: [], categories: [] });
-    if (!open || query.length < 2) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
     const handle = window.setTimeout(async () => {
       try {
         const result = await searchSuggestionsAction(query);
-        if (!cancelled) setSuggestions(result);
+        if (!cancelled) setSettled({ query, suggestions: result });
       } catch {
-        if (!cancelled) setSearchError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSettled({ query, suggestions: null });
       }
     }, 220);
     return () => { cancelled = true; window.clearTimeout(handle); };
-  }, [value, open]);
+  }, [query, searching]);
 
   useEffect(() => {
     function onPointer(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setSettled(null);
+      }
     }
     document.addEventListener('mousedown', onPointer);
     return () => document.removeEventListener('mousedown', onPointer);
@@ -87,7 +100,7 @@ export function SearchField({
       writeRecent(term);
       setRecent(readRecent());
     }
-    setOpen(false);
+    closePanel();
     router.push(href);
   }
 
@@ -104,8 +117,8 @@ export function SearchField({
   return (
     <form ref={rootRef} onSubmit={handleSubmit} role="search"
       aria-label={variant === 'hero' ? 'Search wholesale products' : 'Search catalog'}
-      onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }}
-      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false); }}
+      onKeyDown={(event) => { if (event.key === 'Escape') closePanel(); }}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) closePanel(); }}
       className="relative w-full min-w-0">
       <Search
         aria-hidden="true"
@@ -125,10 +138,11 @@ export function SearchField({
         autoFocus={autoFocus}
         autoComplete="off"
         placeholder={variant === 'hero' ? 'Search products' : 'Search products, brands, categories'}
-        onFocus={() => setOpen(true)}
+        onFocus={openPanel}
         onChange={(event) => {
           setValue(event.target.value);
-          setOpen(true);
+          setSettled(null);
+          openPanel();
         }}
         className={cn(
           'min-w-0 w-full rounded-xl bg-white text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-500',
@@ -142,7 +156,7 @@ export function SearchField({
           type="button"
           onClick={() => {
             setValue('');
-            setSuggestions({ products: [], brands: [], categories: [] });
+            setSettled(null);
           }}
           className={cn('absolute top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500', variant === 'hero' ? 'right-20 sm:right-24' : 'right-14 lg:right-28')}
           aria-label="Clear search"
@@ -205,7 +219,7 @@ export function SearchField({
 
           {loading ? <p role="status" className="px-4 py-5 text-xs text-slate-500">Searching…</p> : null}
           {searchError ? <p role="status" className="px-4 py-5 text-xs text-slate-600">Suggestions are unavailable. Press Search to search the catalog.</p> : null}
-          {value.trim().length >= 2 && !loading && !searchError && !hasSuggestions ? (
+          {query.length >= 2 && !loading && !searchError && !hasSuggestions ? (
             <p role="status" className="break-words px-4 py-5 text-center text-xs text-slate-500">No suggestions for “{value.trim()}”</p>
           ) : null}
 

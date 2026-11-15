@@ -14,7 +14,6 @@ vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
 
 const ADMIN = 'aaaaaa-0000-4000-8000-000000000001';
 const COUPON_ID = 'bbbbbb-0000-4000-8000-000000000002';
-const RETAILER = 'cccccc-0000-4000-8000-000000000003';
 
 const validInput = {
   code: 'diwali10',

@@ -1,4 +1,4 @@
-Applied 98 repository migrations (0001 - 0101) on PostgreSQL 17.11.
+Applied 99 repository migrations (0001 - 0102) on PostgreSQL 17.11.
 PASS LOCK ORDER: line row locked first, completion holds the delivery row: the line write is refused at once, completion finishes, NO deadlock
 PASS CONTROL: with the OLD waiting line guard the same schedule DEADLOCKS (proves the schedule exercises the inversion); the real guard is then restored
 PASS LOCK ORDER: completion committed first: a waiting line write is then refused; quantities stay as verified

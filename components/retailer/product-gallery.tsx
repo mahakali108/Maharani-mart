@@ -66,10 +66,12 @@ export function ProductGallery({
   // Reset active when variant changes (image list identity changes) — ensures
   // switching 50g -> 100g never shows index 3 of the previous gallery.
   const imageIds = images.map((i) => i.id).join('|');
-  useEffect(() => {
+  const [galleryImageIds, setGalleryImageIds] = useState(imageIds);
+  if (galleryImageIds !== imageIds) {
+    setGalleryImageIds(imageIds);
     setActive(0);
     setLightboxZoom(1);
-  }, [imageIds]);
+  }
 
   const current = images[active] ?? images[0] ?? null;
   const multi = images.length > 1;

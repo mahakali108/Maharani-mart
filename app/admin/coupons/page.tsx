@@ -7,6 +7,7 @@ import { AdminEmptyState } from '@/components/admin/empty-state';
 import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { describeDiscountValue } from '@/lib/coupons/engine';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { serverRequestTimeMs } from '@/lib/datetime/request-time';
 
 interface CouponRow {
   id: string;
@@ -68,7 +69,7 @@ export default async function AdminCouponsPage() {
     .returns<CouponRow[]>();
 
   const coupons = data ?? [];
-  const now = Date.now();
+  const now = serverRequestTimeMs();
   const readFailed = Boolean(error);
 
   return (

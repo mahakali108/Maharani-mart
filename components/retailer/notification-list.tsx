@@ -39,33 +39,44 @@ function iconFor(title: string, body: string) {
   return Bell;
 }
 
-function FeedStatus({ state }: { state: InfiniteListState<NotificationItem> }) {
+function FeedStatus({
+  registerSentinel,
+  loading,
+  error,
+  hasMore,
+  needsManualTrigger,
+  onRetry,
+  onLoadMore,
+}: Pick<InfiniteListState<NotificationItem>, 'registerSentinel' | 'loading' | 'error' | 'hasMore' | 'needsManualTrigger'> & {
+  onRetry: () => void;
+  onLoadMore: () => void;
+}) {
   return (
     <div className="flex flex-col items-center gap-2 py-5 text-center">
-      <div ref={state.registerSentinel} aria-hidden="true" className="h-px w-full" data-infinite-scroll-sentinel="" />
+      <div ref={registerSentinel} aria-hidden="true" className="h-px w-full" data-infinite-scroll-sentinel="" />
       <div role="status" aria-live="polite" className="flex min-h-[24px] items-center justify-center text-[11px]">
-        {state.loading ? (
+        {loading ? (
           <span className="flex items-center gap-2 font-medium text-slate-400">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
             Loading more updates…
           </span>
-        ) : state.error ? (
+        ) : error ? (
           <span className="flex flex-wrap items-center justify-center gap-2 text-slate-500">
-            <span>{state.error}</span>
+            <span>{error}</span>
             <button
               type="button"
-              onClick={state.retry}
+              onClick={onRetry}
               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-primary-200 hover:text-primary-600"
             >
               <RotateCw className="h-3 w-3" aria-hidden="true" />
               Retry
             </button>
           </span>
-        ) : state.hasMore ? (
-          state.needsManualTrigger ? (
+        ) : hasMore ? (
+          needsManualTrigger ? (
             <button
               type="button"
-              onClick={state.loadMore}
+              onClick={onLoadMore}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition hover:border-primary-200 hover:text-primary-600"
             >
               Load more
@@ -186,7 +197,15 @@ export function NotificationList({
         </div>
       </section>
 
-      <FeedStatus state={state} />
+      <FeedStatus
+        registerSentinel={state.registerSentinel}
+        loading={state.loading}
+        error={state.error}
+        hasMore={state.hasMore}
+        needsManualTrigger={state.needsManualTrigger}
+        onRetry={state.retry}
+        onLoadMore={state.loadMore}
+      />
     </div>
   );
 }

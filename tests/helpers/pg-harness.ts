@@ -239,22 +239,181 @@ export interface PackFixture {
   brandId: string | null;
 }
 
+const fixtureSuperAdmins = new WeakMap<Db, string>();
+/** One Super Admin per database, used by fixtures that need an owner decision recorded. */
+async function fixtureSuperAdmin(db: Db): Promise<string> {
+  let id = fixtureSuperAdmins.get(db);
+  if (!id) {
+    id = await createUser(db, 'super_admin', 'Fixture Super Admin');
+    fixtureSuperAdmins.set(db, id);
+  }
+  return id;
+}
+
+/**
+ * A product that may be sold, with one pack, created the way the catalogue
+ * rules require since 0086 / 0087 — nothing is bypassed:
+ *   1. the category is created unclassified, then a Super Admin classifies it
+ *      as FMCG with a reason;
+ *   2. the product is created INACTIVE with its pack;
+ *   3. a Super Admin classifies the product (non-food FMCG) with a reason;
+ *   4. label evidence is recorded, a compliance review is submitted and
+ *      approved by the Super Admin;
+ *   5. only then is the product activated.
+ * `active: false` leaves the PACK inactive (the product is still approved).
+ * `publish: false` stops after step 2: a draft product that is not on sale,
+ *   whose facts can still be edited.
+ */
 export async function createPack(
   db: Db,
-  { gstPercent = 18, moq = 1, unitsPerCase = 10, active = true } = {}
+  { gstPercent = 18, moq = 1, unitsPerCase = 10, active = true, publish = true } = {}
 ): Promise<PackFixture> {
   const tag = randomUUID().slice(0, 8);
+  const reviewer = await fixtureSuperAdmin(db);
   const { rows: cat } = await db.query<{ id: string }>(`insert into categories (name) values ($1) returning id`, [`Cat ${tag}`]);
   const { rows: brand } = await db.query<{ id: string }>(`insert into brands (name) values ($1) returning id`, [`Brand ${tag}`]);
+  await as(db, reviewer, (tx) => tx.query(
+    `update categories set compliance_scope = 'fmcg', compliance_scope_reason = 'Fixture: owner-reviewed FMCG category' where id = $1`,
+    [cat[0]!.id]
+  ));
   const { rows: product } = await db.query<{ id: string }>(
     `insert into products (sku_code, name, unit, base_price, gst_percent, category_id, brand_id, is_active)
-     values ($1, $2, 'pcs', 100, $3, $4, $5, true) returning id`,
+     values ($1, $2, 'pcs', 100, $3, $4, $5, false) returning id`,
     [`SKU-${tag}`, `Product ${tag}`, gstPercent, cat[0]!.id, brand[0]!.id]
   );
+  const productId = product[0]!.id;
   const { rows: pack } = await db.query<{ id: string }>(
     `insert into product_packs (product_id, pack_name, pack_sku_code, units_per_case, case_price, base_price, moq, is_active)
      values ($1, '1 pc', $2, $3, 1000, 100, $4, $5) returning id`,
-    [product[0]!.id, `PK-${tag}`, unitsPerCase, moq, active]
+    [productId, `PK-${tag}`, unitsPerCase, moq, active]
   );
-  return { packId: pack[0]!.id, productId: product[0]!.id, gstPercent, categoryId: cat[0]!.id, brandId: brand[0]!.id };
+  const fixture = { packId: pack[0]!.id, productId, gstPercent, categoryId: cat[0]!.id, brandId: brand[0]!.id };
+  if (!publish) return fixture;
+  await publishProduct(db, productId);
+  return fixture;
+}
+
+/**
+ * Steps 3-5 of createPack for an INACTIVE product: classification, label
+ * evidence, a fresh compliance review approved by a Super Admin, activation.
+ * Also the way to put a product back on sale after its facts were edited
+ * (0086 / 0087 require deactivate -> edit -> review -> activate).
+ */
+export async function publishProduct(db: Db, productId: string): Promise<void> {
+  const reviewer = await fixtureSuperAdmin(db);
+  await as(db, reviewer, async (tx) => {
+    await tx.query(
+      `update products set regulatory_classification = 'non_food_fmcg',
+              regulatory_classification_reason = 'Fixture: owner-reviewed non-food FMCG classification'
+        where id = $1`, [productId]);
+    await tx.query(
+      `insert into product_compliance_evidence
+         (product_id, seller_id, evidence_type, storage_bucket_id, storage_object_key, file_name, content_type, uploaded_by)
+       values ($1, null, 'label_photo', 'compliance-evidence', $2, 'label.png', 'image/png', $3)`,
+      [productId, `products/${productId}/central/label_photo/${randomUUID()}.png`, reviewer]);
+    // One review row per product: a re-review resubmits the existing row.
+    const { rows: existing } = await tx.query<{ id: string }>(
+      `update product_compliance_reviews set review_status = 'submitted' where product_id = $1 returning id`, [productId]);
+    const { rows: review } = existing.length > 0 ? { rows: existing } : await tx.query<{ id: string }>(
+      `insert into product_compliance_reviews
+         (product_id, category_scope, review_status, applicability, applicability_reason,
+          mrp, selling_price, net_quantity, uqc, pack_size, manufacturer_or_importer, consumer_care_details, created_by)
+       values ($1, 'fmcg', 'submitted', '{"country_of_origin_required":false}'::jsonb,
+          'Fixture: reviewer recorded the country-of-origin applicability decision.',
+          120, 100, '1 piece', 'pcs', '1 piece', 'Fixture manufacturer', 'Fixture consumer care', $2)
+       returning id`, [productId, reviewer]);
+    await tx.query(`update product_compliance_reviews set review_status = 'approved' where id = $1`, [review[0]!.id]);
+    await tx.query(`update products set is_active = true where id = $1`, [productId]);
+  });
+}
+
+/**
+ * The only way the database lets the sale-relevant facts of a published
+ * product change (0086 / 0087): take it off sale, edit, submit and approve a
+ * fresh compliance review, put it back on sale. `edit` runs as the owner.
+ */
+export async function reviseProduct(db: Db, productId: string, edit: () => Promise<unknown>): Promise<void> {
+  await db.query(`update products set is_active = false where id = $1`, [productId]);
+  await edit();
+  await publishProduct(db, productId);
+}
+
+/** A category an owner has classified as FMCG, so products may be placed in it. */
+export async function createClassifiedCategory(db: Db, name: string): Promise<string> {
+  const reviewer = await fixtureSuperAdmin(db);
+  const { rows } = await db.query<{ id: string }>(`insert into categories (name) values ($1) returning id`, [name]);
+  await as(db, reviewer, (tx) => tx.query(
+    `update categories set compliance_scope = 'fmcg', compliance_scope_reason = 'Fixture: owner-reviewed FMCG category' where id = $1`,
+    [rows[0]!.id]
+  ));
+  return rows[0]!.id;
+}
+
+const SELLER_EVIDENCE_TYPES = [
+  'business_identity', 'business_address', 'business_contact', 'seller_agreement',
+  'settlement_verification', 'compliance_declaration', 'product_source_evidence',
+] as const;
+
+/**
+ * Takes an existing PENDING seller through the review the database requires
+ * before it may trade (0086 / 0087): seven evidence records, a submitted
+ * review, approval by a Super Admin, then activation. Nothing is bypassed.
+ */
+export async function approveAndActivateSeller(db: Db, sellerId: string, reviewerId?: string): Promise<void> {
+  const reviewer = reviewerId ?? (await fixtureSuperAdmin(db));
+  await as(db, reviewer, async (tx) => {
+    for (const evidenceType of SELLER_EVIDENCE_TYPES) {
+      await tx.query(
+        `insert into seller_compliance_evidence
+           (seller_id, evidence_type, storage_bucket_id, storage_object_key, file_name, content_type, uploaded_by)
+         values ($1, $2, 'compliance-evidence', $3, 'evidence.pdf', 'application/pdf', $4)`,
+        [sellerId, evidenceType, `sellers/${sellerId}/${evidenceType}/${randomUUID()}.pdf`, reviewer]);
+    }
+    const { rows } = await tx.query<{ id: string }>(
+      `insert into seller_compliance_reviews
+         (seller_id, review_status, business_identity_verified, business_address_verified,
+          business_contact_verified, product_source_evidence_verified, settlement_verified,
+          seller_agreement_version, seller_agreement_accepted_at,
+          compliance_declaration_version, compliance_declaration_accepted_at, created_by)
+       values ($1, 'submitted', true, true, true, true, true, 'test-v1', now(), 'test-v1', now(), $2)
+       returning id`, [sellerId, reviewer]);
+    await tx.query(`update seller_compliance_reviews set review_status = 'approved' where id = $1`, [rows[0]!.id]);
+    await tx.query(`update sellers set status = 'active' where id = $1`, [sellerId]);
+  });
+}
+
+/**
+ * Third-party offers are OFF by default (0098). This records, as a Super
+ * Admin and through the real function, that both approvals exist — with
+ * references that are plainly test data.
+ */
+export async function openMarketplaceForTest(db: Db): Promise<void> {
+  const reviewer = await fixtureSuperAdmin(db);
+  await as(db, reviewer, (tx) => tx.query(
+    `select public.record_marketplace_launch_approval(true, 'TEST-FIXTURE-OWNER-APPROVAL', 'TEST-FIXTURE-CA-APPROVAL', 'test fixture')`));
+}
+
+/** The seller's OWNER accepts the current Seller Agreement through the real function (0095 / 0098). */
+export async function acceptSellerAgreementAs(db: Db, ownerProfileId: string): Promise<void> {
+  const { rows } = await db.query<{ v: string }>(
+    `select document_version v from public.legal_document_current_versions where document_key = 'seller-agreement'`);
+  if (!rows[0]) throw new Error('No current Seller Agreement version is registered.');
+  await as(db, ownerProfileId, (tx) => tx.query(
+    `select public.record_legal_acceptance('seller-agreement', $1, 'seller_onboarding')`, [rows[0]!.v]));
+}
+
+/**
+ * Runs `fn` as the DATABASE OWNER while the request still carries `userId` as
+ * the signed-in user. This is what an internal function sees when a trusted
+ * SECURITY DEFINER function calls it: no API role, but auth.uid() is set.
+ * Use it only to exercise functions that are deliberately closed to every API
+ * role; a test that needs it must also assert that the API roles are refused.
+ */
+export async function asOwnerOnBehalfOf<T>(db: Db, userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.query(`select set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', $2, true)`, [
+      JSON.stringify({ sub: userId, role: 'authenticated' }), userId,
+    ]);
+    return fn(tx);
+  });
 }

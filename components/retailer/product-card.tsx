@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Check, Heart, ImageOff, Loader2, ShoppingCart, Tag } from 'lucide-react';
 import { addToCartAction } from '@/lib/retailer/cart-actions';
@@ -54,7 +54,13 @@ export function ProductCard({
   const [error, setError] = useState<string | null>(null);
   const [favorite, setFavorite] = useState(isFavorite);
   const [quantity, setQuantity] = useState(Math.max(1, moq));
-  useEffect(() => setFavorite(isFavorite), [isFavorite]);
+  // Follow the server value when it changes (after a revalidation), without an
+  // effect: state is adjusted during render, as React recommends for a prop reset.
+  const [syncedIsFavorite, setSyncedIsFavorite] = useState(isFavorite);
+  if (syncedIsFavorite !== isFavorite) {
+    setSyncedIsFavorite(isFavorite);
+    setFavorite(isFavorite);
+  }
 
   const pricing = piecePricing ? calculateRetailerPiecePrice({
     quantity, casePrice: 0, ...piecePricing, gstPercent, moq,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadRetailerHome } from '@/lib/retailer/home-data';
 import { supabaseFixture } from './helpers/supabase-fixture';
-import { AREA, PRODUCT, RETAILER } from './fixtures/retailer-home';
+import { AREA, RETAILER } from './fixtures/retailer-home';
 
 const ACTIVE = '10000000-0000-4000-8000-000000000001';
 const UPCOMING = '10000000-0000-4000-8000-000000000002';

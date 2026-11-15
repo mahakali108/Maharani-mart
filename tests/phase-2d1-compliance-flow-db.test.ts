@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { as, createMigratedDb, createUser, errorOf, type Db, type Tx } from './helpers/pg-harness';
+import { acceptSellerAgreementAs, as, createMigratedDb, createUser, errorOf, openMarketplaceForTest, type Db, type Tx } from './helpers/pg-harness';
 
 let db: Db;
 let superAdminId: string;
@@ -26,7 +26,7 @@ async function seedApprovedProductAndSeller(): Promise<void> {
   const suffix = randomUUID().slice(0, 8);
   const { rows: categories } = await db.query<{ id: string }>(
     `insert into categories (name, is_active) values ($1, true) returning id`,
-    [`Non-food test category ${suffix}`]
+    [`Household care test category ${suffix}`]
   );
   const categoryId = categories[0]!.id;
   await asSuper((tx) => tx.query(
@@ -102,6 +102,14 @@ async function seedApprovedProductAndSeller(): Promise<void> {
     [sellerReviews[0]!.id]
   ));
   await asSuper((tx) => tx.query(`update sellers set status = 'active' where id = $1`, [sellerId]));
+
+  // 0098: an offer can be published only once the marketplace is open and the
+  // seller's owner has accepted the current Seller Agreement.
+  const sellerOwner = await createUser(db, 'seller', 'Phase 2D.1 Seller Owner');
+  await asSuper((tx) => tx.query(
+    `insert into seller_members (seller_id, profile_id, member_role) values ($1, $2, 'owner')`, [sellerId, sellerOwner]));
+  await acceptSellerAgreementAs(db, sellerOwner);
+  await openMarketplaceForTest(db);
 
   const { rows: offers } = await asSuper((tx) => tx.query<{ id: string }>(
     `insert into seller_offers
@@ -223,7 +231,7 @@ describe('0087 Phase 2D.1 database enforcement', () => {
     await db.query(
       `insert into seller_members (seller_id, profile_id, member_role, created_by) values
        ($1, $2, 'owner', $3), ($4, $5, 'owner', $3)`,
-      [sellerOne, sellerOneUser, superAdminId, sellerTwo, sellerTwoUser, superAdminId]
+      [sellerOne, sellerOneUser, superAdminId, sellerTwo, sellerTwoUser]
     );
     const privateKey = `sellers/${sellerTwo}/business_identity/${objectId()}.pdf`;
     await asSuper((tx) => tx.query(

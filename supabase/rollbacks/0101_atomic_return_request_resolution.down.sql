@@ -2,8 +2,15 @@
 --
 -- Removes the two atomic functions, the private helper and the guards, and
 -- restores the 0054 body and grants of return_order_stock.
--- No row is lost: the history is copied into return_request_events_rollback_archive
--- (row-level security on, no grant to any API role) before the live table is removed.
+-- No row is lost: the history and the per-line record of legacy stock returns
+-- are copied into *_rollback_archive tables (row-level security on, no grant to
+-- any API role) before the live tables are removed.
+--
+-- After this rollback the 0054 function is back, including its old behaviour
+-- for legacy orders (it books a line again on every call). If 0101 is applied
+-- again later, the per-line record starts empty, but the product-level limit
+-- still counts every return movement already written, so nothing can come back
+-- twice.
 --
 -- Roll the application back FIRST: the return actions of this release call
 -- these functions and fail closed without them.
@@ -28,6 +35,20 @@ begin
     alter table public.return_request_events_rollback_archive enable row level security;
     revoke all on table public.return_request_events_rollback_archive from public, anon, authenticated, service_role;
     drop table if exists public.return_request_events;
+  end if;
+end $$;
+-- Same for the per-line record of legacy stock returns.
+do $$
+begin
+  if to_regclass('public.order_item_legacy_stock_returns') is not null then
+    create table if not exists public.order_item_legacy_stock_returns_rollback_archive as
+      select *, now() as archived_at from public.order_item_legacy_stock_returns with no data;
+    insert into public.order_item_legacy_stock_returns_rollback_archive
+      select r.*, now() from public.order_item_legacy_stock_returns r
+       where not exists (select 1 from public.order_item_legacy_stock_returns_rollback_archive x where x.order_item_id = r.order_item_id);
+    alter table public.order_item_legacy_stock_returns_rollback_archive enable row level security;
+    revoke all on table public.order_item_legacy_stock_returns_rollback_archive from public, anon, authenticated, service_role;
+    drop table if exists public.order_item_legacy_stock_returns;
   end if;
 end $$;
 drop function if exists public.guard_return_request_events_append_only();

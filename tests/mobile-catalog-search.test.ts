@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabaseFixture } from './helpers/supabase-fixture';
 
 /**
@@ -415,6 +415,16 @@ describe('GET /api/mobile/v1/catalog/search results', () => {
 // ---------------------------------------------------------------------------
 
 describe('GET /api/mobile/v1/home offers', () => {
+  // The scheme fixtures carry fixed calendar windows (one ends 2026-11-05), so
+  // the clock is pinned inside them; otherwise this suite expires with the date.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-01T06:00:00.000Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns only the admin schemes that are active and inside their window', async () => {
     const response = await getHome(apiRequest('/api/mobile/v1/home'));
     expect(response.status).toBe(200);

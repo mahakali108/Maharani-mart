@@ -363,9 +363,10 @@ describe('0096 rollback script', () => {
     await fresh.close();
   }, 120_000);
 
-  it('all review-only rollbacks apply in reverse order (0101 -> 0094) on one database', async () => {
+  it('all review-only rollbacks apply in reverse order (0102 -> 0094) on one database', async () => {
     const fresh = await createMigratedDb();
     for (const file of [
+      '0102_anonymous_read_policies_fail_closed',
       '0101_atomic_return_request_resolution', '0100_atomic_dispatch_failure_and_return', '0099_atomic_delivery_completion',
       '0098_seller_agreement_and_marketplace_gate', '0097_atomic_split_order_cancellation', '0096_delivery_snapshot_integrity',
       '0095_legal_acceptance_and_privacy_requests', '0094_delivery_trust_and_loyalty_integrity',

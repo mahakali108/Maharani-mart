@@ -7,6 +7,7 @@ import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
 import { SchemeForm } from '@/components/admin/scheme-form';
 import { SchemeRowActions } from '@/components/admin/scheme-row-actions';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { serverRequestTimeMs } from '@/lib/datetime/request-time';
 
 interface SchemeRow {
   id: string;
@@ -34,7 +35,7 @@ export default async function AdminSchemesPage() {
 
   const readFailed = Boolean(error);
   const schemes = data ?? [];
-  const now = Date.now();
+  const now = serverRequestTimeMs();
 
   return (
     <div className="space-y-6">

@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   as,
   createArea,
+  asOwnerOnBehalfOf,
   createMigratedDb,
   createPack,
   createRetailer,
@@ -147,10 +148,18 @@ describe('new pack-stock orders', () => {
 
   it('forces newly inserted variants to start with zero sellable stock', async () => {
     const sku = `ADMIN-${randomUUID().slice(0, 8)}`;
+    // A variant is added to a product that is not on sale: the packs of a
+    // published product are frozen until it is re-reviewed (0086 / 0087).
+    const draft = await createPack(db, { publish: false });
+    expect(await errorOf(db, admin, (tx) => tx.query(
+      `insert into product_packs (product_id, pack_name, pack_sku_code, base_price, case_price, stock_quantity)
+       values ($1, 'Variant on a published product', $2, 100, 100, 77)`,
+      [pack.productId, `${sku}-LIVE`]
+    ))).toMatch(/PRODUCT_REVIEW_REQUIRED/);
     await as(db, admin, (tx) => tx.query(
       `insert into product_packs (product_id, pack_name, pack_sku_code, base_price, case_price, stock_quantity)
        values ($1, 'Admin-created variant', $2, 100, 100, 77)`,
-      [pack.productId, sku]
+      [draft.productId, sku]
     ));
     const { rows } = await db.query<{ stock_quantity: number }>(
       `select stock_quantity from product_packs where pack_sku_code = $1`, [sku]
@@ -197,7 +206,11 @@ describe('new pack-stock orders', () => {
   it('restores cancelled stock exactly once using per-line counters', async () => {
     const order = await createSimpleOrder({ quantity: 3 });
     expect(await readPackStock()).toBe(2);
-    await as(db, admin, (tx) => tx.query(`update orders set status = 'cancelled' where id = $1`, [order.id]));
+    // 0097: a direct status write is refused; cancellation is one atomic function.
+    expect(await errorOf(db, admin, (tx) => tx.query(`update orders set status = 'cancelled' where id = $1`, [order.id])))
+      .toMatch(/CANCEL_GUARD/);
+    expect(await readPackStock()).toBe(2);
+    await as(db, admin, (tx) => tx.query(`select public.cancel_order_coins_atomic($1, 'test cancellation')`, [order.id]));
     expect(await readPackStock()).toBe(5);
     expect(await readOrderItem(order.itemId!)).toEqual({ stock_deducted_quantity: 3, stock_restored_quantity: 3 });
 
@@ -212,17 +225,27 @@ describe('new pack-stock orders', () => {
   it('restores a delivered return once, and exposes status—not exact counts—to retailers', async () => {
     const order = await createSimpleOrder({ quantity: 2 });
     expect(await readPackStock()).toBe(3);
-    await as(db, admin, async (tx) => {
-      await tx.query(`update orders set status = 'confirmed' where id = $1`, [order.id]);
-      await tx.query(`update orders set status = 'dispatched' where id = $1`, [order.id]);
-      await tx.query(`update orders set status = 'delivered' where id = $1`, [order.id]);
-    });
+    await as(db, admin, (tx) => tx.query(`update orders set status = 'confirmed' where id = $1`, [order.id]));
+    // 0100: an API session cannot write "dispatched" directly; the fixture moves
+    // the order as the database owner. (The real dispatch and completion paths
+    // are covered in fulfilment-atomic-actions-db and the real-PostgreSQL scripts.)
+    expect(await errorOf(db, admin, (tx) => tx.query(`update orders set status = 'dispatched' where id = $1`, [order.id])))
+      .toMatch(/FULFILMENT_GUARD/);
+    await db.query(`update orders set status = 'dispatched' where id = $1`, [order.id]);
+    await db.query(`update orders set status = 'delivered' where id = $1`, [order.id]);
 
-    const first = await as(db, admin, (tx) => tx.query<{ result: { units: number } }>(
+    // 0101: no API role may call the stock-return function; it runs only inside
+    // the atomic return functions. It is exercised here the way they call it.
+    for (const who of [admin, staff, retailer.id, 'service']) {
+      expect(await errorOf(db, who, (tx) => tx.query(`select public.return_order_stock($1, null)`, [order.id])))
+        .toMatch(/permission denied for function return_order_stock/);
+    }
+    expect(await readPackStock()).toBe(3);
+    const first = await asOwnerOnBehalfOf(db, admin, (tx) => tx.query<{ result: { units: number } }>(
       `select public.return_order_stock($1, null) as result`, [order.id]
     ));
     expect(first.rows[0]!.result.units).toBe(2);
-    const second = await as(db, admin, (tx) => tx.query<{ result: { units: number } }>(
+    const second = await asOwnerOnBehalfOf(db, admin, (tx) => tx.query<{ result: { units: number } }>(
       `select public.return_order_stock($1, null) as result`, [order.id]
     ));
     expect(second.rows[0]!.result.units).toBe(0);
@@ -350,10 +373,17 @@ describe('new pack-stock orders', () => {
 
     await db.query(`update orders set status = 'dispatched' where id = $1`, [orderId]);
     await db.query(`update orders set status = 'delivered' where id = $1`, [orderId]);
-    const returned = await as(db, admin, (tx) => tx.query<{ result: { status: string; units: number } }>(
+    expect(await errorOf(db, admin, (tx) => tx.query(`select public.return_order_stock($1, $2)`, [orderId, itemRows[0]!.id])))
+      .toMatch(/permission denied for function return_order_stock/);
+    const returned = await asOwnerOnBehalfOf(db, admin, (tx) => tx.query<{ result: { status: string; units: number } }>(
       `select public.return_order_stock($1, $2) as result`, [orderId, itemRows[0]!.id]
     ));
     expect(returned.rows[0]!.result).toMatchObject({ status: 'returned', units: 3 });
+    // a second call finds nothing left on the batch allocation and books nothing
+    const returnedAgain = await asOwnerOnBehalfOf(db, admin, (tx) => tx.query<{ result: { units: number } }>(
+      `select public.return_order_stock($1, $2) as result`, [orderId, itemRows[0]!.id]
+    ));
+    expect(returnedAgain.rows[0]!.result.units).toBe(0);
     expect((await db.query<{ current_quantity: number }>(
       `select current_quantity from inventory_batches where id = $1`, [batchId]
     )).rows[0]!.current_quantity).toBe(10);

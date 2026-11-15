@@ -1,4 +1,4 @@
-Applied 98 repository migrations (0001 - 0101) on PostgreSQL 17.11.
+Applied 99 repository migrations (0001 - 0102) on PostgreSQL 17.11.
 PASS one call completes everything: lines, delivery, order, Rs 200 credit, 8 points, attribution
 PASS the spoofed actor identity does not outlive the call inside the same transaction
 PASS only service_role can execute; anon, retailer, staff, admin and super-admin are refused

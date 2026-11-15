@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computePartialSettlement, type SettlementLine } from '@/lib/delivery/settlement';
-import { computeMembershipDiscount, calculateLoyaltyPointsEarned } from '@/lib/membership/math';
+import { calculateLoyaltyPointsEarned } from '@/lib/membership/math';
 
 describe('Delivery Shortfall & Discounted Net Refund Calculations', () => {
   it('refunds missing items at the exact net discounted rate, not gross catalog price', () => {

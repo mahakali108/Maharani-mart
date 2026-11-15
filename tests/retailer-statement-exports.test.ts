@@ -28,8 +28,6 @@ import { GET as downloadMobileStatement } from '@/app/api/mobile/v1/reports/stat
 
 const RETAILER = 'retailer-1';
 const OTHER_RETAILER = 'retailer-2';
-const FROM = '2026-04-01T00:00:00.000Z';
-const TO = '2026-04-30T23:59:59.999Z';
 const ROW_COUNT = 1_005;
 
 function walletEntry(index: number, retailerId = RETAILER, createdAt?: string) {

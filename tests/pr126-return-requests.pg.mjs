@@ -617,14 +617,226 @@ async function main() {
         assert.ok(again.ok ? again.r.replayed : /RETURN_APPROVE:ALREADY_RESTORED/.test(again.message), again.message);
       }
       assert.deepEqual(await movements(), [10]);
-      // even the owner calling the wrapper again is refused
+      // even the owner calling the wrapper again restores nothing
       const d = await client();
       await d.query('begin');
       await d.query(`select set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', $2, true)`, [JSON.stringify({ role: 'authenticated', sub: adminUser }), adminUser]);
-      await assert.rejects(d.query('select public.return_order_stock($1, null)', [f.order]), /RETURN_STOCK:ALREADY_BOOKED/);
+      // (the order line is on record, so the stock function finds nothing left and writes nothing)
+      assert.equal((await d.query('select public.return_order_stock($1, null) as r', [f.order])).rows[0].r.units, 0);
+      assert.equal((await d.query(`select count(*)::int n from public.stock_movements where reference_order_id = $1 and movement_type = 'return'`, [f.order])).rows[0].n, 1);
+      // and the record itself cannot be booked twice or edited, even by the owner
+      await d.query('savepoint s');
+      await assert.rejects(d.query('insert into public.order_item_legacy_stock_returns (order_item_id, order_id, product_id, units) values ($1, $2, $3, 10)', [f.items[0], f.order, product]), /duplicate key/);
+      await d.query('rollback to savepoint s');
+      await assert.rejects(d.query('delete from public.order_item_legacy_stock_returns where order_item_id = $1', [f.items[0]]), /append-only/);
       await d.query('rollback');
       await d.end();
       assert.deepEqual(await movements(), [10]);
+    });
+
+    // ============================================== same product on two lines
+    // Legacy (pre pack-stock) return movements carry the product, not the order
+    // line. An order may hold the SAME product on two lines. The duplicate
+    // guard must work per order line, and never let more come back than left.
+    const hasMarkers = (await q(`select to_regclass('public.order_item_legacy_stock_returns') is not null as y`))[0].y;
+    /** A DELIVERED legacy order (no pack stock, no batch allocations). Every line is the SAME product. */
+    async function legacyDelivered(lines = [[300, 3], [200, 2]]) {
+      const f = await dispatched(lines);
+      await replica(() => admin.query('update public.orders set simple_stock_mode = false where id = $1', [f.order]));
+      const done = await complete(args(f));
+      assert.equal(done.ok, true, done.message);
+      return f;
+    }
+    const shelf = async () => (await q('select coalesce(sum(quantity), 0)::int n from public.inventory_stock where product_id = $1 and warehouse_id = $2', [product, warehouse]))[0].n;
+    async function legacySnap(f) {
+      return {
+        order: (await q('select status::text s from public.orders where id = $1', [f.order]))[0].s,
+        movements: (await q(`select quantity::int n from public.stock_movements where reference_order_id = $1 and movement_type = 'return' order by created_at, id`, [f.order])).map((x) => x.n),
+        booked: hasMarkers ? (await q('select coalesce((select m.units from public.order_item_legacy_stock_returns m where m.order_item_id = i.id), 0)::int n from unnest($1::uuid[]) with ordinality as i(id, o) order by i.o', [f.items])).map((x) => x.n) : null,
+        shelf: await shelf(),
+        requests: (await q('select status::text s, resolved_by b from public.return_requests where order_id = $1 order by requested_at, id', [f.order])).map((x) => `${x.s}:${x.b ?? '-'}`),
+        events: (await q('select action a, units_restored u, refund_paise::int p, lines l from public.return_request_events where order_id = $1 order by created_at, id', [f.order])).map((x) => `${x.a}:${x.u}:${x.p}:${f.items.map((id) => x.l.find((y) => y.order_item_id === id)?.units).filter(Boolean).join('+')}`),
+        wallet: (await q(`select transaction_type t, amount_paise::int n from public.retailer_wallet_ledger where retailer_id = $1 order by created_at, id`, [f.retailer])).map((x) => `${x.t}:${x.n}`),
+        loyalty: (await q('select entry_type t, points n from public.loyalty_ledger where reference_id = $1 order by created_at, points desc', [f.order])).map((x) => `${x.t}:${x.n}`),
+      };
+    }
+    const fresh = (outs) => outs.filter((o) => o.ok && !o.r.replayed);
+
+    await test('SAME PRODUCT ON TWO LINES (legacy): each line is restored exactly once - the second line is NOT mistaken for the first; repeats, a third request and a whole-order request restore nothing more', async () => {
+      const f = await legacyDelivered();
+      const before = await legacySnap(f);
+      assert.deepEqual(before.movements, []);
+      const a = await request(f, f.items[0]);
+      const first = await approve(a);
+      assert.equal(first.ok, true, first.message);
+      assert.equal(first.r.units_restored, 3);
+      const b = await request(f, f.items[1]);
+      const second = await approve(b, otherAdmin);
+      assert.equal(second.ok, true, `second line of the same product: ${second.message}`);
+      assert.deepEqual([second.r.units_restored, second.r.replayed, second.r.order_item_id], [2, false, f.items[1]]);
+      const after = await legacySnap(f);
+      assert.deepEqual([after.movements, after.shelf - before.shelf, after.events], [[3, 2], 5, ['approved:3:0:3', 'approved:2:0:2']]);
+      if (hasMarkers) assert.deepEqual(after.booked, [3, 2]);
+      assert.deepEqual([after.wallet, after.loyalty, after.order], [before.wallet, before.loyalty, 'delivered']);
+      // repeats are replays; nothing moves
+      for (const [id, actor] of [[a, adminUser], [b, adminUser], [a, superAdmin], [b, otherAdmin]]) {
+        const again = await approve(id, actor);
+        assert.deepEqual([again.ok, again.r?.replayed], [true, true], again.message);
+      }
+      // a third request for either line, and a whole-order request, find nothing left
+      for (const item of [f.items[0], f.items[1], null]) {
+        const extra = await approve(await request(f, item, 'again'));
+        assert.match(extra.message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      }
+      const end = await legacySnap(f);
+      assert.deepEqual([end.movements, end.shelf, end.events, end.booked], [after.movements, after.shelf, after.events, after.booked]);
+    });
+
+    await test('SAME PRODUCT ON TWO LINES (legacy), partial: a line first, then the whole order restores only the other line; whole order first restores both lines once and later line requests are refused', async () => {
+      const f = await legacyDelivered([[300, 3], [200, 2], [400, 4]]);
+      const start = await shelf();
+      assert.equal((await approve(await request(f, f.items[1]))).r?.units_restored, 2);
+      const whole = await approve(await request(f));
+      assert.equal(whole.ok, true, whole.message);
+      assert.equal(whole.r.units_restored, 7);
+      const s1 = await legacySnap(f);
+      assert.deepEqual([s1.movements.slice().sort(), s1.shelf - start, s1.events], [[2, 3, 4], 9, ['approved:2:0:2', 'approved:7:0:3+4']]);
+      if (hasMarkers) assert.deepEqual(s1.booked, [3, 2, 4]);
+
+      const g = await legacyDelivered();
+      const gStart = await shelf();
+      const all = await approve(await request(g));
+      assert.deepEqual([all.ok, all.r?.units_restored], [true, 5], all.message);
+      for (const item of g.items) assert.match((await approve(await request(g, item))).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      const s2 = await legacySnap(g);
+      assert.deepEqual([s2.movements.slice().sort(), s2.shelf - gStart], [[2, 3], 5]);
+    });
+
+    await test(`SAME PRODUCT ON TWO LINES (legacy), concurrent: both line requests, a whole-order request and duplicates approved together - every line comes back exactly once - ${rounds(8)} rounds`, async () => {
+      for (let round = 0; round < rounds(8); round++) {
+        const f = await legacyDelivered();
+        const start = await shelf();
+        const a = await request(f, f.items[0]), b = await request(f, f.items[1]), w = await request(f), a2 = await request(f, f.items[0], 'duplicate');
+        const outs = await Promise.all([
+          approve(a), approve(b, otherAdmin), approve(w, superAdmin), approve(a2), approve(a, otherAdmin), approve(b), approve(b, superAdmin), approve(w),
+        ]);
+        for (const o of outs) assert.ok(o.ok || /RETURN_APPROVE:ALREADY_RESTORED/.test(o.message), o.message);
+        const s = await legacySnap(f);
+        assert.equal(s.shelf - start, 5, `round ${round}: ${JSON.stringify(s)}`);
+        assert.equal(s.movements.reduce((x, y) => x + y, 0), 5);
+        assert.deepEqual(s.movements.slice().sort(), [2, 3]);
+        if (hasMarkers) assert.deepEqual(s.booked, [3, 2]);
+        // what the history says came back equals what really came back
+        assert.equal(fresh(outs).reduce((x, o) => x + o.r.units_restored, 0), 5);
+        assert.equal(s.events.length, fresh(outs).length);
+      }
+    });
+
+    await test('SAME PRODUCT ON TWO LINES (legacy), failure at each write while approving the SECOND line: everything rolls back, the first line stays restored once; the retry then works once', async () => {
+      const writes = [['stock_movements', 'insert'], ['return_requests', 'update'], ['return_request_events', 'insert'], ['audit_logs', 'insert']];
+      if (hasMarkers) writes.push(['order_item_legacy_stock_returns', 'insert']);
+      for (const [table, when] of writes) {
+        const f = await legacyDelivered();
+        assert.equal((await approve(await request(f, f.items[0]))).ok, true);
+        const b = await request(f, f.items[1]);
+        const before = await legacySnap(f);
+        await withFailure(table, when, async () => {
+          const out = await approve(b);
+          assert.match(out.message ?? 'approved', /TEST_INJECTED_FAILURE/, table);
+        });
+        assert.deepEqual(await legacySnap(f), before, `${table}: nothing may remain`);
+        const retry = await approve(b);
+        assert.deepEqual([retry.ok, retry.r?.units_restored, retry.r?.replayed], [true, 2, false], `${table}: ${retry.message}`);
+        const after = await legacySnap(f);
+        assert.deepEqual([after.movements, after.shelf - before.shelf], [[3, 2], 2]);
+      }
+    });
+
+    await test('SAME PRODUCT ON TWO LINES (legacy), stock booked before 0101 with no line recorded: never more comes back than the order took out; an unclear remainder is refused, not guessed', async () => {
+      // A return movement written by the old route: product known, order line unknown.
+      const old = (f, n) => admin.query(`insert into public.stock_movements (product_id, warehouse_id, movement_type, quantity, reference_type, reference_id, reference_order_id, reason, performed_by)
+        values ($1, $2, 'return', $3, 'order', $4, $4, 'before 0101', $5)`, [product, warehouse, n, f.order, adminUser]);
+      // two equal lines, one already booked the old way: one more line may come back, not two
+      const f = await legacyDelivered([[300, 3], [300, 3]]);
+      await old(f, 3);
+      const start = await shelf();
+      const outs = [await approve(await request(f, f.items[0])), await approve(await request(f, f.items[1])), await approve(await request(f))];
+      assert.equal(fresh(outs).length, 1, JSON.stringify(outs));
+      assert.equal((await shelf()) - start, 3);
+      assert.equal((await legacySnap(f)).movements.reduce((x, y) => x + y, 0), 6);
+      // lines of 3 and 2, 3 already booked the old way: the line of 2 still fits; the line of 3 does not and is refused
+      const g = await legacyDelivered();
+      await old(g, 3);
+      const gStart = await shelf();
+      assert.match((await approve(await request(g, g.items[0]))).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      assert.equal((await approve(await request(g, g.items[1]))).r?.units_restored, 2);
+      assert.match((await approve(await request(g))).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      assert.equal((await shelf()) - gStart, 2);
+      // everything already booked the old way: nothing more
+      const h = await legacyDelivered();
+      await old(h, 5);
+      const hStart = await shelf();
+      for (const item of [h.items[0], h.items[1], null]) assert.match((await approve(await request(h, item))).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      assert.equal((await shelf()) - hStart, 0);
+    });
+
+    await test(`SAME PRODUCT ON TWO LINES (pack stock): each line restores its own pack quantity once - in sequence, repeated, and ${rounds(8)} concurrent rounds; a failure rolls back; a short line stays blocked; the same PACK twice in one order is impossible by schema`, async () => {
+      // Pack-stock orders keep the restored count on the order line itself, and
+      // the schema allows one line per pack in an unsplit order (0064).
+      const f = await deliveredOrder({ pieces: [3, 2] }); // one product, two packs, two lines
+      assert.equal((await q('select count(distinct product_id)::int n from public.order_items where order_id = $1', [f.order]))[0].n, 1);
+      await assert.rejects(replica(() => admin.query('update public.order_items set pack_id = $2 where id = $1', [f.items[1], f.packs[0]])), /uq_order_items_legacy_pack/);
+      const before = await snap(f);
+      const a = await request(f, f.items[0]), b = await request(f, f.items[1]);
+      assert.equal((await approve(a)).r?.units_restored, 3);
+      await withFailure('return_request_events', 'insert', async () => {
+        assert.match((await approve(b)).message ?? 'approved', /TEST_INJECTED_FAILURE/);
+      });
+      assert.deepEqual([(await snap(f)).packs, (await snap(f)).restored], [[before.packs[0] + 3, before.packs[1]], [3, 0]]);
+      const second = await approve(b);
+      assert.deepEqual([second.ok, second.r?.units_restored], [true, 2], second.message);
+      for (const id of [a, b]) assert.equal((await approve(id, superAdmin)).r?.replayed, true);
+      for (const item of [f.items[0], f.items[1], null]) assert.match((await approve(await request(f, item, 'again'))).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      const after = await snap(f);
+      assert.deepEqual([after.packs, after.restored, after.wallet, after.loyalty], [[before.packs[0] + 3, before.packs[1] + 2], [3, 2], before.wallet, before.loyalty]);
+
+      for (let round = 0; round < rounds(8); round++) {
+        const g = await deliveredOrder({ pieces: [3, 2] });
+        const start = (await snap(g)).packs;
+        const ga = await request(g, g.items[0]), gb = await request(g, g.items[1]), gw = await request(g);
+        const outs = await Promise.all([approve(ga), approve(gb, otherAdmin), approve(gw, superAdmin), approve(ga, otherAdmin), approve(gb), approve(gw)]);
+        for (const o of outs) assert.ok(o.ok || /RETURN_APPROVE:ALREADY_RESTORED/.test(o.message), o.message);
+        const s2 = await snap(g);
+        assert.deepEqual([s2.packs, s2.restored], [[start[0] + 3, start[1] + 2], [3, 2]], `round ${round}`);
+        assert.equal(fresh(outs).reduce((x, o) => x + o.r.units_restored, 0), 5);
+      }
+
+      // shortfall on line 0 only: line 0 stays blocked, the other line of the same product returns
+      const k = await deliveredOrder({ pieces: [3, 2], missing: 1 });
+      const kBefore = await snap(k);
+      assert.match((await approve(await request(k, k.items[0]))).message ?? 'approved', /RETURN_APPROVE:RECONCILE/);
+      assert.equal((await approve(await request(k, k.items[1]))).r?.units_restored, 2);
+      const kAfter = await snap(k);
+      assert.deepEqual([kAfter.packs, kAfter.restored, kAfter.wallet], [[kBefore.packs[0], kBefore.packs[1] + 2], [0, 2], kBefore.wallet]);
+    });
+
+    await test('SAME PRODUCT ON TWO LINES, REJECTION: rejecting either line or the whole order changes no inventory, no Coins and no points - legacy and pack stock; a rejected line can still be returned by a new request, once', async () => {
+      const f = await legacyDelivered();
+      const before = await legacySnap(f);
+      const ids = [await request(f, f.items[0]), await request(f, f.items[1]), await request(f)];
+      for (const id of ids) assert.deepEqual([(await reject(id)).r?.status, (await reject(id, superAdmin)).r?.replayed], ['rejected', true]);
+      const after = await legacySnap(f);
+      assert.deepEqual([after.movements, after.shelf, after.booked, after.wallet, after.loyalty, after.order], [before.movements, before.shelf, before.booked, before.wallet, before.loyalty, before.order]);
+      assert.deepEqual(after.events, ['rejected:0:0:', 'rejected:0:0:', 'rejected:0:0:']);
+      for (const id of ids) assert.match((await approve(id)).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESOLVED:rejected/);
+      assert.equal((await approve(await request(f, f.items[1], 'new request'))).r?.units_restored, 2);
+      assert.deepEqual((await legacySnap(f)).movements, [2]);
+
+      const g = await deliveredOrder({ pieces: [3, 2] });
+      const gBefore = await snap(g);
+      for (const item of [g.items[0], g.items[1], null]) assert.equal((await reject(await request(g, item))).r?.status, 'rejected');
+      const gAfter = await snap(g);
+      assert.deepEqual([gAfter.packs, gAfter.restored, gAfter.wallet, gAfter.loyalty, gAfter.order], [gBefore.packs, gBefore.restored, gBefore.wallet, gBefore.loyalty, gBefore.order]);
     });
 
     await test('CONSISTENCY SWEEP over every order touched above: history, request state, stock counters and wallet agree', async () => {
@@ -662,7 +874,7 @@ async function main() {
       console.log(`     (${requestIds.length} return requests, ${(await q('select count(*)::int n from public.return_request_events'))[0].n} history rows checked)`);
     });
 
-    await test('catalogue hygiene (0101): fixed search_path, no PUBLIC/anon/authenticated execute; only the two entry points are open to service_role; history table has RLS and no write grant', async () => {
+    await test('catalogue hygiene (0101): fixed search_path, no PUBLIC/anon/authenticated execute; only the two entry points are open to service_role; both new tables have RLS and no write grant', async () => {
       const fn = await q(`select p.proname, p.prosecdef, p.proconfig::text cfg,
           has_function_privilege('anon', p.oid, 'execute') anon, has_function_privilege('authenticated', p.oid, 'execute') authn,
           has_function_privilege('service_role', p.oid, 'execute') svc, coalesce(p.proacl::text, '') acl
@@ -677,18 +889,35 @@ async function main() {
         assert.equal(f.svc, ['approve_return_request_atomic', 'reject_return_request_atomic'].includes(f.proname), f.proname);
         assert.equal(f.prosecdef, !f.proname.startsWith('guard_'), f.proname);
       }
-      const t = (await q(`select c.relrowsecurity rls, has_table_privilege('authenticated', c.oid, 'insert') ai, has_table_privilege('authenticated', c.oid, 'update') au, has_table_privilege('authenticated', c.oid, 'delete') ad,
+      const tableSql = `select c.relrowsecurity rls, has_table_privilege('authenticated', c.oid, 'insert') ai, has_table_privilege('authenticated', c.oid, 'update') au, has_table_privilege('authenticated', c.oid, 'delete') ad,
           has_table_privilege('service_role', c.oid, 'insert') si, has_table_privilege('service_role', c.oid, 'update') su, has_table_privilege('service_role', c.oid, 'delete') sd, has_table_privilege('service_role', c.oid, 'truncate') st,
           has_table_privilege('anon', c.oid, 'select') an, has_table_privilege('authenticated', c.oid, 'select') asel, has_table_privilege('authenticated', c.oid, 'truncate') atr
-        from pg_class c where c.oid = 'public.return_request_events'::regclass`))[0];
-      assert.deepEqual(t, { rls: true, ai: false, au: false, ad: false, si: false, su: false, sd: false, st: false, an: false, asel: true, atr: false });
+        from pg_class c where c.oid = $1::regclass`;
+      for (const table of ['public.return_request_events', 'public.order_item_legacy_stock_returns']) {
+        assert.deepEqual((await q(tableSql, [table]))[0], { rls: true, ai: false, au: false, ad: false, si: false, su: false, sd: false, st: false, an: false, asel: true, atr: false }, table);
+      }
+      // the per-line record of legacy stock returns is visible to Admins only
+      const legacy = await legacyDelivered();
+      assert.equal((await approve(await request(legacy, legacy.items[0]))).ok, true);
+      const seen = async (who) => (await run(who, 'select count(*)::int n from public.order_item_legacy_stock_returns where order_id = $1', [legacy.order])).rows[0].n;
+      assert.deepEqual([await seen(adminUser), await seen(superAdmin), await seen(staff), await seen(legacy.retailer)], [1, 1, 0, 0]);
+      await assert.rejects(run('anon', 'select count(*) from public.order_item_legacy_stock_returns'), /permission denied/);
+      for (const who of [adminUser, 'service']) {
+        await assert.rejects(run(who, 'insert into public.order_item_legacy_stock_returns (order_item_id, order_id, product_id, units) values ($1, $2, $3, 1)', [legacy.items[1], legacy.order, product]), /permission denied/);
+      }
     });
 
     await test('rollback 0101 with data present keeps every row (history archived), restores the 0054 stock function and grants; re-apply (twice) works and resolves a request', async () => {
       const f = await deliveredOrder();
       const id = await request(f);
       const counts = async (events) => (await q(`select (select count(*) from public.orders)::int o, (select count(*) from public.return_requests)::int r, (select count(*) from public.${events})::int e, (select count(*) from public.retailer_wallet_ledger)::int w, (select count(*) from public.order_items)::int i`))[0];
+      // a legacy order with the same product on two lines; line 0 is returned BEFORE the rollback
+      const lg = await legacyDelivered();
+      assert.equal((await approve(await request(lg, lg.items[0]))).r?.units_restored, 3);
+      const lgB = await request(lg, lg.items[1]), lgA2 = await request(lg, lg.items[0], 'after re-apply'), lgAll = await request(lg, null, 'after re-apply');
       const before = await counts('return_request_events');
+      const marks = (await q('select count(*)::int n from public.order_item_legacy_stock_returns'))[0].n;
+      assert.ok(marks > 0);
       const down = fs.readFileSync(path.join(ROLLBACKS, '0101_atomic_return_request_resolution.down.sql'), 'utf8');
       await admin.query(down);
       assert.deepEqual(await counts('return_request_events_rollback_archive'), before);
@@ -696,14 +925,23 @@ async function main() {
       assert.equal((await q(`select count(*)::int n from pg_trigger where tgname in ('trg_guard_return_request_write', 'trg_guard_return_request_events_append_only')`))[0].n, 0);
       assert.equal((await q(`select has_function_privilege('authenticated', 'public.return_order_stock(uuid, uuid)', 'execute') x`))[0].x, true);
       assert.equal((await q(`select to_regclass('public.return_request_events') is null x`))[0].x, true);
+      assert.equal((await q(`select to_regclass('public.order_item_legacy_stock_returns') is null x`))[0].x, true);
+      assert.equal((await q('select count(*)::int n from public.order_item_legacy_stock_returns_rollback_archive'))[0].n, marks);
       await admin.query(readMigration('0101_atomic_return_request_resolution.sql'));
       await admin.query(readMigration('0101_atomic_return_request_resolution.sql'));
       const out = await approve(id);
       assert.equal(out.ok, true, out.message);
       assert.deepEqual([(await snap(f)).packs, (await snap(f)).events.length], [[10], 1]);
+      // the per-line record started empty again, yet the line returned before the rollback cannot come back a second time
+      // (the product-level limit counts the movement already written); the other line of the same product still can, once
+      assert.equal((await q('select count(*)::int n from public.order_item_legacy_stock_returns where order_id = $1', [lg.order]))[0].n, 0);
+      assert.equal((await approve(lgB)).r?.units_restored, 2);
+      assert.match((await approve(lgAll)).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      assert.match((await approve(lgA2)).message ?? 'approved', /RETURN_APPROVE:ALREADY_RESTORED/);
+      assert.deepEqual((await legacySnap(lg)).movements, [3, 2]);
       // a second rollback folds the new history into the archive without losing a row
       await admin.query(down);
-      assert.equal((await counts('return_request_events_rollback_archive')).e, before.e + 1);
+      assert.equal((await counts('return_request_events_rollback_archive')).e, before.e + 2);
       await admin.query(readMigration('0101_atomic_return_request_resolution.sql'));
       assert.equal((await q(`select has_function_privilege('authenticated', 'public.return_order_stock(uuid, uuid)', 'execute') x`))[0].x, false);
       // the 0100 full return still works with 0101 in place (it calls the now-private stock function)
@@ -711,6 +949,26 @@ async function main() {
       const rto = await svc(RETURN, [g.order, staff, null]);
       assert.equal(rto.ok, true, rto.message);
       assert.deepEqual((await snap(g)).packs, [10]);
+    });
+
+    // =================================================================== 0102
+    await test('0102: anonymous reads of products / product_packs / product_images return no rows and no error; signed-in Admin still reads; rollback brings the permission error back; re-apply (twice) fixes it again', async () => {
+      const anonRows = async (table) => (await run('anon', `select 1 from public.${table}`)).rowCount;
+      assert.ok((await q('select count(*)::int n from public.products'))[0].n > 0);
+      for (const table of ['products', 'product_packs', 'product_images']) assert.equal(await anonRows(table), 0, table);
+      await assert.rejects(run('anon', 'select public.product_is_sale_eligible($1)', [product]), /permission denied for function product_is_sale_eligible/);
+      assert.ok((await run(adminUser, 'select 1 from public.products')).rowCount > 0);
+      assert.deepEqual((await q(`select policyname, roles::text from pg_policies where schemaname = 'public' and policyname in ('products_read', 'product_packs_read', 'sellers_select') order by 1`)).map((r) => r.roles), ['{authenticated}', '{authenticated}', '{authenticated}']);
+
+      const down = fs.readFileSync(path.join(ROLLBACKS, '0102_anonymous_read_policies_fail_closed.down.sql'), 'utf8');
+      const rowsBefore = (await q('select (select count(*) from public.products)::int p, (select count(*) from public.product_packs)::int k'))[0];
+      await admin.query(down);
+      await assert.rejects(run('anon', 'select 1 from public.products'), /permission denied for function product_is_sale_eligible/);
+      assert.deepEqual((await q('select (select count(*) from public.products)::int p, (select count(*) from public.product_packs)::int k'))[0], rowsBefore);
+      await admin.query(readMigration('0102_anonymous_read_policies_fail_closed.sql'));
+      await admin.query(readMigration('0102_anonymous_read_policies_fail_closed.sql'));
+      for (const table of ['products', 'product_packs', 'product_images']) assert.equal(await anonRows(table), 0, table);
+      assert.ok((await run(adminUser, 'select 1 from public.product_packs')).rowCount > 0);
     });
 
     console.log(`PR #126 atomic return requests on real PostgreSQL ${version}: ${passed} passed, 0 failed. Deadlock victims: ${deadlocks.length}.`);

@@ -275,7 +275,6 @@ describe('Android project integrity', () => {
 
   it('every referenced resource exists as a file or a values entry', () => {
     const resourceDirs = allFiles().filter((f) => /[\\/]res[\\/]/.test(f));
-    const files = new Set(resourceDirs.map((f) => f.replace(/\\/g, '/')));
 
     const declaredValues = new Set<string>();
     const resourceFiles: { type: string; name: string }[] = [];

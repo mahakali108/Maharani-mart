@@ -8,7 +8,6 @@ import {
 } from '@/lib/coupons/engine';
 import type { CouponRow } from '@/lib/coupons/types';
 
-const PRODUCT = '33333333-3333-4333-8333-333333333333';
 const CATEGORY = '66666666-6666-4666-8666-666666666666';
 const BRAND = '77777777-7777-4777-8777-777777777777';
 

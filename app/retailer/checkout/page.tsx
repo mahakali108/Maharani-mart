@@ -129,11 +129,7 @@ export default async function CheckoutPage() {
   ]);
   const offerById = new Map(marketplaceResult.offers.map((offer) => [offer.offerId, offer]));
 
-  let subtotal = 0;
-  let gstTotal = 0;
-  let savings = 0;
-  const gstByRate = new Map<number, number>();
-  const lines = items.map((item) => {
+  const pricedLines = items.map((item) => {
     const pack = item.product_packs;
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
@@ -165,10 +161,6 @@ export default async function CheckoutPage() {
     });
     // Effective per-piece rate actually charged.
     const unitPrice = pricing.unitPrice;
-    subtotal += pricing.subtotal;
-    gstTotal += pricing.gst;
-    gstByRate.set(gstPercent, (gstByRate.get(gstPercent) ?? 0) + pricing.gst);
-    savings += calcSavings(pack?.mrp, pricing.unitPrice, pricing.quantity);
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     // Prefer the variant's own image (matches the product page size switcher).
     const lineImage = pack?.image_url ?? images[0]?.image_url;
@@ -177,7 +169,7 @@ export default async function CheckoutPage() {
       productName: product?.name ?? null,
       packName: pack?.pack_name ?? null,
     });
-    return {
+    const line = {
       id: item.id,
       quantity: item.quantity,
       packName: pack?.pack_name ?? 'Unknown pack',
@@ -199,7 +191,28 @@ export default async function CheckoutPage() {
       sellerGstin: marketplaceOffer?.sellerGstin ?? null,
       fulfilmentType: marketplaceOffer?.fulfilmentType ?? null,
     };
+    // Totals are summed after the map, in line order, rather than by
+    // reassigning outer variables from inside the callback.
+    return {
+      line,
+      subtotal: pricing.subtotal,
+      gst: pricing.gst,
+      gstPercent,
+      savings: calcSavings(pack?.mrp, pricing.unitPrice, pricing.quantity),
+    };
   });
+
+  let subtotal = 0;
+  let gstTotal = 0;
+  let savings = 0;
+  const gstByRate = new Map<number, number>();
+  for (const entry of pricedLines) {
+    subtotal += entry.subtotal;
+    gstTotal += entry.gst;
+    gstByRate.set(entry.gstPercent, (gstByRate.get(entry.gstPercent) ?? 0) + entry.gst);
+    savings += entry.savings;
+  }
+  const lines = pricedLines.map((entry) => entry.line);
   // COUPON (0051): revalidated server-side against the current cart before any
   // discount is displayed. The final gate is the quote inside
   // placeOrderAction, which re-runs the same validator and refuses to bill a

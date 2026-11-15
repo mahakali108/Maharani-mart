@@ -363,7 +363,7 @@ describe('checkout re-prices every line from the database', () => {
     await setCategoryPrice('general', 100);
     await setCategoryPrice('silver', 97);
     // The retailer quoted at the general price while still general…
-    expect(await orderError({ retailer: plain, quantity: 2, unitPrice: 100 })).toBeNull;
+    expect(await orderError({ retailer: plain, quantity: 2, unitPrice: 100 })).toBeNull();
     // …then became silver (or was quoted before the change) and submitted the old price.
     await as(db, admin, (tx) =>
       tx.query(`select public.admin_set_retailer_category($1::uuid, 'silver', 'Approved after review')`, [plain.id])

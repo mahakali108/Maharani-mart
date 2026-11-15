@@ -42,18 +42,23 @@ const redirect = (location: string) => ({
 });
 
 /** A fetch double that answers per-URL and can fail/timeout per-URL. */
-function fakeFetch(handlers: Record<string, (init?: any) => any | Promise<any>>) {
-  return async (input: any, init: any = {}) => {
+type FakeInit = { signal: AbortSignal };
+type FakeHandler = (init: FakeInit) => unknown;
+
+function fakeFetch(handlers: Record<string, FakeHandler>) {
+  const impl = async (input: unknown, init: FakeInit = { signal: new AbortController().signal }) => {
     const url = String(input);
     const key = Object.keys(handlers).find((k) => url.startsWith(k));
     const handler = key ? handlers[key] : undefined;
     if (!handler) throw Object.assign(new Error(`fetch failed: ${url}`), { cause: { code: 'ECONNREFUSED' } });
     return handler(init);
   };
+  // The probe only reads `status` and `headers.get`, which every double provides.
+  return impl as unknown as typeof fetch;
 }
 
 /** All controls answer: this environment HAS internet access. */
-const reachableInternet: Record<string, (init?: any) => any | Promise<any>> = {
+const reachableInternet: Record<string, FakeHandler> = {
   'https://api.github.com/': () => ok(),
   'https://example.com/': () => ok(),
 };
@@ -78,7 +83,7 @@ describe('the production URL is fixed and alias-proof', () => {
       fetchImpl: (() => {
         contacts += 1;
         return Promise.resolve(ok());
-      }) as any,
+      }) as unknown as typeof fetch,
     });
     expect(contacts).toBe(0);
     expect(result.path).toBe('refused-url');
@@ -149,7 +154,7 @@ describe('the probe classifies each failure path honestly', () => {
     const result = await probeProduction({
       timeoutMs: 40,
       fetchImpl: fakeFetch({
-        'https://maharanitraders.vercel.app/': (init: any) =>
+        'https://maharanitraders.vercel.app/': (init: FakeInit) =>
           new Promise((_resolve, reject) => {
             init.signal.addEventListener('abort', () =>
               reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })),
@@ -209,7 +214,7 @@ describe('the probe distinguishes sandbox restrictions from a real outage', () =
   });
 
   it('offline runner (every request times out) is NETWORK_RESTRICTED', async () => {
-    const slow = (init: any) =>
+    const slow = (init: FakeInit) =>
       new Promise((_resolve, reject) => {
         init.signal.addEventListener('abort', () =>
           reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })),

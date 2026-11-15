@@ -8,7 +8,7 @@ could not be run, it says **NOT DONE** / **NOT VERIFIED** and why.
 
 ## Verdict
 
-**READY FOR INDEPENDENT REVIEW** for the code, migrations and tests (now 0094–0101; see sections 12–17 for the final pass).
+**READY FOR INDEPENDENT REVIEW** for the code, migrations and tests (now 0094–0102; sections 18–25 are the latest pass and replace the figures in sections 15–17).
 **NOT READY TO LAUNCH** (unchanged; see `00_LAUNCH_READINESS.md`).
 
 Not verified in this pass, and a reviewer or the owner must do it:
@@ -487,3 +487,188 @@ build; the preview was not opened (section 9).
   refused. A seller return flow does not exist.
 - `zod` advisory, TCS/TDS, legal drafts, owner details and GSTIN — unchanged.
 
+---
+
+# Release-review completion (latest pass, same day)
+
+Started from pushed commit `d72237e`. The earlier findings were re-run, not
+taken on trust. Nothing was applied to the live database (still at `0093`,
+checked read-only), nothing was deployed or merged, the PR stays a Draft.
+The commit that contains this section is named in the PR description.
+
+Sections 15, 16 and 17 above describe the state **before** this pass and are
+kept as history. The current figures are in section 23.
+
+## 18. Same product on two lines of a legacy order — reproduced and fixed (0101)
+
+**Reproduced.** In legacy inventory mode (orders that are not on pack stock),
+`0101` decided whether a line was "already returned" by looking for a `return`
+stock movement for the **order and product**. An order with the same product on
+two lines (two packs of one product) therefore had its second, legitimate line
+refused with `RETURN_APPROVE:ALREADY_RESTORED` after the first line was
+approved. Evidence: the new tests failed on unmodified `d72237e`.
+
+**Fix (0101 edited in place — it has never been applied anywhere).**
+
+- New table `public.order_item_legacy_stock_returns`, one row per order line
+  (primary key `order_item_id`), append-only, RLS on, Admin read only, no write
+  grant to any API role. It records that a line's stock came back.
+- The "what can still come back" calculation is now per order line.
+- A product-level cap stays in force: across all lines of one product in one
+  order, never more comes back than the lines took out, counting stock
+  movements written before this table existed.
+- Duplicate protection is unchanged in strength: a repeated approval, a second
+  request for the same line, and a whole-order request after its lines were
+  returned all restore nothing.
+- Rollback archives the new table row for row before dropping it.
+
+**Tests on real PostgreSQL 17.11** (`tests/pr126-return-requests.pg.mjs`):
+one order with two lines of one product; both restored exactly once; repeats
+restore nothing; 8 rounds of simultaneous approvals restore once; partial
+(single-line) returns; a failure injected at each write undoes everything;
+movements written before 0101 are respected; rejection changes no stock, wallet
+or loyalty row; rollback and re-apply with data present.
+
+## 19. The 11 failing tests and the 11 suites that could not start
+
+Each was examined. Outcome: **3 real defects fixed, the rest were tests written
+before rules that the database now enforces.** No test was deleted or skipped.
+Where a test's set-up was out of date it was changed to go through the route the
+product now requires, and the original assertion was kept or made stricter.
+
+Real defects fixed:
+
+| Defect | Fix |
+|---|---|
+| Anonymous read of `products` / `product_packs` (and `product_images`, `product_pack_images`, `inventory_area_totals`, which read them) raised `permission denied for function product_is_sale_eligible`. Recorded in `0086` as a known unresolved issue. `sellers_select` had the same fault. | New migration `0102`: the same three policies, same expressions, now `TO authenticated`. Anonymous callers get **no rows and no error**. No function grant changed; nobody sees a row they could not see before. Whether the catalogue should be browsable without sign-in is an owner decision and was **not** taken. |
+| A seller changing quantity tiers no longer sent the offer back for moderation. Cause: the stock-movement exemption added in this PR's `0097` also swallowed the re-moderation signal. | `0097` edited in place: the exemption does not apply when re-moderation was requested. |
+| `tests/category-tier-pricing-db.test.ts` had an assertion written `.toBeNull` (no call), so it asserted nothing. | Now `.toBeNull()`; it passes. |
+
+Out-of-date tests, by cause:
+
+| Rule now enforced | Tests re-pointed |
+|---|---|
+| 0086/0087: a product is sold only from an owner-classified category, with a classification, evidence and an approved review; facts of a product on sale change only by deactivate → edit → re-review → activate | `security-phase0-db`, `mobile-checkout-atomic-db`, `simplified-pack-stock-db`, `data-retention-cleanup`, `security-definer-hardening-db`, `ai-retention`, `category-tier-pricing-db`, `api-execute-revocation-flows`, `admin-taxonomy-db`, `security-phase0-app` |
+| 0086/0087/0098: a seller trades only after review, agreement acceptance and the marketplace switch | `seller-marketplace-db`, `release-stock-authorization`, `phase-2d1-compliance-flow-db` |
+| 0092: a refund retry returns the first result and writes nothing | `seller-marketplace-db` |
+| 0094: order-earned loyalty points come only from verified delivery | `membership-db` |
+| 0097/0100/0101: cancel, dispatch and stock return only through the atomic functions | `release-stock-authorization`, `simplified-pack-stock-db` (each now also asserts the direct route is refused) |
+| Source text wrapped differently from the pinned string | `phase-2d1-compliance-corrections`, `phase-2d1-concurrency-contract` |
+| A fixture date (scheme ending 2026-11-05) had passed | `mobile-catalog-search` (clock pinned inside that suite) |
+
+The shared fixture helper `tests/helpers/pg-harness.ts` now builds products and
+sellers through the real review steps; it bypasses nothing.
+
+## 20. Lint: 48 errors and 40 warnings → 0 and 0
+
+No rule was disabled, no `eslint-disable` was added (five unused ones were
+removed), the configuration is the same two presets, and no `any` was added.
+
+- 12 `any` in two test files: replaced with real types.
+- 36 React errors:
+  - Components declared inside a component (control centre, user detail):
+    moved to module level. The three control-centre tabs with form state were
+    losing that state on every parent re-render; they now keep it.
+  - Clock read during render in four **server** pages: taken from
+    `lib/datetime/request-time.ts`, a documented once-per-request reading.
+  - Totals summed by reassigning variables inside `.map` (cart, checkout): the
+    map returns each line's figures and a loop sums them in the same order.
+  - State set inside an effect (install prompt, search field, compare grid,
+    product card, gallery, infinite scroll): replaced with derived values,
+    render-time prop resets, or `useSyncExternalStore` for browser storage.
+  - Refs written during render (infinite scroll): written in an effect that
+    runs before the observer effect.
+- 40 warnings: unused imports, variables and dead code removed.
+
+Regression test: `tests/react-render-purity-regressions.test.tsx` (11 tests:
+install prompt, search suggestions, compare selection, favourite flag). **The
+same 11 tests also pass against the old components at `d72237e`**, which is the
+evidence that behaviour did not change. Two intended differences: the compare
+selection now also follows products loaded later by scrolling, and a dismissed
+install prompt stays dismissed for the page even if storage refuses the write.
+
+Not covered by a browser test: cart and checkout totals (server pages; covered
+by typecheck, build and the existing pricing tests only).
+
+## 21. Migration 0102 and migration order
+
+`0102_anonymous_read_policies_fail_closed.sql` with
+`supabase/rollbacks/0102_anonymous_read_policies_fail_closed.down.sql`.
+Policies only; no data, no grants. The rollback restores the previous policies
+(and with them the previous error).
+
+Apply `0094 → 0102` in order. Roll back `0102 → 0094`. `0101` must be rolled
+back before `0100`. Verified: the whole chain rolls back and re-applies twice
+on one database (`tests/pr126-migration-review-db.test.ts`), and 0101 and 0102
+roll back and re-apply with data present on real PostgreSQL.
+
+## 22. Real PostgreSQL 17.11, migrations 0001–0102
+
+| Script | Passed | Failed | Skipped |
+|---|---|---|---|
+| `pr126-return-requests.pg.mjs` | 27 | 0 | 0 |
+| `pr126-fulfilment-and-locks.pg.mjs` | 31 | 0 | 0 |
+| `pr126-delivery-completion.pg.mjs` | 25 | 0 | 0 |
+| `pr126-review-fixes.pg.mjs` | 18 | 0 | 0 |
+| `refund-ledger-real-postgres.pg.mjs` | 31 | 0 | 0 |
+
+Deadlock victims: 0. Logs in `evidence/`. These scripts are **not** run by
+GitHub Actions (they need a PostgreSQL binary the workflow does not install);
+they are sandbox evidence a reviewer can reproduce with the commands in
+section 15.
+
+## 23. Full checks, in order, on the final code
+
+| Step | Command | `main` (`80007cc`) | PR, final code |
+|---|---|---|---|
+| Typecheck | `corepack pnpm run typecheck` | pass | pass |
+| Lint | `corepack pnpm run lint` | 48 errors, 40 warnings | **0 errors, 0 warnings** |
+| Tests | `corepack pnpm test` | 198 files, 18 failed; 3028 tests: 11 failed, 213 skipped, 2804 passed | **213 files, 0 failed; 3328 tests: 3328 passed, 0 failed, 0 skipped** |
+| Build | `corepack pnpm run build` | pass | pass |
+
+Same sandbox, same commands. The `main` figures were measured earlier the same
+day. The 213 tests that `main` skips sit behind suites that fail in set-up;
+they now run.
+
+## 24. GitHub, Vercel, Cloudflare
+
+- **GitHub "Web CI"** runs typecheck → lint → tests → build. With lint clean it
+  no longer stops at lint. The result for the pushed commit is recorded in the
+  PR description, not here, because it only exists after the push.
+- **Vercel**: preview build status is read from the commit's check runs. The
+  sandbox cannot reach `*.vercel.app`, so the preview was **not opened in a
+  browser — NOT VERIFIED**. No production deployment was made.
+- **Cloudflare "Workers Builds: maharani-mart"**: this repository has no
+  Cloudflare configuration (no `wrangler` file, no OpenNext adapter, no
+  Cloudflare dependency); the app is deployed on Vercel. The check comes from a
+  Cloudflare project connected to the repository and cannot pass as the
+  repository stands. It was not disabled or changed. **Owner action:** in the
+  Cloudflare dashboard, Workers & Pages → `maharani-mart` → Settings → Builds,
+  disconnect the repository or turn off builds for non-production branches. The
+  build log is not readable from here, so the exact error is **not confirmed**.
+
+## 25. Three separate questions
+
+**Code review readiness — yes.** Typecheck, lint, full tests and build pass
+locally with nothing failing or skipped; migrations 0094–0102 and rollbacks are
+tested on real PostgreSQL. Subject to GitHub CI being green on the pushed
+commit (see the PR description).
+
+**Preview / staging verification — not done.** No database has 0094–0102
+applied, so no flow was exercised through a deployed app. The preview was not
+opened in a browser. A reviewer needs a disposable Supabase project (not
+`fhrmsrumsraprvutrpeo`) with 0001–0102 applied.
+
+**Production launch readiness — no.** Still required:
+
+- Owner + CA, in writing: refund rule for approved returns (today stock only,
+  no Coins, no loyalty reversal); reconciliation rules for returns after a
+  shortfall credit (section 13; those returns stay blocked); TCS/TDS handling
+  (not built).
+- Owner: legal identity, GSTIN, addresses, support details, final legal pages
+  (`05_OWNER_CHECKLIST.md`); whether the catalogue may be seen without sign-in
+  (today: no); the Cloudflare project.
+- Marketplace seller offers stay OFF until owner and CA approvals are recorded
+  and each seller has accepted the agreement (0098).
+- Engineering: staging run, backup and rollout plan for 0094–0102, a return
+  flow for seller-fulfilled lines (does not exist), the `zod` advisory.

@@ -18,7 +18,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { as, createMigratedDb, createRetailer, createUser, errorOf, type Db } from './helpers/pg-harness';
+import { as, createMigratedDb, createPack, createRetailer, createUser, errorOf, type Db } from './helpers/pg-harness';
 
 let db: Db;
 let retailerA: { id: string; areaId: string };
@@ -208,5 +208,37 @@ describe('public endpoints and RLS predicates still work for anonymous callers',
       return result.rows;
     });
     expect(Array.isArray(rows)).toBe(true);
+  });
+
+  it('0102: every table and view anon may select from answers without a function-permission error, and shows no catalogue or seller row', async () => {
+    // A published product, with a pack and an image, and a seller exist.
+    const published = await createPack(db);
+    await db.query(`insert into product_images (product_id, image_url) values ($1, 'https://example.invalid/a.png')`, [published.productId]);
+    await db.query(`insert into sellers (business_name, status) values ('Anon Probe Seller', 'pending')`);
+
+    const { rows: relations } = await db.query<{ name: string }>(
+      `select c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind in ('r', 'v', 'm') and has_table_privilege('anon', c.oid, 'SELECT')
+        order by 1`
+    );
+    expect(relations.length).toBeGreaterThan(0);
+    const failures: string[] = [];
+    for (const { name } of relations) {
+      const error = await errorOf(db, 'anon', (tx) => tx.query(`select * from public."${name}" limit 5`));
+      if (error) failures.push(`${name}: ${error}`);
+    }
+    expect(failures).toEqual([]);
+
+    for (const table of ['products', 'product_packs', 'product_images']) {
+      const { rows } = await as(db, 'anon', (tx) => tx.query(`select 1 from public."${table}"`));
+      expect(rows, table).toHaveLength(0);
+    }
+    // sellers has no anonymous table grant at all
+    expect(await errorOf(db, 'anon', (tx) => tx.query(`select 1 from public.sellers`))).toMatch(/permission denied for table sellers/);
+    // The helpers stay closed to anon; a signed-in retailer still sees the published product.
+    expect(await errorOf(db, 'anon', (tx) => tx.query(`select public.product_is_sale_eligible($1)`, [published.productId])))
+      .toMatch(/permission denied for function product_is_sale_eligible/);
+    const seen = await as(db, retailerA.id, (tx) => tx.query(`select id from products where id = $1`, [published.productId]));
+    expect(seen.rows).toHaveLength(1);
   });
 });

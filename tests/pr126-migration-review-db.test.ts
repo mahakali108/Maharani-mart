@@ -1,6 +1,6 @@
 /**
- * Review of migrations 0094–0101 and their rollbacks, as executable checks
- * (PostgreSQL 16 via PGlite, full chain 0001–0101 applied).
+ * Review of migrations 0094–0102 and their rollbacks, as executable checks
+ * (PostgreSQL 16 via PGlite, full chain 0001–0102 applied).
  *
  * The function list is read from the migration files, so a function added to
  * any of them later is covered automatically and must be classified below.
@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 import { createMigratedDb, type Db } from './helpers/pg-harness';
 
-const FILES = readdirSync('supabase/migrations').filter((f) => /^(009[4-9]|010[01])_/.test(f)).sort();
+const FILES = readdirSync('supabase/migrations').filter((f) => /^(009[4-9]|010[0-2])_/.test(f)).sort();
 const FUNCTIONS = [...new Set(FILES.flatMap((file) =>
   [...readFileSync(`supabase/migrations/${file}`, 'utf8').matchAll(/create (?:or replace )?function public\.([a-z_0-9]+)/gi)].map((m) => m[1]!)))].sort();
 
@@ -27,15 +27,15 @@ const AUTHENTICATED_MAY_CALL = [
   'seller_offer_gate_status',           // Admin or member of that seller (0098)
   'set_sub_order_status',               // existing RPC; closing states are atomic (0097)
 ];
-const TABLES = ['delivery_completion_requests', 'legal_document_acceptances', 'legal_document_current_versions', 'marketplace_launch_approvals', 'return_request_events'];
+const TABLES = ['delivery_completion_requests', 'legal_document_acceptances', 'legal_document_current_versions', 'marketplace_launch_approvals', 'order_item_legacy_stock_returns', 'return_request_events'];
 
 let db: Db;
 beforeAll(async () => { db = await createMigratedDb(); }, 180_000);
 afterAll(async () => { await db.close(); });
 
-describe('migrations 0094–0101: catalogue review', () => {
-  it('covers eight migrations in unbroken order, each with a rollback script', () => {
-    expect(FILES.map((f) => f.slice(0, 4))).toEqual(['0094', '0095', '0096', '0097', '0098', '0099', '0100', '0101']);
+describe('migrations 0094–0102: catalogue review', () => {
+  it('covers nine migrations in unbroken order, each with a rollback script', () => {
+    expect(FILES.map((f) => f.slice(0, 4))).toEqual(['0094', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102']);
     for (const file of FILES) {
       expect(() => readFileSync(`supabase/rollbacks/${file.replace(/\.sql$/, '.down.sql')}`, 'utf8')).not.toThrow();
     }
@@ -139,6 +139,7 @@ describe('migrations 0094–0101: catalogue review', () => {
       { relname: 'legal_document_acceptances', rls: true, grants: 'authenticated:SELECT' },
       { relname: 'legal_document_current_versions', rls: true, grants: 'authenticated:SELECT' },
       { relname: 'marketplace_launch_approvals', rls: true, grants: 'authenticated:SELECT' },
+      { relname: 'order_item_legacy_stock_returns', rls: true, grants: 'authenticated:SELECT' },
       { relname: 'return_request_events', rls: true, grants: 'authenticated:SELECT' },
     ]);
   });
@@ -170,7 +171,7 @@ describe('migrations 0094–0101: catalogue review', () => {
   });
 });
 
-describe('rollbacks 0094–0101: no data loss', () => {
+describe('rollbacks 0094–0102: no data loss', () => {
   const strip = (sql: string) => sql.replace(/--[^\n]*/g, '');
 
   it('no rollback truncates, deletes rows or drops a column', () => {
@@ -192,10 +193,10 @@ describe('rollbacks 0094–0101: no data loss', () => {
         expect(archive).toBeLessThan(match.index!);
       }
     }
-    expect(dropped.sort()).toEqual(['legal_document_current_versions', 'marketplace_launch_approvals', 'return_request_events']);
+    expect(dropped.sort()).toEqual(['legal_document_current_versions', 'marketplace_launch_approvals', 'order_item_legacy_stock_returns', 'return_request_events']);
   });
 
-  it('the whole chain rolls back 0101 → 0094 and re-applies 0094 → 0101, twice, on one database', async () => {
+  it('the whole chain rolls back 0102 → 0094 and re-applies 0094 → 0102, twice, on one database', async () => {
     const fresh = await createMigratedDb();
     for (let round = 0; round < 2; round++) {
       for (const file of [...FILES].reverse()) {

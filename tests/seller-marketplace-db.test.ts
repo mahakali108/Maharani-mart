@@ -17,7 +17,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { as, createMigratedDb, createUser, errorOf, type Db, type Tx } from './helpers/pg-harness';
+import {
+  acceptSellerAgreementAs, approveAndActivateSeller, as, createMigratedDb, createPack as createApprovedPack, createUser, errorOf,
+  openMarketplaceForTest, type Db, type Tx,
+} from './helpers/pg-harness';
 
 let db: Db;
 let admin: string;
@@ -30,18 +33,15 @@ let sellerId: string;
 let offerId: string;
 let stockSubOrderId: string;
 
-async function createPack(tx: Db | Tx, name: string, stock: number): Promise<{ productId: string; packId: string }> {
-  const sku = `SKU-${name}-${Math.random().toString(36).slice(2, 8)}`;
-  const { rows: productRows } = await tx.query<{ id: string }>(
-    `insert into products (sku_code, name, unit, base_price) values ($1, $2, 'pcs', 100) returning id`,
-    [sku, name]
-  );
-  const { rows: packRows } = await tx.query<{ id: string }>(
-    `insert into product_packs (product_id, pack_name, pack_sku_code, units_per_case, base_price, case_price, stock_quantity)
-     values ($1, 'Std', $2, 12, 100, 1200, $3) returning id`,
-    [productRows[0]!.id, `${sku}-P`, stock]
-  );
-  return { productId: productRows[0]!.id, packId: packRows[0]!.id };
+/**
+ * A product that may be sold (owner-classified category, approved compliance
+ * review — 0086 / 0087) with one pack holding `stock` pieces.
+ */
+async function createPack(target: Db, name: string, stock: number): Promise<{ productId: string; packId: string }> {
+  void name;
+  const created = await createApprovedPack(target);
+  await target.query(`update product_packs set stock_quantity = $2 where id = $1`, [created.packId, stock]);
+  return { productId: created.productId, packId: created.packId };
 }
 
 async function createSeller(tx: Db | Tx, name: string): Promise<string> {
@@ -76,14 +76,16 @@ beforeAll(async () => {
   ));
 
   sellerId = await as(db, admin, (tx) => createSeller(tx, 'Bazaar Seller Co'));
-  await as(db, admin, (tx) => tx.query(
-    `update sellers set status='active' where id=$1 and status='pending'`,
-    [sellerId]
-  ));
+  // A seller trades only after its compliance review (0086 / 0087) ...
+  await approveAndActivateSeller(db, sellerId);
   await as(db, admin, (tx) => tx.query(
     `insert into seller_members (seller_id, profile_id, member_role) values ($1, $2, 'owner')`,
     [sellerId, sellerProfile]
   ));
+  // ... and offers exist only once the marketplace is open and the seller's
+  // owner has accepted the current Seller Agreement (0098).
+  await acceptSellerAgreementAs(db, sellerProfile);
+  await openMarketplaceForTest(db);
 
   // Admin-authored, approved, seller-fulfilled offer at ₹100.00/piece.
   offerId = await as(db, admin, async (tx) => {
@@ -123,10 +125,12 @@ describe('0062 seller identity and tenancy', () => {
       [pendingId]
     ))).toMatch(/INVALID_SELLER_STATUS_TRANSITION/);
 
-    await as(db, admin, (tx) => tx.query(
+    // 0086 / 0087: activation needs an approved compliance review first.
+    expect(await errorOf(db, admin, (tx) => tx.query(
       `update sellers set status='active' where id=$1 and status='pending'`,
       [pendingId]
-    ));
+    ))).toMatch(/SELLER_COMPLIANCE_REQUIRED/);
+    await approveAndActivateSeller(db, pendingId, admin);
     const { rows } = await db.query<{ reviewed_by: string | null }>(
       `select reviewed_by from sellers where id=$1`, [pendingId]
     );
@@ -350,8 +354,8 @@ describe('0067 child-scoped coin refunds', () => {
       [parentId, retailer, randomUUID()]
     ));
     await as(db, 'service', (tx) => tx.query(
-      `insert into sub_orders (id, parent_order_id, seller_id, fulfilment_type, status, sort_index, gross_paise, payable_paise)
-       values ($1, $2, $3, 'seller', 'cancelled', 0, 500, 500)`,
+      `insert into sub_orders (id, parent_order_id, seller_id, fulfilment_type, status, sort_index, gross_paise, payable_paise, coins_share_paise)
+       values ($1, $2, $3, 'seller', 'cancelled', 0, 500, 500, 500)`,
       [childId, parentId, sellerId]
     ));
 
@@ -376,14 +380,25 @@ describe('0067 child-scoped coin refunds', () => {
     });
     expect(refunded).toBe(300);
 
-    // A second reversal of the same debit is refused by the exactly-once key.
+    // A retry of the same request (identical arguments) credits nothing more.
     const again = await as(db, 'service', async (tx) => {
       const { rows } = await tx.query<{ refunded: string }>(
-        `select refund_sub_order_coins($1, 300, 'retry') as refunded`, [childId]
+        `select refund_sub_order_coins($1, 300, 'partial test') as refunded`, [childId]
       );
       return Number(rows[0]!.refunded);
     });
-    expect(again).toBe(0);
+    // 0092: the replay answers with the result of the first call (300) and
+    // writes nothing; the ledger below still holds exactly one reversal.
+    expect(again).toBe(300);
+    const { rows: credited } = await db.query<{ total: string }>(
+      `select coalesce(sum(amount_paise), 0) total from retailer_wallet_ledger where reversal_of=$1`, [debitId]
+    );
+    expect(Number(credited[0]!.total)).toBe(300);
+    // Since 0092 a DIFFERENT request under the same refund event is refused
+    // outright instead of being silently treated as a retry.
+    expect(await errorOf(db, 'service', (tx) => tx.query(
+      `select refund_sub_order_coins($1, 300, 'retry') as refunded`, [childId]
+    ))).toMatch(/Refund event key conflicts with an existing request/);
 
     const { rows: reversals } = await db.query<{ count: string }>(
       `select count(*) from retailer_wallet_ledger where reversal_of=$1`, [debitId]
@@ -482,9 +497,7 @@ describe('0069/0072 seller portal boundaries after main 0070', () => {
     expect(await errorOf(db, pendingProfile, (tx) => tx.query(
       `select public.claim_seller_invite_attempt($1)`, [sellerRecord]
     ))).toMatch(/Super Admin authorization required/);
-    await as(db, admin, (tx) => tx.query(
-      `update sellers set status='active' where id=$1 and status='pending'`, [sellerRecord]
-    ));
+    await approveAndActivateSeller(db, sellerRecord, admin);
     expect((await as(db, pendingProfile, (tx) => tx.query(
       `select id from sellers where id=$1`, [sellerRecord]
     ))).rows).toHaveLength(1);
@@ -621,7 +634,14 @@ describe('0069/0072 seller portal boundaries after main 0070', () => {
     const oldDb = await createMigratedDb({ lastMigration: '0069_seller_portal_access.sql' });
     try {
       const oldRetailer = await createUser(oldDb, 'retailer');
-      const oldPack = await createPack(oldDb, 'Historic saved line', 10);
+      // The 0069 schema predates the catalogue compliance rules; a plain insert is the faithful fixture there.
+      const { rows: oldProduct } = await oldDb.query<{ id: string }>(
+        `insert into products (sku_code, name, unit, base_price) values ($1, 'Historic saved line', 'pcs', 100) returning id`,
+        [`SKU-OLD-${randomUUID().slice(0, 8)}`]);
+      const { rows: oldPackRows } = await oldDb.query<{ id: string }>(
+        `insert into product_packs (product_id, pack_name, pack_sku_code, units_per_case, base_price, case_price, stock_quantity)
+         values ($1, 'Std', $2, 12, 100, 1200, 10) returning id`, [oldProduct[0]!.id, `SKU-OLD-P-${randomUUID().slice(0, 8)}`]);
+      const oldPack = { productId: oldProduct[0]!.id, packId: oldPackRows[0]!.id };
       const { rows: oldCart } = await oldDb.query<{ id: string }>(
         `insert into retailer_saved_carts (retailer_id, name) values ($1,'Historic list') returning id`, [oldRetailer]
       );
@@ -713,30 +733,29 @@ describe('0069/0072 seller portal boundaries after main 0070', () => {
       `select seller_update_own_profile($1, $2, $3, $4, $5, $6, $7)`,
       ['Forged Seller Co', 'Ramesh Owner', '9876543210', null, null, null, null]
     ))).toMatch(/Business identity changes require Super Admin verification/);
-    await as(db, sellerProfile, (tx) => tx.query(
+    // Since 0087 the facts verified in a seller's compliance review are frozen
+    // while the seller is active: a contact change is refused until the seller
+    // is suspended or the review is returned to "submitted". Nothing changes.
+    const { rows: beforeSeller } = await db.query<{ contact_name: string | null; address_line: string | null }>(
+      `select contact_name, address_line from sellers where id=$1`, [sellerId]);
+    expect(await errorOf(db, sellerProfile, (tx) => tx.query(
       `select seller_update_own_profile($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        'Bazaar Seller Co',
-        'Ramesh Owner',
-        '9876543210',
-        null,
-        null,
-        null,
-        'Station Road, Chapra',
-      ]
-    ));
+      ['Bazaar Seller Co', 'Ramesh Owner', '9876543210', null, null, null, 'Station Road, Chapra']
+    ))).toMatch(/SELLER_REVIEW_REQUIRED/);
     const { rows: updatedSeller } = await db.query<{
       status: string;
-      contact_name: string;
-      gstin: string;
-      pan: string;
+      contact_name: string | null;
+      address_line: string | null;
+      gstin: string | null;
+      pan: string | null;
     }>(
-      `select status, contact_name, gstin, pan from sellers where id=$1`,
+      `select status, contact_name, address_line, gstin, pan from sellers where id=$1`,
       [sellerId]
     );
     expect(updatedSeller[0]).toEqual({
       status: 'active',
-      contact_name: 'Ramesh Owner',
+      contact_name: beforeSeller[0]!.contact_name,
+      address_line: beforeSeller[0]!.address_line,
       gstin: null,
       pan: null,
     });
@@ -878,7 +897,7 @@ describe('0072 invitation retries and tenant boundaries', () => {
       );
       return rows[0]!.id;
     });
-    await as(db, admin, (tx) => tx.query(`update sellers set status='active' where id=$1`, [otherSeller]));
+    await approveAndActivateSeller(db, otherSeller, admin);
     await as(db, admin, (tx) => tx.query(
       `insert into seller_members (seller_id, profile_id, member_role) values ($1,$2,'owner')`, [otherSeller, otherProfile]
     ));

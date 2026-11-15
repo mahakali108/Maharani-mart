@@ -27,6 +27,11 @@
 --   reject_return_request_atomic   - one transaction: status + history row.
 --       Never touches stock or money.
 --   return_request_events          - append-only history of every resolution.
+--   order_item_legacy_stock_returns - which ORDER LINE of a pre-pack-stock
+--       order has had its stock booked back. The legacy return movement
+--       (0017) records only the product, and one order can hold the same
+--       product on two lines; without this record the second line would be
+--       mistaken for the first.
 --   guards                         - no API role can resolve a request, edit
 --       one, or restore order stock, except through the two functions.
 --
@@ -100,13 +105,41 @@ create policy "return_request_events_select" on public.return_request_events
   for select to authenticated
   using (retailer_id = auth.uid() or public.is_admin_or_above());
 
+-- ----------------------------------------------------------------------------
+-- 1b. Legacy orders (no pack stock, no batch allocations): one row per ORDER
+--     LINE whose stock has been booked back. The primary key is the order
+--     line, so the same line can never be booked twice, and two lines of the
+--     same product are told apart. Written only by return_order_stock.
+--     No foreign keys, for the same retention reason as above.
+-- ----------------------------------------------------------------------------
+create table if not exists public.order_item_legacy_stock_returns (
+  order_item_id uuid primary key,
+  order_id uuid not null,
+  product_id uuid not null,
+  units integer not null check (units > 0),
+  created_at timestamptz not null default now()
+);
+comment on table public.order_item_legacy_stock_returns is
+  '0101: which line of a legacy (pre pack-stock, no batch allocation) order has had its stock booked back. One row per order line, ever. Written only by return_order_stock.';
+create index if not exists idx_order_item_legacy_stock_returns_order
+  on public.order_item_legacy_stock_returns (order_id, product_id);
+
+alter table public.order_item_legacy_stock_returns enable row level security;
+revoke all on table public.order_item_legacy_stock_returns from public, anon, authenticated, service_role;
+grant select on table public.order_item_legacy_stock_returns to authenticated, service_role;
+
+drop policy if exists "order_item_legacy_stock_returns_select" on public.order_item_legacy_stock_returns;
+create policy "order_item_legacy_stock_returns_select" on public.order_item_legacy_stock_returns
+  for select to authenticated
+  using (public.is_admin_or_above());
+
 create or replace function public.guard_return_request_events_append_only()
 returns trigger
 language plpgsql
 set search_path = public, pg_temp
 as $$
 begin
-  raise exception 'RETURN_GUARD: return-request history is append-only.' using errcode = '42501';
+  raise exception 'RETURN_GUARD: % is append-only.', tg_table_name using errcode = '42501';
 end;
 $$;
 revoke all on function public.guard_return_request_events_append_only() from public, anon, authenticated, service_role;
@@ -114,6 +147,11 @@ revoke all on function public.guard_return_request_events_append_only() from pub
 drop trigger if exists trg_guard_return_request_events_append_only on public.return_request_events;
 create trigger trg_guard_return_request_events_append_only
   before update or delete on public.return_request_events
+  for each row execute function public.guard_return_request_events_append_only();
+
+drop trigger if exists trg_guard_order_item_legacy_stock_returns_append_only on public.order_item_legacy_stock_returns;
+create trigger trg_guard_order_item_legacy_stock_returns_append_only
+  before update or delete on public.order_item_legacy_stock_returns
   for each row execute function public.guard_return_request_events_append_only();
 
 -- ----------------------------------------------------------------------------
@@ -158,10 +196,92 @@ create trigger trg_guard_return_request_write
   for each row execute function public.guard_return_request_write();
 
 -- ----------------------------------------------------------------------------
--- 3. return_order_stock: (a) no API role may call it - stock comes back only
---    inside a function that also commits the return state; (b) the pre-0054
---    fallback (orders with no batch allocations) no longer books the same line
---    twice. The 0054 body is otherwise unchanged.
+-- 3. What is still restorable, per ORDER LINE. Private. Writes nothing.
+--
+--    Pack stock (0054/0089): the per-line counters on order_items.
+--    Batch allocations (0017): what was dispatched and not yet returned.
+--    Legacy fallback (0017, no allocation): the whole line, once.
+--      "Once" is decided per order line (order_item_legacy_stock_returns).
+--      A return movement written BEFORE this migration names the product but
+--      not the line, so there is a second, product-level limit: across all
+--      fallback lines of one product in the order, never more is booked back
+--      than those lines hold. A line that does not fit under what is left
+--      is not restorable (refused, never part-booked). A whole-order request
+--      takes the open lines in line order while they fit.
+-- ----------------------------------------------------------------------------
+create or replace function public._return_request_restorable_lines(
+  p_order_id uuid,
+  p_order_item_id uuid
+) returns table (order_item_id uuid, units integer, seller_fulfilled boolean)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  with lines as (
+    select oi.id, oi.product_id, oi.quantity, oi.sub_order_id,
+           oi.stock_deducted_quantity, oi.stock_restored_quantity, oi.shipped_quantity, oi.returned_received_quantity,
+           oi.source_type, oi.fulfilment_type,
+           o.simple_stock_mode as simple,
+           exists (select 1 from public.order_stock_allocations a
+                    where a.order_item_id = oi.id and a.quantity_dispatched > 0) as allocated
+      from public.order_items oi
+      join public.orders o on o.id = oi.order_id
+     where oi.order_id = p_order_id
+  ),
+  -- Legacy fallback lines, per product: what the lines hold in total, and what
+  -- has already been booked back for that product against this order.
+  legacy_room as (
+    select l.product_id,
+           sum(l.quantity)
+             - coalesce((select sum(m.quantity) from public.stock_movements m
+                          where m.reference_order_id = p_order_id and m.product_id = l.product_id
+                            and m.movement_type = 'return' and m.batch_id is null), 0) as room
+      from lines l
+     where not l.simple and not l.allocated
+     group by l.product_id
+  ),
+  -- Fallback lines in scope that are not booked yet, with a running total per
+  -- product (in line order), so a request covering several lines of one
+  -- product is held to the same product-level limit as the lines one by one.
+  legacy_open as (
+    select l.id, sum(l.quantity) over (partition by l.product_id order by l.id) as running
+      from lines l
+     where not l.simple and not l.allocated
+       and (p_order_item_id is null or l.id = p_order_item_id)
+       and not exists (select 1 from public.order_item_legacy_stock_returns r where r.order_item_id = l.id)
+  )
+  select l.id,
+         greatest(0, case
+           when l.simple and l.sub_order_id is null
+             then l.stock_deducted_quantity - l.stock_restored_quantity
+           when l.simple
+             then l.stock_deducted_quantity - l.shipped_quantity
+                  + l.returned_received_quantity - l.stock_restored_quantity
+           when l.allocated
+             then (select coalesce(sum(a.quantity_dispatched - a.quantity_returned), 0)
+                     from public.order_stock_allocations a
+                    where a.order_item_id = l.id and a.quantity_dispatched > a.quantity_returned)
+           when (select lo.running from legacy_open lo where lo.id = l.id)
+                  <= (select r.room from legacy_room r where r.product_id = l.product_id)
+             then l.quantity
+           else 0
+         end)::integer,
+         coalesce(l.source_type::text = 'seller' and l.fulfilment_type::text = 'seller', false)
+    from lines l
+   where p_order_item_id is null or l.id = p_order_item_id
+   order by l.id;
+$$;
+revoke all on function public._return_request_restorable_lines(uuid, uuid) from public, anon, authenticated, service_role;
+
+-- ----------------------------------------------------------------------------
+-- 4. return_order_stock: (a) no API role may call it - stock comes back only
+--    inside a function that also commits the return state; (b) for orders
+--    without pack stock it now works line by line: a line with batch
+--    allocations is returned by the 0017 function (already idempotent); a
+--    line without them is booked back once, recorded against the ORDER LINE.
+--    A line with nothing left is skipped and nothing is written for it.
+--    The pack-stock branch (0054) is unchanged.
 -- ----------------------------------------------------------------------------
 create or replace function public.return_order_stock(p_order_id uuid, p_order_item_id uuid default null)
 returns jsonb
@@ -172,7 +292,10 @@ as $$
 declare
   v_simple boolean;
   v_status public.order_status;
-  v_units integer;
+  v_units integer := 0;
+  v_line record;
+  v_got integer;
+  v_product uuid;
 begin
   perform public.require_inventory_role();
 
@@ -190,72 +313,35 @@ begin
     return jsonb_build_object('status', 'returned', 'order_id', p_order_id, 'units', v_units);
   end if;
 
-  -- 0101: the legacy fallback inserts a full-quantity "return" movement for
-  -- every line that has no dispatched allocation, on every call.
-  if exists (
-    select 1
-      from public.order_items oi
-     where oi.order_id = p_order_id
-       and (p_order_item_id is null or oi.id = p_order_item_id)
-       and not exists (select 1 from public.order_stock_allocations a
-                        where a.order_item_id = oi.id and a.quantity_dispatched > 0)
-       and exists (select 1 from public.stock_movements m
-                    where m.reference_order_id = p_order_id
-                      and m.product_id = oi.product_id
-                      and m.movement_type = 'return'
-                      and m.batch_id is null)
-  ) then
-    raise exception 'RETURN_STOCK:ALREADY_BOOKED: the returned stock for this order line is already booked.'
-      using errcode = '23505';
-  end if;
+  -- Legacy order. The order row is locked above, so two calls for the same
+  -- order run one after the other; each line is re-read inside the loop, after
+  -- the lines before it have been booked.
+  for v_line in
+    select oi.id from public.order_items oi
+     where oi.order_id = p_order_id and (p_order_item_id is null or oi.id = p_order_item_id)
+     order by oi.id
+     for update
+  loop
+    select r.units into v_got from public._return_request_restorable_lines(p_order_id, v_line.id) r;
+    continue when coalesce(v_got, 0) = 0;
 
-  return public.return_legacy_order_stock(p_order_id, p_order_item_id);
+    v_got := coalesce((public.return_legacy_order_stock(p_order_id, v_line.id) ->> 'units')::integer, 0);
+    if not exists (select 1 from public.order_stock_allocations a
+                    where a.order_item_id = v_line.id and a.quantity_dispatched > 0) then
+      select oi.product_id into v_product from public.order_items oi where oi.id = v_line.id;
+      -- Primary key = the order line: a second booking of the same line fails here.
+      insert into public.order_item_legacy_stock_returns (order_item_id, order_id, product_id, units)
+      values (v_line.id, p_order_id, v_product, v_got);
+    end if;
+    v_units := v_units + v_got;
+  end loop;
+
+  return jsonb_build_object('status', 'returned', 'order_id', p_order_id, 'units', v_units);
 end;
 $$;
 revoke all on function public.return_order_stock(uuid, uuid) from public, anon, authenticated, service_role;
 comment on function public.return_order_stock(uuid, uuid) is
   '0101: internal. Called only by return_delivery_to_warehouse_atomic and approve_return_request_atomic; no API role may execute it.';
-
--- ----------------------------------------------------------------------------
--- 4. What is still restorable, per order line. Private.
---    Mirrors restore_simple_order_stock (0089) and return_legacy_order_stock
---    (0017) exactly, without writing anything.
--- ----------------------------------------------------------------------------
-create or replace function public._return_request_restorable_lines(
-  p_order_id uuid,
-  p_order_item_id uuid
-) returns table (order_item_id uuid, units integer, seller_fulfilled boolean)
-language sql
-stable
-security definer
-set search_path = public, pg_temp
-as $$
-  select oi.id,
-         greatest(0, case
-           when o.simple_stock_mode and oi.sub_order_id is null
-             then oi.stock_deducted_quantity - oi.stock_restored_quantity
-           when o.simple_stock_mode
-             then oi.stock_deducted_quantity - oi.shipped_quantity
-                  + oi.returned_received_quantity - oi.stock_restored_quantity
-           when exists (select 1 from public.order_stock_allocations a
-                         where a.order_item_id = oi.id and a.quantity_dispatched > 0)
-             then (select coalesce(sum(a.quantity_dispatched - a.quantity_returned), 0)
-                     from public.order_stock_allocations a
-                    where a.order_item_id = oi.id and a.quantity_dispatched > a.quantity_returned)
-           when exists (select 1 from public.stock_movements m
-                         where m.reference_order_id = o.id and m.product_id = oi.product_id
-                           and m.movement_type = 'return' and m.batch_id is null)
-             then 0
-           else oi.quantity
-         end)::integer,
-         coalesce(oi.source_type::text = 'seller' and oi.fulfilment_type::text = 'seller', false)
-    from public.order_items oi
-    join public.orders o on o.id = oi.order_id
-   where oi.order_id = p_order_id
-     and (p_order_item_id is null or oi.id = p_order_item_id)
-   order by oi.id;
-$$;
-revoke all on function public._return_request_restorable_lines(uuid, uuid) from public, anon, authenticated, service_role;
 
 -- ----------------------------------------------------------------------------
 -- 5. Approve.

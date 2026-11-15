@@ -24,12 +24,25 @@ import { as, createMigratedDb, createUser, errorOf, type Db } from './helpers/pg
 let db: Db;
 let adminId: string;
 let retailerId: string;
+let superAdminId: string;
 
 beforeAll(async () => {
   db = await createMigratedDb();
   adminId = await createUser(db, 'admin', 'Fixture Admin');
   retailerId = await createUser(db, 'retailer', 'Fixture Retailer');
+  superAdminId = await createUser(db, 'super_admin', 'Fixture Super Admin');
 }, 180_000);
+
+/**
+ * Since 0086 a new category is a draft: retailers see it only after a Super
+ * Admin has classified it as Cosmetics or FMCG with a recorded reason.
+ */
+async function classifyCategory(id: string): Promise<void> {
+  await as(db, superAdminId, (tx) => tx.query(
+    `update categories set compliance_scope = 'fmcg', compliance_scope_reason = 'Fixture: owner-reviewed FMCG category' where id = $1`,
+    [id]
+  ));
+}
 
 function uniqueName(prefix: string): string {
   return `${prefix} ${Math.random().toString(36).slice(2, 8)}`;
@@ -51,15 +64,23 @@ describe('admin category creation', () => {
     expect(created.is_active).toBe(true);
     expect(created.parent_id).toBeNull();
 
-    // Visible to the retailer catalog read (policy: is_active or staff+).
-    const seenByRetailer = await as(db, retailerId, async (tx) => {
+    const readAsRetailer = () => as(db, retailerId, async (tx) => {
       const { rows } = await tx.query<{ id: string; name: string }>(
         `select id, name from categories where id = $1`,
         [created.id]
       );
       return rows[0];
     });
-    expect(seenByRetailer?.name).toBe(name);
+    // 0086: an unclassified draft is not shown to retailers, and an Admin cannot classify it.
+    expect(await readAsRetailer()).toBeUndefined();
+    expect(await errorOf(db, adminId, (tx) => tx.query(
+      `update categories set compliance_scope = 'fmcg', compliance_scope_reason = 'Admin attempt' where id = $1`, [created.id]
+    ))).toMatch(/Only a Super Admin can change catalogue compliance scope/);
+    expect(await readAsRetailer()).toBeUndefined();
+
+    // Visible to the retailer catalog read once a Super Admin has classified it.
+    await classifyCategory(created.id);
+    expect((await readAsRetailer())?.name).toBe(name);
   });
 
   it('persists a subcategory under its parent', async () => {
@@ -192,6 +213,11 @@ describe.each(['categories', 'brands'] as const)('%s edit and visibility through
       return rows[0]!.id;
     });
     await as(db, adminId, (tx) => tx.query(`update ${table} set name = $1 where id = $2`, [updated, id]));
+    if (table === 'categories') {
+      const draft = await as(db, retailerId, (tx) => tx.query(`select id from categories where id = $1`, [id]));
+      expect(draft.rows).toEqual([]);
+      await classifyCategory(id);
+    }
     const visible = await as(db, retailerId, (tx) => tx.query<{ name: string }>(`select name from ${table} where id = $1`, [id]));
     expect(visible.rows[0]?.name).toBe(updated);
     await as(db, adminId, (tx) => tx.query(`update ${table} set is_active = false where id = $1`, [id]));

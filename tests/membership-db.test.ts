@@ -83,9 +83,17 @@ describe('Paid membership retirement + retained loyalty ledger (PostgreSQL 16)',
 
     it('allows an admin to award points with idempotency protection', async () => {
       const key = 'test:award:1';
-      await as(db, admin, (tx: Tx) =>
+      // 0094: nobody can hand-write an order-earned entry; those come only from
+      // the verified delivery trigger. An Admin award is a MANUAL_CREDIT.
+      expect(await errorOf(db, admin, (tx: Tx) =>
         tx.query(
           `select public.record_loyalty_points($1, 100, 'ORDER_EARN', 'Order #101 award', 'order', null, $2)`,
+          [retailer1, key]
+        )
+      )).toMatch(/Order-earned points are created only by the verified order-delivery trigger/);
+      await as(db, admin, (tx: Tx) =>
+        tx.query(
+          `select public.record_loyalty_points($1, 100, 'MANUAL_CREDIT', 'Goodwill award', 'manual', null, $2)`,
           [retailer1, key]
         )
       );
@@ -98,7 +106,7 @@ describe('Paid membership retirement + retained loyalty ledger (PostgreSQL 16)',
       expect(await balance()).toBe(100);
       await as(db, admin, (tx: Tx) =>
         tx.query(
-          `select public.record_loyalty_points($1, 100, 'ORDER_EARN', 'Order #101 retry', 'order', null, $2)`,
+          `select public.record_loyalty_points($1, 100, 'MANUAL_CREDIT', 'Goodwill award retry', 'manual', null, $2)`,
           [retailer1, key]
         )
       );

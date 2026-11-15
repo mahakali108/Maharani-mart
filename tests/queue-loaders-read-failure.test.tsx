@@ -21,7 +21,6 @@
  * See docs/HANDOFF_TO_PR_OWNERS.md. tests/list-pages-read-failure.test.tsx covers the
  * pages that render a `ReadFailureNotice` instead of throwing.
  */
-import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 

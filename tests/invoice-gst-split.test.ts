@@ -27,7 +27,6 @@ const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
 const invoicePage = read('app/retailer/orders/[id]/invoice/page.tsx');
 const downloadRoute = read('app/retailer/orders/[id]/invoice/download/route.ts');
-const htmlBuilder = read('lib/retailer/invoice-html.ts');
 const displayModule = read('lib/retailer/invoice-display.ts');
 
 // ---------------------------------------------------------------------------

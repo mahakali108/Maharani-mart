@@ -470,7 +470,7 @@ describe('8. the probe behaviour is executed, not only read', () => {  const pyt
     // The skip above must never become a silent hole: CI always executes it.
     expect(WORKFLOW).toContain('Verify the probe logic offline');
     if (python === null) {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[production-health-probe] no Python interpreter on this machine — the offline ' +
           'self-test was skipped locally but is enforced by .github/workflows/production-health.yml.'
