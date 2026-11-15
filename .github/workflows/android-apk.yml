@@ -241,9 +241,28 @@ jobs:
           # is ALSO pinned here: renaming it must fail loudly in two places.
           EXPECTED_PKG=$(sed -n 's/.*applicationId = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
           test "$EXPECTED_PKG" = "com.maharanitraders.app"
-          EXPECTED_CODE=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' android/app/build.gradle.kts | head -1)
-          EXPECTED_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -1)
+
+          # versionCode/versionName are DERIVED from android/version.properties
+          # by build.gradle.kts (there is deliberately no literal versionCode =
+          # <number> left in the build script), so the expected values are read
+          # from that file. Reading the build script instead produced an empty
+          # expectation and failed the identity grep; this is the same source of
+          # truth the next step verifies the artifact against.
+          PROPS=android/version.properties
+          read_prop() { sed -n "s/^$1=//p" "$PROPS" | head -1; }
+          V_MAJOR=$(read_prop VERSION_MAJOR)
+          V_MINOR=$(read_prop VERSION_MINOR)
+          V_PATCH=$(read_prop VERSION_PATCH)
+          EXPECTED_CODE=$(read_prop VERSION_CODE)
+          EXPECTED_NAME="$V_MAJOR.$V_MINOR.$V_PATCH"
+          for value in "$V_MAJOR" "$V_MINOR" "$V_PATCH" "$EXPECTED_CODE"; do
+            case "$value" in
+              ''|*[!0-9]*) echo "::error title=version policy::$PROPS has a blank or non-numeric version field"; exit 1 ;;
+            esac
+          done
           echo "expected: package=$EXPECTED_PKG versionCode=$EXPECTED_CODE versionName=$EXPECTED_NAME"
+          echo "aapt=$AAPT apksigner=$APKSIGNER"
+          echo "build-tools available: $(ls -1 "${ANDROID_HOME}/build-tools" 2>/dev/null | tr '\n' ' ')"
 
           BADGING=$("$AAPT" dump badging "$APK_PATH")
           echo "$BADGING" | grep -F "package: name='$EXPECTED_PKG'"
