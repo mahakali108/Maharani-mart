@@ -1,4 +1,4 @@
-Applied 97 repository migrations (0001 - 0100) on PostgreSQL 17.11.
+Applied 98 repository migrations (0001 - 0101) on PostgreSQL 17.11.
 PASS split cancel: a second session WAITS for the first, then credits nothing (no double refund)
 PASS split cancel: the first session ROLLS BACK, the waiting session then performs the whole refund
 PASS split cancel: 16 simultaneous sessions (retailer, admin, service) refund exactly once

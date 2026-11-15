@@ -36,10 +36,12 @@ export function ReturnRowActions({ returnId }: { returnId: string }) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}
-            placeholder="Reason for rejection"
+            placeholder="Reason for rejection (required)"
+            aria-label="Reason for rejection"
+            maxLength={1000}
             className="w-48 rounded-lg border border-ink-200 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-600"
           />
-          <Button size="sm" variant="outline" disabled={isPending || !note.trim()} onClick={handleReject}>
+          <Button size="sm" variant="outline" disabled={isPending || note.trim().length < 3} onClick={handleReject}>
             Confirm reject
           </Button>
         </div>

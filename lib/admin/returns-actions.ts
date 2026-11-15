@@ -1,63 +1,77 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { createTrustedDeliveryWriter } from '@/lib/delivery/trusted-writer';
 import { createInAppNotification, queueChannelNotification, type NotifyInput } from '@/lib/notifications/notify';
-import type { Database } from '@/types/database.types';
-
-type ReturnRequestUpdate = Database['public']['Tables']['return_requests']['Update'];
+import {
+  RETURNS_ADMIN_ONLY,
+  RETURNS_NOT_INSTALLED,
+  RETURNS_WRITER_UNAVAILABLE,
+  isReturnApprovalResult,
+  isReturnRejectionResult,
+  isReturnRequestId,
+  isReturnRpcMissing,
+  mapReturnApprovalError,
+  mapReturnRejectionError,
+} from '@/lib/returns/resolution';
 
 export type ReturnActionResult = { error?: string } | { success: true };
 
-interface ReturnRequestRow {
-  retailer_id: string;
-  order_id: string;
-  status: string;
+type RpcClient = {
+  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+};
+
+function isAdminRole(role: string): boolean {
+  return role === 'admin' || role === 'super_admin';
 }
 
+/**
+ * Approves a return request. One database transaction (migration 0101):
+ * the request and its order are locked, the acting Admin is re-verified by the
+ * database, the stock is restored exactly once, the request becomes "approved"
+ * and a history row is written — together or not at all. A repeat (double
+ * click, retry after a timeout) is a replay: nothing is written again and the
+ * retailer is not notified twice.
+ *
+ * No Coins are refunded and no loyalty points are reversed here. That rule is
+ * an open owner decision; see lib/returns/resolution.ts.
+ */
 export async function approveReturnAction(returnId: string, note: string): Promise<ReturnActionResult> {
   const user = await requirePermission('orders.return.manage');
-  const supabase = (await createClient());
+  if (!isAdminRole(user.role)) return { error: RETURNS_ADMIN_ONLY };
+  if (!isReturnRequestId(returnId)) return { error: 'Return request not found.' };
+  const cleanNote = typeof note === 'string' ? note.trim() : '';
+  if (cleanNote.length > 1000) return { error: 'The note must be 1000 characters or fewer.' };
 
-  const { data: existing } = await supabase
-    .from('return_requests')
-    .select('retailer_id, order_id, order_item_id, status')
-    .eq('id', returnId)
-    .maybeSingle<ReturnRequestRow & { order_item_id: string | null }>();
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: RETURNS_WRITER_UNAVAILABLE };
 
-  if (!existing) return { error: 'Return request not found.' };
-  if (existing.status !== 'requested') return { error: 'This return request has already been resolved.' };
+  const { data, error } = await (trusted as unknown as RpcClient).rpc('approve_return_request_atomic', {
+    p_return_request_id: returnId,
+    p_actor_id: user.id,
+    p_note: cleanNote || null,
+  });
+  if (error) {
+    if (isReturnRpcMissing(error)) return { error: RETURNS_NOT_INSTALLED };
+    return { error: mapReturnApprovalError(error.message) };
+  }
+  if (!isReturnApprovalResult(data)) {
+    return { error: 'The return request could not be confirmed as approved. Refresh the page before trying again.' };
+  }
 
-  // Book the returned goods back into inventory (RETURN movements). The
-  // RPC puts stock back into the batches it was dispatched from when the
-  // FEFO allocations are known, otherwise at the aggregate product level.
-  // Runs BEFORE the status flip so a failure cannot approve-without-stock.
-  const { error: returnError } = await supabase.rpc('return_order_stock' as never, {
-    p_order_id: existing.order_id,
-    p_order_item_id: existing.order_item_id,
-  } as never);
-  if (returnError) return { error: `Return could not be booked into stock: ${returnError.message}` };
-
-  const payload: ReturnRequestUpdate = {
-    status: 'approved',
-    resolved_by: user.id,
-    resolved_at: new Date().toISOString(),
-    resolution_note: note || null,
-  };
-
-  const { error } = await supabase.from('return_requests').update(payload as unknown as never).eq('id', returnId);
-  if (error) return { error: error.message };
-
-  const notifyInput: NotifyInput = {
-    recipientId: existing.retailer_id,
-    title: 'Return request approved',
-    body: `Your return request for order has been approved.${note ? ` Note: ${note}` : ''}`,
-    linkUrl: `/retailer/orders/${existing.order_id}`,
-    category: 'order',
-  };
-  await createInAppNotification(notifyInput);
-  await queueChannelNotification('whatsapp', notifyInput);
+  // After the commit, and only for the call that actually did the work.
+  if (!data.replayed) {
+    const notifyInput: NotifyInput = {
+      recipientId: data.retailer_id,
+      title: 'Return request approved',
+      body: `Your return request for order ${data.order_number} has been approved.${cleanNote ? ` Note: ${cleanNote}` : ''}`,
+      linkUrl: `/retailer/orders/${data.order_id}`,
+      category: 'order',
+    };
+    await createInAppNotification(notifyInput);
+    await queueChannelNotification('whatsapp', notifyInput);
+  }
 
   revalidatePath('/admin/returns');
   revalidatePath('/admin/inventory');
@@ -65,38 +79,44 @@ export async function approveReturnAction(returnId: string, note: string): Promi
   return { success: true };
 }
 
+/**
+ * Rejects a return request. One database transaction (migration 0101): status
+ * and history row together. Never touches stock or Coins.
+ */
 export async function rejectReturnAction(returnId: string, note: string): Promise<ReturnActionResult> {
   const user = await requirePermission('orders.return.manage');
-  const supabase = (await createClient());
+  if (!isAdminRole(user.role)) return { error: RETURNS_ADMIN_ONLY };
+  if (!isReturnRequestId(returnId)) return { error: 'Return request not found.' };
+  const cleanNote = typeof note === 'string' ? note.trim() : '';
+  if (cleanNote.length < 3 || cleanNote.length > 1000) {
+    return { error: 'Please give a reason of 3 to 1000 characters for rejecting this return request.' };
+  }
 
-  const { data: existing } = await supabase
-    .from('return_requests')
-    .select('retailer_id, order_id, status')
-    .eq('id', returnId)
-    .maybeSingle<ReturnRequestRow>();
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: RETURNS_WRITER_UNAVAILABLE };
 
-  if (!existing) return { error: 'Return request not found.' };
-  if (existing.status !== 'requested') return { error: 'This return request has already been resolved.' };
-
-  if (!note.trim()) return { error: 'Please provide a reason for rejecting this return request.' };
-
-  const payload: ReturnRequestUpdate = {
-    status: 'rejected',
-    resolved_by: user.id,
-    resolved_at: new Date().toISOString(),
-    resolution_note: note,
-  };
-
-  const { error } = await supabase.from('return_requests').update(payload as unknown as never).eq('id', returnId);
-  if (error) return { error: error.message };
-
-  await createInAppNotification({
-    recipientId: existing.retailer_id,
-    title: 'Return request rejected',
-    body: `Your return request was not approved. Reason: ${note}`,
-    linkUrl: `/retailer/orders/${existing.order_id}`,
-    category: 'order',
+  const { data, error } = await (trusted as unknown as RpcClient).rpc('reject_return_request_atomic', {
+    p_return_request_id: returnId,
+    p_actor_id: user.id,
+    p_note: cleanNote,
   });
+  if (error) {
+    if (isReturnRpcMissing(error)) return { error: RETURNS_NOT_INSTALLED };
+    return { error: mapReturnRejectionError(error.message) };
+  }
+  if (!isReturnRejectionResult(data)) {
+    return { error: 'The return request could not be confirmed as rejected. Refresh the page before trying again.' };
+  }
+
+  if (!data.replayed) {
+    await createInAppNotification({
+      recipientId: data.retailer_id,
+      title: 'Return request rejected',
+      body: `Your return request for order ${data.order_number} was not approved. Reason: ${cleanNote}`,
+      linkUrl: `/retailer/orders/${data.order_id}`,
+      category: 'order',
+    });
+  }
 
   revalidatePath('/admin/returns');
   return { success: true };

@@ -1,6 +1,6 @@
 /**
- * Review of migrations 0094–0100 and their rollbacks, as executable checks
- * (PostgreSQL 16 via PGlite, full chain 0001–0100 applied).
+ * Review of migrations 0094–0101 and their rollbacks, as executable checks
+ * (PostgreSQL 16 via PGlite, full chain 0001–0101 applied).
  *
  * The function list is read from the migration files, so a function added to
  * any of them later is covered automatically and must be classified below.
@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 import { createMigratedDb, type Db } from './helpers/pg-harness';
 
-const FILES = readdirSync('supabase/migrations').filter((f) => /^(009[4-9]|0100)_/.test(f)).sort();
+const FILES = readdirSync('supabase/migrations').filter((f) => /^(009[4-9]|010[01])_/.test(f)).sort();
 const FUNCTIONS = [...new Set(FILES.flatMap((file) =>
   [...readFileSync(`supabase/migrations/${file}`, 'utf8').matchAll(/create (?:or replace )?function public\.([a-z_0-9]+)/gi)].map((m) => m[1]!)))].sort();
 
@@ -27,20 +27,26 @@ const AUTHENTICATED_MAY_CALL = [
   'seller_offer_gate_status',           // Admin or member of that seller (0098)
   'set_sub_order_status',               // existing RPC; closing states are atomic (0097)
 ];
-const TABLES = ['delivery_completion_requests', 'legal_document_acceptances', 'legal_document_current_versions', 'marketplace_launch_approvals'];
+const TABLES = ['delivery_completion_requests', 'legal_document_acceptances', 'legal_document_current_versions', 'marketplace_launch_approvals', 'return_request_events'];
 
 let db: Db;
 beforeAll(async () => { db = await createMigratedDb(); }, 180_000);
 afterAll(async () => { await db.close(); });
 
-describe('migrations 0094–0100: catalogue review', () => {
-  it('covers seven migrations in unbroken order, each with a rollback script', () => {
-    expect(FILES.map((f) => f.slice(0, 4))).toEqual(['0094', '0095', '0096', '0097', '0098', '0099', '0100']);
+describe('migrations 0094–0101: catalogue review', () => {
+  it('covers eight migrations in unbroken order, each with a rollback script', () => {
+    expect(FILES.map((f) => f.slice(0, 4))).toEqual(['0094', '0095', '0096', '0097', '0098', '0099', '0100', '0101']);
     for (const file of FILES) {
       expect(() => readFileSync(`supabase/rollbacks/${file.replace(/\.sql$/, '.down.sql')}`, 'utf8')).not.toThrow();
     }
     // 29 in 0094–0099 + 7 in 0100 (three atomic RPCs, one private actor check, three guard triggers).
-    expect(FUNCTIONS).toHaveLength(36);
+    // + 6 in 0101: two atomic return-request RPCs, one private helper, two guard triggers, and
+    //   return_order_stock (0054) re-created without any API-role grant.
+    expect(FUNCTIONS).toHaveLength(42);
+    for (const added of ['approve_return_request_atomic', 'reject_return_request_atomic', '_return_request_restorable_lines',
+      'guard_return_request_write', 'guard_return_request_events_append_only', 'return_order_stock']) {
+      expect(FUNCTIONS).toContain(added);
+    }
     for (const added of ['dispatch_order_atomic', 'fail_delivery_atomic', 'return_delivery_to_warehouse_atomic', '_fulfilment_actor_role',
       'guard_direct_order_fulfilment_transition', 'guard_direct_delivery_fulfilment_transition', 'guard_settled_delivery_lines']) {
       expect(FUNCTIONS).toContain(added);
@@ -77,14 +83,18 @@ describe('migrations 0094–0100: catalogue review', () => {
         where p.pronamespace = 'public'::regnamespace and p.proname = any($1)
           and not has_function_privilege('service_role', p.oid, 'execute') order by 1`, [FUNCTIONS]);
     expect(rows.map((r) => r.proname)).toEqual([
-      '_close_sub_order_core', '_fulfilment_actor_role', '_order_loyalty_points_due', '_refund_child_share_remaining', '_set_sub_order_status_plain',
-      'guard_direct_delivery_fulfilment_transition', 'guard_direct_order_fulfilment_transition', 'guard_settled_delivery_lines',
+      '_close_sub_order_core', '_fulfilment_actor_role', '_order_loyalty_points_due', '_refund_child_share_remaining', '_return_request_restorable_lines',
+      '_set_sub_order_status_plain',
+      'guard_direct_delivery_fulfilment_transition', 'guard_direct_order_fulfilment_transition',
+      'guard_return_request_events_append_only', 'guard_return_request_write', 'guard_settled_delivery_lines',
       'record_marketplace_launch_approval',
+      'return_order_stock', // 0101: stock comes back only inside a function that also commits the return state
     ]);
   });
 
-  it('the atomic delivery and fulfilment functions are SECURITY DEFINER, service-role only, and re-check the role themselves', async () => {
-    const names = ['complete_delivery_atomic', 'dispatch_order_atomic', 'fail_delivery_atomic', 'return_delivery_to_warehouse_atomic'];
+  it('the atomic delivery, fulfilment and return-request functions are SECURITY DEFINER, service-role only, and re-check the role themselves', async () => {
+    const names = ['approve_return_request_atomic', 'complete_delivery_atomic', 'dispatch_order_atomic', 'fail_delivery_atomic',
+      'reject_return_request_atomic', 'return_delivery_to_warehouse_atomic'];
     const { rows } = await db.query<{ proname: string; definer: boolean; svc: boolean; authn: boolean; anon: boolean; src: string }>(
       `select p.proname, p.prosecdef definer, has_function_privilege('service_role', p.oid, 'execute') svc,
               has_function_privilege('authenticated', p.oid, 'execute') authn, has_function_privilege('anon', p.oid, 'execute') anon, p.prosrc src
@@ -129,11 +139,38 @@ describe('migrations 0094–0100: catalogue review', () => {
       { relname: 'legal_document_acceptances', rls: true, grants: 'authenticated:SELECT' },
       { relname: 'legal_document_current_versions', rls: true, grants: 'authenticated:SELECT' },
       { relname: 'marketplace_launch_approvals', rls: true, grants: 'authenticated:SELECT' },
+      { relname: 'return_request_events', rls: true, grants: 'authenticated:SELECT' },
     ]);
+  });
+
+  it('return-request functions lock the order before the request, and the approval validates before it writes', async () => {
+    const { rows } = await db.query<{ proname: string; src: string }>(
+      `select p.proname, p.prosrc src from pg_proc p where p.pronamespace = 'public'::regnamespace
+        and p.proname in ('approve_return_request_atomic', 'reject_return_request_atomic')`);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const order = row.src.search(/from public\.orders o where o\.id = v_order_id for update/);
+      const request = row.src.search(/from public\.return_requests r where r\.id = p_return_request_id for update/);
+      expect(order, `${row.proname} locks the order`).toBeGreaterThan(-1);
+      expect(request, `${row.proname} locks the request after the order`).toBeGreaterThan(order);
+      expect(row.src, row.proname).toContain("array['super_admin', 'admin']");
+      expect(row.src, row.proname).toContain('insert into public.return_request_events');
+    }
+    const approve = rows.find((r) => r.proname === 'approve_return_request_atomic')!.src;
+    const stock = approve.indexOf('public.return_order_stock(');
+    for (const check of ['RETURN_APPROVE:ALREADY_RESOLVED', 'RETURN_APPROVE:ORDER_STATE', 'RETURN_APPROVE:RECONCILE', 'RETURN_APPROVE:SELLER_RETURN',
+      'RETURN_APPROVE:QUANTITY', 'RETURN_APPROVE:ALREADY_RESTORED']) {
+      expect(approve.indexOf(check), check).toBeGreaterThan(-1);
+      expect(approve.indexOf(check), `${check} is decided before any stock moves`).toBeLessThan(stock);
+    }
+    // Approval moves no money: no wallet, credit or loyalty function is reachable from it.
+    expect(approve).not.toMatch(/refund_order_coins|order_shortfall_coins|retailer_wallet_ledger\s*\(|record_loyalty_points|insert into public\.retailer_wallet_ledger/);
+    const reject = rows.find((r) => r.proname === 'reject_return_request_atomic')!.src;
+    expect(reject).not.toMatch(/return_order_stock|restore_simple_order_stock|refund_order_coins|retailer_wallet_ledger|product_packs|stock_movements/);
   });
 });
 
-describe('rollbacks 0094–0100: no data loss', () => {
+describe('rollbacks 0094–0101: no data loss', () => {
   const strip = (sql: string) => sql.replace(/--[^\n]*/g, '');
 
   it('no rollback truncates, deletes rows or drops a column', () => {
@@ -155,10 +192,10 @@ describe('rollbacks 0094–0100: no data loss', () => {
         expect(archive).toBeLessThan(match.index!);
       }
     }
-    expect(dropped.sort()).toEqual(['legal_document_current_versions', 'marketplace_launch_approvals']);
+    expect(dropped.sort()).toEqual(['legal_document_current_versions', 'marketplace_launch_approvals', 'return_request_events']);
   });
 
-  it('the whole chain rolls back 0100 → 0094 and re-applies 0094 → 0100, twice, on one database', async () => {
+  it('the whole chain rolls back 0101 → 0094 and re-applies 0094 → 0101, twice, on one database', async () => {
     const fresh = await createMigratedDb();
     for (let round = 0; round < 2; round++) {
       for (const file of [...FILES].reverse()) {

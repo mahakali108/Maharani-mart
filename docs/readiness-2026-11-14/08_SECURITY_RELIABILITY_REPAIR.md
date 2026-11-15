@@ -8,7 +8,7 @@ could not be run, it says **NOT DONE** / **NOT VERIFIED** and why.
 
 ## Verdict
 
-**READY FOR INDEPENDENT REVIEW** for the code, migrations and tests.
+**READY FOR INDEPENDENT REVIEW** for the code, migrations and tests (now 0094–0101; see sections 12–17 for the final pass).
 **NOT READY TO LAUNCH** (unchanged; see `00_LAUNCH_READINESS.md`).
 
 Not verified in this pass, and a reviewer or the owner must do it:
@@ -244,8 +244,8 @@ Cloudflare hosting is actually wanted, that is separate work.
 
 ## 11. Remaining risks
 
-- `approveReturnAction` (`lib/admin/returns-actions.ts`) is still two separate
-  writes (stock return, then the request status). Not changed in this PR.
+- ~~`approveReturnAction` is still two separate writes.~~ **Fixed in section 12
+  (migration 0101).**
 - Returns of deliveries with a shortfall credit need manual reconciliation
   (section 3).
 - 11 failing tests and 48 lint errors on `main`, including
@@ -255,3 +255,235 @@ Cloudflare hosting is actually wanted, that is separate work.
   GSTIN outstanding (`05_OWNER_CHECKLIST.md`).
 - Everything in sections 1–5 was tested on PGlite and embedded PostgreSQL 17,
   not on a Supabase project. A staging run is still needed.
+
+---
+
+# Final blocker repair (added later the same day)
+
+Sections 1–11 above describe the state at commit `c1dff87`. Sections 12–17
+describe what changed after it. Where the two disagree, these sections win:
+the migration range is now **0094–0101**, and the figures in sections 7 and 8
+are superseded by section 15.
+
+## 12. Return request approval and rejection are each one transaction (0101)
+
+**The defect.** `approveReturnAction` made two separate database calls: first
+`return_order_stock` (stock back on the shelf), then an UPDATE of the request
+to `approved`. If the second call failed, the stock was restored and the
+request still said `requested`. The old stock function was also callable by
+any staff session, with no request at all. For orders older than pack stock it
+booked the same goods again on every call (shown as a control in the real
+PostgreSQL run).
+
+**The repair.** Migration `0101_atomic_return_request_resolution.sql` adds:
+
+| Object | Purpose |
+|---|---|
+| `approve_return_request_atomic(request, actor, note)` | The whole approval in one transaction |
+| `reject_return_request_atomic(request, actor, note)` | The whole rejection in one transaction |
+| `return_request_events` | Append-only history, exactly one row per resolved request |
+| `guard_return_request_write` (trigger) | No API role may UPDATE a request or insert one that is already resolved |
+| `return_order_stock` | Re-created; **no** API role may call it any more |
+
+What the approval does, in order, inside one transaction:
+
+1. Refuses any caller other than the server (`service_role`). Reads the actor's
+   role from `profiles` itself: active **Admin or Super Admin only**.
+2. Locks the parent order, then the request (`orders → return_requests →
+   order_items → stock rows`, the same parent-first order as 0094–0100).
+3. Already approved → answers `replayed: true` and writes nothing. Already
+   rejected → refused.
+4. Checks the request belongs to the order and retailer, the order is
+   `delivered`, and the item (if one is named) is a line of that order.
+5. Refuses if the goods were settled with a shortfall credit
+   (`RETURN_APPROVE:RECONCILE`), if a seller fulfils the line
+   (`SELLER_RETURN`), if more would return than was delivered (`QUANTITY`), or
+   if nothing is left to restore (`ALREADY_RESTORED`). All of this is decided
+   before any stock moves.
+6. Restores the stock, and checks the units restored equal the units computed.
+7. Sets the request to `approved`, writes the history row and the audit log.
+8. Commits. Any failure at any step undoes all of it.
+
+Rejection is the same shape: Admin or Super Admin, a reason of 3–1000
+characters, the status change and the history row together. It contains no
+stock, wallet or loyalty statement at all (asserted from the function source).
+
+**Money.** Approval refunds nothing and reverses no points. That is what the
+application did before this change; no refund rule for approved returns has
+been given, so none was invented. `return_request_events.refund_paise` is
+constrained to 0. If the owner decides a refund is due, that is new work.
+
+**Application.** `lib/admin/returns-actions.ts` is now: permission check, Admin
+check, UUID check, one RPC. `lib/returns/resolution.ts` turns each database
+code into a plain sentence. The retailer is notified only after the commit and
+never on a replay. If 0101 is not installed, or the server key is missing, the
+action refuses with a clear message and writes nothing.
+
+**Screen.** `/admin/returns` now says approval moves stock only, hides the
+buttons from staff, shows whether a request is for one item or the whole
+order, and shows the amount and date of any shortfall credit already issued
+for that order's delivery.
+
+**Dependencies.** 0101 needs 0100 (`_fulfilment_actor_role`), 0054 / 0089
+(pack stock), 0017 (legacy stock) and 0009 (`return_requests`). Apply 0094 →
+0101 in order. Roll back 0101 before 0100. The rollback restores the 0054
+function and its grants and copies the history into
+`return_request_events_rollback_archive` before removing the table.
+
+### Evidence
+
+Real PostgreSQL 17.11, migrations 0001–0101, 19 passed, 0 failed, 0 deadlock
+victims (`evidence/pr126-return-requests.real-postgres.log`):
+
+| Required case | Result |
+|---|---|
+| Successful approval | Pack stock 7 → 10, request `approved`, one history row, audit log names the Admin, wallet and loyalty unchanged |
+| Repeated approval | Same Admin, another Admin, Super Admin: `replayed: true`, nothing written, first approver kept |
+| Simultaneous approvals | 16 at once on one request, 5 rounds: 1 fresh, 15 replays, stock restored once |
+| Two requests for the same goods, approved together | 5 rounds: one restores, the other `ALREADY_RESTORED` |
+| Failure between stock and status | Failure injected at `product_packs`, `order_items`, `return_requests`, `return_request_events`, `audit_logs`: full rollback every time; the retry works once |
+| Invalid quantities and items | `QUANTITY`, `INVALID_ITEM`, `INVALID_REQUEST`, `ORDER_STATE:dispatched` |
+| Unauthorised user | Staff, salesman, retailer, deactivated Admin, unknown id: `NO_PERMISSION` (42501) |
+| Rejection | Reason required; no stock, Coins or points; replays; cannot be approved afterwards |
+| Approve and reject at once | 15 rounds: exactly one resolution; stock moves only if approval won |
+| Already refunded or reconciled | After return-to-warehouse: `ORDER_STATE:returned`. Shortfall credit: `RECONCILE`, credit untouched |
+| Partial returns | Line, then whole order: only the remainder is restored; a third request is refused |
+| Split orders | Maharani line restores pack stock; seller line refused; seller stock untouched |
+| Old route | `return_order_stock` denied to every API role; direct UPDATE → `RETURN_GUARD`; history append-only |
+| Consistency sweep | Every resolved request has one matching history row; restored never exceeds deducted; no wallet or loyalty row came from a return request |
+| Rollback | With data present: rows kept, 0054 function restored; re-applied twice |
+
+The real server actions against the real migrations (PGlite):
+`tests/return-request-actions-db.test.ts`, 13 tests, all pass. They cover the
+same cases through `approveReturnAction` / `rejectReturnAction`, plus: staff
+stopped before any database call, a forged Admin role refused by the database,
+missing server key, missing migration, and raw database text never shown.
+PGlite has one connection, so concurrency is proven only by the real
+PostgreSQL script.
+
+## 13. Shortfall-credit returns stay blocked — owner decision needed
+
+The refusal rule is kept in both places (`RETURN_APPROVE:RECONCILE` in 0101,
+`DELIVERY_RETURN:RECONCILE` in 0100). No Coins are reversed or issued again.
+
+A reconciliation workflow was **not** built. It cannot be defined safely
+without rules that only the owner (with the CA) can give:
+
+1. When goods are returned from a delivery that already got a shortfall
+   credit, is any further refund due, and on what basis (per unit delivered,
+   net of the credit, none)?
+2. Is the earlier shortfall credit ever taken back, and when?
+3. What happens to loyalty points earned on that delivery?
+4. Who may approve it, and is a second approver needed?
+
+Until those are answered, the manual route is:
+
+- Open `/admin/returns`. The request shows the credit amount and date.
+- Reject the request with a reason such as "handled manually, shortfall credit
+  already issued".
+- If goods physically came back, book them with the existing stock adjustment
+  screen (`createStockAdjustmentAction`), with a note naming the order.
+- If the owner decides money is due, record it with the existing wallet
+  adjustment (`recordAdjustmentAction`), with a note naming the order and the
+  earlier credit.
+
+Both tools already write their own audit rows. A fully delivered line on the
+same order is not affected and can be approved normally (tested).
+
+## 14. Re-audit of 0094–0100
+
+Applied anywhere? Checked read-only on `fhrmsrumsraprvutrpeo`: last migration
+is `0093`, none of the PR's functions exist, there are no preview branches.
+So 0094–0100 are applied nowhere known, and 0101 is a new forward migration.
+None of 0094–0100 was edited in this pass.
+
+| Point | State | Where it is checked |
+|---|---|---|
+| Proof exists in the private bucket, right order, right uploader | Intact | `delivery-completion-action-db`, real PG completion script |
+| Completion is transactional | Intact | real PG completion script, 25/0 |
+| Lock order, no deadlock | Intact | real PG locks script, 31/0, 0 victims |
+| Direct protected status writes blocked | Intact | `FULFILMENT_GUARD` tests |
+| Dispatch, failed delivery, return are atomic | Intact | `fulfilment-atomic-actions-db`, real PG |
+| Delivered quantities final | Intact | `guard_settled_delivery_lines` tests |
+| Marketplace switch off by default | Intact | checked after two rollback/re-apply rounds |
+| Seller agreement, owner and CA approval | Intact | `seller-agreement-gate-db` |
+| Grants, `search_path`, RLS | 42 functions, none open to PUBLIC, fixed `search_path`; signed-in sessions may call the same 10 as before; 0101 added none | `pr126-migration-review-db` |
+| Rollback chain | 0101 → 0094 and back, twice | same file |
+
+One thing found and fixed here: the first draft of 0101 used a trigger to block
+`TRUNCATE` on the history table. The repository forbids that word in recent
+migrations (`tests/premium-upgrade.test.ts`). The trigger was removed rather
+than the test changed; API roles hold no truncate privilege on the table
+(asserted on real PostgreSQL).
+
+## 15. Full checks on the final code, against `main` (`80007cc`)
+
+Same sandbox, same Node and pnpm, same commands (`pnpm test`, `pnpm typecheck`,
+`pnpm lint`, `pnpm build`).
+
+| Check | `main` | PR (final) |
+|---|---|---|
+| Typecheck | pass | pass |
+| Build | pass | pass |
+| Lint | 48 errors, 40 warnings | 48 errors, 40 warnings |
+| Test files | 198: 18 failed | 212: 18 failed, 194 passed |
+| Tests | 3028: 11 failed, 213 skipped, 2804 passed | 3314: 11 failed, 213 skipped, 3090 passed |
+
+- Failing tests and files: compared by `diff`, **identical** to `main`.
+- Lint errors: compared per file and message, **identical** to `main`. The PR
+  adds none. Every file added or changed in this pass is clean, with no
+  suppression comment.
+- Fixed in this pass: none of the baseline failures. They are in files this PR
+  does not otherwise touch.
+
+Baseline lint errors (on `main`, not fixed): 12 `no-explicit-any` in
+`tests/production-probe.test.ts` and `tests/mobile-retailer-upgrade-api.test.ts`;
+36 React render-purity errors in 14 existing files, including the cart,
+checkout, notification list and infinite scroll. Fixing the 36 means changing
+how those screens render. That was not done inside a database-integrity PR
+with no browser available to check the result. It should be its own PR.
+
+Baseline test failures (on `main`, not fixed): `security-phase0-app` (3),
+`membership-db` (1), `api-privilege-hardening` (1, anonymous catalogue read —
+may be a real defect), and 11 database suites that fail in set-up because the
+shared `createPack` fixture is broken.
+
+Real PostgreSQL 17.11, migrations 0001–0101, all re-run on the final code:
+
+| Script | Result |
+|---|---|
+| `tests/pr126-return-requests.pg.mjs` | 19 passed, 0 failed, 0 deadlock victims |
+| `tests/pr126-fulfilment-and-locks.pg.mjs` | 31 passed, 0 failed, 0 deadlock victims outside the control run |
+| `tests/pr126-delivery-completion.pg.mjs` | 25 passed, 0 failed |
+| `tests/pr126-review-fixes.pg.mjs` | 18 passed, 0 failed |
+| `tests/refund-ledger-real-postgres.pg.mjs` | 31 passed |
+
+Command, for each script:
+
+```
+mkdir /tmp/pgdeps && cd /tmp/pgdeps && npm install embedded-postgres@17.11.0-beta.19 pg
+NODE_PATH=/tmp/pgdeps/node_modules node tests/<name>.pg.mjs
+```
+
+## 16. GitHub checks
+
+"Web checks" runs typecheck → lint → test → build and stops at the first
+failure. Lint fails on the 48 baseline errors, so **tests and build do not run
+in CI. They are skipped, not passed.** The test and build results in section 15
+come from the sandbox only. The same job fails the same way on `main`.
+
+Cloudflare "Workers Builds" still fails (section 10). Vercel reports a finished
+build; the preview was not opened (section 9).
+
+## 17. What is still open
+
+- Refund rule for approved returns, and the shortfall reconciliation rules
+  (section 13) — owner and CA.
+- 48 baseline lint errors keep CI red and stop CI from running tests.
+- 11 baseline test failures.
+- No staging database has 0094–0101. Nothing was exercised through a deployed
+  app. Preview in a browser: **NOT VERIFIED**.
+- Seller-fulfilled lines cannot be returned through a return request; they are
+  refused. A seller return flow does not exist.
+- `zod` advisory, TCS/TDS, legal drafts, owner details and GSTIN — unchanged.
+
