@@ -4,12 +4,6 @@ import { join } from 'node:path';
 import {
   CATALOG_MAX_ROWS,
   CATALOG_PAGE_SIZE,
-  catalogHref,
-  hasDerivedPriceConstraints,
-  isDbSortable,
-  parseCatalogSort,
-  sanitizeSearchTerm,
-  type CatalogQuery,
 } from '@/lib/retailer/catalog-params';
 import { decodeCursor, encodeCursor, toListBatch, toOffsetBatch } from '@/lib/infinite-scroll/cursor';
 import { buildKeysetPredicate, type KeysetColumn } from '@/lib/infinite-scroll/keyset';

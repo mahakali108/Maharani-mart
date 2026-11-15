@@ -16,7 +16,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { as, createArea, createMigratedDb, createUser, errorOf, type Db } from './helpers/pg-harness';
+import { as, createArea, createMigratedDb, createPack, createUser, errorOf, type Db } from './helpers/pg-harness';
 
 let db: Db;
 let admin: string;
@@ -45,11 +45,9 @@ beforeAll(async () => {
     warehouseId,
   ]);
 
-  const product = await db.query<{ id: string }>(
-    `insert into products (sku_code, name, unit, base_price) values ($1, 'Flow Product', 'pcs', 100) returning id`,
-    [`FLOW-${randomUUID().slice(0, 8)}`]
-  );
-  productId = product.rows[0]!.id;
+  // A product needs an owner-classified category and an approved compliance
+  // review before it can exist in the catalogue (0086 / 0087); the fixture does both.
+  productId = (await createPack(db)).productId;
 }, 180_000);
 
 async function draftGrn(quantity: number, batchNumber: string): Promise<string> {

@@ -99,7 +99,7 @@ export function PromoBanner({
         {desktopProps ? (
           <picture>
             {mobileSrcSet ? <source media="(max-width: 767px)" srcSet={mobileSrcSet} sizes={mobileSizes} /> : null}
-            {/* eslint-disable-next-line @next/next/no-img-element -- art direction needs a real <picture>; URLs are pre-optimised by lib/media */}
+            { }
             <img
               {...desktopProps}
               alt={title}

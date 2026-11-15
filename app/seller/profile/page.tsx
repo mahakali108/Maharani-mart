@@ -4,6 +4,8 @@ import { SellerProfileForm } from '@/components/seller/seller-profile-form';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
+import { PolicyAcceptanceCard } from '@/components/legal/policy-acceptance-card';
+import { SellerGateNotice } from '@/components/seller/seller-gate-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +23,10 @@ export default async function SellerProfilePage() {
           PAN, and address details remain restricted to your team and Maharani Traders admins.
         </p>
       </div>
+
+      <SellerGateNotice sellerId={seller.id} memberRole={memberRole} />
+
+      <PolicyAcceptanceCard audience="seller" />
 
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">

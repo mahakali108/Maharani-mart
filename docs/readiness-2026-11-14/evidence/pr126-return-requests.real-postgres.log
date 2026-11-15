@@ -1,0 +1,32 @@
+Applied 99 repository migrations (0001 - 0102) on PostgreSQL 17.11.
+PASS LIFECYCLE: a retailer submits a request from their own session; only for their own delivered order; never pre-resolved; never for another order's item
+PASS APPROVE: one call restores the stock, approves the request and writes the history row; no Coins, no points; the audit log names the Admin
+PASS REPEAT: approving again (same Admin, another Admin, Super Admin) is a replay - no second stock movement, one history row, first approver kept
+PASS CONCURRENT: 16 simultaneous approvals of one request - stock restored once, one history row, 15 replays - 5 rounds
+PASS CONCURRENT: two requests for the SAME goods approved together - only one restores; the other is refused, nothing doubled - 5 rounds
+PASS FAILURE between stock and status (and at every other write): everything rolls back - stock is never restored without the approved state; the retry then works once
+PASS OLD ROUTE CLOSED: no API role can restore order stock directly, flip or edit a request with a plain UPDATE, or write the history
+PASS UNAUTHORISED: staff, salesman, retailer, a deactivated Admin and an unknown actor are refused by the database; nothing changes
+PASS REJECT: needs a reason; changes the request and writes history; never touches stock, Coins or points; replays; a rejected request cannot be approved and vice versa
+     (approval won 8, rejection won 7)
+PASS RACE: approve and reject fired together - exactly one resolution; stock moves only if the approval won - 15 rounds
+PASS INVALID: a request for another order's item, for another retailer, for an order that is not delivered, or restoring more than was delivered is refused; nothing changes
+PASS SHORTFALL CREDIT: a return over goods already settled in Coins is refused before any write - the credit is neither reversed nor repeated; a fully delivered line of the same order can still be returned
+PASS PARTIAL RETURNS: a line request restores that line only; the same line cannot be restored twice; a later whole-order request restores only what is left
+PASS ALREADY RETURNED / REFUNDED: after return-to-warehouse the request cannot be approved (no second stock return, no second refund); after an approved line, return-to-warehouse restores only the rest and refunds once
+PASS SPLIT ORDERS: a Maharani-fulfilled line returns to pack stock only; a seller-fulfilled line (and a whole-order request that includes one) is refused; seller stock is never touched
+PASS LEGACY ORDERS (before pack stock, no batch allocations): the old stock function booked the line again on every call - now it is booked once
+PASS SAME PRODUCT ON TWO LINES (legacy): each line is restored exactly once - the second line is NOT mistaken for the first; repeats, a third request and a whole-order request restore nothing more
+PASS SAME PRODUCT ON TWO LINES (legacy), partial: a line first, then the whole order restores only the other line; whole order first restores both lines once and later line requests are refused
+PASS SAME PRODUCT ON TWO LINES (legacy), concurrent: both line requests, a whole-order request and duplicates approved together - every line comes back exactly once - 8 rounds
+PASS SAME PRODUCT ON TWO LINES (legacy), failure at each write while approving the SECOND line: everything rolls back, the first line stays restored once; the retry then works once
+PASS SAME PRODUCT ON TWO LINES (legacy), stock booked before 0101 with no line recorded: never more comes back than the order took out; an unclear remainder is refused, not guessed
+PASS SAME PRODUCT ON TWO LINES (pack stock): each line restores its own pack quantity once - in sequence, repeated, and 8 concurrent rounds; a failure rolls back; a short line stays blocked; the same PACK twice in one order is impossible by schema
+PASS SAME PRODUCT ON TWO LINES, REJECTION: rejecting either line or the whole order changes no inventory, no Coins and no points - legacy and pack stock; a rejected line can still be returned by a new request, once
+     (160 return requests, 103 history rows checked)
+PASS CONSISTENCY SWEEP over every order touched above: history, request state, stock counters and wallet agree
+PASS catalogue hygiene (0101): fixed search_path, no PUBLIC/anon/authenticated execute; only the two entry points are open to service_role; both new tables have RLS and no write grant
+PASS rollback 0101 with data present keeps every row (history archived), restores the 0054 stock function and grants; re-apply (twice) works and resolves a request
+PASS 0102: anonymous reads of products / product_packs / product_images return no rows and no error; signed-in Admin still reads; rollback brings the permission error back; re-apply (twice) fixes it again
+PR #126 atomic return requests on real PostgreSQL 17.11: 27 passed, 0 failed. Deadlock victims: 0.
+exit=0

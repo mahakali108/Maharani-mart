@@ -179,6 +179,15 @@ export async function saveNotificationPrefsAction(_prev: ProfileActionResult, fo
   return { successMessage: 'Notification settings saved.' };
 }
 
+type AccountRequestType = 'account_deletion' | 'data_export' | 'data_correction' | 'consent_withdrawal';
+const ACCOUNT_REQUEST_TYPES: AccountRequestType[] = ['account_deletion', 'data_export', 'data_correction', 'consent_withdrawal'];
+const ACCOUNT_REQUEST_LABELS: Record<AccountRequestType, string> = {
+  account_deletion: 'account deletion',
+  data_export: 'account data export',
+  data_correction: 'personal data correction',
+  consent_withdrawal: 'consent withdrawal',
+};
+
 /**
  * Records an account-level request (deletion or data export) for staff
  * review and notifies staff. Requests are NEVER self-executed: account
@@ -186,13 +195,17 @@ export async function saveNotificationPrefsAction(_prev: ProfileActionResult, fo
  * approval. A submitted request does not change access.
  */
 export async function requestAccountActionAction(
-  requestType: 'account_deletion' | 'data_export',
+  requestType: AccountRequestType,
   note: string
 ): Promise<ProfileActionResult> {
   const user = await requirePermission('orders.create');
   if (user.role !== 'retailer') return { error: 'Only a retailer can submit this request.' };
-  if (!['account_deletion', 'data_export'].includes(requestType)) return { error: 'Unknown request type.' };
+  if (!ACCOUNT_REQUEST_TYPES.includes(requestType)) return { error: 'Unknown request type.' };
   const trimmedNote = note.trim().slice(0, 500);
+  // A correction cannot be acted on without knowing what is wrong.
+  if (requestType === 'data_correction' && trimmedNote.length < 10) {
+    return { error: 'Please describe what is incorrect and what it should be.' };
+  }
 
   const supabase = (await createClient());
   const { error } = await supabase.from('retailer_account_requests').insert({
@@ -200,6 +213,11 @@ export async function requestAccountActionAction(
     request_type: requestType,
     note: trimmedNote || null,
   } as unknown as never);
+  // 23514 = the database does not yet know this request type (migration 0095
+  // pending). Say so plainly instead of pretending the request was filed.
+  if (error && (error as { code?: string }).code === '23514') {
+    return { error: 'This request cannot be filed online yet. Please contact us using the details on the Grievance page.' };
+  }
   if (error) return { error: error.message };
 
   // Notify staff for review (same broadcast pattern as return requests).
@@ -210,7 +228,7 @@ export async function requestAccountActionAction(
     .in('role', ['staff', 'admin', 'super_admin'])
     .eq('is_active', true)
     .returns<{ id: string }[]>();
-  const label = requestType === 'account_deletion' ? 'account deletion' : 'account data export';
+  const label = ACCOUNT_REQUEST_LABELS[requestType];
   for (const staff of staffProfiles ?? []) {
     try {
       await createInAppNotification({

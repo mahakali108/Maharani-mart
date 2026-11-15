@@ -1,0 +1,34 @@
+Applied 99 repository migrations (0001 - 0102) on PostgreSQL 17.11.
+PASS LOCK ORDER: line row locked first, completion holds the delivery row: the line write is refused at once, completion finishes, NO deadlock
+PASS CONTROL: with the OLD waiting line guard the same schedule DEADLOCKS (proves the schedule exercises the inversion); the real guard is then restored
+PASS LOCK ORDER: completion committed first: a waiting line write is then refused; quantities stay as verified
+PASS LOCK ORDER: line write committed first: completion waits at the DELIVERY row (holding no line lock), then applies the verified quantities
+PASS LOCK ORDER: completion vs line UPDATEs, line INSERTs and admin line edits, free-running - 40 rounds, zero deadlocks, every delivery consistent
+PASS LOCK ORDER: the shortfall credit function called directly (delivery row first) racing completion (order first) does not deadlock
+PASS PROOF: a file uploaded by the assignee into this order's folder is accepted and stored
+PASS PROOF: refused and NOTHING written - nonexistent file, another order's file, another user's file, a retailer's file, wrong bucket, forged paths, archived, delete marker, no uploader
+PASS PROOF: an Admin's upload is accepted for any delivery; the assignee's upload is accepted when an Admin completes
+PASS PROOF: Storage policies agree with the RPC - only the assignee or an Admin can upload into the folder; nobody can rewrite or delete a proof; no direct RPC call
+PASS DISPATCH: one call moves the order, creates one delivery task for the actor with the OTP digest, and snapshots every line; attribution is the real actor
+PASS DISPATCH: 12 simultaneous calls (staff, admin, super-admin) - exactly one dispatches; one task, one snapshot; the rest are refused cleanly
+PASS DISPATCH: an injected failure at ANY write (order, delivery task, line snapshot) leaves the order exactly as it was; the retry then succeeds
+PASS DISPATCH: a pre-0054 (batch stock) order with no stock is refused by the stock step and nothing changes
+PASS DISPATCH: who may - API roles cannot execute; salesman, retailer, deactivated, unknown and out-of-scope staff are refused; wrong states are refused
+PASS GUARD: no API role can dispatch, return or re-open an order with a plain UPDATE (admin, super-admin, staff, service key)
+PASS GUARD: no API role can fail, re-open or return a DELIVERY TASK with a plain UPDATE, or rewrite quantities after completion
+PASS FAIL: one call marks the delivery failed and re-opens the order; a repeat is a replay that writes nothing
+PASS FAIL: 10 simultaneous calls - exactly one writes, nine replay; an injected failure on the order update rolls the delivery back too
+PASS FAIL: who may - only the assignee or an Admin; API roles cannot execute; a completed delivery cannot be failed
+PASS RE-DISPATCH after a failure: the SAME task is reset (new OTP, attempts 0, fresh 0/0 lines); two racing re-dispatches produce one; a failure mid-way keeps the failed state
+PASS RETURN: one call returns stock, closes the delivery and the order, refunds the Coins and reverses the points; attribution is the real actor
+PASS RETURN: a retry after success is a replay - no second stock movement, refund or points reversal
+PASS RETURN: 16 simultaneous calls - stock returned once, one refund, one points reversal - 5 rounds
+PASS RETURN: an injected failure at ANY write (stock, delivery, order, wallet refund, points reversal) rolls back everything; the retry then does it all once
+PASS RETURN: a delivery that already has a shortfall credit is refused BEFORE anything changes (0088 reconciliation rule), not half-returned
+PASS RETURN: an order with no Coins debit returns its stock with a zero refund
+PASS RETURN: who may - API roles cannot execute; salesman, retailer, out-of-scope staff refused; an open or failed delivery cannot be returned
+PASS RACE: completion, failure and return fired together on one dispatched order - a legal end state, each ledger written at most once - 15 rounds
+PASS catalogue hygiene (0100): definer + fixed search_path, no PUBLIC/anon/authenticated execute; the helper is closed to service_role too
+PASS rollback 0100 with data present keeps every row and removes the functions and the guard; re-apply (twice) works
+PR #126 lock order + atomic fulfilment on real PostgreSQL 17.11: 31 passed, 0 failed. Deadlock victims outside the control run: 0.
+exit=0

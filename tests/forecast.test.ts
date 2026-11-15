@@ -89,7 +89,7 @@ describe('forecast statistical primitives', () => {
   });
 
   it('detects day-of-week seasonality only with a strong pattern and enough data', () => {
-    const base = Array.from({ length: 63 }, (_, i) => 10);
+    const base = Array.from({ length: 63 }, () => 10);
     // 63 days from today: make Sundays (the day 7 back from diff) spike.
     const daily = base.map((q, index) => {
       const date = new Date(TODAY.getTime() - (base.length - 1 - index) * DAY);
@@ -224,7 +224,7 @@ describe('forecastProduct behaviour', () => {
 
 describe('forecast insights generation', () => {
   it('generates traceable reorder and stock-out insights without inventing facts', async () => {
-    const { generateForecastInsights, rankForecasts } = await import('@/lib/ai/forecast/insights');
+    const { generateForecastInsights } = await import('@/lib/ai/forecast/insights');
     const series = makeSeries(Array.from({ length: 60 }, () => 20));
     const result = forecastProduct({ series, stock: stockSnapshot({ availableQuantity: 100 }), params: PARAMS, today: TODAY });
     const all = [result, forecastProduct({ series: makeSeries(Array.from({ length: 60 }, () => 2)), stock: stockSnapshot(), params: PARAMS, today: TODAY })];

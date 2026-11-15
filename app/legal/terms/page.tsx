@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Terms and Conditions — Maharani Tr
 
 export default function TermsPage() {
   return (
-    <PublicInfoShell eyebrow="Legal policies" title="Terms and Conditions" intro="Effective date: 04 November 2026. These terms cover Maharani Traders’ current own-stock wholesale and retail sales.">
+    <PublicInfoShell documentKey="terms" eyebrow="Legal policies" title="Terms and Conditions" intro="Effective date: 04 November 2026. These terms cover Maharani Traders’ current own-stock wholesale and retail sales.">
       <InfoCard title="Acceptance and business model">
         <p>By using the website, creating an account, placing an order or purchasing products, you agree to these terms and the applicable website policies. If you do not agree, please do not use the website.</p>
         <p>Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity. These policies cover own-stock cosmetics, personal-care products and non-food FMCG. Food products are excluded.</p>

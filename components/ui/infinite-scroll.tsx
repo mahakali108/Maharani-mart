@@ -40,6 +40,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import { Loader2, RotateCw } from 'lucide-react';
@@ -89,6 +90,17 @@ export interface UseInfiniteListOptions<T> {
   rootMargin?: string;
 }
 
+// Browser support for IntersectionObserver never changes while a page is open.
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+function lacksIntersectionObserver(): boolean {
+  return typeof IntersectionObserver === 'undefined';
+}
+function assumeIntersectionObserver(): boolean {
+  return false;
+}
+
 /**
  * The one state machine behind every scrolling list.
  *
@@ -108,7 +120,8 @@ export function useInfiniteList<T>({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentinel, setSentinel] = useState<HTMLElement | null>(null);
-  const [needsManualTrigger, setNeedsManualTrigger] = useState(false);
+  // False on the server and during hydration, then the real answer in the browser.
+  const needsManualTrigger = useSyncExternalStore(subscribeToNothing, lacksIntersectionObserver, assumeIntersectionObserver);
 
   // A filter/search/sort change re-renders the page on the server: the
   // server-rendered rows change, so anything appended before must be dropped.
@@ -130,10 +143,15 @@ export function useInfiniteList<T>({
   const errorRef = useRef(error);
   const inFlightRef = useRef(false);
   const loaderRef = useRef(loader);
-  cursorRef.current = cursor;
-  hasMoreRef.current = hasMore;
-  errorRef.current = error;
-  loaderRef.current = loader;
+  // Synchronised after every commit (never during render). This effect is
+  // declared before the observer effect below, so the refs are current before
+  // any `loadMore` that the observer or a click can start.
+  useEffect(() => {
+    cursorRef.current = cursor;
+    hasMoreRef.current = hasMore;
+    errorRef.current = error;
+    loaderRef.current = loader;
+  });
 
   const loadMore = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -156,7 +174,7 @@ export function useInfiniteList<T>({
         // duplicate rows already on screen and re-requesting it would loop
         // forever, so the list ends here — a broken cursor must never become an
         // infinite spinner.
-        // eslint-disable-next-line no-console
+         
         console.warn('[infinite-scroll] loader returned a non-advancing cursor; stopping the list.');
         setHasMore(false);
         return;
@@ -177,10 +195,6 @@ export function useInfiniteList<T>({
     setError(null);
     void loadMore();
   }, [loadMore]);
-
-  useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') setNeedsManualTrigger(true);
-  }, []);
 
   // Re-created after every batch: if the sentinel is still on screen (a short
   // list, or a tall phone) the fresh observer fires immediately and the list

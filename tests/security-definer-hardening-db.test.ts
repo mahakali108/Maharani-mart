@@ -86,7 +86,9 @@ describe('0057 — audit trigger still fires after the search_path change', () =
       `select count(*)::text as n from audit_logs where table_name = 'products' and record_id = $1`,
       [pack.productId]
     );
-    await db.query(`update products set name = name || ' ' where id = $1`, [pack.productId]);
+    // Any update is audited. An operational column is used because the name of a
+    // product that is on sale is frozen until it is re-reviewed (0086 / 0087).
+    await db.query(`update products set reorder_level = coalesce(reorder_level, 0) + 1 where id = $1`, [pack.productId]);
     const after = await db.query<{ n: string }>(
       `select count(*)::text as n from audit_logs where table_name = 'products' and record_id = $1`,
       [pack.productId]

@@ -105,7 +105,7 @@ self.addEventListener('fetch', (event) => {
             cache.put(request, res.clone());
           }
           return res;
-        } catch (err) {
+        } catch {
           return cached || Response.error();
         }
       })

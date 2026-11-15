@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { legalDocumentByKey } from '@/lib/legal/documents';
 
 const links = [
+  { href: '/legal', label: 'All policies' },
   { href: '/about', label: 'About' },
   { href: '/legal/terms', label: 'Terms' },
   { href: '/legal/privacy', label: 'Privacy' },
@@ -13,12 +15,15 @@ const links = [
 ];
 
 /** Accessible, responsive shell for public operational/legal information. */
-export function PublicInfoShell({ title, eyebrow, intro, children }: {
+export function PublicInfoShell({ title, eyebrow, intro, children, documentKey }: {
   title: string;
   eyebrow: string;
   intro: string;
   children: React.ReactNode;
+  /** Registry key (lib/legal/documents.ts); shows version and dates when set. */
+  documentKey?: string;
 }) {
+  const doc = documentKey ? legalDocumentByKey(documentKey) : undefined;
   return (
     <div className="min-h-screen bg-ivory-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white/95">
@@ -34,6 +39,13 @@ export function PublicInfoShell({ title, eyebrow, intro, children }: {
           <p className="shop-eyebrow">{eyebrow}</p>
           <h1 className="shop-heading mt-2 text-3xl font-semibold sm:text-4xl">{title}</h1>
           <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">{intro}</p>
+          {doc ? (
+            <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600" aria-label="Document version">
+              <div className="flex gap-1.5"><dt className="font-semibold text-slate-700">Version</dt><dd>{doc.version}</dd></div>
+              <div className="flex gap-1.5"><dt className="font-semibold text-slate-700">Effective date</dt><dd>{doc.effectiveDate}</dd></div>
+              <div className="flex gap-1.5"><dt className="font-semibold text-slate-700">Last updated</dt><dd>{doc.lastUpdated}</dd></div>
+            </dl>
+          ) : null}
         </div>
         <div role="note" className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
           <strong>Publication review required.</strong> Business and contact details are owner-provided. The current sales model, contact availability, grievance timelines, tax/invoice responsibilities and these policies require operational verification and Indian legal/tax review before production publication. This page does not replace applicable law or an agreed order record.

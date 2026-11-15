@@ -71,11 +71,13 @@ interface HarnessOptions {
   resetKey?: string;
 }
 
-function Harness({ batches, failOnce = false, resetKey }: HarnessOptions) {
+/** A loader over a fixed queue of batches. Its counters live in this closure, not in a component. */
+function createQueueLoader(batches: string[][], failOnce: boolean) {
   const queue = [...batches];
   let attempts = 0;
 
-  async function loader(cursor: string | null): Promise<InfiniteScrollBatch> {
+  return async function loader(cursor: string | null): Promise<InfiniteScrollBatch> {
+    void cursor;
     attempts += 1;
     if (failOnce && attempts === 1) throw new Error('Network unavailable');
     const next = queue.shift() ?? [];
@@ -83,13 +85,18 @@ function Harness({ batches, failOnce = false, resetKey }: HarnessOptions) {
       rows: next.map((label) => <li key={label}>{label}</li>),
       nextCursor: queue.length > 0 ? encodeCursor({ k: 'offset', o: attempts * 10 }) : null,
     };
-  }
+  };
+}
+
+function Harness({ batches, failOnce = false, resetKey }: HarnessOptions) {
+  // As before: every render of the harness starts a fresh queue.
+  const loader = createQueueLoader(batches, failOnce);
 
   return (
     <InfiniteScrollProvider
       loader={loader}
       initialCursor={encodeCursor({ k: 'offset', o: 0 })}
-      initialHasMore={queue.length > 0}
+      initialHasMore={batches.length > 0}
       resetKey={resetKey}
     >
       <ul aria-label="rows">

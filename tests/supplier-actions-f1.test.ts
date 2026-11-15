@@ -17,7 +17,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceRoleClient: mocks.serviceFactory,
 }));
 vi.mock('next/headers', () => ({
-  headers: () => ({ get: (_name: string) => null }),
+  headers: () => ({ get: () => null }),
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/admin/guard', () => ({ requirePermission: vi.fn() }));

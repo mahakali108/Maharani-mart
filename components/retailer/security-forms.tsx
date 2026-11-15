@@ -126,7 +126,7 @@ export function AccountRequestsCard({ hasDeletionRequest }: { hasDeletionRequest
   const [note, setNote] = useState('');
   const [state, setState] = useState<{ error?: string; success?: string } | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [requestType, setRequestType] = useState<'account_deletion' | 'data_export'>(hasDeletionRequest ? 'account_deletion' : 'data_export');
+  const [requestType, setRequestType] = useState<'account_deletion' | 'data_export' | 'data_correction' | 'consent_withdrawal'>(hasDeletionRequest ? 'account_deletion' : 'data_export');
 
   function submit() {
     setState(null);
@@ -160,6 +160,32 @@ export function AccountRequestsCard({ hasDeletionRequest }: { hasDeletionRequest
         >
           <FileDown className="h-4 w-4 shrink-0" aria-hidden="true" />
           Export my data
+        </button>
+        <button
+          type="button"
+          onClick={() => setRequestType('data_correction')}
+          aria-pressed={requestType === 'data_correction'}
+          className={
+            requestType === 'data_correction'
+              ? 'flex items-center gap-2 rounded-xl border-2 border-primary-500 bg-primary-50 px-3 py-2.5 text-left text-[11px] font-bold text-primary-800'
+              : 'flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-left text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50'
+          }
+        >
+          <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Correct my data
+        </button>
+        <button
+          type="button"
+          onClick={() => setRequestType('consent_withdrawal')}
+          aria-pressed={requestType === 'consent_withdrawal'}
+          className={
+            requestType === 'consent_withdrawal'
+              ? 'flex items-center gap-2 rounded-xl border-2 border-primary-500 bg-primary-50 px-3 py-2.5 text-left text-[11px] font-bold text-primary-800'
+              : 'flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-left text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50'
+          }
+        >
+          <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Withdraw a consent
         </button>
         <button
           type="button"

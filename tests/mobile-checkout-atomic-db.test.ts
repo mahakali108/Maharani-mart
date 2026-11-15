@@ -4,10 +4,12 @@ import {
   as,
   createArea,
   createMigratedDb,
+  createClassifiedCategory,
   createPack,
   createRetailer,
   createUser,
   errorOf,
+  reviseProduct,
   type Db,
   type PackFixture,
   type RetailerFixture,
@@ -210,10 +212,14 @@ afterAll(async () => {
 beforeEach(async () => {
   await db.query(`update retailers set status = 'active' where id = $1`, [retailer.id]);
   await db.query(`update warehouses set is_active = (id = $1)`, [activeWarehouseId]);
-  await db.query(`update products set gst_percent = 18, category_id = $2, brand_id = $3 where id = $1`, [
-    pack.productId, pack.categoryId, pack.brandId,
-  ]);
-  await db.query(`update product_packs set moq = 2, case_price = 1000, allow_loose_pieces = true where id = $1`, [pack.packId]);
+  // Since 0086 / 0087 the facts of a product on sale change only through
+  // deactivate -> edit -> fresh compliance review -> reactivate.
+  await reviseProduct(db, pack.productId, async () => {
+    await db.query(`update products set gst_percent = 18, category_id = $2, brand_id = $3 where id = $1`, [
+      pack.productId, pack.categoryId, pack.brandId,
+    ]);
+    await db.query(`update product_packs set moq = 2, case_price = 1000, allow_loose_pieces = true where id = $1`, [pack.packId]);
+  });
   await db.query(`update product_pricing_tiers set price_per_piece = 100 where product_pack_id = $1`, [pack.packId]);
   await db.query(`delete from retailer_active_coupons where retailer_id = $1`, [retailer.id]);
   await db.query(`delete from cart_items where retailer_id = $1`, [retailer.id]);
@@ -359,7 +365,8 @@ describe('0056 atomic mobile checkout database contract', () => {
   });
 
   it('keeps the current one-piece increment when legacy case metadata disallows loose pieces', async () => {
-    await db.query(`update product_packs set allow_loose_pieces = false where id = $1`, [pack.packId]);
+    await reviseProduct(db, pack.productId, () =>
+      db.query(`update product_packs set allow_loose_pieces = false where id = $1`, [pack.packId]));
     await setCart(2);
 
     const input = orderInput(2);
@@ -500,10 +507,9 @@ describe('0056 atomic mobile checkout database contract', () => {
 
     // Restore terms, then make the scoped product ineligible before commit.
     await db.query(`update coupons set minimum_order_value = 100, discount_value = 10 where id = $1`, [coupon.id]);
-    const { rows: otherCategory } = await db.query<{ id: string }>(
-      `insert into categories (name) values ('Changed category') returning id`
-    );
-    await db.query(`update products set category_id = $2 where id = $1`, [pack.productId, otherCategory[0]!.id]);
+    const otherCategory = await createClassifiedCategory(db, 'Changed category');
+    await reviseProduct(db, pack.productId, () =>
+      db.query(`update products set category_id = $2 where id = $1`, [pack.productId, otherCategory]));
     const scopeError = await atomicError({ ...quote, p_request_key: randomUUID() });
     expect(scopeError).toMatch(/COUPON_INVALID: the coupon no longer applies/);
     expect(await cartQuantity()).toBe(2);
@@ -544,7 +550,9 @@ describe('0056 atomic mobile checkout database contract', () => {
 
     await db.query(`update product_pricing_tiers set price_per_piece = 100 where product_pack_id = $1`, [pack.packId]);
     const staleGst = orderInput();
-    await db.query(`update products set gst_percent = 5 where id = $1`, [pack.productId]);
+    // a GST change reaches the shop only after the product is re-reviewed and back on sale
+    await reviseProduct(db, pack.productId, () =>
+      db.query(`update products set gst_percent = 5 where id = $1`, [pack.productId]));
     const gstError = await errorOf(db, 'service', (tx) => tx.query(RPC_SQL, [
       staleGst.p_retailer_id,
       staleGst.p_collected_by,
@@ -769,7 +777,8 @@ describe('0056 atomic mobile checkout database contract', () => {
 
 describe('0056 caller-owned cart mutation', () => {
   it('enforces MOQ and compare-and-set changes at a one-piece step despite legacy case metadata', async () => {
-    await db.query(`update product_packs set allow_loose_pieces = false where id = $1`, [pack.packId]);
+    await reviseProduct(db, pack.productId, () =>
+      db.query(`update product_packs set allow_loose_pieces = false where id = $1`, [pack.packId]));
     const directInsert = await errorOf(db, retailer.id, (tx) => tx.query(
       `insert into cart_items (retailer_id, product_id, pack_id, quantity) values ($1, $2, $3, 2)`,
       [retailer.id, pack.productId, pack.packId]

@@ -14,7 +14,8 @@ describe('Phase 2D.1 suspension/publication concurrency contract', () => {
     expect(guard).toContain('if not v_requires_eligibility then');
     expect(guard).toContain('from public.sellers s where s.id = new.seller_id for share;');
     expect(guard).toContain('from public.products p where p.id = new.product_id for share;');
-    expect(guard).toContain('A seller suspension takes a conflicting row lock');
+    // the comment is wrapped across lines in the migration; match it unwrapped
+    expect(guard.replace(/\n\s*--\s?/g, ' ').replace(/\s+/g, ' ')).toContain('A seller suspension takes a conflicting row lock');
   });
 
   it('serializes approval-revision stamping with later fact changes so invalidation audit ordering is deterministic', () => {

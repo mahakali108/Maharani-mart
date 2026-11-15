@@ -35,11 +35,28 @@ export function isRunningStandalone(): boolean {
   }
   return (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
+/** True when "Not now" (or a completed install) was remembered in this browser. */
+function readDismissed(): boolean {
+  try {
+    return window.localStorage.getItem(DISMISS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberDismissed(): void {
+  try {
+    window.localStorage.setItem(DISMISS_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
 const AUTH_PATHS = ['/login', '/register-retailer', '/forgot-password', '/reset-password'];
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -50,52 +67,43 @@ export default function InstallPrompt() {
       // Prevent the browser's default mini-infobar so we can show our own.
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
+      setDismissed(readDismissed());
+    };
+    // A dismissal made in another tab of this browser applies here too.
+    const stored = (e: StorageEvent) => {
+      if (e.key === DISMISS_KEY) setDismissed(readDismissed());
     };
     // Once installed, drop the prompt and remember it, so it never reappears.
     const installed = () => {
       setDeferred(null);
-      setVisible(false);
-      try {
-        window.localStorage.setItem(DISMISS_KEY, '1');
-      } catch {
-        /* ignore */
-      }
+      setDismissed(true);
+      rememberDismissed();
     };
     window.addEventListener('beforeinstallprompt', handler as EventListener);
     window.addEventListener('appinstalled', installed);
+    window.addEventListener('storage', stored);
     return () => {
+      window.removeEventListener('storage', stored);
       window.removeEventListener('beforeinstallprompt', handler as EventListener);
       window.removeEventListener('appinstalled', installed);
     };
   }, []);
 
-  useEffect(() => {
-    if (!deferred) return;
-    let dismissed = false;
-    try {
-      dismissed = window.localStorage.getItem(DISMISS_KEY) === '1';
-    } catch {
-      dismissed = false;
-    }
-    const onAuth = AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
-    setVisible(!dismissed && !onAuth);
-  }, [deferred, pathname]);
+  // Derived, not stored: shown only while a genuine install event is held, the
+  // user has not dismissed it, and the current screen is not an auth screen.
+  const onAuth = AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
+  const visible = deferred !== null && !dismissed && !onAuth;
 
   const install = async () => {
     if (!deferred) return;
     await deferred.prompt();
     await deferred.userChoice;
     setDeferred(null);
-    setVisible(false);
   };
 
   const dismiss = () => {
-    setVisible(false);
-    try {
-      window.localStorage.setItem(DISMISS_KEY, '1');
-    } catch {
-      /* ignore */
-    }
+    setDismissed(true);
+    rememberDismissed();
   };
 
   if (!visible) return null;

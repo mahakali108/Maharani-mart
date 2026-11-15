@@ -7,6 +7,12 @@ const migration = readFileSync(join(root, 'supabase/migrations/0087_phase_2d1_co
 const phase2d = readFileSync(join(root, 'supabase/migrations/0086_catalog_seller_compliance_enforcement.sql'), 'utf8');
 const evidenceStorage = readFileSync(join(root, 'lib/compliance/evidence-storage.ts'), 'utf8');
 
+/**
+ * The migration text with comment markers and line wrapping collapsed, so a
+ * pinned sentence or statement is matched whatever column it was wrapped at.
+ */
+const flat = migration.replace(/\n\s*--\s?/g, ' ').replace(/\s+/g, ' ');
+
 describe('Phase 2D.1 critical compliance corrections', () => {
   it('allows seller suspension/takedown to deactivate an offer while requiring eligibility for creation and publication', () => {
     expect(migration).toContain("v_requires_eligibility boolean := tg_op = 'INSERT'");
@@ -30,11 +36,18 @@ describe('Phase 2D.1 critical compliance corrections', () => {
     expect(migration).toContain("('cosmetics', 'non_food_fmcg', 'food_blocked', 'unclassified')");
     expect(migration).toContain("p.regulatory_classification = 'non_food_fmcg'");
     expect(migration).not.toContain("lower(btrim(new.name)) ~");
-    expect(migration).toContain('Existing rows remain `unclassified`');
+    expect(flat).toContain('Existing rows remain `unclassified`');
   });
 
   it('explicitly hardens all internal Security Definer helper classes and preserves only declared authenticated RPCs', () => {
-    expect(migration).toContain('revoke all on function public.product_compliance_has_evidence(uuid, text)');
+    // The helper sits inside a multi-function REVOKE: find the statement that
+    // names it and require that it withdraws EXECUTE from every API role.
+    const revokes = flat.split(';').map((statement) => statement.trim()).filter((statement) => /^revoke all on function /i.test(statement));
+    for (const helper of ['public.product_compliance_has_evidence(uuid, text)', 'public.seller_compliance_has_evidence(uuid, text)']) {
+      const statement = revokes.find((candidate) => candidate.includes(helper));
+      expect(statement, helper).toBeTruthy();
+      expect(statement!, helper).toMatch(/from public, anon, authenticated, service_role$/);
+    }
     expect(migration).toContain('public.seller_compliance_has_evidence(uuid, text)');
     expect(migration).toContain('from public, anon, authenticated, service_role;');
     expect(migration).toContain('grant execute on function public.product_is_sale_eligible(uuid)');

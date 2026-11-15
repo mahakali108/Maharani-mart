@@ -30,7 +30,6 @@ import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 const root = join(__dirname, '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
-const PRODUCT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PACK_50G = '11111111-1111-4111-8111-111111111111';
 const PACK_100G = '22222222-2222-4222-8222-222222222222';
 const PACK_200G = '33333333-3333-4333-8333-333333333333';

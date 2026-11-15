@@ -16,6 +16,7 @@ import {
   complianceSummary,
   type ComplianceStatus,
 } from '@/lib/compliance/checklist';
+import { serverRequestTimeMs } from '@/lib/datetime/request-time';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +79,7 @@ export default async function CompliancePage() {
     ? readinessAuditEvents.find((entry) => entry.after_data?.recordedAt === orderingReadiness.recordedAt)
     : undefined;
   const readinessExpired = orderingReadiness
-    ? Date.parse(orderingReadiness.approvalValidityPolicy.validUntil) <= Date.now()
+    ? Date.parse(orderingReadiness.approvalValidityPolicy.validUntil) <= serverRequestTimeMs()
     : false;
 
   const ownerFields = [

@@ -149,7 +149,8 @@ describe('P0-1 role assignment paths', () => {
   it('createStaffAction writes a server-side invite BEFORE creating the user and sends no metadata role', async () => {
     mocks.client.mockReturnValue(superAdminSession());
     const calls: string[] = [];
-    const createUser = vi.fn(async (_args: { user_metadata: Record<string, unknown>; email: string }) => {
+    const createUser = vi.fn(async (args: { user_metadata: Record<string, unknown>; email: string }) => {
+      void args;
       calls.push('createUser');
       return { data: { user: { id: 'new-user' } }, error: null };
     });
@@ -204,7 +205,10 @@ describe('P0-1 role assignment paths', () => {
   });
 
   it('public registration sends no role in signup metadata and maps invalid_area', async () => {
-    const signUp = vi.fn(async (_args: { options: { data: Record<string, unknown> } }) => ({ data: { user: null, session: null }, error: { message: 'Database error saving new user: invalid_area' } }));
+    const signUp = vi.fn(async (args: { options: { data: Record<string, unknown> } }) => {
+      void args;
+      return { data: { user: null, session: null }, error: { message: 'Database error saving new user: invalid_area' } };
+    });
     mocks.client.mockReturnValue(
       sessionClient({}, { auth: { getUser: mocks.getUser, signUp }, rpc: vi.fn().mockResolvedValue({ data: false, error: null }) })
     );
@@ -268,17 +272,36 @@ describe('P0-3 catalogue pricing permissions', () => {
       hsnCode: '3401',
       leadTimeDays: '2',
       moq: '1',
+      // every product save must name an owner-classified category (0086 gate)
+      categoryId: 'c1',
       ...overrides,
     };
     for (const [key, value] of Object.entries(values)) form.set(key, value);
     return form;
   }
 
+  /** An active category a Super Admin has classified as FMCG. */
+  const ALLOWED_CATEGORY = { id: 'c1', is_active: true, compliance_scope: 'fmcg' };
+
+  it('refuses a product save with no category or an unclassified one, before any write', async () => {
+    for (const categories of [[], [{ id: 'c1', is_active: true, compliance_scope: 'unapproved' }]]) {
+      const db = sessionClient({
+        profiles: [{ id: UID, role: 'admin', full_name: 'Admin', is_active: true }],
+        products: [{ id: 'p1' }],
+        categories,
+      });
+      mocks.client.mockReturnValue(db);
+      await expect(updateProductAction('p1', null, productForm())).resolves.toHaveProperty('error');
+      expect(db.queries.some((q) => q.operation === 'update')).toBe(false);
+    }
+  });
+
   function staffCatalogSession() {
     return sessionClient({
       profiles: [{ id: UID, role: 'staff', full_name: 'Staff', is_active: true }],
       products: [{ id: 'p1', base_price: 100, gst_percent: 18, hsn_code: '3401', units_per_case: 10 }],
       product_packs: [{ id: 'pk1', product_id: 'p1', case_price: 900, sort_order: 0, created_at: '2026-01-01' }],
+      categories: [ALLOWED_CATEGORY],
     });
   }
 
@@ -323,6 +346,7 @@ describe('P0-3 catalogue pricing permissions', () => {
       products: [{ id: 'p1' }],
       product_packs: [{ id: 'pk1', product_id: 'p1', sort_order: 0, created_at: '2026-01-01' }],
       product_pricing_tiers: [],
+      categories: [ALLOWED_CATEGORY],
     });
     mocks.client.mockReturnValue(db);
     await expect(updateProductAction('p1', null, productForm({ basePrice: '120', casePrice: '1000' }))).resolves.toBeNull();

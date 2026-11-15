@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => ({
   sellerGuard: vi.fn(),
   activeSellerGuard: vi.fn(),
   revalidate: vi.fn(),
+  offerGate: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: mocks.client,
@@ -55,6 +56,13 @@ vi.mock('@/lib/seller/guard', () => ({
   requireActiveSeller: mocks.activeSellerGuard,
 }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
+// Launch gate (0098). These pre-existing tests describe a marketplace that is
+// OPEN with the Seller Agreement accepted; the closed states are covered in
+// tests/seller-offer-gate.test.ts.
+vi.mock('@/lib/seller/offer-gate', async (original) => ({
+  ...(await original<typeof import('@/lib/seller/offer-gate')>()),
+  checkSellerOfferGate: mocks.offerGate,
+}));
 
 const ADMIN = 'aaaaaaaa-0000-4000-8000-000000000001';
 const SELLER_ID = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -63,6 +71,7 @@ const PACK_ID = 'dddddddd-0000-4000-8000-000000000004';
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.offerGate.mockResolvedValue({ open: true });
   mocks.permission.mockResolvedValue({ id: ADMIN, role: 'admin', fullName: 'Fixture admin', email: null });
   mocks.superAdminGuard.mockResolvedValue({ id: ADMIN, role: 'super_admin', fullName: 'Fixture owner', email: null });
   mocks.sellerGuard.mockResolvedValue({

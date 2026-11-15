@@ -12,12 +12,6 @@ const pascal = (value) => value
   .filter(Boolean)
   .map((part) => part[0].toUpperCase() + part.slice(1))
   .join('');
-const resolveRef = (ref) => {
-  const [family, shade] = ref.split('.');
-  const value = registry.families[family]?.tokens[shade];
-  if (!value) throw new Error(`Unknown design token reference: ${ref}`);
-  return value;
-};
 const rgbChannels = (hex) => [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16)).join(' ');
 
 let css = `/* Generated from design/tokens.json. Do not edit by hand. */\n:root {\n`;

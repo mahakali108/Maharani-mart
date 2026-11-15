@@ -8,10 +8,11 @@ import {
   ChangePasswordForm,
   LogoutAllSessionsButton,
 } from '@/components/retailer/security-forms';
+import { PolicyAcceptanceCard } from '@/components/legal/policy-acceptance-card';
 
 interface RequestRow {
   id: string;
-  request_type: 'account_deletion' | 'data_export';
+  request_type: 'account_deletion' | 'data_export' | 'data_correction' | 'consent_withdrawal';
   status: 'submitted' | 'reviewing' | 'completed' | 'rejected';
   created_at: string;
 }
@@ -57,6 +58,7 @@ export default async function SecurityPage() {
       <ChangePasswordForm />
       <LogoutAllSessionsButton />
       <AccountRequestsCard hasDeletionRequest={hasDeletionRequest} />
+      <PolicyAcceptanceCard audience="retailer" />
 
       {requests.length > 0 ? (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -68,7 +70,7 @@ export default async function SecurityPage() {
               <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-bold text-slate-900">
-                    {row.request_type === 'account_deletion' ? 'Account deletion' : 'Data export'}
+                    {{ account_deletion: 'Account deletion', data_export: 'Data export', data_correction: 'Data correction', consent_withdrawal: 'Consent withdrawal' }[row.request_type]}
                   </p>
                   <p className="mt-0.5 text-[10px] text-slate-500">{formatIndiaDateTime(row.created_at)}</p>
                 </div>

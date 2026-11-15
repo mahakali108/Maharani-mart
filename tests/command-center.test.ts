@@ -68,7 +68,6 @@ function profile(overrides: Partial<RawProfile> & { id: string }): RawProfile {
   };
 }
 
-const EMPTY_FORECASTS: ForecastResult[] = [];
 
 function emptyForecastResult(): ForecastResult {
   // Never returned by the engine with data — only shape.

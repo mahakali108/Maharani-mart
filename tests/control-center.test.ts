@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { allBusinessTools, executeBusinessTool, toolsForContext } from '@/lib/ai/tools';
 import type { AIToolContext } from '@/lib/ai/types';
 import { computeAccessStatus, statusBadgeColor, ACCESS_PRESETS } from '@/lib/admin/control-center/types';
-import type { AccessStatus } from '@/lib/admin/control-center/types';
 
 // ---------------------------------------------------------------------------
 // Fake Supabase

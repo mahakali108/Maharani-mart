@@ -20,7 +20,6 @@
  * owner is in docs/HANDOFF_TO_PR_OWNERS.md. The second half matters — an "always show an error" regression would
  * pass a one-sided test.
  */
-import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 

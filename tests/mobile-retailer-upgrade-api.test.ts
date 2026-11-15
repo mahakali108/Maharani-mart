@@ -17,7 +17,14 @@ vi.mock('@/lib/mobile/clients', () => ({
   gotrueFetch: mocks.gotrueFetch,
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: () => mocks.reportClient }));
-vi.mock('@/lib/orders/cancellation-coins', () => ({ restoreAndVerifyCancellationCoins: mocks.restoreAndVerifyCancellationCoins }));
+// tryAtomicOrderCancellation (added with the atomic-cancel wiring) reports "not
+// committed" here so these tests keep exercising the guarded fallback path.
+vi.mock('@/lib/orders/cancellation-coins', () => ({
+  restoreAndVerifyCancellationCoins: mocks.restoreAndVerifyCancellationCoins,
+  tryAtomicOrderCancellation: async () => false,
+  // 0097 wiring: "unavailable" keeps these tests on the guarded fallback path.
+  attemptAtomicOrderCancellation: async () => ({ status: 'unavailable' }),
+}));
 vi.mock('@/lib/coupons/validate', () => ({ releaseOrderCoupon: mocks.releaseOrderCoupon }));
 
 import { GET as getProfile, PATCH as patchProfile } from '@/app/api/mobile/v1/profile/route';
@@ -76,7 +83,17 @@ function request(method: string, path: string, body?: unknown) {
 }
 
 async function json(response: Response) {
-  return await response.json() as Record<string, any>;
+  return await response.json() as Record<string, unknown>;
+}
+
+/** Reads a nested value from a parsed body; a missing step yields undefined, so the assertion fails. */
+function at(body: unknown, ...path: Array<string | number>): unknown {
+  let current: unknown = body;
+  for (const step of path) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string | number, unknown>)[step];
+  }
+  return current;
 }
 
 beforeEach(() => {
@@ -180,10 +197,10 @@ describe('mobile retailer upgrade routes', () => {
       }] },
     });
     const schemes = await json(await getSchemes(request('GET', '/api/mobile/v1/schemes')));
-    expect(schemes.data.schemes).toHaveLength(1);
-    expect(schemes.data.schemes[0].name).toBe('Monsoon scheme');
+    expect(at(schemes, 'data', 'schemes')).toHaveLength(1);
+    expect(at(schemes, 'data', 'schemes', 0, 'name')).toBe('Monsoon scheme');
     const help = await json(await getHelp(request('GET', '/api/mobile/v1/help')));
-    expect(help.data.supportPhone).toBe('+91-9876543210');
+    expect(at(help, 'data', 'supportPhone')).toBe('+91-9876543210');
   });
 
   it('lists caller-owned support tickets and hides another retailer ticket', async () => {
@@ -193,7 +210,7 @@ describe('mobile retailer upgrade routes', () => {
     ] } });
     const payload = await json(await getTickets(request('GET', '/api/mobile/v1/support/tickets')));
     expect(payload.data).toHaveLength(1);
-    expect(payload.data[0].id).toBe(TICKET);
+    expect(at(payload, 'data', 0, 'id')).toBe(TICKET);
     expect(client.queries.find((query) => query.table === 'support_tickets')?.filters)
       .toContainEqual({ op: 'eq', column: 'retailer_id', value: RETAILER });
   });
@@ -203,7 +220,7 @@ describe('mobile retailer upgrade routes', () => {
     const created = await json(await createTicket(request('POST', '/api/mobile/v1/support/tickets', {
       subject: 'Missing items from order', topic: 'order', priority: 'normal', description: 'Two products were missing from the delivered order.',
     })));
-    expect(created.data.ticketNumber).toMatch(/^MT-TKT-\d{8}-[A-Z0-9]{4}$/);
+    expect(at(created, 'data', 'ticketNumber')).toMatch(/^MT-TKT-\d{8}-[A-Z0-9]{4}$/);
     expect(client.queries.find((query) => query.table === 'support_tickets' && query.operation === 'insert')?.payload)
       .toMatchObject({ retailer_id: RETAILER, status: 'open' });
     expect(client.queries.find((query) => query.table === 'support_ticket_messages' && query.operation === 'insert')?.payload)
@@ -227,8 +244,8 @@ describe('mobile retailer upgrade routes', () => {
       support_ticket_messages: [{ id: 'message-1', ticket_id: TICKET, author_id: RETAILER, author_role: 'retailer', body: 'My delivery has not arrived.', created_at: '2026-10-01T00:30:00Z' }],
     } });
     const detail = await json(await getTicket(request('GET', `/api/mobile/v1/support/tickets/${TICKET}`), { params: Promise.resolve({ id: TICKET }) }));
-    expect(detail.data.canReply).toBe(true);
-    expect(detail.data.messages[0]).toMatchObject({ authorRole: 'retailer', isOwn: true });
+    expect(at(detail, 'data', 'canReply')).toBe(true);
+    expect(at(detail, 'data', 'messages', 0)).toMatchObject({ authorRole: 'retailer', isOwn: true });
     expect(client.queries.some((query) => query.table === 'support_tickets' && query.filters.some((filter) => filter.column === 'retailer_id' && filter.value === RETAILER))).toBe(true);
 
     install({ tables: { support_tickets: [{ id: TICKET, retailer_id: OTHER_RETAILER, status: 'open', orders: null }] } });
@@ -241,7 +258,7 @@ describe('mobile retailer upgrade routes', () => {
       retailer_saved_carts: [{ id: SAVED_CART, retailer_id: RETAILER, name: 'Saved for later', created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', retailer_saved_cart_items: [] }],
     } });
     const payload = await json(await getSavedCarts(request('GET', '/api/mobile/v1/saved-carts')));
-    expect(payload.data.savedCarts[0].name).toBe('Saved for later');
+    expect(at(payload, 'data', 'savedCarts', 0, 'name')).toBe('Saved for later');
     expect(client.queries.find((query) => query.table === 'retailer_saved_carts')?.filters)
       .toContainEqual({ op: 'eq', column: 'retailer_id', value: RETAILER });
     const blocked = await deleteSavedCart(request('DELETE', `/api/mobile/v1/saved-carts/${SAVED_CART}`), { params: Promise.resolve({ id: SAVED_CART }) });
@@ -305,7 +322,7 @@ describe('mobile retailer upgrade routes', () => {
     expect(hostile.status).toBe(400);
     install({ tables: { retailer_account_requests: [{ id: 'request-1', retailer_id: RETAILER, request_type: 'data_export', status: 'submitted', created_at: '2026-10-01T00:00:00Z' }] } });
     const list = await json(await getAccountRequests(request('GET', '/api/mobile/v1/account/requests')));
-    expect(list.data.requests[0].requestType).toBe('data_export');
+    expect(at(list, 'data', 'requests', 0, 'requestType')).toBe('data_export');
   });
 
   it('rejects impossible or reversed report-date ranges instead of silently substituting defaults', async () => {

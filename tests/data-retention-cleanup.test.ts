@@ -625,7 +625,9 @@ describe('coins / historical credit ledger purge — balances preserved', () => 
 
 describe('permanent product data is never deleted', () => {
   it('keeps products, packs, stock, images, categories, brands, SKU/barcode and pricing through a full cleanup', async () => {
-    const p = await createPack(db);
+    // A draft product: SKU and barcode of a product that is on sale are frozen
+    // until it is re-reviewed (0086 / 0087). Retention treats both the same way.
+    const p = await createPack(db, { publish: false });
     await as(db, admin, (tx) =>
       tx.query(`select admin_set_product_pack_stock($1, $2)`, [p.packId, 42])
     );

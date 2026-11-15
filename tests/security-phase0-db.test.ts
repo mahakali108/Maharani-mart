@@ -33,6 +33,8 @@ let staff: string;
 let salesman: string;
 let area: string;
 let pack: PackFixture;
+/** A product that is NOT on sale yet (no approved review): its facts are still editable. */
+let draft: PackFixture;
 
 /** A public signup exactly as GoTrue performs it (insert into auth.users). */
 async function signUp(meta: Record<string, unknown>, email = `x-${randomUUID()}@test.local`) {
@@ -58,6 +60,7 @@ beforeAll(async () => {
   salesman = await createUser(db, 'salesman');
   area = await createArea(db);
   pack = await createPack(db);
+  draft = await createPack(db, { publish: false });
 }, 120_000);
 
 // ---------------------------------------------------------------------------
@@ -228,6 +231,22 @@ describe('P0-2 retailer self-creation (SEC-5)', () => {
 // P0-3 / SEC-6 — catalogue pricing is Admin-only
 // ---------------------------------------------------------------------------
 describe('P0-3 catalogue pricing (SEC-6)', () => {
+  // Since 0086 / 0087 the sale-relevant facts of a product that is ON SALE are
+  // frozen for everyone until it is deactivated and re-reviewed. The Admin-only
+  // pricing rule is therefore exercised on a DRAFT product, where edits are
+  // possible at all; the first test shows the published product is closed too.
+  it('a published product: neither staff nor an Admin can change a price in place', async () => {
+    for (const who of [staff, admin]) {
+      expect(await errorOf(db, who, (tx) => tx.query(`update products set base_price = 1 where id = $1`, [pack.productId])))
+        .toMatch(/PRODUCT_REVIEW_REQUIRED|Only an Admin can change base_price on products/);
+      expect(await errorOf(db, who, (tx) => tx.query(`update product_packs set case_price = 1 where id = $1`, [pack.packId])))
+        .toMatch(/PRODUCT_REVIEW_REQUIRED|Only an Admin can change case_price on product_packs/);
+    }
+    const row = await one<{ b: string; c: string }>(
+      `select p.base_price b, k.case_price c from products p join product_packs k on k.product_id = p.id where k.id = $1`, [pack.packId]);
+    expect([Number(row.b), Number(row.c)]).toEqual([100, 1000]);
+  });
+
   it.each([
     ['base_price', `base_price = 1`],
     ['gst_percent', `gst_percent = 0`],
@@ -235,7 +254,7 @@ describe('P0-3 catalogue pricing (SEC-6)', () => {
     ['sku_code', `sku_code = 'HIJACK'`],
     ['units_per_case', `units_per_case = 99`],
   ])('staff cannot change products.%s', async (column, set) => {
-    const err = await errorOf(db, staff, (tx) => tx.query(`update products set ${set} where id = $1`, [pack.productId]));
+    const err = await errorOf(db, staff, (tx) => tx.query(`update products set ${set} where id = $1`, [draft.productId]));
     expect(err).toContain(`Only an Admin can change ${column} on products`);
   });
 
@@ -248,52 +267,53 @@ describe('P0-3 catalogue pricing (SEC-6)', () => {
     ['pack_sku_code', `pack_sku_code = 'HIJACK'`],
     ['units_per_case', `units_per_case = 99`],
   ])('staff cannot change product_packs.%s', async (column, set) => {
-    const err = await errorOf(db, staff, (tx) => tx.query(`update product_packs set ${set} where id = $1`, [pack.packId]));
+    const err = await errorOf(db, staff, (tx) => tx.query(`update product_packs set ${set} where id = $1`, [draft.packId]));
     expect(err).toContain(`Only an Admin can change ${column} on product_packs`);
   });
 
   it('staff cannot create products, packs or pricing tiers', async () => {
     expect(
       await errorOf(db, staff, (tx) =>
-        tx.query(`insert into products (sku_code, name, unit, base_price) values ('S-NEW', 'Staff Product', 'pcs', 1)`)
+        // in an owner-classified category and inactive, so the row-level policy is what refuses it
+        tx.query(`insert into products (sku_code, name, unit, base_price, category_id, is_active) values ('S-NEW', 'Staff Product', 'pcs', 1, $1, false)`, [draft.categoryId])
       )
     ).toMatch(/row-level security/);
     expect(
       await errorOf(db, staff, (tx) =>
         tx.query(
           `insert into product_packs (product_id, pack_name, pack_sku_code, base_price, case_price) values ($1, 'x', 'PK-STAFF', 1, 1)`,
-          [pack.productId]
+          [draft.productId]
         )
       )
     ).toMatch(/row-level security/);
     expect(
       await errorOf(db, staff, (tx) =>
-        tx.query(`insert into product_pricing_tiers (product_pack_id, min_quantity, price_per_piece) values ($1, 1, 0.01)`, [pack.packId])
+        tx.query(`insert into product_pricing_tiers (product_pack_id, min_quantity, price_per_piece) values ($1, 1, 0.01)`, [draft.packId])
       )
     ).toMatch(/row-level security/);
   });
 
   it('staff pricing-tier updates change nothing', async () => {
-    await db.query(`insert into product_pricing_tiers (product_pack_id, min_quantity, price_per_piece) values ($1, 5, 90)`, [pack.packId]);
-    await as(db, staff, (tx) => tx.query(`update product_pricing_tiers set price_per_piece = 0.01 where product_pack_id = $1`, [pack.packId]));
-    const row = await one<{ p: string }>(`select min(price_per_piece) p from product_pricing_tiers where product_pack_id = $1`, [pack.packId]);
+    await db.query(`insert into product_pricing_tiers (product_pack_id, min_quantity, price_per_piece) values ($1, 5, 90)`, [draft.packId]);
+    await as(db, staff, (tx) => tx.query(`update product_pricing_tiers set price_per_piece = 0.01 where product_pack_id = $1`, [draft.packId]));
+    const row = await one<{ p: string }>(`select min(price_per_piece) p from product_pricing_tiers where product_pack_id = $1`, [draft.packId]);
     expect(Number(row.p)).toBe(90);
   });
 
   it('LEGIT: staff still edits operational catalogue fields', async () => {
-    await as(db, staff, (tx) => tx.query(`update products set name = 'Renamed by staff', reorder_level = 7 where id = $1`, [pack.productId]));
-    await as(db, staff, (tx) => tx.query(`update product_packs set moq = 2, barcode = 'BC-STAFF' where id = $1`, [pack.packId]));
-    expect((await one<{ name: string }>(`select name from products where id = $1`, [pack.productId])).name).toBe('Renamed by staff');
-    expect((await one<{ moq: number }>(`select moq from product_packs where id = $1`, [pack.packId])).moq).toBe(2);
+    await as(db, staff, (tx) => tx.query(`update products set name = 'Renamed by staff', reorder_level = 7 where id = $1`, [draft.productId]));
+    await as(db, staff, (tx) => tx.query(`update product_packs set moq = 2, barcode = 'BC-STAFF' where id = $1`, [draft.packId]));
+    expect((await one<{ name: string }>(`select name from products where id = $1`, [draft.productId])).name).toBe('Renamed by staff');
+    expect((await one<{ moq: number }>(`select moq from product_packs where id = $1`, [draft.packId])).moq).toBe(2);
   });
 
   it('LEGIT: an admin changes prices, GST and HSN and creates tiers', async () => {
-    await as(db, admin, (tx) => tx.query(`update products set base_price = 120, gst_percent = 12, hsn_code = '3401' where id = $1`, [pack.productId]));
-    await as(db, admin, (tx) => tx.query(`update product_packs set case_price = 1100, mrp = 130 where id = $1`, [pack.packId]));
+    await as(db, admin, (tx) => tx.query(`update products set base_price = 120, gst_percent = 12, hsn_code = '3401' where id = $1`, [draft.productId]));
+    await as(db, admin, (tx) => tx.query(`update product_packs set case_price = 1100, mrp = 130 where id = $1`, [draft.packId]));
     await as(db, admin, (tx) =>
-      tx.query(`insert into product_pricing_tiers (product_pack_id, min_quantity, price_per_piece) values ($1, 20, 80)`, [pack.packId])
+      tx.query(`insert into product_pricing_tiers (product_pack_id, min_quantity, price_per_piece) values ($1, 20, 80)`, [draft.packId])
     );
-    const product = await one<{ base_price: string; gst_percent: string }>(`select base_price, gst_percent from products where id = $1`, [pack.productId]);
+    const product = await one<{ base_price: string; gst_percent: string }>(`select base_price, gst_percent from products where id = $1`, [draft.productId]);
     expect(Number(product.base_price)).toBe(120);
     expect(Number(product.gst_percent)).toBe(12);
   });

@@ -10,6 +10,7 @@ import {
   validateSellerInput,
 } from '@/lib/admin/seller-validation';
 import { checkProductCanBeSold, checkSellerCanTrade } from '@/lib/compliance/catalog-compliance';
+import { checkSellerOfferGate, mapSellerGateError } from '@/lib/seller/offer-gate';
 
 export type SellerActionResult =
   | { ok: true }
@@ -31,6 +32,8 @@ function revalidateSellerPortal() {
 }
 
 function mapOfferWriteError(message: string): string {
+  const gateMessage = mapSellerGateError(message);
+  if (gateMessage) return gateMessage;
   if (message.includes('PRICE_BELOW_FLOOR')) {
     return 'Price is below the admin minimum floor for this pack.';
   }
@@ -154,6 +157,10 @@ export async function sellerCreateOfferAction(formData: FormData): Promise<Selle
   ]);
   if (!productGate.ok) return { ok: false, error: productGate.error };
   if (!sellerGate.ok) return sellerGate;
+  // A new offer is created active: the marketplace must be open and the
+  // current Seller Agreement accepted (re-enforced by the database, 0098).
+  const launchGate = await checkSellerOfferGate(supabase, seller.id);
+  if (!launchGate.open) return { ok: false, error: launchGate.error };
 
   // Note: moderation_status is always 'pending' on seller insert; the DB
   // trigger trg_a_seller_offer_portal_write & trg_enforce_seller_offer_rules
@@ -264,6 +271,11 @@ export async function sellerSetOfferActiveAction(
   }
 
   const supabase = (await createClient());
+  // Deactivation is always allowed. Activation needs the launch gate.
+  if (isActive) {
+    const launchGate = await checkSellerOfferGate(supabase, seller.id);
+    if (!launchGate.open) return { ok: false, error: launchGate.error };
+  }
   const { data, error } = await supabase
     .from('seller_offers' as never)
     .update({ is_active: Boolean(isActive) } as never)

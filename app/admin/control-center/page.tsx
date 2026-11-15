@@ -10,6 +10,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { COMPLIANCE_CHECKLIST } from '@/lib/compliance/checklist';
 import { ControlCenterClient } from './client';
+import { serverRequestTimeMs } from '@/lib/datetime/request-time';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,8 +47,9 @@ export default async function ControlCenterPage() {
   ]);
   const reviewTarget = approvalSettings?.review_target_hours ?? 48;
   const pendingApplications = (applicationRows ?? []).filter((row) => row.status === 'pending');
+  const requestTimeMs = serverRequestTimeMs();
   const overdueApplications = pendingApplications.filter(
-    (row) => (Date.now() - new Date(row.submitted_at).getTime()) / 3_600_000 > (row.review_target_hours ?? reviewTarget)
+    (row) => (requestTimeMs - new Date(row.submitted_at).getTime()) / 3_600_000 > (row.review_target_hours ?? reviewTarget)
   );
   const ownerInputsOutstanding = COMPLIANCE_CHECKLIST.filter((item) => item.status === 'owner_input_required').length;
 

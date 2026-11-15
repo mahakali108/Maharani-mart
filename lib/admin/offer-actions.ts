@@ -9,6 +9,7 @@ import {
   validateSellerReason,
 } from '@/lib/admin/seller-validation';
 import { checkProductCanBeSold, checkSellerCanTrade } from '@/lib/compliance/catalog-compliance';
+import { checkSellerOfferGate, mapSellerGateError } from '@/lib/seller/offer-gate';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,6 +18,25 @@ export type OfferActionResult = { ok: true } | { ok: false; error: string };
 function revalidateOfferPages(packId?: string) {
   revalidatePath('/admin/offers');
   if (packId) revalidatePath(`/admin/catalog/${packId}`);
+}
+
+type SessionClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Launch gate for an existing offer (marketplace switch + current Seller
+ * Agreement accepted by the seller's owner). Admins are bound by it too; the
+ * database enforces the same rule (migration 0098).
+ */
+async function offerLaunchGate(supabase: SessionClient, offerId: string): Promise<OfferActionResult> {
+  const { data: offer, error } = await supabase
+    .from('seller_offers' as never)
+    .select('seller_id')
+    .eq('id', offerId)
+    .maybeSingle<{ seller_id: string }>();
+  if (error) return { ok: false, error: error.message };
+  if (!offer) return { ok: false, error: 'Offer not found.' };
+  const gate = await checkSellerOfferGate(supabase, offer.seller_id);
+  return gate.open ? { ok: true } : { ok: false, error: gate.error };
 }
 
 /**
@@ -69,6 +89,11 @@ export async function moderateOfferAction(
   }
 
   const supabase = (await createClient());
+  // Approval publishes the offer. Rejection is always allowed.
+  if (decision === 'approved') {
+    const gate = await offerLaunchGate(supabase, offerId);
+    if (!gate.ok) return gate;
+  }
   const { data, error } = await supabase
     .from('seller_offers' as never)
     .update({
@@ -79,7 +104,7 @@ export async function moderateOfferAction(
     } as never)
     .eq('id', offerId)
     .select('id, pack_id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: mapSellerGateError(error.message) ?? error.message };
   if (!data || (data as unknown[]).length === 0) return { ok: false, error: 'Offer not found.' };
 
   revalidateOfferPages();
@@ -99,12 +124,17 @@ export async function setOfferActiveAction(
   if (!UUID_RE.test(offerId)) return { ok: false, error: 'Invalid offer.' };
 
   const supabase = (await createClient());
+  // Deactivation is always allowed. Activation needs the launch gate.
+  if (isActive) {
+    const gate = await offerLaunchGate(supabase, offerId);
+    if (!gate.ok) return gate;
+  }
   const { data, error } = await supabase
     .from('seller_offers' as never)
     .update({ is_active: isActive } as never)
     .eq('id', offerId)
     .select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: mapSellerGateError(error.message) ?? error.message };
   if (!data || (data as unknown[]).length === 0) return { ok: false, error: 'Offer not found.' };
 
   revalidateOfferPages();
@@ -157,6 +187,9 @@ export async function createOfferAction(formData: FormData): Promise<OfferAction
   ]);
   if (!productGate.ok) return { ok: false, error: productGate.error };
   if (!sellerGate.ok) return sellerGate;
+  // Offers are created active (column default), so creation is gated too.
+  const launchGate = await checkSellerOfferGate(supabase, sellerId);
+  if (!launchGate.open) return { ok: false, error: launchGate.error };
 
   const { data, error } = await supabase
     .from('seller_offers' as never)
@@ -180,7 +213,7 @@ export async function createOfferAction(formData: FormData): Promise<OfferAction
     if (error.code === '23505') {
       return { ok: false, error: 'This seller already has an active offer for that pack.' };
     }
-    return { ok: false, error: error.message };
+    return { ok: false, error: mapSellerGateError(error.message) ?? error.message };
   }
   if (!data) return { ok: false, error: 'The offer could not be created.' };
 

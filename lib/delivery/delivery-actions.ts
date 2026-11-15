@@ -34,30 +34,38 @@ import { requireUser, type CurrentUser } from '@/lib/auth/session';
 import { can } from '@/lib/permissions/permissions';
 import { createInAppNotification, notifyOrderEvent } from '@/lib/notifications/notify';
 import { createClient } from '@/lib/supabase/server';
-import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
+import {
+  FULFILMENT_NOT_INSTALLED,
+  isFailedDeliveryResult,
+  isFulfilmentRpcMissing,
+  isReturnToWarehouseResult,
+  mapFailedDeliveryError,
+  mapReturnToWarehouseError,
+} from './fulfilment';
 
 import {
-  canTransitionDeliveryStatus,
   describeDeliveryTransitionError,
   type DeliveryStatus,
 } from './state-machine';
-import { generateDeliveryOtp, hashDeliveryOtp, isValidOtpFormat, verifyDeliveryOtp, MAX_OTP_ATTEMPTS } from './otp';
-import { computePartialSettlement, type SettlementLine } from './settlement';
-import { computeReturnDeadline, parseReturnWindowDays } from './return-window';
+import { generateDeliveryOtp, hashDeliveryOtp, isValidOtpFormat } from './otp';
+import { createTrustedDeliveryWriter, TRUSTED_WRITER_UNAVAILABLE } from './trusted-writer';
+import {
+  COMPLETE_DELIVERY_RPC,
+  COMPLETION_NOT_INSTALLED,
+  completionIdempotencyKey,
+  isCompletionResult,
+  isCompletionRpcMissing,
+  isOtpIncorrect,
+  mapCompletionError,
+  type CompletionLine,
+} from './completion';
 
-/**
- * Minimal RPC surface for the 🪙 coin functions added in migration 0053. The
- * generated database types predate those functions; this keeps the call typed
- * without weakening the client for every other query.
- */
-function RpcCapable(client: Awaited<ReturnType<typeof createClient>>) {
-  return client as unknown as {
-    rpc: (
-      name: string,
-      args: Record<string, unknown>
-    ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
-  };
-}
+type CompletionRpcClient = {
+  rpc: (
+    name: string,
+    args: Record<string, unknown>
+  ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+};
 
 // ---------------------------------------------------------------------------
 // Types (server action results)
@@ -138,6 +146,17 @@ async function fetchDeliveryWithOrder(
   return { delivery, order };
 }
 
+/**
+ * Client for writes that migration 0094 reserves to trusted paths. Admins keep
+ * their own session (they pass the database guard and stay the audited actor);
+ * everyone else needs the server-side writer, used only after the action's
+ * own permission, assignee and OTP checks.
+ */
+function trustedWriterFor(user: CurrentUser, own: Awaited<ReturnType<typeof createClient>>) {
+  if (isAdminLike(user)) return own;
+  return createTrustedDeliveryWriter();
+}
+
 function isAdminLike(user: CurrentUser): boolean {
   return user.role === 'admin' || user.role === 'super_admin';
 }
@@ -161,14 +180,6 @@ function isValidDeliveryProofRef(ref: string | null | undefined, orderId: string
 
 function staffDeliveryLink(userRole: string, orderId: string): string {
   return userRole === 'salesman' ? `/salesman/deliveries/${orderId}` : `/staff/deliveries/${orderId}`;
-}
-
-/** Value paise per order line + the pieces snapshot, for settlement math. */
-interface OrderLineValue {
-  id: string;
-  line_total: number;
-  quantity: number;
-  quantity_pieces: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +231,9 @@ export async function assignDeliveryStaffAction(
   // The .in() guard makes this claim atomic against a concurrent reassignment
   // or completion; a 0-row update returns NO error, so the returned row is
   // the proof the claim landed.
-  const { data: claimed, error } = await supabase
+  const assignWriter = trustedWriterFor(user, supabase);
+  if (!assignWriter) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data: claimed, error } = await assignWriter
     .from('order_deliveries')
     .update({
       assigned_staff_id: staffId,
@@ -272,7 +285,9 @@ export async function regenerateDeliveryOtpAction(orderId: string): Promise<Deli
   if (delivery.otp_verified_at) return { error: 'This delivery was already verified with an OTP.' };
 
   const otp = generateDeliveryOtp();
-  const { data: claimed, error } = await supabase
+  const otpWriter = trustedWriterFor(user, supabase);
+  if (!otpWriter) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data: claimed, error } = await otpWriter
     .from('order_deliveries')
     .update({
       otp_hash: hashDeliveryOtp(orderId, otp),
@@ -366,37 +381,65 @@ export async function completeDeliveryAction(
   if (!Array.isArray(input.items) || input.items.length === 0) {
     return { error: 'Delivery quantities for every order line are required.' };
   }
-
-  const supabase = (await createClient());
-  const found = await fetchDeliveryWithOrder(supabase, orderId);
-  if ('error' in found) return { error: found.error };
-  const { delivery, order } = found;
-
-  if (delivery.assigned_staff_id !== user.id && !isAdminLike(user)) {
-    return { error: 'Only the assigned delivery person can complete this delivery.' };
+  const items: CompletionLine[] = [];
+  for (const item of input.items) {
+    const delivered = Number(item?.delivered);
+    const missing = Number(item?.missing);
+    const damaged = Number(item?.damaged);
+    if (
+      typeof item?.orderItemId !== 'string' ||
+      !Number.isInteger(delivered) || !Number.isInteger(missing) || !Number.isInteger(damaged) ||
+      delivered < 0 || missing < 0 || damaged < 0
+    ) {
+      return { error: 'Quantities must be whole numbers of 0 or more.' };
+    }
+    items.push({ orderItemId: item.orderItemId, delivered, missing, damaged });
   }
-  if (delivery.delivery_status !== 'assigned' && delivery.delivery_status !== 'in_progress') {
-    return { error: 'This delivery is not open — it was already completed or failed.' };
-  }
-  if (order.status !== 'dispatched' && order.status !== 'delivered') {
-    return { error: `This order is ${order.status.replace(/_/g, ' ')} — it cannot be completed as a delivery.` };
-  }
-  if (delivery.otp_attempts >= MAX_OTP_ATTEMPTS) {
-    return { error: 'Too many wrong OTP attempts. Ask an admin to regenerate the OTP.' };
-  }
-  if (!delivery.otp_hash) {
-    return { error: 'This delivery has no OTP — ask an admin to regenerate it.' };
+  if (new Set(items.map((i) => i.orderItemId)).size !== items.length) {
+    return { error: 'Duplicate order lines in the submission.' };
   }
 
-  // --- OTP check (count the attempt BEFORE deciding, like a real terminal) ---
-  if (!verifyDeliveryOtp(orderId, input.otp, delivery.otp_hash)) {
-    const attempts = delivery.otp_attempts + 1;
-    await supabase
-      .from('order_deliveries')
-      .update({ otp_attempts: attempts } as never)
-      .eq('id', delivery.id)
-      .eq('otp_attempts', delivery.otp_attempts);
-    const remaining = MAX_OTP_ATTEMPTS - attempts;
+  // Everything that follows is ONE database transaction (migration 0099):
+  // actor, state, OTP, attempt counting, line validation, quantities,
+  // completion, order status, shortfall credit and loyalty either all commit
+  // or none do. The plain OTP never leaves this process — only its keyed
+  // digest is sent. The function runs under the server-only service role and
+  // re-verifies the actor itself; a staff or Admin browser session cannot
+  // call it.
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: TRUSTED_WRITER_UNAVAILABLE };
+
+  let otpDigest: string;
+  try {
+    otpDigest = hashDeliveryOtp(orderId, input.otp);
+  } catch {
+    return { error: TRUSTED_WRITER_UNAVAILABLE };
+  }
+  const signatureRef = input.signatureUrl?.trim() || null;
+  const photoRef = input.photoUrl?.trim() || null;
+
+  const { data, error } = await (trusted as unknown as CompletionRpcClient).rpc(COMPLETE_DELIVERY_RPC, {
+    p_order_id: orderId,
+    p_actor_id: user.id,
+    p_otp_digest: otpDigest,
+    p_idempotency_key: completionIdempotencyKey({
+      orderId, actorId: user.id, otpDigest, receiverName: receiver, notes, signatureRef, photoRef, items,
+    }),
+    p_receiver_name: receiver,
+    p_notes: notes || null,
+    p_signature_ref: signatureRef,
+    p_photo_ref: photoRef,
+    p_items: items.map((i) => ({
+      order_item_id: i.orderItemId, delivered: i.delivered, missing: i.missing, damaged: i.damaged,
+    })),
+  });
+
+  if (error) {
+    if (isCompletionRpcMissing(error)) return { error: COMPLETION_NOT_INSTALLED };
+    return { error: mapCompletionError(error.message) };
+  }
+  if (isOtpIncorrect(data)) {
+    const remaining = Number(data.attempts_remaining) || 0;
     return {
       error:
         remaining > 0
@@ -404,192 +447,40 @@ export async function completeDeliveryAction(
           : 'Incorrect OTP. The task is now locked — ask an admin to regenerate the OTP.',
     };
   }
-
-  // --- Load the line snapshots for validation + settlement ---
-  const { data: lineRows } = await supabase
-    .from('order_delivery_items')
-    .select('id, order_item_id, quantity_ordered')
-    .eq('delivery_id', delivery.id);
-  const lines = (lineRows ?? []) as { id: string; order_item_id: string; quantity_ordered: number }[];
-  if (lines.length === 0) return { error: 'This delivery task has no line snapshots.' };
-
-  const { data: valueRows } = await supabase
-    .from('order_items')
-    .select('id, line_total, quantity, quantity_pieces')
-    .eq('order_id', orderId);
-  const values = new Map(
-    ((valueRows ?? []) as OrderLineValue[]).map((v) => [v.id, v])
-  );
-
-  const byItemId = new Map(input.items.map((i) => [i.orderItemId, i]));
-  if (byItemId.size !== input.items.length) return { error: 'Duplicate order lines in the submission.' };
-  if (byItemId.size !== lines.length) {
-    return { error: `Quantities are required for all ${lines.length} order lines.` };
+  if (!isCompletionResult(data)) {
+    // No confirmation from the database: report nothing as done.
+    return { error: mapCompletionError(null) };
   }
 
-  const settlementLines: SettlementLine[] = [];
-  for (const line of lines) {
-    const submitted = byItemId.get(line.order_item_id);
-    if (!submitted) return { error: 'Missing quantities for one or more order lines.' };
+  const creditRupees = (Number(data.credit_back_paise) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
-    const delivered = Number(submitted.delivered);
-    const missing = Number(submitted.missing);
-    const damaged = Number(submitted.damaged);
-    if (
-      !Number.isInteger(delivered) || !Number.isInteger(missing) || !Number.isInteger(damaged) ||
-      delivered < 0 || missing < 0 || damaged < 0
-    ) {
-      return { error: 'Quantities must be whole numbers of 0 or more.' };
-    }
-    if (delivered + missing + damaged !== line.quantity_ordered) {
-      return { error: 'Delivered + missing + damaged must equal the ordered quantity for every line.' };
-    }
-    if (delivered + missing + damaged === 0 && line.quantity_ordered === 0) continue;
-
-    const value = values.get(line.order_item_id);
-    settlementLines.push({
-      lineTotalPaise: value?.line_total ?? 0,
-      quantityOrdered: line.quantity_ordered,
-      quantityMissing: missing,
-      quantityDamaged: damaged,
-    });
-
-    const { error: itemError } = await supabase
-      .from('order_delivery_items')
-      .update({
-        quantity_delivered: delivered,
-        quantity_missing: missing,
-        quantity_damaged: damaged,
-      } as never)
-      .eq('id', line.id);
-    if (itemError) return { error: itemError.message };
-  }
-
-  const settlement = computePartialSettlement(settlementLines);
-  const finalStatus: DeliveryStatus = settlement.fullyDelivered ? 'delivered' : 'partially_delivered';
-
-  // --- Return window snapshot (platform default 7 days) ---
-  const { data: setting } = await supabase
-    .from('platform_settings')
-    .select('value')
-    .eq('key', 'orders.return_window_days')
-    .maybeSingle<{ value: unknown }>();
-  const returnWindowDays = parseReturnWindowDays(setting?.value);
-
-  const nowIso = new Date().toISOString();
-  // Atomic claim: only an open task can transition to a completed status.
-  const { data: claimedDelivery, error: deliveryError } = await supabase
-    .from('order_deliveries')
-    .update({
-      delivery_status: finalStatus,
-      delivered_at: nowIso,
-      receiver_name: receiver,
-      otp_verified_at: nowIso,
-      signature_url: input.signatureUrl?.trim() || null,
-      photo_url: input.photoUrl?.trim() || null,
-      delivery_notes: notes || null,
-      return_window_days: returnWindowDays,
-      return_deadline: computeReturnDeadline(nowIso, returnWindowDays),
-      completed_by: user.id,
-    } as never)
-    .eq('id', delivery.id)
-    .in('delivery_status', ['assigned', 'in_progress'])
-    .select('id')
-    .maybeSingle<{ id: string }>();
-
-  if (deliveryError) return { error: deliveryError.message };
-  if (!claimedDelivery) {
-    return { error: 'This delivery was completed concurrently — refresh to see the result.' };
-  }
-
-  // --- Order → delivered (guarded; 0042 trigger also validates). When the
-  // order is already 'delivered' (manual admin path), the update is skipped —
-  // the delivery record is the missing piece, not the status. ---
-  if (order.status === 'dispatched') {
-    const { data: claimedOrder, error: orderError } = await supabase
-      .from('orders')
-      .update({ status: 'delivered', delivered_at: nowIso } as unknown as never)
-      .eq('id', orderId)
-      .eq('status', 'dispatched')
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (orderError) return { error: orderError.message };
-    if (!claimedOrder) {
-      return { error: 'The order changed state while completing — refresh and re-check before retrying.' };
+  // The transaction has committed. A replay (retry of a request that already
+  // succeeded) was notified the first time; it is not notified again.
+  if (!data.replayed) {
+    try {
+      await notifyOrderEvent({
+        recipientId: data.retailer_id,
+        title: data.fully_delivered ? 'Order delivered' : 'Order partially delivered',
+        body: data.fully_delivered
+          ? `Your order ${data.order_number} was delivered to ${receiver}. Return window: ${data.return_window_days} day(s).`
+          : `Your order ${data.order_number} was partially delivered to ${receiver}. ₹${creditRupees} was credited back to your wallet for missing/damaged items.`,
+        linkUrl: `/retailer/orders/${orderId}/delivery`,
+        category: 'order',
+      });
+    } catch (notifyError) {
+      // The delivery is recorded; a failed notification must not report failure.
+      console.warn('Delivery notification failed:', notifyError instanceof Error ? notifyError.message : notifyError);
     }
   }
-
-  // --- Shortfall coin refund (decision D4) ---
-  //
-  // Missing/damaged value goes back as coins. The ledger is admin-only, so this
-  // is written through `order_shortfall_coins` (0053): one linked, bounded,
-  // idempotent REFUND_CREDIT per delivery — which is what makes it possible for
-  // the STAFF member completing the delivery to credit the shop at all.
-  if (settlement.creditBackPaise > 0) {
-    const shortfallNote = `${settlement.shortfallPieces} item(s) missing or damaged at delivery`;
-    const { error: creditError } = await RpcCapable(supabase).rpc('order_shortfall_coins', {
-      p_delivery_id: delivery.id,
-      p_amount_paise: settlement.creditBackPaise,
-      p_reason: shortfallNote,
-      p_created_by: user.id,
-      p_reverse: false,
-    });
-
-    if (creditError && !/does not exist|could not find the function|schema cache/i.test(creditError.message)) {
-      // A duplicate shortfall credit (23505) is the idempotent success.
-      if ((creditError as { code?: string }).code !== '23505') return { error: creditError.message };
-    } else if (creditError) {
-      // Older database without 0053: the direct write still works for admins,
-      // and the unique idempotency key keeps it single.
-      const { data: account } = await supabase
-        .from('retailer_credit_accounts')
-        .select('id')
-        .eq('retailer_id', order.retailer_id)
-        .maybeSingle<{ id: string }>();
-
-      const { error: fallbackError } = await supabase
-        .from('retailer_wallet_ledger')
-        .insert({
-          retailer_id: order.retailer_id,
-          account_id: account?.id ?? null,
-          transaction_type: 'REFUND_CREDIT',
-          amount_paise: settlement.creditBackPaise,
-          direction: 'credit',
-          reference_type: 'delivery',
-          reference_id: delivery.id,
-          description: `Shortfall credit for order ${order.order_number}`,
-          reason: shortfallNote,
-          created_by: user.id,
-          idempotency_key: `delivery-shortfall:${delivery.id}`,
-          metadata: {
-            delivery_id: delivery.id,
-            order_id: orderId,
-            shortfall_pieces: settlement.shortfallPieces,
-            credit_rupees: settlement.creditBackPaise / 100,
-          },
-        } as never);
-      if (fallbackError && fallbackError.code !== '23505') return { error: fallbackError.message };
-    }
-  }
-
-  await notifyOrderEvent({
-    recipientId: order.retailer_id,
-    title: settlement.fullyDelivered ? 'Order delivered' : 'Order partially delivered',
-    body: settlement.fullyDelivered
-      ? `Your order ${order.order_number} was delivered to ${receiver}. Return window: ${returnWindowDays} day(s).`
-      : `Your order ${order.order_number} was partially delivered to ${receiver}. ₹${(settlement.creditBackPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })} was credited back to your wallet for missing/damaged items.`,
-    linkUrl: `/retailer/orders/${orderId}/delivery`,
-    category: 'order',
-  });
 
   revalidateDeliveryPaths(orderId);
   revalidatePath('/retailer/account/ledger');
-  revalidatePath(`/admin/retailers/${order.retailer_id}`);
+  revalidatePath(`/admin/retailers/${data.retailer_id}`);
   return {
     success: true,
-    message: settlement.fullyDelivered
-      ? `Delivery of ${order.order_number} recorded.`
-      : `Partial delivery recorded — ₹${(settlement.creditBackPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })} credited back to the retailer's wallet.`,
+    message: data.fully_delivered
+      ? `Delivery of ${data.order_number} recorded.`
+      : `Partial delivery recorded — ₹${creditRupees} credited back to the retailer's wallet.`,
   };
 }
 
@@ -608,65 +499,38 @@ export async function recordFailedDeliveryAction(
     return { error: 'Describe the failure in 3–500 characters.' };
   }
 
-  const supabase = (await createClient());
-  const found = await fetchDeliveryWithOrder(supabase, orderId);
-  if ('error' in found) return { error: found.error };
-  const { delivery, order } = found;
-
-  if (delivery.assigned_staff_id !== user.id && !isAdminLike(user)) {
-    return { error: 'Only the assigned delivery person can fail this delivery.' };
-  }
-  if (!canTransitionDeliveryStatus(delivery.delivery_status as DeliveryStatus, 'failed')) {
-    return {
-      error:
-        describeDeliveryTransitionError(delivery.delivery_status as DeliveryStatus, 'failed') ??
-        'Cannot fail this delivery.',
-    };
-  }
-  if (order.status !== 'dispatched' && order.status !== 'processing') {
-    return { error: `This order is ${order.status.replace(/_/g, ' ')} — a failed-delivery re-open is not possible.` };
-  }
-
-  const { data: claimed, error } = await supabase
-    .from('order_deliveries')
-    .update({
-      delivery_status: 'failed',
-      failure_reason: failureReason,
-    } as never)
-    .eq('id', delivery.id)
-    .in('delivery_status', ['assigned', 'in_progress'])
-    .select('id')
-    .maybeSingle<{ id: string }>();
-  if (error) return { error: error.message };
-  if (!claimed) return { error: 'This delivery changed while saving — refresh and try again.' };
-
-  // Re-open the order for a re-attempt (guarded; 0042 trigger validates).
-  // Skipped when the order already re-opened concurrently.
-  if (order.status === 'dispatched') {
-    const { data: claimedOrder, error: orderError } = await supabase
-      .from('orders')
-      .update({ status: 'processing' } as unknown as never)
-      .eq('id', orderId)
-      .eq('status', 'dispatched')
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (orderError) return { error: orderError.message };
-    if (!claimedOrder) {
-      return { error: 'The order changed state while failing this delivery — refresh and re-check.' };
-    }
-  }
-
-  await notifyOrderEvent({
-    recipientId: order.retailer_id,
-    title: 'Delivery could not be completed',
-    body: `Your order ${order.order_number} could not be delivered (${failureReason}). It has been returned to the warehouse queue and will be re-attempted.`,
-    linkUrl: `/retailer/orders/${orderId}`,
-    category: 'order',
+  // One database transaction (migration 0100): the delivery is marked failed
+  // and the order re-opened together. The database re-verifies the actor's
+  // role and that they are the assignee or an Admin.
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data, error } = await (trusted as unknown as CompletionRpcClient).rpc('fail_delivery_atomic', {
+    p_order_id: orderId,
+    p_actor_id: user.id,
+    p_reason: failureReason,
   });
+  if (error) {
+    if (isFulfilmentRpcMissing(error)) return { error: FULFILMENT_NOT_INSTALLED };
+    return { error: mapFailedDeliveryError(error.message) };
+  }
+  if (!isFailedDeliveryResult(data)) {
+    return { error: 'This delivery could not be marked failed. Nothing was changed. Refresh and try again.' };
+  }
+
+  // After commit, and not again when the same failure is submitted twice.
+  if (!data.replayed) {
+    await notifyOrderEvent({
+      recipientId: data.retailer_id,
+      title: 'Delivery could not be completed',
+      body: `Your order ${data.order_number} could not be delivered (${failureReason}). It has been returned to the warehouse queue and will be re-attempted.`,
+      linkUrl: `/retailer/orders/${orderId}`,
+      category: 'order',
+    });
+  }
 
   revalidateDeliveryPaths(orderId);
   revalidatePath('/admin/orders');
-  return { success: true, message: `Delivery attempt failed — order ${order.order_number} re-opened for re-pick.` };
+  return { success: true, message: `Delivery attempt failed — order ${data.order_number} re-opened for re-pick.` };
 }
 
 /**
@@ -683,85 +547,43 @@ export async function recordReturnToWarehouseAction(
     return { error: 'You do not have permission to manage returns.' };
   }
 
-  const supabase = (await createClient());
-  const found = await fetchDeliveryWithOrder(supabase, orderId);
-  if ('error' in found) return { error: found.error };
-  const { delivery, order } = found;
+  const trimmedNotes = (notes ?? '').trim();
+  if (trimmedNotes.length > 1000) return { error: 'Notes must be 1000 characters or fewer.' };
 
-  if (!canTransitionDeliveryStatus(delivery.delivery_status as DeliveryStatus, 'returned_to_warehouse')) {
-    return {
-      error:
-        describeDeliveryTransitionError(
-          delivery.delivery_status as DeliveryStatus,
-          'returned_to_warehouse'
-        ) ?? 'Cannot return this delivery to the warehouse.',
-    };
-  }
-  if (order.status !== 'delivered' && order.status !== 'returned') {
-    return { error: `This order is ${order.status.replace(/_/g, ' ')} — return to warehouse is not possible.` };
-  }
-
-  // Book the stock back into the warehouse.
-  const { error: stockError } = await supabase.rpc('return_order_stock' as never, {
+  // One database transaction (migration 0100): stock back, delivery and order
+  // status, loyalty reversal and the Coins refund commit together or not at
+  // all. A repeat after success changes nothing.
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data, error } = await (trusted as unknown as CompletionRpcClient).rpc('return_delivery_to_warehouse_atomic', {
     p_order_id: orderId,
-  } as never);
-  if (stockError) return { error: `Stock could not be returned: ${stockError.message}` };
-
-  const { data: claimed, error } = await supabase
-    .from('order_deliveries')
-    .update({
-      delivery_status: 'returned_to_warehouse',
-      delivery_notes: (notes ?? '').trim() || null,
-    } as never)
-    .eq('id', delivery.id)
-    .in('delivery_status', ['delivered', 'partially_delivered'])
-    .select('id')
-    .maybeSingle<{ id: string }>();
-  if (error) return { error: error.message };
-  if (!claimed) return { error: 'This delivery changed while saving — refresh and try again.' };
-
-  if (order.status === 'delivered') {
-    const { data: claimedOrder, error: orderError } = await supabase
-      .from('orders')
-      .update({ status: 'returned' } as unknown as never)
-      .eq('id', orderId)
-      .eq('status', 'delivered')
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (orderError) return { error: orderError.message };
-    if (!claimedOrder) {
-      return { error: 'The order changed state while returning to warehouse — refresh and re-check.' };
-    }
+    p_actor_id: user.id,
+    p_notes: trimmedNotes || null,
+  });
+  if (error) {
+    if (isFulfilmentRpcMissing(error)) return { error: FULFILMENT_NOT_INSTALLED };
+    return { error: mapReturnToWarehouseError(error.message) };
+  }
+  if (!isReturnToWarehouseResult(data)) {
+    return { error: 'This order could not be returned to the warehouse. Nothing was changed. Refresh and try again.' };
   }
 
-  // Reverse the wallet debit for the FULL order; if a shortfall refund was
-  // already credited at partial delivery, reverse that too so the retailer
-  // is not credited twice for the same goods.
-  const walletRefund = await reverseOrderWalletDebit(orderId, order.retailer_id, 'returned to warehouse', user.id);
-  if ('error' in walletRefund) return { error: 'The return status changed, but the wallet refund could not be verified. Contact support before retrying.' };
-  // A shortfall credit for this delivery, if any, is reversed in the same
-  // breath — the shop pays for the goods again because they came back. The
-  // function is idempotent: a second return reverses nothing more.
-  const { error: reverseShortfallError } = await RpcCapable(supabase).rpc('order_shortfall_coins', {
-    p_delivery_id: delivery.id,
-    p_reason: 'returned to warehouse',
-    p_created_by: user.id,
-    p_reverse: true,
-  });
-  if (reverseShortfallError && !/does not exist|could not find the function|schema cache/i.test(reverseShortfallError.message)) {
-    console.warn('Shortfall credit reversal failed:', reverseShortfallError.message);
+  if (!data.replayed) {
+    await notifyOrderEvent({
+      recipientId: data.retailer_id,
+      title: 'Order returned to warehouse',
+      body:
+        data.refunded_paise > 0
+          ? `Your order ${data.order_number} was returned to the warehouse. The order amount has been credited back to your wallet.`
+          : `Your order ${data.order_number} was returned to the warehouse.`,
+      linkUrl: `/retailer/orders/${orderId}`,
+      category: 'wallet',
+    });
   }
-
-  await notifyOrderEvent({
-    recipientId: order.retailer_id,
-    title: 'Order returned to warehouse',
-    body: `Your order ${order.order_number} was returned to the warehouse. The order amount has been credited back to your wallet.`,
-    linkUrl: `/retailer/orders/${orderId}`,
-    category: 'wallet',
-  });
 
   revalidateDeliveryPaths(orderId);
   revalidatePath('/retailer/account/ledger');
-  revalidatePath(`/admin/retailers/${order.retailer_id}`);
-  return { success: true, message: `Order ${order.order_number} returned to the warehouse.` };
+  revalidatePath(`/admin/retailers/${data.retailer_id}`);
+  revalidatePath('/admin/inventory');
+  return { success: true, message: `Order ${data.order_number} returned to the warehouse.` };
 }
