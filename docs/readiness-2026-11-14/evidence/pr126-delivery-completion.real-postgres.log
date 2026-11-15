@@ -1,4 +1,4 @@
-Applied 96 repository migrations (0001 - 0099) on PostgreSQL 17.11.
+Applied 97 repository migrations (0001 - 0100) on PostgreSQL 17.11.
 PASS one call completes everything: lines, delivery, order, Rs 200 credit, 8 points, attribution
 PASS the spoofed actor identity does not outlive the call inside the same transaction
 PASS only service_role can execute; anon, retailer, staff, admin and super-admin are refused
@@ -25,3 +25,4 @@ PASS order already marked delivered by an Admin: points come down to the deliver
 PASS catalogue hygiene: definer + fixed search_path, no PUBLIC/anon/authenticated execute, RLS on and no API grants on the idempotency table
 PASS rollback 0099 with data present keeps every row; re-apply (twice) works and completes a delivery
 PR #126 delivery completion on real PostgreSQL 17.11: 25 passed, 0 failed.
+exit=0

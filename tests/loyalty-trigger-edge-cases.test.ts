@@ -40,8 +40,15 @@ describe('0080 Loyalty Trigger Security & Edge Cases', () => {
     await as(db, 'service', async (tx: Tx) => {
       await tx.query(`update public.orders set status = 'confirmed' where id = $1`, [orderId]);
       await tx.query(`update public.orders set status = 'processing' where id = $1`, [orderId]);
-      await tx.query(`update public.orders set status = 'dispatched' where id = $1`, [orderId]);
     });
+    {
+      // 0100: an API role (even the service key) can no longer make this
+      // transition with a plain UPDATE; it belongs to the atomic fulfilment
+      // functions, which run as the database owner. The loyalty rule under
+      // test is unchanged, so the step is made the way those functions make it.
+      await expect(as(db, 'service', (tx: Tx) => tx.query(`update public.orders set status = 'dispatched' where id = $1`, [orderId]))).rejects.toThrow(/FULFILMENT_GUARD/);
+      await db.query(`update public.orders set status = 'dispatched' where id = $1`, [orderId]);
+    }
 
     const balRes = await as(db, retailer, async (tx: Tx) => {
       return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer]);
@@ -77,9 +84,14 @@ describe('0080 Loyalty Trigger Security & Edge Cases', () => {
   it('handles delivered -> returned reversal safely', async () => {
     const orderId = 'c0000000-0000-0000-0000-000000000001';
     // 1. Returned to warehouse -> points reversed to 0
-    await as(db, 'service', async (tx: Tx) => {
-      await tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]);
-    });
+    {
+      // 0100: an API role (even the service key) can no longer make this
+      // transition with a plain UPDATE; it belongs to the atomic fulfilment
+      // functions, which run as the database owner. The loyalty rule under
+      // test is unchanged, so the step is made the way those functions make it.
+      await expect(as(db, 'service', (tx: Tx) => tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]))).rejects.toThrow(/FULFILMENT_GUARD/);
+      await db.query(`update public.orders set status = 'returned' where id = $1`, [orderId]);
+    }
     const balReturned = await as(db, retailer, async (tx: Tx) => {
       return tx.query<{ get_retailer_loyalty_balance: number }>(`select public.get_retailer_loyalty_balance($1)`, [retailer]);
     });

@@ -97,6 +97,9 @@ export function mapCompletionError(message: string | null | undefined): string {
   const text = message ?? '';
   const match = /DELIVERY_COMPLETE:([A-Z_]+):\s*([^\n]*)/.exec(text);
   if (!match) {
+    if (/DELIVERY_GUARD:BUSY|could not obtain lock/.test(text)) {
+      return 'This delivery is being updated by another request. Nothing was changed — refresh and try again.';
+    }
     if (/DELIVERY_GUARD:/.test(text)) {
       return 'This delivery task does not match the order. Ask an admin to re-dispatch it.';
     }
@@ -129,6 +132,10 @@ export function mapCompletionError(message: string | null | undefined): string {
       return 'Delivery notes must be 1000 characters or fewer.';
     case 'PROOF':
       return 'Proof files must belong to this order — re-capture and try again.';
+    case 'PROOF_MISSING':
+      return 'A proof file could not be found in storage — re-capture it and try again.';
+    case 'PROOF_OWNER':
+      return 'A proof file was not uploaded by the delivery person for this order — re-capture it and try again.';
     case 'LINES_REQUIRED':
       return 'Delivery quantities for every order line are required.';
     case 'QUANTITY':

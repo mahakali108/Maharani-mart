@@ -1,4 +1,4 @@
-Applied 96 repository migrations on 17.11.
+Applied 97 repository migrations on 17.11.
 PASS split parent cancellation restores each stock owner and retries safely
 PASS split parent stock restoration excludes units still in transit
 PASS split stock failure rolls back parent status and every stock change
@@ -31,3 +31,4 @@ PASS legacy flagged debit with existing credit is not silently repaired
 PASS fully credited malformed history is rejected rather than treated as a replay
 PASS unlinked credit blocks even a fully refunded replay
 Real PostgreSQL integration: 31 passed.
+exit=0

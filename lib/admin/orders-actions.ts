@@ -171,6 +171,15 @@ export async function updateOrderStatusAction(orderId: string, status: OrderStat
   if (status === 'delivered' && actor.role !== 'super_admin' && actor.role !== 'admin') {
     return { error: 'Only an Admin can mark an order delivered here. Complete the delivery task with the retailer\u2019s OTP instead.' };
   }
+  // Dispatch, return and the failed-delivery re-open move stock, the delivery
+  // task and Coins. They run only through their own atomic workflows
+  // (migration 0100 also refuses these as direct status writes).
+  if (status === 'dispatched') {
+    return { error: 'Use the Dispatch button on the order — it deducts stock and creates the delivery task together.' };
+  }
+  if (status === 'returned') {
+    return { error: 'Use Return to warehouse on the delivery — it returns stock and Coins together.' };
+  }
   // Never bypass cancellation's refund verification via the generic status UI.
   if (status === 'cancelled') return cancelOrderAction(orderId, '');
   const supabase = (await createClient());

@@ -20,6 +20,10 @@ work started. No applied migration file was edited.
 | `0098_seller_agreement_and_marketplace_gate.sql` | SEC-17 marketplace switch (OFF) and agreement gate. | Third-party offers cannot go live until the switch is on. | `0098_….down.sql` (approval log kept in an archive table) |
 | `0099_atomic_delivery_completion.sql` | One-transaction delivery completion (`complete_delivery_atomic`, service role only), idempotency table, loyalty on delivered value. | The new app code needs it: without 0099 delivery completion is refused with a clear message. | `0099_….down.sql` (keeps the idempotency table; roll the app back first) |
 
+| `0100_atomic_dispatch_failure_and_return.sql` | One-transaction dispatch, failed delivery and return to warehouse (service role only); guards against the same changes being made directly; delivered quantities final for every API role. | Any script or Admin screen that sets `dispatched` / `returned` / `failed` directly is refused. Returns with a shortfall credit are refused for manual reconciliation. | `0100_….down.sql` |
+
+**Security and reliability repair:** 0096 and 0099 were corrected in place (dated note in each file) — valid only because 0094–0099 are applied nowhere. See `08_SECURITY_RELIABILITY_REPAIR.md`.
+
 **Final completion pass:** rollbacks 0095 and 0098 were changed so that they delete no data (see `07_FINAL_COMPLETION.md` §4). The full chain 0099 → 0094 → 0099 was run twice on one database.
 
 All five are idempotent (re-run tested). Rollback 0098 → 0094 and re-apply was tested on real PostgreSQL with data present.

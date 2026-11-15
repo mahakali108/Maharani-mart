@@ -1,6 +1,6 @@
 /**
- * Review of migrations 0094–0099 and their rollbacks, as executable checks
- * (PostgreSQL 16 via PGlite, full chain 0001–0099 applied).
+ * Review of migrations 0094–0100 and their rollbacks, as executable checks
+ * (PostgreSQL 16 via PGlite, full chain 0001–0100 applied).
  *
  * The function list is read from the migration files, so a function added to
  * any of them later is covered automatically and must be classified below.
@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 import { createMigratedDb, type Db } from './helpers/pg-harness';
 
-const FILES = readdirSync('supabase/migrations').filter((f) => /^009[4-9]_/.test(f)).sort();
+const FILES = readdirSync('supabase/migrations').filter((f) => /^(009[4-9]|0100)_/.test(f)).sort();
 const FUNCTIONS = [...new Set(FILES.flatMap((file) =>
   [...readFileSync(`supabase/migrations/${file}`, 'utf8').matchAll(/create (?:or replace )?function public\.([a-z_0-9]+)/gi)].map((m) => m[1]!)))].sort();
 
@@ -33,13 +33,18 @@ let db: Db;
 beforeAll(async () => { db = await createMigratedDb(); }, 180_000);
 afterAll(async () => { await db.close(); });
 
-describe('migrations 0094–0099: catalogue review', () => {
-  it('covers six migrations in unbroken order, each with a rollback script', () => {
-    expect(FILES.map((f) => f.slice(0, 4))).toEqual(['0094', '0095', '0096', '0097', '0098', '0099']);
+describe('migrations 0094–0100: catalogue review', () => {
+  it('covers seven migrations in unbroken order, each with a rollback script', () => {
+    expect(FILES.map((f) => f.slice(0, 4))).toEqual(['0094', '0095', '0096', '0097', '0098', '0099', '0100']);
     for (const file of FILES) {
       expect(() => readFileSync(`supabase/rollbacks/${file.replace(/\.sql$/, '.down.sql')}`, 'utf8')).not.toThrow();
     }
-    expect(FUNCTIONS).toHaveLength(29);
+    // 29 in 0094–0099 + 7 in 0100 (three atomic RPCs, one private actor check, three guard triggers).
+    expect(FUNCTIONS).toHaveLength(36);
+    for (const added of ['dispatch_order_atomic', 'fail_delivery_atomic', 'return_delivery_to_warehouse_atomic', '_fulfilment_actor_role',
+      'guard_direct_order_fulfilment_transition', 'guard_direct_delivery_fulfilment_transition', 'guard_settled_delivery_lines']) {
+      expect(FUNCTIONS).toContain(added);
+    }
   });
 
   it('every function has a fixed search_path; every SECURITY DEFINER function is closed to PUBLIC and anon', async () => {
@@ -72,9 +77,44 @@ describe('migrations 0094–0099: catalogue review', () => {
         where p.pronamespace = 'public'::regnamespace and p.proname = any($1)
           and not has_function_privilege('service_role', p.oid, 'execute') order by 1`, [FUNCTIONS]);
     expect(rows.map((r) => r.proname)).toEqual([
-      '_close_sub_order_core', '_order_loyalty_points_due', '_refund_child_share_remaining', '_set_sub_order_status_plain',
+      '_close_sub_order_core', '_fulfilment_actor_role', '_order_loyalty_points_due', '_refund_child_share_remaining', '_set_sub_order_status_plain',
+      'guard_direct_delivery_fulfilment_transition', 'guard_direct_order_fulfilment_transition', 'guard_settled_delivery_lines',
       'record_marketplace_launch_approval',
     ]);
+  });
+
+  it('the atomic delivery and fulfilment functions are SECURITY DEFINER, service-role only, and re-check the role themselves', async () => {
+    const names = ['complete_delivery_atomic', 'dispatch_order_atomic', 'fail_delivery_atomic', 'return_delivery_to_warehouse_atomic'];
+    const { rows } = await db.query<{ proname: string; definer: boolean; svc: boolean; authn: boolean; anon: boolean; src: string }>(
+      `select p.proname, p.prosecdef definer, has_function_privilege('service_role', p.oid, 'execute') svc,
+              has_function_privilege('authenticated', p.oid, 'execute') authn, has_function_privilege('anon', p.oid, 'execute') anon, p.prosrc src
+         from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = any($1) order by 1`, [names]);
+    expect(rows.map((r) => r.proname)).toEqual(names);
+    for (const row of rows) {
+      expect({ name: row.proname, definer: row.definer, svc: row.svc, authn: row.authn, anon: row.anon })
+        .toEqual({ name: row.proname, definer: true, svc: true, authn: false, anon: false });
+      expect(row.src, row.proname).toContain("if coalesce(auth.role(), '') <> 'service_role' then");
+    }
+  });
+
+  it('lock order is parent first in every delivery function: orders, then order_deliveries, then order_delivery_items', async () => {
+    const names = ['complete_delivery_atomic', 'dispatch_order_atomic', 'fail_delivery_atomic', 'return_delivery_to_warehouse_atomic'];
+    const { rows } = await db.query<{ proname: string; src: string }>(
+      `select p.proname, p.prosrc src from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = any($1)`, [names]);
+    for (const row of rows) {
+      const order = row.src.search(/from public\.orders o where o\.id = p_order_id for update/);
+      const delivery = row.src.search(/from public\.order_deliveries d where d\.(?:id = v_delivery_id|order_id = p_order_id) for update/);
+      const lines = row.src.search(/from public\.order_delivery_items di where di\.delivery_id = [a-z_.]+ order by di\.id for update/);
+      expect(order, `${row.proname} locks the order`).toBeGreaterThan(-1);
+      expect(delivery, `${row.proname} locks the delivery after the order`).toBeGreaterThan(order);
+      if (lines > -1) expect(lines, `${row.proname} locks lines after the delivery`).toBeGreaterThan(delivery);
+      // No function takes a line lock before the delivery lock.
+      expect(row.src.slice(0, delivery)).not.toMatch(/order_delivery_items[^;]*for update/);
+    }
+    // The line guard never WAITS for the parent while a line row is locked.
+    const guard = (await db.query<{ src: string }>(`select prosrc src from pg_proc where proname = 'guard_order_delivery_item_snapshot'`)).rows[0]!.src;
+    expect(guard).toContain('for share of od nowait');
+    expect(guard.match(/for (share|update)/g)).toHaveLength(1);
   });
 
   it('every new table has RLS on, nothing for anon, and at most SELECT for signed-in users', async () => {
@@ -93,7 +133,7 @@ describe('migrations 0094–0099: catalogue review', () => {
   });
 });
 
-describe('rollbacks 0094–0099: no data loss', () => {
+describe('rollbacks 0094–0100: no data loss', () => {
   const strip = (sql: string) => sql.replace(/--[^\n]*/g, '');
 
   it('no rollback truncates, deletes rows or drops a column', () => {
@@ -118,7 +158,7 @@ describe('rollbacks 0094–0099: no data loss', () => {
     expect(dropped.sort()).toEqual(['legal_document_current_versions', 'marketplace_launch_approvals']);
   });
 
-  it('the whole chain rolls back 0099 → 0094 and re-applies 0094 → 0099, twice, on one database', async () => {
+  it('the whole chain rolls back 0100 → 0094 and re-applies 0094 → 0100, twice, on one database', async () => {
     const fresh = await createMigratedDb();
     for (let round = 0; round < 2; round++) {
       for (const file of [...FILES].reverse()) {

@@ -135,11 +135,20 @@ describe('0094 delivery trust boundary and loyalty integrity (PostgreSQL 16)', (
     });
 
     it('still lets the assigned staff start a delivery and record a failed attempt', async () => {
-      const { deliveryId } = await dispatchedOrder([[500, 10]]);
+      const { orderId, deliveryId } = await dispatchedOrder([[500, 10]]);
       expect(await errorOf(db, staff, (tx: Tx) =>
         tx.query(`update public.order_deliveries set delivery_status = 'in_progress', in_progress_at = now() where id = $1`, [deliveryId]))).toBeNull();
+      // 0100: a failed attempt must also re-open the order, so it is one
+      // transaction (fail_delivery_atomic) and no longer a plain UPDATE that
+      // could leave a failed task on a still-dispatched order.
       expect(await errorOf(db, staff, (tx: Tx) =>
-        tx.query(`update public.order_deliveries set delivery_status = 'failed', failure_reason = 'Shop closed' where id = $1`, [deliveryId]))).toBeNull();
+        tx.query(`update public.order_deliveries set delivery_status = 'failed', failure_reason = 'Shop closed' where id = $1`, [deliveryId]))).toMatch(/FULFILMENT_GUARD/);
+      // The assigned staff member still CAN record it — through the server.
+      expect(await errorOf(db, 'service', (tx: Tx) =>
+        tx.query(`select public.fail_delivery_atomic($1, $2, 'Shop closed')`, [orderId, staff]))).toBeNull();
+      const { rows } = await db.query<{ d: string; r: string; o: string }>(
+        `select d.delivery_status d, d.failure_reason r, o.status::text o from public.order_deliveries d join public.orders o on o.id = d.order_id where d.id = $1`, [deliveryId]);
+      expect(rows[0]).toEqual({ d: 'failed', r: 'Shop closed', o: 'processing' });
     });
 
     it('rejects staff marking the order delivered directly, and awards nothing', async () => {
@@ -423,8 +432,15 @@ describe('0094 delivery trust boundary and loyalty integrity (PostgreSQL 16)', (
         await tx.query(`update public.order_delivery_items set quantity_delivered = 7, quantity_missing = 3 where order_item_id = $1`, [itemIds[0]]);
         await tx.query(`update public.order_deliveries set delivery_status = 'partially_delivered' where id = $1`, [deliveryId]);
         await tx.query(`update public.orders set status = 'delivered' where id = $1`, [orderId]);
-        await tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]);
       });
+      // 0100: an API role (even the service key) can no longer mark an order
+      // returned with a plain UPDATE; only return_delivery_to_warehouse_atomic
+      // (which runs as the function owner) performs this transition.
+      expect(await errorOf(db, 'service', (tx: Tx) =>
+        tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]))).toMatch(/FULFILMENT_GUARD/);
+      expect(await loyaltyPoints(orderId, 'ORDER_REVERSAL')).toEqual([]);
+      // The transition as the atomic function makes it (database owner).
+      await db.query(`update public.orders set status = 'returned' where id = $1`, [orderId]);
       expect(await loyaltyPoints(orderId, 'ORDER_EARN')).toEqual([14]);
       expect(await loyaltyPoints(orderId, 'ORDER_REVERSAL')).toEqual([-14]);
     });

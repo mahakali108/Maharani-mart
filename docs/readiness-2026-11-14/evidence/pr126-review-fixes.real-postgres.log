@@ -1,4 +1,4 @@
-Applied 96 repository migrations (0001 - 0099) on PostgreSQL 17.11.
+Applied 97 repository migrations (0001 - 0100) on PostgreSQL 17.11.
 PASS split cancel: a second session WAITS for the first, then credits nothing (no double refund)
 PASS split cancel: the first session ROLLS BACK, the waiting session then performs the whole refund
 PASS split cancel: 16 simultaneous sessions (retailer, admin, service) refund exactly once
@@ -9,7 +9,7 @@ PASS direct status write BEFORE the atomic call: refused, nothing changes; the a
 PASS direct status writes WAITING on an uncommitted atomic call: after commit they change nothing (one refund only)
 PASS direct status write WAITING on an atomic call that ROLLS BACK: refused, nothing changes
 PASS snapshot: assigned staff cannot rewrite quantity_ordered / order_item_id / delivery_id, delete or forge a line
-PASS snapshot race: completion holds the delivery; a concurrent staff quantity write WAITS and is then refused
+PASS snapshot race: completion holds the delivery; a concurrent staff quantity write is REFUSED AT ONCE (never waits child -> parent) and again after commit
 PASS snapshot race: a staff quantity write in flight makes completion WAIT, and completion then re-checks the committed quantities
 PASS snapshot: refund and loyalty use the original order quantity end to end (Rs 1,000 / 10 pcs, 2 missing -> Rs 200 and 8 points)
 PASS marketplace switch: two Super Admin sessions are serialised; the later decision wins; history keeps both
@@ -44,3 +44,4 @@ PASS permission matrix: anonymous, retailer, other retailer, delivery staff, oth
 PASS new objects: no anon EXECUTE, fixed search_path, RLS on new tables
 PASS rollback safety: 0098 -> 0094 roll back in order on a database WITH data, then 0094 -> 0098 re-apply
 PR #126 real PostgreSQL 17.11: 18 passed, 0 failed.
+exit=0

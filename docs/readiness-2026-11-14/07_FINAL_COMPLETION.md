@@ -6,6 +6,10 @@ could not be run, it says **NOT DONE** and why.
 
 ## Verdict
 
+> **Superseded in part by `08_SECURITY_RELIABILITY_REPAIR.md`**, which corrects
+> the lock-order claim in section 1 and the proof-reference check, and adds
+> migration 0100.
+
 **READY FOR INDEPENDENT REVIEW** — for the code, migrations and tests.
 
 Two items of the brief are **NOT DONE** and the reviewer or owner must do them:
@@ -32,7 +36,7 @@ validates the form, computes the OTP digest in Node, and makes **one** call:
 
 | # | Requirement | Where |
 |---|---|---|
-| 1 | Locks order → delivery → delivery lines, always in that order | `for update` ×3 |
+| 1 | Locks order → delivery → delivery lines, always in that order. **Correction (see `08_SECURITY_RELIABILITY_REPAIR.md`): this was not true at commit `5993b16`; it could deadlock against a direct line write. Fixed afterwards.** | `for update` ×3 |
 | 2 | Delivery open, order `dispatched` / `delivered` | `NOT_OPEN`, `ORDER_STATE` |
 | 3 | Actor exists, is active, has the delivery role, is the assignee or an Admin | `NO_PERMISSION`, `NOT_ASSIGNED` |
 | 4 | OTP: keyed digest computed on the server compared with the stored hash; the plain OTP and the secret never reach the database | `p_otp_digest` |

@@ -121,13 +121,25 @@ describe('the app uses the functions', () => {
     // PR #126: the credit is issued by order_shortfall_coins INSIDE the atomic
     // completion (0099), with the amount computed by the database (0094) —
     // the app no longer sends an amount and has no direct-insert fallback.
-    // The return-to-warehouse reversal still calls the function from the app.
     const sql94 = read('supabase/migrations/0094_delivery_trust_and_loyalty_integrity.sql');
     const sql99 = read('supabase/migrations/0099_atomic_delivery_completion.sql');
     expect(sql99).toContain('public.order_shortfall_coins(');
-    expect(delivery).toContain("rpc('order_shortfall_coins'");
     expect(delivery).not.toContain('p_amount_paise');
-    expect(delivery).toMatch(/p_reverse: true/);
+    // PR #126 (0100): return-to-warehouse is one transaction and makes no
+    // separate reversal call. order_shortfall_coins keeps its reversal branch
+    // (0094), but refund_order_coins (0088) refuses an order that carries a
+    // delivery shortfall credit, so the old sequence could never finish: it
+    // marked the order returned and THEN failed the refund. The atomic function
+    // now refuses such a return before any write (DELIVERY_RETURN:RECONCILE)
+    // and leaves it to an Admin. Behaviour: tests/fulfilment-atomic-actions-db
+    // and tests/pr126-fulfilment-and-locks.pg.mjs.
+    const sql100 = read('supabase/migrations/0100_atomic_dispatch_failure_and_return.sql');
+    expect(sql94).toMatch(/if p_reverse then/);
+    expect(sql100).toContain('DELIVERY_RETURN:RECONCILE');
+    expect(sql100.indexOf('DELIVERY_RETURN:RECONCILE')).toBeLessThan(sql100.indexOf('perform public.return_order_stock(p_order_id, null)'));
+    expect(delivery).toContain("rpc('return_delivery_to_warehouse_atomic'");
+    // The app has no wallet write of its own on this path.
+    expect(delivery).not.toContain("from('retailer_wallet_ledger')");
     expect(sql94).toContain("'delivery-shortfall:' || p_delivery_id::text");
   });
 

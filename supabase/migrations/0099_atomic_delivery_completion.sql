@@ -11,9 +11,10 @@
 -- half-completed delivery.
 --
 -- complete_delivery_atomic() does all of it in ONE transaction:
---   lock order -> delivery lines -> delivery row (the same line -> delivery
---   order the 0096 snapshot guard uses, so the two cannot deadlock), verify the
---   actor, verify the OTP digest, validate every line against the original
+--   lock order -> delivery row -> delivery lines (PARENT FIRST; see "Lock
+--   order" below), verify the actor, verify the OTP digest, verify that each
+--   proof file really exists in Storage and was uploaded by an authorised
+--   person, validate every line against the original
 --   order line, write quantities + completion + order status, credit the
 --   shortfall, reconcile loyalty, record the idempotency result.
 --
@@ -29,6 +30,32 @@
 -- an Admin / Super Admin.
 --
 -- Idempotent: safe to re-run. No table is dropped, no row is deleted.
+--
+-- CORRECTIONS MADE BEFORE THIS MIGRATION WAS EVER APPLIED (security review,
+-- 15 Nov 2026). This file has not run on any database, so it was corrected in
+-- place rather than patched by a later migration:
+--
+--   1. Lock order. The first draft locked the delivery LINES and then the
+--      delivery row. It now locks the delivery row first and its lines second.
+--      Canonical order for every delivery write path in 0096 / 0099 / 0100:
+--
+--        orders  ->  order_deliveries  ->  order_delivery_items
+--                ->  retailer_credit_accounts / wallet ledger  ->  retailers (loyalty)
+--
+--      A direct line UPDATE cannot follow that order (PostgreSQL locks the
+--      updated row before any trigger runs), so the 0096 line guard takes its
+--      delivery-row lock with NOWAIT on UPDATE: a session that already holds a
+--      line lock never WAITS for the parent, which removes the only possible
+--      child -> parent wait edge. See 0096.
+--
+--   2. Proof files. A path-prefix check proves nothing about the file. The
+--      function now reads storage.objects itself: the object must exist in the
+--      private `delivery-proofs` bucket under deliveries/{order id}/, must be a
+--      current (not archived / deleted) version, and its recorded uploader
+--      (owner_id, set by Supabase Storage from the uploader's token, never by
+--      the client) must be the acting delivery person, the assigned delivery
+--      person, or an active Admin / Super Admin - the same people the Storage
+--      INSERT policy of 0045 allows to upload into that folder.
 -- ============================================================================
 
 do $$
@@ -36,6 +63,16 @@ begin
   if to_regprocedure('public.delivery_shortfall_paise(uuid)') is null
      or to_regprocedure('public.guard_order_delivery_completion_lines()') is null then
     raise exception 'MIGRATION ORDER VIOLATION: 0099 requires 0094 and 0096.' using errcode = 'undefined_function';
+  end if;
+  -- Proof verification reads Storage. Fail the migration, not a delivery, if
+  -- the function owner cannot see it.
+  if to_regclass('storage.objects') is null
+     or not has_table_privilege(current_user, 'storage.objects', 'select') then
+    raise exception 'MIGRATION PRECONDITION: 0099 needs SELECT on storage.objects for the migration role (%).', current_user
+      using errcode = 'insufficient_privilege';
+  end if;
+  if not exists (select 1 from storage.buckets b where b.id = 'delivery-proofs' and b.public is not true) then
+    raise exception 'MIGRATION PRECONDITION: 0099 needs the private delivery-proofs bucket (0045).' using errcode = 'undefined_object';
   end if;
 end $$;
 
@@ -223,6 +260,8 @@ declare
   v_photo text := nullif(btrim(coalesce(p_photo_ref, '')), '');
   v_ref text;
   v_prefix text;
+  v_proof_owner text;
+  v_proof_found boolean;
   v_previous_sub text := current_setting('request.jwt.claim.sub', true);
   v_request public.delivery_completion_requests%rowtype;
   v_submitted integer;
@@ -298,7 +337,7 @@ begin
     raise exception 'DELIVERY_COMPLETE:QUANTITY: quantities must be whole numbers of 0 or more.' using errcode = '22023';
   end if;
 
-  -- ---- Locks: order -> lines -> delivery ----------------------------------
+  -- ---- Locks: order -> delivery -> lines (parent first, always) -----------
   select * into v_order from public.orders o where o.id = p_order_id for update;
   if not found then
     raise exception 'DELIVERY_COMPLETE:NOT_FOUND: order not found.' using errcode = 'P0002';
@@ -307,8 +346,11 @@ begin
   if v_delivery_id is null then
     raise exception 'DELIVERY_COMPLETE:NO_DELIVERY: no delivery task exists for this order.' using errcode = 'P0002';
   end if;
-  perform 1 from public.order_delivery_items di where di.delivery_id = v_delivery_id order by di.id for update;
   select * into v_delivery from public.order_deliveries d where d.id = v_delivery_id for update;
+  if not found then
+    raise exception 'DELIVERY_COMPLETE:NO_DELIVERY: no delivery task exists for this order.' using errcode = 'P0002';
+  end if;
+  perform 1 from public.order_delivery_items di where di.delivery_id = v_delivery_id order by di.id for update;
 
   -- ---- Actor ---------------------------------------------------------------
   select p.role::text, coalesce(p.is_active, false) into v_actor_role, v_actor_active
@@ -364,6 +406,45 @@ begin
       'attempts_remaining', greatest(c_max_attempts - (v_delivery.otp_attempts + 1), 0)
     );
   end if;
+
+  -- ---- Proof files: must really exist, here, uploaded by the right person --
+  -- The reference arrives from a browser. Nothing about it is trusted: the
+  -- bucket, the object and its uploader are read from Storage's own table.
+  -- owner_id is written by Supabase Storage from the uploader's verified
+  -- token; clients have no UPDATE policy on this bucket, so it cannot be
+  -- changed afterwards. (to_jsonb keeps this working across Storage schema
+  -- versions: owner_id is current, owner is the older uuid column.)
+  foreach v_ref in array array[v_signature, v_photo] loop
+    if v_ref is not null then
+      v_proof_owner := null;
+      select true, coalesce(nullif(to_jsonb(so) ->> 'owner_id', ''), nullif(to_jsonb(so) ->> 'owner', ''))
+        into v_proof_found, v_proof_owner
+        from storage.objects so
+       where so.bucket_id = 'delivery-proofs'
+         and so.name = v_ref
+         and (to_jsonb(so) ->> 'archived_at') is null
+         and coalesce((to_jsonb(so) ->> 'is_delete_marker')::boolean, false) = false
+       limit 1;
+      if not coalesce(v_proof_found, false) then
+        raise exception 'DELIVERY_COMPLETE:PROOF_MISSING: a proof file was not found in storage.' using errcode = '22023';
+      end if;
+      v_proof_found := null;
+      if v_proof_owner is null
+         or v_proof_owner !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+        raise exception 'DELIVERY_COMPLETE:PROOF_OWNER: a proof file has no recorded uploader.' using errcode = '42501';
+      end if;
+      if v_proof_owner::uuid is distinct from p_actor_id
+         and v_proof_owner::uuid is distinct from v_delivery.assigned_staff_id
+         and not exists (
+           select 1 from public.profiles pp
+            where pp.id = v_proof_owner::uuid
+              and coalesce(pp.is_active, false)
+              and pp.role::text in ('super_admin', 'admin')
+         ) then
+        raise exception 'DELIVERY_COMPLETE:PROOF_OWNER: a proof file was uploaded by someone who may not submit proof for this delivery.' using errcode = '42501';
+      end if;
+    end if;
+  end loop;
 
   -- ---- Lines: submission vs snapshot vs original order lines ---------------
   create temporary table if not exists _delivery_completion_lines (

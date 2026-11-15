@@ -19,6 +19,12 @@ rows, so nothing has been exploited or lost.
 > transaction (0099), the Super Admin marketplace screen exists, and the
 > rollbacks no longer delete data. Browser verification of the preview was
 > **not done**. See `07_FINAL_COMPLETION.md`. The verdict does not change.
+>
+> **Update, security and reliability repair:** delivery proof files are now
+> verified, a deadlock between completion and line edits was removed, and
+> dispatch, failed delivery and return to warehouse are each one transaction
+> (0100). Preview still **not verified**. See
+> `08_SECURITY_RELIABILITY_REPAIR.md`. The verdict does not change.
 
 ## Status by area
 

@@ -367,7 +367,11 @@ async function main() {
       assert.deepEqual(await line(mine.items[0]), before);
     });
 
-    await test('snapshot race: completion holds the delivery; a concurrent staff quantity write WAITS and is then refused', async () => {
+    // Lock-order correction (0096, 15 Nov 2026): the line guard no longer WAITS
+    // for the delivery row while holding a line lock (child -> parent), it asks
+    // with NOWAIT. So the write is refused at once instead of after a wait. The
+    // protected outcome is unchanged and asserted below: the write never lands.
+    await test('snapshot race: completion holds the delivery; a concurrent staff quantity write is REFUSED AT ONCE (never waits child -> parent) and again after commit', async () => {
       const d = await dispatched([[1000, 10]]);
       await run(staff, 'update public.order_delivery_items set quantity_delivered = 10 where order_item_id = $1', [d.items[0]]);
       const completer = await client(), racer = await client();
@@ -377,9 +381,12 @@ async function main() {
       const late = racer.query('update public.order_delivery_items set quantity_delivered = 0, quantity_missing = 10 where order_item_id = $1', [d.items[0]]);
       late.catch(() => {});
       await sleep(500);
-      assert.equal(await isWaitingOnLock(racer), true, 'the staff write waits for the completion to finish');
+      assert.equal(await isWaitingOnLock(racer), false, 'the staff write does not wait for the delivery row while holding the line row');
+      await assert.rejects(late, (error) => error.code === '55P03' && /DELIVERY_GUARD:BUSY/.test(error.message));
+      await racer.query('rollback');
       await completer.query('commit');
-      await assert.rejects(late, /locked after completion/);
+      await assert.rejects(run(staff, 'update public.order_delivery_items set quantity_delivered = 0, quantity_missing = 10 where order_item_id = $1', [d.items[0]]), /locked after completion|final once the delivery is completed/);
+      await begin(racer, staff);
       await racer.query('rollback');
       assert.deepEqual(await line(d.items[0]), { delivery_id: d.delivery, order_item_id: d.items[0], quantity_ordered: 10, quantity_delivered: 10, quantity_missing: 0, quantity_damaged: 0 });
       assert.equal(Number((await admin.query('select public.delivery_shortfall_paise($1) n', [d.delivery])).rows[0].n), 0, 'no shortfall refund can be manufactured after completion');

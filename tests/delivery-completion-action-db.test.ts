@@ -15,7 +15,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-import { createMigratedDb, createRetailer, createUser, errorOf, type Db, type Tx } from './helpers/pg-harness';
+import { as, createMigratedDb, createRetailer, createUser, errorOf, type Db, type Tx } from './helpers/pg-harness';
 
 process.env.DELIVERY_OTP_SECRET = 'test-only-delivery-otp-secret';
 
@@ -122,6 +122,18 @@ async function dispatched(lines: [number, number][], opts: { assignee?: string }
     );
   }
   return { orderId, deliveryId: delivery[0]!.id, itemIds, pieces: lines.map(([, p]) => p) };
+}
+
+/**
+ * Records an uploaded proof the way Supabase Storage does: `owner_id` is the
+ * uploader taken from their token. (The harness table mirrors the live
+ * storage.objects columns; Storage itself is not running here.)
+ */
+async function putProof(name: string, uploader: string | null) {
+  await db.query(
+    `insert into storage.objects (bucket_id, name, owner, owner_id) values ('delivery-proofs', $1, $2, $3)`,
+    [name, uploader, uploader],
+  );
 }
 
 function actAs(id: string, role: string) {
@@ -431,12 +443,131 @@ describe('completeDeliveryAction — proofs and lines', () => {
     await expectUntouched(f, 0);
   });
 
-  it("this order's own proof is stored", async () => {
+  it("this order's own proof, uploaded by the assignee, is stored", async () => {
     const f = await dispatched([[500, 5]]);
     actAs(staff, 'staff');
     const ref = `deliveries/${f.orderId}/signature.png`;
-    expect(await completeDeliveryAction(f.orderId, payload(f, {}, { signatureUrl: ref }))).toMatchObject({ success: true });
-    expect((await snapshot(f)).delivery.signature_url).toBe(ref);
+    const photo = `deliveries/${f.orderId}/photo.jpg`;
+    await putProof(ref, staff);
+    await putProof(photo, staff);
+    expect(await completeDeliveryAction(f.orderId, payload(f, {}, { signatureUrl: ref, photoUrl: photo }))).toMatchObject({ success: true });
+    const done = await snapshot(f);
+    expect(done.delivery.signature_url).toBe(ref);
+    expect(done.delivery.delivery_status).toBe('delivered');
+  });
+
+  it('a well-formed path whose file does not exist is refused: the path alone proves nothing', async () => {
+    const f = await dispatched([[500, 5]]);
+    actAs(staff, 'staff');
+    const ref = `deliveries/${f.orderId}/${randomUUID()}.png`;
+    expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { signatureUrl: ref })))).toMatch(/could not be found in storage/);
+    expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { photoUrl: ref })))).toMatch(/could not be found in storage/);
+    expect(state.rpcCalls.length).toBe(2); // the app check passed; the DATABASE refused
+    await expectUntouched(f, 0);
+  });
+
+  it("another user's upload is refused even inside the right folder (other staff, salesman, retailer, unknown, no uploader)", async () => {
+    const f = await dispatched([[500, 5]]);
+    actAs(staff, 'staff');
+    const uploaders: (string | null)[] = [otherStaff, salesman, retailer, randomUUID(), null];
+    for (const uploader of uploaders) {
+      const ref = `deliveries/${f.orderId}/${randomUUID()}.png`;
+      await putProof(ref, uploader);
+      expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { signatureUrl: ref })))).toMatch(/not uploaded by the delivery person/);
+      expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { photoUrl: ref })))).toMatch(/not uploaded by the delivery person/);
+    }
+    await expectUntouched(f, 0);
+  });
+
+  it('client-supplied metadata is never trusted: forged owner metadata, the wrong bucket, archived and deleted versions are refused', async () => {
+    const f = await dispatched([[500, 5]]);
+    actAs(staff, 'staff');
+    // The uploader is otherStaff; the metadata CLAIMS the assignee.
+    const forged = `deliveries/${f.orderId}/${randomUUID()}.png`;
+    await db.query(
+      `insert into storage.objects (bucket_id, name, owner, owner_id, metadata, user_metadata)
+       values ('delivery-proofs', $1, $2, $3, $4::jsonb, $4::jsonb)`,
+      [forged, otherStaff, otherStaff, JSON.stringify({ owner: staff, owner_id: staff, uploaded_by: staff, order_id: f.orderId })]);
+    expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { signatureUrl: forged })))).toMatch(/not uploaded by the delivery person/);
+
+    const wrongBucket = `deliveries/${f.orderId}/${randomUUID()}.png`;
+    await db.query(`insert into storage.objects (bucket_id, name, owner, owner_id) values ('payment-proofs', $1, $2, $3)`, [wrongBucket, staff, staff]);
+    expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { signatureUrl: wrongBucket })))).toMatch(/could not be found in storage/);
+
+    const archived = `deliveries/${f.orderId}/${randomUUID()}.png`;
+    await db.query(`insert into storage.objects (bucket_id, name, owner, owner_id, archived_at) values ('delivery-proofs', $1, $2, $3, now())`, [archived, staff, staff]);
+    expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { signatureUrl: archived })))).toMatch(/could not be found in storage/);
+
+    const deleted = `deliveries/${f.orderId}/${randomUUID()}.png`;
+    await db.query(`insert into storage.objects (bucket_id, name, owner, owner_id, is_delete_marker) values ('delivery-proofs', $1, $2, $3, true)`, [deleted, staff, staff]);
+    expect(errorText(await completeDeliveryAction(f.orderId, payload(f, {}, { photoUrl: deleted })))).toMatch(/could not be found in storage/);
+    await expectUntouched(f, 0);
+  });
+
+  it("an Admin's upload is accepted; the assignee's upload is accepted when an Admin completes; a deactivated Admin's upload is not", async () => {
+    const a = await dispatched([[500, 5]]);
+    const byAdmin = `deliveries/${a.orderId}/${randomUUID()}.png`;
+    await putProof(byAdmin, admin);
+    actAs(staff, 'staff');
+    expect(await completeDeliveryAction(a.orderId, payload(a, {}, { photoUrl: byAdmin }))).toMatchObject({ success: true });
+
+    const b = await dispatched([[500, 5]]);
+    const byAssignee = `deliveries/${b.orderId}/${randomUUID()}.png`;
+    await putProof(byAssignee, staff);
+    actAs(admin, 'super_admin');
+    expect(await completeDeliveryAction(b.orderId, payload(b, {}, { signatureUrl: byAssignee }))).toMatchObject({ success: true });
+
+    const c = await dispatched([[500, 5]]);
+    const formerAdmin = await createUser(db, 'admin', 'Former Admin');
+    await db.query(`update public.profiles set is_active = false where id = $1`, [formerAdmin]);
+    const byFormer = `deliveries/${c.orderId}/${randomUUID()}.png`;
+    await putProof(byFormer, formerAdmin);
+    actAs(staff, 'staff');
+    expect(errorText(await completeDeliveryAction(c.orderId, payload(c, {}, { signatureUrl: byFormer })))).toMatch(/not uploaded by the delivery person/);
+    await expectUntouched(c, 0);
+  });
+
+  it('calling the database function directly does not bypass the proof check, and API roles cannot call it at all', async () => {
+    const f = await dispatched([[500, 5]]);
+    const ref = `deliveries/${f.orderId}/${randomUUID()}.png`;
+    const call = (who: string, proof: string) => errorOf(db, who, (tx: Tx) => tx.query(
+      `select public.complete_delivery_atomic($1, $2, $3, $4, 'Shop Owner', null, $5, null, $6::jsonb)`,
+      [f.orderId, staff, hashDeliveryOtp(f.orderId, OTP), 'k'.repeat(32), proof,
+        JSON.stringify([{ order_item_id: f.itemIds[0], delivered: 5, missing: 0, damaged: 0 }])]));
+    expect(await call('service', ref)).toMatch(/DELIVERY_COMPLETE:PROOF_MISSING/);
+    await putProof(ref, otherStaff);
+    expect(await call('service', ref)).toMatch(/DELIVERY_COMPLETE:PROOF_OWNER/);
+    for (const who of [staff, admin, retailer, 'anon']) expect(await call(who, ref)).toMatch(/permission denied/);
+    await expectUntouched(f, 0);
+  });
+
+  it('Storage policies agree with the function: only the assignee or an Admin can put a file in the order folder, and nobody can rewrite or delete it', async () => {
+    const f = await dispatched([[500, 5]]);
+    const name = () => `deliveries/${f.orderId}/${randomUUID()}.png`;
+    const insert = (who: string, objectName: string) => errorOf(db, who, (tx: Tx) => tx.query(
+      `insert into storage.objects (bucket_id, name, owner, owner_id) values ('delivery-proofs', $1, $2, $3)`,
+      [objectName, who === 'anon' ? null : who, who === 'anon' ? null : who]));
+    const mine = name();
+    expect(await insert(staff, mine)).toBeNull();
+    expect(await insert(admin, name())).toBeNull();
+    for (const who of [otherStaff, salesman, retailer, 'anon']) {
+      expect(await insert(who, name())).toMatch(/row-level security|permission denied/);
+    }
+    // No UPDATE or DELETE policy exists for this bucket, so the recorded uploader cannot be changed.
+    for (const who of [staff, otherStaff, retailer]) {
+      const changed = await as(db, who, async (tx: Tx) => {
+        const u = await tx.query(`update storage.objects set owner_id = $2 where name = $1 returning id`, [mine, who]);
+        const d = await tx.query(`delete from storage.objects where name = $1 returning id`, [mine]);
+        return u.rows.length + d.rows.length;
+      });
+      expect(changed).toBe(0);
+    }
+    const { rows } = await db.query<{ owner_id: string }>(`select owner_id from storage.objects where name = $1`, [mine]);
+    expect(rows[0]!.owner_id).toBe(staff);
+    const { rows: policies } = await db.query<{ cmd: string }>(
+      `select cmd from pg_policies where schemaname = 'storage' and tablename = 'objects'
+         and (coalesce(qual, '') || coalesce(with_check, '')) like '%delivery-proofs%' order by 1`);
+    expect(policies.map((p) => p.cmd)).toEqual(['INSERT', 'SELECT']);
   });
 
   it('missing, duplicated and foreign order lines are refused and nothing is written', async () => {

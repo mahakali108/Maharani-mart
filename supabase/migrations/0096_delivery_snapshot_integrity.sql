@@ -80,15 +80,34 @@ begin
     end if;
   end if;
 
-  select od.order_id, od.sub_order_id, od.delivery_status::text, od.assigned_staff_id
-    into v_delivery_order, v_delivery_sub_order, v_delivery_status, v_assignee
-    from public.order_deliveries od
-   where od.id = new.delivery_id
-     for share of od;
-  -- FOR SHARE serialises line writes against completion: a completion UPDATE
-  -- holds the delivery row, so a concurrent line write waits and then sees the
-  -- completed status (and is refused); a line write in flight makes completion
-  -- wait and then re-check the committed quantities.
+  -- Lock order (corrected 15 Nov 2026, before this migration was ever applied).
+  -- Every delivery write path locks  order_deliveries  BEFORE
+  -- order_delivery_items  (see 0099 / 0100). A direct line write cannot do
+  -- that: on UPDATE PostgreSQL has already locked the line row before this
+  -- trigger runs, and on INSERT the same transaction may hold other line
+  -- locks. WAITING for the delivery row here would therefore be a
+  -- child -> parent wait, the inverse of the canonical order, and could
+  -- deadlock against a completion that holds the delivery and wants the lines.
+  --
+  -- So the share lock is taken with NOWAIT. If a completion, dispatch, failure
+  -- or return currently holds the delivery row, this write is refused at once
+  -- with a retryable error and nothing changes. A session that holds a line
+  -- lock never waits for the delivery row, so no lock cycle can form.
+  --
+  -- A line write that does get the share lock makes a later completion wait at
+  -- the delivery row (while it holds no line lock) and then re-check the
+  -- committed quantities. The atomic functions hold FOR UPDATE on the delivery
+  -- themselves, so their own line writes pass straight through.
+  begin
+    select od.order_id, od.sub_order_id, od.delivery_status::text, od.assigned_staff_id
+      into v_delivery_order, v_delivery_sub_order, v_delivery_status, v_assignee
+      from public.order_deliveries od
+     where od.id = new.delivery_id
+       for share of od nowait;
+  exception when lock_not_available then
+    raise exception 'DELIVERY_GUARD:BUSY: this delivery is being completed or updated by another request. Nothing was changed; refresh and try again.'
+      using errcode = '55P03';
+  end;
   if not found then
     raise exception 'DELIVERY_GUARD: delivery not found for this line.' using errcode = '42501';
   end if;

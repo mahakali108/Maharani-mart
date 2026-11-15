@@ -165,7 +165,12 @@ describe('Paid membership retirement + retained loyalty ledger (PostgreSQL 16)',
       );
       expect(await balance()).toBe(initial + 15);
 
-      await as(db, 'service', (tx: Tx) => tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]));
+      // 0100: an API role (even the service key) can no longer make this
+      // transition with a plain UPDATE; it belongs to the atomic fulfilment
+      // functions, which run as the database owner. The loyalty rule under
+      // test is unchanged, so the step is made the way those functions make it.
+      await expect(as(db, 'service', (tx: Tx) => tx.query(`update public.orders set status = 'returned' where id = $1`, [orderId]))).rejects.toThrow(/FULFILMENT_GUARD/);
+      await db.query(`update public.orders set status = 'returned' where id = $1`, [orderId]);
       expect(await balance()).toBe(initial);
     });
   });

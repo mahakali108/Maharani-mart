@@ -72,8 +72,13 @@ create table storage.buckets (
 create table storage.objects (
   id uuid primary key default gen_random_uuid(),
   bucket_id text references storage.buckets(id), name text, owner uuid, metadata jsonb,
-  created_at timestamptz default now(), updated_at timestamptz default now()
+  created_at timestamptz default now(), updated_at timestamptz default now(),
+  -- Columns of the live Supabase Storage table (read from the project on
+  -- 15 Nov 2026) that proof verification relies on.
+  owner_id text, version text, user_metadata jsonb,
+  archived_at timestamptz, is_delete_marker boolean not null default false
 );
+grant select, insert, update, delete on storage.objects to anon, authenticated, service_role;
 alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language sql immutable as $$
   select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]

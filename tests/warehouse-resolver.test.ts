@@ -216,7 +216,10 @@ describe('warehouse surfaces', () => {
     expect(actions).toContain("if (!order.simple_stock_mode)");
     expect(actions).toContain("rpc('reserve_order_stock'");
     expect(actions).toContain("rpc('release_order_stock'");
-    expect(read('lib/staff/dispatch-actions.ts')).toContain("rpc('consume_order_stock'");
+    // PR #126 (0100): dispatch is one transaction; the stock call moved from the
+    // action into dispatch_order_atomic, which the action calls.
+    expect(read('lib/staff/dispatch-actions.ts')).toContain("rpc('dispatch_order_atomic'");
+    expect(read('supabase/migrations/0100_atomic_dispatch_failure_and_return.sql')).toContain('perform public.consume_order_stock(p_order_id);');
   });
 
   it('keeps the warehouse schema future-compatible (nothing dropped, columns kept)', async () => {

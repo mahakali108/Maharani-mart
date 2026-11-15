@@ -34,10 +34,16 @@ import { requireUser, type CurrentUser } from '@/lib/auth/session';
 import { can } from '@/lib/permissions/permissions';
 import { createInAppNotification, notifyOrderEvent } from '@/lib/notifications/notify';
 import { createClient } from '@/lib/supabase/server';
-import { reverseOrderWalletDebit } from '@/lib/orders/wallet-reversal';
+import {
+  FULFILMENT_NOT_INSTALLED,
+  isFailedDeliveryResult,
+  isFulfilmentRpcMissing,
+  isReturnToWarehouseResult,
+  mapFailedDeliveryError,
+  mapReturnToWarehouseError,
+} from './fulfilment';
 
 import {
-  canTransitionDeliveryStatus,
   describeDeliveryTransitionError,
   type DeliveryStatus,
 } from './state-machine';
@@ -60,20 +66,6 @@ type CompletionRpcClient = {
     args: Record<string, unknown>
   ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
 };
-
-/**
- * Minimal RPC surface for the 🪙 coin functions added in migration 0053. The
- * generated database types predate those functions; this keeps the call typed
- * without weakening the client for every other query.
- */
-function RpcCapable(client: Awaited<ReturnType<typeof createClient>>) {
-  return client as unknown as {
-    rpc: (
-      name: string,
-      args: Record<string, unknown>
-    ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Types (server action results)
@@ -507,65 +499,38 @@ export async function recordFailedDeliveryAction(
     return { error: 'Describe the failure in 3–500 characters.' };
   }
 
-  const supabase = (await createClient());
-  const found = await fetchDeliveryWithOrder(supabase, orderId);
-  if ('error' in found) return { error: found.error };
-  const { delivery, order } = found;
-
-  if (delivery.assigned_staff_id !== user.id && !isAdminLike(user)) {
-    return { error: 'Only the assigned delivery person can fail this delivery.' };
-  }
-  if (!canTransitionDeliveryStatus(delivery.delivery_status as DeliveryStatus, 'failed')) {
-    return {
-      error:
-        describeDeliveryTransitionError(delivery.delivery_status as DeliveryStatus, 'failed') ??
-        'Cannot fail this delivery.',
-    };
-  }
-  if (order.status !== 'dispatched' && order.status !== 'processing') {
-    return { error: `This order is ${order.status.replace(/_/g, ' ')} — a failed-delivery re-open is not possible.` };
-  }
-
-  const { data: claimed, error } = await supabase
-    .from('order_deliveries')
-    .update({
-      delivery_status: 'failed',
-      failure_reason: failureReason,
-    } as never)
-    .eq('id', delivery.id)
-    .in('delivery_status', ['assigned', 'in_progress'])
-    .select('id')
-    .maybeSingle<{ id: string }>();
-  if (error) return { error: error.message };
-  if (!claimed) return { error: 'This delivery changed while saving — refresh and try again.' };
-
-  // Re-open the order for a re-attempt (guarded; 0042 trigger validates).
-  // Skipped when the order already re-opened concurrently.
-  if (order.status === 'dispatched') {
-    const { data: claimedOrder, error: orderError } = await supabase
-      .from('orders')
-      .update({ status: 'processing' } as unknown as never)
-      .eq('id', orderId)
-      .eq('status', 'dispatched')
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (orderError) return { error: orderError.message };
-    if (!claimedOrder) {
-      return { error: 'The order changed state while failing this delivery — refresh and re-check.' };
-    }
-  }
-
-  await notifyOrderEvent({
-    recipientId: order.retailer_id,
-    title: 'Delivery could not be completed',
-    body: `Your order ${order.order_number} could not be delivered (${failureReason}). It has been returned to the warehouse queue and will be re-attempted.`,
-    linkUrl: `/retailer/orders/${orderId}`,
-    category: 'order',
+  // One database transaction (migration 0100): the delivery is marked failed
+  // and the order re-opened together. The database re-verifies the actor's
+  // role and that they are the assignee or an Admin.
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data, error } = await (trusted as unknown as CompletionRpcClient).rpc('fail_delivery_atomic', {
+    p_order_id: orderId,
+    p_actor_id: user.id,
+    p_reason: failureReason,
   });
+  if (error) {
+    if (isFulfilmentRpcMissing(error)) return { error: FULFILMENT_NOT_INSTALLED };
+    return { error: mapFailedDeliveryError(error.message) };
+  }
+  if (!isFailedDeliveryResult(data)) {
+    return { error: 'This delivery could not be marked failed. Nothing was changed. Refresh and try again.' };
+  }
+
+  // After commit, and not again when the same failure is submitted twice.
+  if (!data.replayed) {
+    await notifyOrderEvent({
+      recipientId: data.retailer_id,
+      title: 'Delivery could not be completed',
+      body: `Your order ${data.order_number} could not be delivered (${failureReason}). It has been returned to the warehouse queue and will be re-attempted.`,
+      linkUrl: `/retailer/orders/${orderId}`,
+      category: 'order',
+    });
+  }
 
   revalidateDeliveryPaths(orderId);
   revalidatePath('/admin/orders');
-  return { success: true, message: `Delivery attempt failed — order ${order.order_number} re-opened for re-pick.` };
+  return { success: true, message: `Delivery attempt failed — order ${data.order_number} re-opened for re-pick.` };
 }
 
 /**
@@ -582,85 +547,43 @@ export async function recordReturnToWarehouseAction(
     return { error: 'You do not have permission to manage returns.' };
   }
 
-  const supabase = (await createClient());
-  const found = await fetchDeliveryWithOrder(supabase, orderId);
-  if ('error' in found) return { error: found.error };
-  const { delivery, order } = found;
+  const trimmedNotes = (notes ?? '').trim();
+  if (trimmedNotes.length > 1000) return { error: 'Notes must be 1000 characters or fewer.' };
 
-  if (!canTransitionDeliveryStatus(delivery.delivery_status as DeliveryStatus, 'returned_to_warehouse')) {
-    return {
-      error:
-        describeDeliveryTransitionError(
-          delivery.delivery_status as DeliveryStatus,
-          'returned_to_warehouse'
-        ) ?? 'Cannot return this delivery to the warehouse.',
-    };
-  }
-  if (order.status !== 'delivered' && order.status !== 'returned') {
-    return { error: `This order is ${order.status.replace(/_/g, ' ')} — return to warehouse is not possible.` };
-  }
-
-  // Book the stock back into the warehouse.
-  const { error: stockError } = await supabase.rpc('return_order_stock' as never, {
+  // One database transaction (migration 0100): stock back, delivery and order
+  // status, loyalty reversal and the Coins refund commit together or not at
+  // all. A repeat after success changes nothing.
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: TRUSTED_WRITER_UNAVAILABLE };
+  const { data, error } = await (trusted as unknown as CompletionRpcClient).rpc('return_delivery_to_warehouse_atomic', {
     p_order_id: orderId,
-  } as never);
-  if (stockError) return { error: `Stock could not be returned: ${stockError.message}` };
-
-  const { data: claimed, error } = await supabase
-    .from('order_deliveries')
-    .update({
-      delivery_status: 'returned_to_warehouse',
-      delivery_notes: (notes ?? '').trim() || null,
-    } as never)
-    .eq('id', delivery.id)
-    .in('delivery_status', ['delivered', 'partially_delivered'])
-    .select('id')
-    .maybeSingle<{ id: string }>();
-  if (error) return { error: error.message };
-  if (!claimed) return { error: 'This delivery changed while saving — refresh and try again.' };
-
-  if (order.status === 'delivered') {
-    const { data: claimedOrder, error: orderError } = await supabase
-      .from('orders')
-      .update({ status: 'returned' } as unknown as never)
-      .eq('id', orderId)
-      .eq('status', 'delivered')
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (orderError) return { error: orderError.message };
-    if (!claimedOrder) {
-      return { error: 'The order changed state while returning to warehouse — refresh and re-check.' };
-    }
+    p_actor_id: user.id,
+    p_notes: trimmedNotes || null,
+  });
+  if (error) {
+    if (isFulfilmentRpcMissing(error)) return { error: FULFILMENT_NOT_INSTALLED };
+    return { error: mapReturnToWarehouseError(error.message) };
+  }
+  if (!isReturnToWarehouseResult(data)) {
+    return { error: 'This order could not be returned to the warehouse. Nothing was changed. Refresh and try again.' };
   }
 
-  // Reverse the wallet debit for the FULL order; if a shortfall refund was
-  // already credited at partial delivery, reverse that too so the retailer
-  // is not credited twice for the same goods.
-  const walletRefund = await reverseOrderWalletDebit(orderId, order.retailer_id, 'returned to warehouse', user.id);
-  if ('error' in walletRefund) return { error: 'The return status changed, but the wallet refund could not be verified. Contact support before retrying.' };
-  // A shortfall credit for this delivery, if any, is reversed in the same
-  // breath — the shop pays for the goods again because they came back. The
-  // function is idempotent: a second return reverses nothing more.
-  const { error: reverseShortfallError } = await RpcCapable(supabase).rpc('order_shortfall_coins', {
-    p_delivery_id: delivery.id,
-    p_reason: 'returned to warehouse',
-    p_created_by: user.id,
-    p_reverse: true,
-  });
-  if (reverseShortfallError && !/does not exist|could not find the function|schema cache/i.test(reverseShortfallError.message)) {
-    console.warn('Shortfall credit reversal failed:', reverseShortfallError.message);
+  if (!data.replayed) {
+    await notifyOrderEvent({
+      recipientId: data.retailer_id,
+      title: 'Order returned to warehouse',
+      body:
+        data.refunded_paise > 0
+          ? `Your order ${data.order_number} was returned to the warehouse. The order amount has been credited back to your wallet.`
+          : `Your order ${data.order_number} was returned to the warehouse.`,
+      linkUrl: `/retailer/orders/${orderId}`,
+      category: 'wallet',
+    });
   }
-
-  await notifyOrderEvent({
-    recipientId: order.retailer_id,
-    title: 'Order returned to warehouse',
-    body: `Your order ${order.order_number} was returned to the warehouse. The order amount has been credited back to your wallet.`,
-    linkUrl: `/retailer/orders/${orderId}`,
-    category: 'wallet',
-  });
 
   revalidateDeliveryPaths(orderId);
   revalidatePath('/retailer/account/ledger');
-  revalidatePath(`/admin/retailers/${order.retailer_id}`);
-  return { success: true, message: `Order ${order.order_number} returned to the warehouse.` };
+  revalidatePath(`/admin/retailers/${data.retailer_id}`);
+  revalidatePath('/admin/inventory');
+  return { success: true, message: `Order ${data.order_number} returned to the warehouse.` };
 }
