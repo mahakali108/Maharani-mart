@@ -304,10 +304,11 @@ describe('application references resolve against the schema', () => {
     // 0061 was never committed; 0075 is the on-hold retention archive and 0076
     // the deferred banner alt_text. Anything else appearing here is a numbering
     // accident that must be reviewed before it is applied.
-    // 0103 is reserved by the open security-advisor branch (PR #127) and is
-    // deliberately skipped by the website content migrations (0104/0105), which
-    // are independent of it and must not renumber around an unmerged branch.
-    expect(gaps).toEqual(['0061', '0075', '0076', '0103']);
+    // 0103 belongs to the security-advisor work (PR #127). It is excluded from
+    // this contiguity assertion rather than pinned present or absent: the
+    // website content migrations (0104/0105) are independent of it and must not
+    // renumber around a branch that may or may not have merged yet.
+    expect(gaps.filter((gap) => gap !== '0103')).toEqual(['0061', '0075', '0076']);
   });
 
   it('never ships two migrations with the same version', () => {
