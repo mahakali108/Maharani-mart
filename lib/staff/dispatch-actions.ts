@@ -126,7 +126,10 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
     if (resetError) return { error: `Delivery task could not be reset: ${resetError.message}` };
     if (reset) {
       deliveryId = reset.id;
-      await supabase.from('order_delivery_items').delete().eq('delivery_id', deliveryId);
+      // 0096: delivery staff cannot delete line snapshots; the previous attempt's
+      // lines are cleared by the same trusted writer that reset the task.
+      const { error: clearError } = await resetWriter.from('order_delivery_items').delete().eq('delivery_id', deliveryId);
+      if (clearError) return { error: `Previous delivery lines could not be cleared: ${clearError.message}` };
     } else {
       return { error: 'A delivery task already exists for this order and is not in a failed state.' };
     }
@@ -148,7 +151,10 @@ export async function dispatchOrderAction(orderId: string): Promise<DispatchResu
     deliveryId = inserted.id;
   }
 
-  // Snapshot the ordered quantities for the completion form + settlement.
+  // Snapshot the ordered quantities for the completion form. The database
+  // (0096) re-checks that every line belongs to this order and that
+  // quantity_ordered equals the original ordered quantity; refunds and loyalty
+  // are valued from order_items, not from this snapshot.
   const itemSnapshots = items.map((item) => ({
     delivery_id: deliveryId,
     order_item_id: item.id,

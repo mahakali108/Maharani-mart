@@ -153,6 +153,8 @@ describe('0094 delivery trust boundary and loyalty integrity (PostgreSQL 16)', (
     it('allows the trusted paths: service role (after server OTP check) and Admin', async () => {
       const viaService = await dispatchedOrder([[1000, 10]]);
       await as(db, 'service', async (tx: Tx) => {
+        // 0096: a delivery completes only with every line fully accounted for.
+        await tx.query(`update public.order_delivery_items set quantity_delivered = quantity_ordered where delivery_id = $1`, [viaService.deliveryId]);
         await tx.query(`update public.order_deliveries set delivery_status = 'delivered', otp_verified_at = now(), completed_by = $2 where id = $1`, [viaService.deliveryId, staff]);
         await tx.query(`update public.orders set status = 'delivered' where id = $1`, [viaService.orderId]);
       });
@@ -165,10 +167,161 @@ describe('0094 delivery trust boundary and loyalty integrity (PostgreSQL 16)', (
 
     it('freezes delivered quantities for staff once the delivery is completed', async () => {
       const { deliveryId, itemIds } = await dispatchedOrder([[1000, 10]]);
-      await as(db, 'service', (tx: Tx) =>
-        tx.query(`update public.order_deliveries set delivery_status = 'delivered' where id = $1`, [deliveryId]));
+      await as(db, 'service', async (tx: Tx) => {
+        await tx.query(`update public.order_delivery_items set quantity_delivered = quantity_ordered where delivery_id = $1`, [deliveryId]);
+        await tx.query(`update public.order_deliveries set delivery_status = 'delivered' where id = $1`, [deliveryId]);
+      });
       expect(await errorOf(db, staff, (tx: Tx) =>
         tx.query(`update public.order_delivery_items set quantity_delivered = 0, quantity_missing = 10 where order_item_id = $1`, [itemIds[0]]))).toMatch(/locked after completion/);
+    });
+  });
+
+  describe('SEC-16 (0096): the delivery line snapshot cannot be manipulated through the Data API', () => {
+    const lineOf = async (itemId: string) => (await db.query<{ delivery_id: string; order_item_id: string; quantity_ordered: number; quantity_delivered: number; quantity_missing: number; quantity_damaged: number }>(
+      `select delivery_id, order_item_id, quantity_ordered, quantity_delivered, quantity_missing, quantity_damaged from public.order_delivery_items where order_item_id = $1`, [itemId])).rows;
+
+    it('REPRODUCTION: without 0096 the assigned staff member can rewrite quantity_ordered and re-point the line', async () => {
+      const { itemIds } = await dispatchedOrder([[1000, 10]]);
+      const other = await dispatchedOrder([[9000, 10]]);
+      await db.exec(`alter table public.order_delivery_items disable trigger trg_guard_order_delivery_item_snapshot;`);
+      try {
+        expect(await errorOf(db, staff, (tx: Tx) =>
+          tx.query(`update public.order_delivery_items set quantity_ordered = 1, quantity_missing = 1 where order_item_id = $1`, [itemIds[0]]))).toBeNull();
+        expect((await lineOf(itemIds[0]!))[0]?.quantity_ordered).toBe(1);
+        expect(await errorOf(db, staff, (tx: Tx) =>
+          tx.query(`delete from public.order_delivery_items where order_item_id = $1`, [other.itemIds[0]]))).toBeNull();
+        expect(await lineOf(other.itemIds[0]!)).toHaveLength(0);
+      } finally {
+        await db.exec(`alter table public.order_delivery_items enable trigger trg_guard_order_delivery_item_snapshot;`);
+      }
+    });
+
+    it('rejects changing quantity_ordered, order_item_id or delivery_id by the assigned staff member', async () => {
+      const mine = await dispatchedOrder([[1000, 10], [500, 5]]);
+      const other = await dispatchedOrder([[9000, 10]]);
+      const before = await lineOf(mine.itemIds[0]!);
+      for (const sql of [
+        `update public.order_delivery_items set quantity_ordered = 1 where order_item_id = '${mine.itemIds[0]}'`,
+        `update public.order_delivery_items set quantity_ordered = 1000, quantity_missing = 1000 where order_item_id = '${mine.itemIds[0]}'`,
+        `update public.order_delivery_items set order_item_id = '${other.itemIds[0]}' where order_item_id = '${mine.itemIds[0]}'`,
+        `update public.order_delivery_items set delivery_id = '${other.deliveryId}' where order_item_id = '${mine.itemIds[0]}'`,
+        `update public.order_delivery_items set created_at = now() - interval '1 day' where order_item_id = '${mine.itemIds[0]}'`,
+      ]) {
+        expect(await errorOf(db, staff, (tx: Tx) => tx.query(sql)), sql).toMatch(/snapshot .* is immutable/);
+      }
+      expect(await lineOf(mine.itemIds[0]!)).toEqual(before);
+    });
+
+    it('keeps the snapshot immutable for Admin and the service role too', async () => {
+      const mine = await dispatchedOrder([[1000, 10]]);
+      const sql = `update public.order_delivery_items set quantity_ordered = 2 where order_item_id = '${mine.itemIds[0]}'`;
+      expect(await errorOf(db, admin, (tx: Tx) => tx.query(sql))).toMatch(/is immutable/);
+      expect(await errorOf(db, 'service', (tx: Tx) => tx.query(sql))).toMatch(/is immutable/);
+    });
+
+    it('rejects staff deleting a line or inserting a forged one', async () => {
+      const mine = await dispatchedOrder([[1000, 10]]);
+      const other = await dispatchedOrder([[9000, 10]]);
+      expect(await errorOf(db, staff, (tx: Tx) =>
+        tx.query(`delete from public.order_delivery_items where order_item_id = $1`, [mine.itemIds[0]]))).toMatch(/cannot be removed/);
+      expect(await lineOf(mine.itemIds[0]!)).toHaveLength(1);
+      // A line of ANOTHER order attached to my delivery.
+      await db.query(`delete from public.order_delivery_items where order_item_id = $1`, [other.itemIds[0]]);
+      expect(await errorOf(db, staff, (tx: Tx) =>
+        tx.query(`insert into public.order_delivery_items (delivery_id, order_item_id, quantity_ordered) values ($1, $2, 10)`, [mine.deliveryId, other.itemIds[0]]))).toMatch(/does not belong to this delivery's order/);
+      // Right order, wrong ordered quantity.
+      await db.query(`delete from public.order_delivery_items where order_item_id = $1`, [mine.itemIds[0]]);
+      expect(await errorOf(db, staff, (tx: Tx) =>
+        tx.query(`insert into public.order_delivery_items (delivery_id, order_item_id, quantity_ordered) values ($1, $2, 3)`, [mine.deliveryId, mine.itemIds[0]]))).toMatch(/must equal the original ordered quantity \(10\)/);
+      // Right snapshot but pre-filled quantities.
+      expect(await errorOf(db, staff, (tx: Tx) =>
+        tx.query(`insert into public.order_delivery_items (delivery_id, order_item_id, quantity_ordered, quantity_missing, quantity_delivered) values ($1, $2, 10, 10, 0)`, [mine.deliveryId, mine.itemIds[0]]))).toMatch(/starts with no quantities recorded/);
+      expect(await lineOf(mine.itemIds[0]!)).toHaveLength(0);
+    });
+
+    it('applies membership and original-quantity validation to trusted writers as well', async () => {
+      const mine = await dispatchedOrder([[1000, 10]]);
+      const other = await dispatchedOrder([[9000, 10]]);
+      await db.query(`delete from public.order_delivery_items where delivery_id in ($1, $2)`, [mine.deliveryId, other.deliveryId]);
+      expect(await errorOf(db, 'service', (tx: Tx) =>
+        tx.query(`insert into public.order_delivery_items (delivery_id, order_item_id, quantity_ordered) values ($1, $2, 10)`, [mine.deliveryId, other.itemIds[0]]))).toMatch(/does not belong/);
+      expect(await errorOf(db, admin, (tx: Tx) =>
+        tx.query(`insert into public.order_delivery_items (delivery_id, order_item_id, quantity_ordered) values ($1, $2, 99)`, [mine.deliveryId, mine.itemIds[0]]))).toMatch(/must equal the original ordered quantity/);
+      expect(await errorOf(db, 'service', (tx: Tx) =>
+        tx.query(`insert into public.order_delivery_items (delivery_id, order_item_id, quantity_ordered) values ($1, $2, 10)`, [mine.deliveryId, mine.itemIds[0]]))).toBeNull();
+    });
+
+    it('lets the assigned staff member record only delivered / missing / damaged within the ordered quantity', async () => {
+      const mine = await dispatchedOrder([[1000, 10]]);
+      expect(await errorOf(db, staff, (tx: Tx) =>
+        tx.query(`update public.order_delivery_items set quantity_delivered = 7, quantity_missing = 2, quantity_damaged = 1 where order_item_id = $1`, [mine.itemIds[0]]))).toBeNull();
+      expect((await lineOf(mine.itemIds[0]!))[0]).toMatchObject({ quantity_ordered: 10, quantity_delivered: 7, quantity_missing: 2, quantity_damaged: 1 });
+      for (const set of [
+        `quantity_delivered = 11, quantity_missing = 0, quantity_damaged = 0`,
+        `quantity_delivered = 7, quantity_missing = 3, quantity_damaged = 1`,
+        `quantity_delivered = -1, quantity_missing = 11, quantity_damaged = 0`,
+        `quantity_delivered = 5, quantity_missing = 0, quantity_damaged = 0`,
+      ]) {
+        expect(await errorOf(db, staff, (tx: Tx) =>
+          tx.query(`update public.order_delivery_items set ${set} where order_item_id = $1`, [mine.itemIds[0]])), set).not.toBeNull();
+      }
+      expect((await lineOf(mine.itemIds[0]!))[0]).toMatchObject({ quantity_delivered: 7, quantity_missing: 2, quantity_damaged: 1 });
+    });
+
+    it('gives no write access to another staff member, a retailer or an anonymous caller', async () => {
+      const mine = await dispatchedOrder([[1000, 10]]);
+      const before = await lineOf(mine.itemIds[0]!);
+      for (const who of [otherStaff, retailer, 'anon'] as const) {
+        await errorOf(db, who, (tx: Tx) =>
+          tx.query(`update public.order_delivery_items set quantity_delivered = 0, quantity_missing = 10 where order_item_id = $1`, [mine.itemIds[0]]));
+        await errorOf(db, who, (tx: Tx) =>
+          tx.query(`delete from public.order_delivery_items where order_item_id = $1`, [mine.itemIds[0]]));
+        expect(await lineOf(mine.itemIds[0]!), String(who)).toEqual(before);
+      }
+    });
+
+    it('refuses completion with missing, unaccounted or mis-labelled lines (every caller)', async () => {
+      const mine = await dispatchedOrder([[1000, 10], [500, 5]]);
+      const complete = (status: string) => errorOf(db, 'service', (tx: Tx) =>
+        tx.query(`update public.order_deliveries set delivery_status = '${status}' where id = $1`, [mine.deliveryId]));
+      expect(await complete('delivered')).toMatch(/full ordered quantity/);
+      await db.query(`update public.order_delivery_items set quantity_delivered = quantity_ordered where order_item_id = $1`, [mine.itemIds[0]]);
+      await db.query(`update public.order_delivery_items set quantity_delivered = 3, quantity_damaged = 2 where order_item_id = $1`, [mine.itemIds[1]]);
+      expect(await complete('delivered')).toMatch(/must be recorded as partially delivered/);
+      await db.query(`delete from public.order_delivery_items where order_item_id = $1`, [mine.itemIds[0]]);
+      expect(await complete('partially_delivered')).toMatch(/exactly one line per order line/);
+      await db.query(`insert into public.order_delivery_items (delivery_id, order_item_id, quantity_ordered, quantity_delivered) values ($1, $2, 10, 10)`, [mine.deliveryId, mine.itemIds[0]]);
+      expect(await complete('partially_delivered')).toBeNull();
+    });
+
+    it('values the shortfall and loyalty from the original order line even if a snapshot row were corrupted', async () => {
+      // ₹1,000 for 10 pieces; 2 missing → ₹200 shortfall; loyalty on ₹800 → 8 points.
+      const mine = await dispatchedOrder([[1000, 10]]);
+      await db.query(`update public.order_delivery_items set quantity_delivered = 8, quantity_missing = 2 where order_item_id = $1`, [mine.itemIds[0]]);
+      // Simulate legacy / corrupted data that predates the guard: quantity_ordered understated to 2.
+      await db.exec(`alter table public.order_delivery_items disable trigger user;`);
+      await db.query(`update public.order_delivery_items set quantity_ordered = 2, quantity_delivered = 0 where order_item_id = $1`, [mine.itemIds[0]]);
+      await db.exec(`alter table public.order_delivery_items enable trigger user;`);
+      const { rows } = await db.query<{ paise: string }>(`select public.delivery_shortfall_paise($1) as paise`, [mine.deliveryId]);
+      // 0094 would have returned 100000 (2 of "2" = the whole line). 0096 uses the order line: 2 of 10.
+      expect(Number(rows[0]!.paise)).toBe(20000);
+    });
+
+    it('end to end: staff records quantities, trusted writer completes, refund and points use original quantities', async () => {
+      const mine = await dispatchedOrder([[1000, 10]]);
+      expect(await errorOf(db, staff, (tx: Tx) =>
+        tx.query(`update public.order_delivery_items set quantity_delivered = 8, quantity_missing = 2 where order_item_id = $1`, [mine.itemIds[0]]))).toBeNull();
+      await as(db, 'service', async (tx: Tx) => {
+        await tx.query(`update public.order_deliveries set delivery_status = 'partially_delivered', otp_verified_at = now(), completed_by = $2 where id = $1`, [mine.deliveryId, staff]);
+        await tx.query(`select public.order_shortfall_coins($1, 1, 'shortfall', $2, false)`, [mine.deliveryId, staff]);
+        await tx.query(`update public.orders set status = 'delivered' where id = $1`, [mine.orderId]);
+      });
+      const { rows } = await db.query<{ amount_paise: string }>(
+        `select amount_paise from public.retailer_wallet_ledger where reference_type = 'delivery' and reference_id = $1`, [mine.deliveryId]);
+      expect(rows.map((row) => Number(row.amount_paise))).toEqual([20000]);
+      expect(await loyaltyPoints(mine.orderId, 'ORDER_EARN')).toEqual([8]);
+      expect(await errorOf(db, staff, (tx: Tx) =>
+        tx.query(`update public.order_delivery_items set quantity_delivered = 0, quantity_missing = 10 where order_item_id = $1`, [mine.itemIds[0]]))).toMatch(/locked after completion/);
     });
   });
 

@@ -437,6 +437,21 @@ export async function completeDeliveryAction(
     ((valueRows ?? []) as OrderLineValue[]).map((v) => [v.id, v])
   );
 
+  // The snapshot is display data. Quantities are validated against the
+  // ORIGINAL order lines so that a tampered snapshot can never change a refund
+  // (the database enforces the same rule in migration 0096).
+  if (values.size === 0 || values.size !== lines.length) {
+    return { error: 'This delivery task does not match the order lines. Ask an admin to re-dispatch it.' };
+  }
+  for (const line of lines) {
+    const original = values.get(line.order_item_id);
+    if (!original) return { error: 'This delivery task contains a line from another order. Ask an admin to review it.' };
+    const originalQuantity = original.quantity_pieces ?? original.quantity;
+    if (line.quantity_ordered !== originalQuantity) {
+      return { error: 'This delivery task no longer matches the original order quantities. Ask an admin to re-dispatch it.' };
+    }
+  }
+
   const byItemId = new Map(input.items.map((i) => [i.orderItemId, i]));
   if (byItemId.size !== input.items.length) return { error: 'Duplicate order lines in the submission.' };
   if (byItemId.size !== lines.length) {

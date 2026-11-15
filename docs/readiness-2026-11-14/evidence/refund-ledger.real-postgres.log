@@ -1,0 +1,33 @@
+Applied 95 repository migrations on 17.11.
+PASS split parent cancellation restores each stock owner and retries safely
+PASS split parent stock restoration excludes units still in transit
+PASS split stock failure rolls back parent status and every stock change
+PASS admin manual debit reversal is linked, atomic and idempotent
+PASS manual reversal rejects non-admins and order debit even for an admin
+PASS concurrent manual reversal replays serialize on the account
+PASS seller child cancellation refunds its checkout share and stock atomically, replay safe
+PASS seller child refund failure rolls back status, shipment and stock
+PASS seller cancellation after a linked partial refunds only remaining share
+PASS seller may not cancel another seller child or call the private transition
+PASS concurrent seller child cancellation retries serialize without extra credits or stock
+PASS seller refund does not grant the seller wallet-read privileges
+PASS seller cancellation refuses allocated seller settlements without changing either plane
+PASS last child cancellation restores both stock owners and releases parent coupon
+PASS partial replay rejects malformed linked history added after the first event
+PASS child partial refund rejects a debit exceeding its immutable share
+PASS refund grants deny anonymous callers and keep helper private
+PASS full refund via actual refund_order_coins gives zero
+PASS partial refunds, duplicate event and cap
+PASS concurrent partial refunds serialize and cannot exceed the debit
+PASS concurrent duplicate events write one credit
+PASS authenticated owner can cancel; foreign and inactive owners are denied
+PASS checkout debit waits for the refund account lock
+PASS atomic cancellation rolls status and wallet back on refund failure
+PASS atomic cancellation commits status and refund together
+PASS atomic cancellation refuses split orders without changing status
+PASS child event-keyed partial refunds preserve the original debit
+PASS legacy reversed flags are left unchanged and rejected
+PASS legacy flagged debit with existing credit is not silently repaired
+PASS fully credited malformed history is rejected rather than treated as a replay
+PASS unlinked credit blocks even a fully refunded replay
+Real PostgreSQL integration: 31 passed.

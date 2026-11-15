@@ -15,14 +15,17 @@ work started. No applied migration file was edited.
 |---|---|---|---|
 | `0094_delivery_trust_and_loyalty_integrity.sql` | Guard triggers on `order_deliveries`, `order_delivery_items`, `orders`; server-computed shortfall credit; loyalty on delivered value; real authorisation in `record_loyalty_points`; revokes TRUNCATE/REFERENCES/TRIGGER from API roles. | **Medium.** Changes behaviour of delivery completion: staff sessions can no longer write completion fields directly. Requires the app code in this PR to be deployed first. No data is changed. | `supabase/rollbacks/0094_….down.sql` — re-opens the vulnerabilities; emergency use only. Tested: applies cleanly and 0094 can be re-applied. |
 | `0095_legal_acceptance_and_privacy_requests.sql` | New append-only table `legal_document_acceptances` + `record_legal_acceptance()`; adds request types `data_correction`, `consent_withdrawal`; adds ticket topics `grievance`, `privacy` and `acknowledged_at`. | **Low.** Additive. Replaces two check constraints with wider ones. | `supabase/rollbacks/0095_….down.sql` — refuses to run if it would discard user requests; dropping the table loses acceptance proof (export first). |
+| `0096_delivery_snapshot_integrity.sql` | SEC-16 snapshot guard and completion check. | Delivery completion refused if a line is not fully accounted for. | `0096_….down.sql` |
+| `0097_atomic_split_order_cancellation.sql` | SEC-06 atomic split cancel, `close_sub_order_atomic`, direct-cancel guards, 0069 trigger fix. | Any script writing `status='cancelled'` directly is refused. | `0097_….down.sql` (restores 0088 / 0066 / 0069 bodies) |
+| `0098_seller_agreement_and_marketplace_gate.sql` | SEC-17 marketplace switch (OFF) and agreement gate. | Third-party offers cannot go live until the switch is on. | `0098_….down.sql` (approval log kept in an archive table) |
 
-Both are idempotent (re-run tested).
+All five are idempotent (re-run tested). Rollback 0098 → 0094 and re-apply was tested on real PostgreSQL with data present.
 
 ## Order of application — for the owner's decision, not done here
 
 1. Review and merge the PR. Deploy the application.
 2. Take a database backup.
-3. Apply 0094, then 0095, in that order, in a quiet period.
+3. Apply 0094, 0095, 0096, 0097, 0098, in that order, in a quiet period.
 4. Run the checks below. If delivery completion fails, roll back 0094 only.
 
 Post-apply checks (read-only):

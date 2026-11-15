@@ -20,7 +20,7 @@ holds **0 users, 0 orders, 0 ledger rows**, so none of these has been exploited.
 | SEC-03 | High | `order_shortfall_coins()` credited whatever amount the caller sent, and let any staff member reverse a credit. | Function body (0053); test "inflated amount ignored" | **Fixed in PR** (0094 §4): amount is computed from recorded delivery lines. |
 | SEC-04 | Medium | Loyalty points were awarded on the full order total even when part of the order was not delivered. | Trigger body (0093); test: ₹2,000 order, 3 of 10 short → 14 points, not 20 | **Fixed in PR** (0094 §5). |
 | SEC-05 | High | Legacy unkeyed SHA-256 delivery OTP hashes were still accepted. An unkeyed hash of a 6-digit code can be brute-forced by anyone who knows the order id. | `lib/delivery/otp.ts` | **Fixed in PR** (app). Safe: live DB has 0 deliveries. |
-| SEC-06 | High | Order cancellation changed the status and refunded Coins in separate steps in three code paths; the atomic database function `cancel_order_coins_atomic` (0088) had no caller. | `lib/retailer/order-actions.ts`, `lib/admin/orders-actions.ts`, mobile cancel route | **Mitigated in PR**: all three paths try the atomic function first and still verify the ledger. See residual R-2. |
+| SEC-06 | High | Order cancellation changed the status and refunded Coins in separate steps in three code paths; the atomic database function `cancel_order_coins_atomic` (0088) had no caller. | `lib/retailer/order-actions.ts`, `lib/admin/orders-actions.ts`, mobile cancel route | **Fixed in PR (0097)**: split orders and single sub-orders cancel in one transaction; no two-step fallback after a refusal. See `06_REVIEW_FIXES.md`. |
 | SEC-07 | Medium | `anon` and `authenticated` hold TRUNCATE, REFERENCES and TRIGGER on public tables and views (158 TRUNCATE grants live). RLS does not restrict TRUNCATE. | Live `information_schema.table_privileges` | **Fixed in PR** (0094 §6). |
 | SEC-08 | Medium | Partial-delivery settlement read `order_items.line_total` (rupees) as paise, so a shortfall refund would have been 100 times too small. | `lib/delivery/delivery-actions.ts`; column is `numeric(12,2)` rupees | **Fixed in PR** (app); DB function computes the same value independently. |
 | SEC-09 | Medium | Staff and sales roles could set an order to `delivered` from the generic admin status action. | `updateOrderStatusAction` | **Fixed in PR** (app + 0094 trigger). |
@@ -38,6 +38,9 @@ or ownership expressions. Public buckets hold only catalogue imagery and
 avatars. No finding, but policy expressions longer than 150 characters were
 truncated by the query and were **not fully read** — classify as partially
 audited.
+
+| SEC-16 | High | Delivery staff could rewrite, re-point, delete or forge delivery snapshot lines and so change a refund or loyalty award. | `order_delivery_items` | **Fixed in PR (0096)**. |
+| SEC-17 | High | Seller agreement acceptance was recorded but not enforced; no owner/CA sign-off gate on third-party selling. | `seller_offers`, `order_items` | **Fixed in PR (0098)** at the database; Admin screen missing. |
 
 ## 2. What was repaired in this PR
 
@@ -68,8 +71,8 @@ penetration test; treat it accordingly.
 ## 4. Residual risks that block a "secure" verdict
 
 - **R-1** Service-role use in delivery actions depends on code review discipline.
-- **R-2** Cancellation falls back to the two-step path when the atomic function declines (for example split marketplace orders).
+- **R-2** CLOSED by 0097. The two-step path now runs only if the atomic function is absent (app deployed before the migration).
 - **R-3** SEC-10 multi-step workflows are not transactional.
-- **R-4** Concurrency was tested on a single-connection database, so truly simultaneous sessions were **not** exercised. Locking was reviewed by reading the SQL, and idempotency keys were tested by replay.
+- **R-4** PARTLY CLOSED: cancellation, delivery snapshot and marketplace switch were exercised with simultaneous sessions on real PostgreSQL 17 (`06_REVIEW_FIXES.md`); other workflows were not. Original note: Concurrency was tested on a single-connection database, so truly simultaneous sessions were **not** exercised. Locking was reviewed by reading the SQL, and idempotency keys were tested by replay.
 - **R-5** SEC-02 remains exploitable on the live database until 0094 is applied.
 - **R-6** No external penetration test, no load test, no review of Vercel environment variables (not inspected, by instruction not changed).

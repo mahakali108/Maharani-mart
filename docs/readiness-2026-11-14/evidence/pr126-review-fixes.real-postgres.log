@@ -1,0 +1,44 @@
+Applied 95 repository migrations (0001 - 0098) on PostgreSQL 17.11.
+PASS split cancel: a second session WAITS for the first, then credits nothing (no double refund)
+PASS split cancel: the first session ROLLS BACK, the waiting session then performs the whole refund
+PASS split cancel: 16 simultaneous sessions (retailer, admin, service) refund exactly once
+PASS opposite entry points at once (whole order, child A, child B, legacy status RPC): no deadlock, exact totals - 25 rounds
+PASS two admins close the two children at the same moment: parent cancelled once, coupon released once
+PASS partial failure under concurrency: a failing session changes nothing and does not poison the next one
+PASS a direct status write racing the atomic call is refused; the atomic call still completes
+PASS snapshot: assigned staff cannot rewrite quantity_ordered / order_item_id / delivery_id, delete or forge a line
+PASS snapshot race: completion holds the delivery; a concurrent staff quantity write WAITS and is then refused
+PASS snapshot race: a staff quantity write in flight makes completion WAIT, and completion then re-checks the committed quantities
+PASS snapshot: refund and loyalty use the original order quantity end to end (Rs 1,000 / 10 pcs, 2 missing -> Rs 200 and 8 points)
+PASS marketplace switch: two Super Admin sessions are serialised; the later decision wins; history keeps both
+PASS seller gate holds for every role on real PostgreSQL (switch off, then on without acceptance, then accepted)
+  columns: anon, retailer, otherRetailer, staff, otherStaff, admin, superAdmin, service  (Y allowed, n refused; y/. = observed, not asserted)
+  nnnnnnnn  snapshot: change quantity_ordered
+  nnnnnnnn  snapshot: re-point order_item_id
+  nnnYnYYY  snapshot: record delivered/missing/damaged
+  nnnnnyyy  snapshot: delete a line
+  nnnnnYYY  delivery: mark delivered directly (0094)
+  nnnnnnnY  delivery: read shortfall helper
+  nnnnnYYY  loyalty: mint points (0094)
+  nYnnnYYY  cancel: atomic whole-order cancel
+  nnnnnYYY  cancel: close one sub-order
+  nnnnnYYY  cancel: legacy set_sub_order_status(cancelled)
+  nnnnnnnn  cancel: direct orders.status = cancelled
+  nnnnnnnn  cancel: direct sub_orders.status = cancelled
+  nnnnnnnn  cancel: private core helper
+  nnnnnnnn  cancel: private refund helper
+  nnnnnnYn  market: turn third-party offers on
+  nnnnnnnn  market: write approval log directly
+  nnnnnnYn  market: publish a document version
+  nnnnnnny  market: change current version directly
+  nYYYYYYY  market: read the switch
+  nnnnnnnY  market: internal agreement predicate
+  nYYYYYYn  legal: accept current Terms for myself
+  nnnnnnny  legal: write an acceptance row directly
+  nYnnn..y  privacy: file a data-correction request (own)
+  nYnnn..y  privacy: file a consent-withdrawal request (own)
+  nnnnnyyy  grievance: forge acknowledged_at on a ticket
+PASS permission matrix: anonymous, retailer, other retailer, delivery staff, other staff, admin, super-admin, service role
+PASS new objects: no anon EXECUTE, fixed search_path, RLS on new tables
+PASS rollback safety: 0098 -> 0094 roll back in order on a database WITH data, then 0094 -> 0098 re-apply
+PR #126 real PostgreSQL 17.11: 16 passed, 0 failed.

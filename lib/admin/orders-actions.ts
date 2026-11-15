@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { notifyOrderEvent } from '@/lib/notifications/notify';
 import type { Database } from '@/types/database.types';
-import { restoreAndVerifyCancellationCoins, tryAtomicOrderCancellation } from '@/lib/orders/cancellation-coins';
+import { attemptAtomicOrderCancellation, restoreAndVerifyCancellationCoins } from '@/lib/orders/cancellation-coins';
 import { canTransitionOrderStatus, describeTransitionError } from '@/lib/orders/state-machine';
 import { releaseOrderCoupon } from '@/lib/coupons/validate';
 import { resolveActiveWarehouse } from '@/lib/warehouse/resolver';
@@ -134,8 +134,12 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
   if (order.status === 'dispatched' || order.status === 'delivered' || order.status === 'returned') {
     return { error: 'Dispatched, delivered or returned orders cannot be cancelled — use the appropriate return process.' };
   }
-  const atomicallyCancelled = order.status !== 'cancelled'
-    && await tryAtomicOrderCancellation(supabase, orderId, reason || 'Order cancelled');
+  const atomic = order.status !== 'cancelled'
+    ? await attemptAtomicOrderCancellation(supabase, orderId, reason || 'Order cancelled')
+    : null;
+  // Declined by the database: nothing changed, and no non-atomic fallback.
+  if (atomic?.status === 'refused') return { error: atomic.error };
+  const atomicallyCancelled = atomic?.status === 'cancelled';
   if (order.status !== 'cancelled' && !atomicallyCancelled) {
     const { data: cancelled, error } = await supabase
       .from('orders')

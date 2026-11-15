@@ -53,4 +53,15 @@ describe('delivery actions write protected fields through the trusted writer', (
     const admin = readFileSync('lib/admin/orders-actions.ts', 'utf8');
     expect(admin).toMatch(/status === 'delivered' && actor\.role !== 'super_admin' && actor\.role !== 'admin'/);
   });
+  it('completion checks the snapshot against the original order lines before any settlement or write (SEC-16)', () => {
+    const body = section('completeDeliveryAction');
+    const check = body.indexOf('This delivery task no longer matches the original order quantities.');
+    expect(check).toBeGreaterThan(-1);
+    expect(body).toContain('This delivery task does not match the order lines.');
+    expect(body).toContain('This delivery task contains a line from another order.');
+    expect(body).toContain('original.quantity_pieces ?? original.quantity');
+    // The comparison runs before settlement lines are built and before the trusted write.
+    expect(body.indexOf('const settlementLines')).toBeGreaterThan(check);
+    expect(body.indexOf("completionWriter\n    .from('order_deliveries')")).toBeGreaterThan(check);
+  });
 });

@@ -22,6 +22,8 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: () => mocks.reportClient
 vi.mock('@/lib/orders/cancellation-coins', () => ({
   restoreAndVerifyCancellationCoins: mocks.restoreAndVerifyCancellationCoins,
   tryAtomicOrderCancellation: async () => false,
+  // 0097 wiring: "unavailable" keeps these tests on the guarded fallback path.
+  attemptAtomicOrderCancellation: async () => ({ status: 'unavailable' }),
 }));
 vi.mock('@/lib/coupons/validate', () => ({ releaseOrderCoupon: mocks.releaseOrderCoupon }));
 

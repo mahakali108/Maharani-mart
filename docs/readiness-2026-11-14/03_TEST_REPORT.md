@@ -6,11 +6,11 @@ production.
 | Check | Command | Before (main `80007cc`) | After (this PR) | Status |
 |---|---|---|---|---|
 | Type check | `pnpm typecheck` | pass | pass | PASS |
-| Unit / DB tests | `pnpm test` | 18 files failed, 180 passed; 11 tests failed, 2804 passed, 213 skipped | 18 files failed, 186 passed; 11 tests failed, 2874 passed, 213 skipped | **FAIL (pre-existing)** |
+| Unit / DB tests | `pnpm test` | 18 files failed, 180 passed; 11 tests failed, 2804 passed, 213 skipped | 18 files failed, 189 passed; 11 tests failed, 2972 passed, 213 skipped (same 18 files as before) | **FAIL (pre-existing)** |
 | Lint | `pnpm lint` | 48 errors, 40 warnings | 48 errors, 40 warnings | **FAIL (pre-existing)** |
 | Production build | `pnpm build` | not run | succeeds; all `/legal` routes generated | PASS |
 | Dependency audit | `pnpm audit --prod` | not run | 1 high (`zod` < 4.6.6) | **FAIL** |
-| Concurrency with multiple sessions | — | — | not possible: test database is single-connection | BLOCKED |
+| Concurrency with multiple sessions | `node tests/pr126-review-fixes.pg.mjs`, `node tests/refund-ledger-real-postgres.pg.mjs` | — | PostgreSQL 17.11: 16 passed and 31 passed (run by hand; not in `pnpm test`) | PASS for cancellation, snapshot and seller gate only |
 | Browser / end-to-end journey | — | — | not run (no browser in sandbox, no test accounts) | BLOCKED |
 | Live production smoke test | — | — | not run by instruction | BLOCKED |
 

@@ -53,7 +53,14 @@ export async function acceptLegalDocumentsAction(formData: FormData): Promise<vo
       p_context: audience === 'seller' ? 'seller_onboarding' : 'account',
     } as never);
     if (error) {
-      console.warn('Legal acceptance could not be recorded:', error.message);
+      // LEGAL_VERSION_NOT_CURRENT (0098): the published version moved on while the
+      // page was open. Nothing is recorded; the refreshed page shows the document
+      // as still pending, so the person reads and accepts the current text.
+      console.warn(
+        error.message.includes('LEGAL_VERSION_NOT_CURRENT')
+          ? `Legal acceptance refused: ${document.key} ${document.version} is not the current version.`
+          : `Legal acceptance could not be recorded: ${error.message}`,
+      );
       break;
     }
   }

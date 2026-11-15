@@ -9,7 +9,7 @@ import { validatePackForCart } from '@/lib/retailer/cart-service';
 import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import { isReturnWindowOpen } from '@/lib/delivery/return-window';
 import type { Database } from '@/types/database.types';
-import { restoreAndVerifyCancellationCoins, tryAtomicOrderCancellation } from '@/lib/orders/cancellation-coins';
+import { attemptAtomicOrderCancellation, restoreAndVerifyCancellationCoins } from '@/lib/orders/cancellation-coins';
 import { releaseOrderCoupon } from '@/lib/coupons/validate';
 
 type ReturnRequestInsert = Database['public']['Tables']['return_requests']['Insert'];
@@ -23,7 +23,11 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
   // Preferred path: status, Coins refund and coupon release in one database
   // transaction. When it commits, the guarded update below matches no row and
   // the already-cancelled branch continues to ledger verification.
-  await tryAtomicOrderCancellation(supabase, orderId, reason || 'Retailer cancelled order');
+  const atomic = await attemptAtomicOrderCancellation(supabase, orderId, reason || 'Retailer cancelled order');
+  // The database declined and changed nothing. Do not fall back to a status
+  // write followed by a separate refund: that could leave a cancelled order
+  // with Coins not returned (split orders have one debit per sub-order).
+  if (atomic.status === 'refused') return { error: atomic.error };
 
   // RLS (orders_retailer_cancel) already restricts this to the
   // caller's own pending orders — the .eq() filters here just make
