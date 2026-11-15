@@ -754,6 +754,14 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
               -f body="$(printf '### Android CI diagnostics\n\n```\n'; head -c 55000 /tmp/diagnostics.txt; printf '\n```\n')" \
               || echo "::warning::could not post commit diagnostics"
+            # Second, independent channel: an issue. Commit comments are not
+            # always retrievable by automation clients, while the issues API is
+            # (this repository's Actions artifacts and log archives are served
+            # from hosts that some sandboxes cannot reach). Best effort only.
+            gh api "repos/$GITHUB_REPOSITORY/issues" \
+              -f title="Android CI diagnostics — ${GITHUB_SHA:0:7}" \
+              -f body="$(printf '### Android CI diagnostics — %s\n\nRun: %s\n\n```\n' "${GITHUB_SHA:0:7}" "$GITHUB_RUN_ID"; head -c 55000 /tmp/diagnostics.txt; printf '\n```\n')" \
+              || echo "::warning::could not open a diagnostics issue"
             exit 0
           fi
           {
