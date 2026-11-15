@@ -40,10 +40,9 @@ grant execute on function public.log_order_status_change() to public, anon, auth
 grant execute on function public.log_seller_offer_price_change() to public, anon, authenticated;
 grant execute on function public.release_stock_on_order_cancel() to public, anon, authenticated;
 grant execute on function public.sync_product_pack_primary_image() to public, anon, authenticated;
-do $
-begin
+do $$begin
   if to_regprocedure('public.rls_auto_enable()') is not null then
     execute 'grant execute on function public.rls_auto_enable() to public, anon, authenticated';
   end if;
 end;
-$;
+$$;
