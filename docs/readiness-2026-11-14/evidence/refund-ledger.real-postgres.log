@@ -1,4 +1,4 @@
-Applied 95 repository migrations on 17.11.
+Applied 96 repository migrations on 17.11.
 PASS split parent cancellation restores each stock owner and retries safely
 PASS split parent stock restoration excludes units still in transit
 PASS split stock failure rolls back parent status and every stock change

@@ -98,12 +98,32 @@ describe('0095 legal acceptance records and privacy request types (PostgreSQL 16
     expect(Number(rows[0]!.n)).toBeGreaterThan(0);
   });
 
-  it('rollback applies cleanly on a database with no such requests', async () => {
-    const scratch = await createMigratedDb();
-    await scratch.exec(readFileSync('supabase/rollbacks/0095_legal_acceptance_and_privacy_requests.down.sql', 'utf8'));
-    const { rows } = await scratch.query<{ n: string }>(
-      `select count(*)::text as n from pg_class where relname = 'legal_document_acceptances'`);
-    expect(rows[0]!.n).toBe('0');
+  // Final-completion review: the rollback used to DROP the acceptance table
+  // (and three columns). It now deletes nothing — it only removes access.
+  it('rollback applies cleanly, KEEPS every acceptance row and column, removes API access, and 0095 re-applies', async () => {
+    const scratch = await createMigratedDb({ lastMigration: '0095_legal_acceptance_and_privacy_requests.sql' });
+    const user = await createUser(scratch, 'retailer', 'Acceptance Keeper');
+    await as(scratch, user, (tx: Tx) => tx.query(`select public.record_legal_acceptance('terms', '1.0', 'account')`));
+    const down = readFileSync('supabase/rollbacks/0095_legal_acceptance_and_privacy_requests.down.sql', 'utf8');
+    expect(down).not.toMatch(/drop table|drop column|truncate|delete from/i);
+
+    await scratch.exec(down);
+    const kept = await scratch.query<{ user_id: string; document_key: string }>(`select user_id, document_key from public.legal_document_acceptances`);
+    expect(kept.rows).toEqual([{ user_id: user, document_key: 'terms' }]);
+    const columns = await scratch.query<{ column_name: string }>(
+      `select column_name from information_schema.columns where table_schema = 'public'
+        and ((table_name = 'support_tickets' and column_name = 'acknowledged_at')
+          or (table_name = 'retailer_account_requests' and column_name in ('resolved_at', 'resolution_note'))) order by 1`);
+    expect(columns.rows.map((r) => r.column_name)).toEqual(['acknowledged_at', 'resolution_note', 'resolved_at']);
+    // To the application the table is gone: no read, no write, no function.
+    expect(await errorOf(scratch, user, (tx: Tx) => tx.query(`select 1 from public.legal_document_acceptances`))).toMatch(/permission denied/);
+    expect(await errorOf(scratch, user, (tx: Tx) => tx.query(`select public.record_legal_acceptance('terms', '1.0', 'account')`))).toMatch(/does not exist/);
+
+    // A second rollback is harmless; re-applying restores access to the same rows.
+    await scratch.exec(down);
+    await scratch.exec(readFileSync('supabase/migrations/0095_legal_acceptance_and_privacy_requests.sql', 'utf8'));
+    const again = await as(scratch, user, (tx: Tx) => tx.query(`select document_key from public.legal_document_acceptances`));
+    expect(again.rows).toHaveLength(1);
     await scratch.close();
   }, 120_000);
 });

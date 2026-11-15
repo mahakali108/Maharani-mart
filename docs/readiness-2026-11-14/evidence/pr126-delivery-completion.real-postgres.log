@@ -1,0 +1,27 @@
+Applied 96 repository migrations (0001 - 0099) on PostgreSQL 17.11.
+PASS one call completes everything: lines, delivery, order, Rs 200 credit, 8 points, attribution
+PASS the spoofed actor identity does not outlive the call inside the same transaction
+PASS only service_role can execute; anon, retailer, staff, admin and super-admin are refused
+PASS two sessions complete at once (same request): the second WAITS, then gets the first result; one settlement
+PASS two sessions complete at once with DIFFERENT quantities: exactly one wins, the other is refused, no mixed state
+PASS 24 simultaneous sessions (assignee, admin, super-admin; mixed payloads) settle exactly once - 10 rounds
+PASS the first session ROLLS BACK: the waiting session then performs the whole settlement
+PASS lost response: the commit happened, the retry on a new connection returns the same result and adds nothing
+PASS 40 simultaneous wrong OTPs: exactly 10 are counted, 30 are refused as locked, the limit is never passed
+PASS 9 wrong OTPs racing 1 correct one: the delivery completes once and at most 9 attempts are counted
+PASS a wrong OTP is counted even though the caller's transaction did nothing else; a later rollback-inducing error is not counted
+PASS a staff quantity write in flight: completion WAITS (no deadlock), then overwrites with the verified quantities
+PASS completion in flight: a staff quantity write WAITS and is then refused (locked after completion)
+PASS staff line writes and completion hammered together never deadlock - 20 rounds
+PASS completion racing an Admin cancelling the order: one of them wins cleanly, never both
+PASS failure of the wallet credit rolls back every change, and the next attempt succeeds
+PASS failure of the order status update rolls back every change, and the next attempt succeeds
+PASS failure of the loyalty award rolls back every change, and the next attempt succeeds
+PASS failure of the delivery row update rolls back every change, and the next attempt succeeds
+PASS failure of the idempotency record rolls back every change, and the next attempt succeeds
+PASS an error inside an open transaction aborts it: nothing partial survives
+PASS actor checks: unassigned staff, retailer, deactivated account and unknown id are refused; assigned salesman and admin succeed
+PASS order already marked delivered by an Admin: points come down to the delivered value; a return then nets to zero
+PASS catalogue hygiene: definer + fixed search_path, no PUBLIC/anon/authenticated execute, RLS on and no API grants on the idempotency table
+PASS rollback 0099 with data present keeps every row; re-apply (twice) works and completes a delivery
+PR #126 delivery completion on real PostgreSQL 17.11: 25 passed, 0 failed.

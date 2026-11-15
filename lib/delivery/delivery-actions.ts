@@ -41,10 +41,25 @@ import {
   describeDeliveryTransitionError,
   type DeliveryStatus,
 } from './state-machine';
-import { generateDeliveryOtp, hashDeliveryOtp, isValidOtpFormat, verifyDeliveryOtp, MAX_OTP_ATTEMPTS } from './otp';
-import { computePartialSettlement, type SettlementLine } from './settlement';
-import { computeReturnDeadline, parseReturnWindowDays } from './return-window';
+import { generateDeliveryOtp, hashDeliveryOtp, isValidOtpFormat } from './otp';
 import { createTrustedDeliveryWriter, TRUSTED_WRITER_UNAVAILABLE } from './trusted-writer';
+import {
+  COMPLETE_DELIVERY_RPC,
+  COMPLETION_NOT_INSTALLED,
+  completionIdempotencyKey,
+  isCompletionResult,
+  isCompletionRpcMissing,
+  isOtpIncorrect,
+  mapCompletionError,
+  type CompletionLine,
+} from './completion';
+
+type CompletionRpcClient = {
+  rpc: (
+    name: string,
+    args: Record<string, unknown>
+  ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+};
 
 /**
  * Minimal RPC surface for the 🪙 coin functions added in migration 0053. The
@@ -173,14 +188,6 @@ function isValidDeliveryProofRef(ref: string | null | undefined, orderId: string
 
 function staffDeliveryLink(userRole: string, orderId: string): string {
   return userRole === 'salesman' ? `/salesman/deliveries/${orderId}` : `/staff/deliveries/${orderId}`;
-}
-
-/** Order line value (RUPEES, as stored) + the pieces snapshot, for settlement math. */
-interface OrderLineValue {
-  id: string;
-  line_total: number;
-  quantity: number;
-  quantity_pieces: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -382,37 +389,65 @@ export async function completeDeliveryAction(
   if (!Array.isArray(input.items) || input.items.length === 0) {
     return { error: 'Delivery quantities for every order line are required.' };
   }
-
-  const supabase = (await createClient());
-  const found = await fetchDeliveryWithOrder(supabase, orderId);
-  if ('error' in found) return { error: found.error };
-  const { delivery, order } = found;
-
-  if (delivery.assigned_staff_id !== user.id && !isAdminLike(user)) {
-    return { error: 'Only the assigned delivery person can complete this delivery.' };
+  const items: CompletionLine[] = [];
+  for (const item of input.items) {
+    const delivered = Number(item?.delivered);
+    const missing = Number(item?.missing);
+    const damaged = Number(item?.damaged);
+    if (
+      typeof item?.orderItemId !== 'string' ||
+      !Number.isInteger(delivered) || !Number.isInteger(missing) || !Number.isInteger(damaged) ||
+      delivered < 0 || missing < 0 || damaged < 0
+    ) {
+      return { error: 'Quantities must be whole numbers of 0 or more.' };
+    }
+    items.push({ orderItemId: item.orderItemId, delivered, missing, damaged });
   }
-  if (delivery.delivery_status !== 'assigned' && delivery.delivery_status !== 'in_progress') {
-    return { error: 'This delivery is not open — it was already completed or failed.' };
-  }
-  if (order.status !== 'dispatched' && order.status !== 'delivered') {
-    return { error: `This order is ${order.status.replace(/_/g, ' ')} — it cannot be completed as a delivery.` };
-  }
-  if (delivery.otp_attempts >= MAX_OTP_ATTEMPTS) {
-    return { error: 'Too many wrong OTP attempts. Ask an admin to regenerate the OTP.' };
-  }
-  if (!delivery.otp_hash) {
-    return { error: 'This delivery has no OTP — ask an admin to regenerate it.' };
+  if (new Set(items.map((i) => i.orderItemId)).size !== items.length) {
+    return { error: 'Duplicate order lines in the submission.' };
   }
 
-  // --- OTP check (count the attempt BEFORE deciding, like a real terminal) ---
-  if (!verifyDeliveryOtp(orderId, input.otp, delivery.otp_hash)) {
-    const attempts = delivery.otp_attempts + 1;
-    await supabase
-      .from('order_deliveries')
-      .update({ otp_attempts: attempts } as never)
-      .eq('id', delivery.id)
-      .eq('otp_attempts', delivery.otp_attempts);
-    const remaining = MAX_OTP_ATTEMPTS - attempts;
+  // Everything that follows is ONE database transaction (migration 0099):
+  // actor, state, OTP, attempt counting, line validation, quantities,
+  // completion, order status, shortfall credit and loyalty either all commit
+  // or none do. The plain OTP never leaves this process — only its keyed
+  // digest is sent. The function runs under the server-only service role and
+  // re-verifies the actor itself; a staff or Admin browser session cannot
+  // call it.
+  const trusted = createTrustedDeliveryWriter();
+  if (!trusted) return { error: TRUSTED_WRITER_UNAVAILABLE };
+
+  let otpDigest: string;
+  try {
+    otpDigest = hashDeliveryOtp(orderId, input.otp);
+  } catch {
+    return { error: TRUSTED_WRITER_UNAVAILABLE };
+  }
+  const signatureRef = input.signatureUrl?.trim() || null;
+  const photoRef = input.photoUrl?.trim() || null;
+
+  const { data, error } = await (trusted as unknown as CompletionRpcClient).rpc(COMPLETE_DELIVERY_RPC, {
+    p_order_id: orderId,
+    p_actor_id: user.id,
+    p_otp_digest: otpDigest,
+    p_idempotency_key: completionIdempotencyKey({
+      orderId, actorId: user.id, otpDigest, receiverName: receiver, notes, signatureRef, photoRef, items,
+    }),
+    p_receiver_name: receiver,
+    p_notes: notes || null,
+    p_signature_ref: signatureRef,
+    p_photo_ref: photoRef,
+    p_items: items.map((i) => ({
+      order_item_id: i.orderItemId, delivered: i.delivered, missing: i.missing, damaged: i.damaged,
+    })),
+  });
+
+  if (error) {
+    if (isCompletionRpcMissing(error)) return { error: COMPLETION_NOT_INSTALLED };
+    return { error: mapCompletionError(error.message) };
+  }
+  if (isOtpIncorrect(data)) {
+    const remaining = Number(data.attempts_remaining) || 0;
     return {
       error:
         remaining > 0
@@ -420,212 +455,40 @@ export async function completeDeliveryAction(
           : 'Incorrect OTP. The task is now locked — ask an admin to regenerate the OTP.',
     };
   }
-
-  // --- Load the line snapshots for validation + settlement ---
-  const { data: lineRows } = await supabase
-    .from('order_delivery_items')
-    .select('id, order_item_id, quantity_ordered')
-    .eq('delivery_id', delivery.id);
-  const lines = (lineRows ?? []) as { id: string; order_item_id: string; quantity_ordered: number }[];
-  if (lines.length === 0) return { error: 'This delivery task has no line snapshots.' };
-
-  const { data: valueRows } = await supabase
-    .from('order_items')
-    .select('id, line_total, quantity, quantity_pieces')
-    .eq('order_id', orderId);
-  const values = new Map(
-    ((valueRows ?? []) as OrderLineValue[]).map((v) => [v.id, v])
-  );
-
-  // The snapshot is display data. Quantities are validated against the
-  // ORIGINAL order lines so that a tampered snapshot can never change a refund
-  // (the database enforces the same rule in migration 0096).
-  if (values.size === 0 || values.size !== lines.length) {
-    return { error: 'This delivery task does not match the order lines. Ask an admin to re-dispatch it.' };
+  if (!isCompletionResult(data)) {
+    // No confirmation from the database: report nothing as done.
+    return { error: mapCompletionError(null) };
   }
-  for (const line of lines) {
-    const original = values.get(line.order_item_id);
-    if (!original) return { error: 'This delivery task contains a line from another order. Ask an admin to review it.' };
-    const originalQuantity = original.quantity_pieces ?? original.quantity;
-    if (line.quantity_ordered !== originalQuantity) {
-      return { error: 'This delivery task no longer matches the original order quantities. Ask an admin to re-dispatch it.' };
+
+  const creditRupees = (Number(data.credit_back_paise) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+  // The transaction has committed. A replay (retry of a request that already
+  // succeeded) was notified the first time; it is not notified again.
+  if (!data.replayed) {
+    try {
+      await notifyOrderEvent({
+        recipientId: data.retailer_id,
+        title: data.fully_delivered ? 'Order delivered' : 'Order partially delivered',
+        body: data.fully_delivered
+          ? `Your order ${data.order_number} was delivered to ${receiver}. Return window: ${data.return_window_days} day(s).`
+          : `Your order ${data.order_number} was partially delivered to ${receiver}. ₹${creditRupees} was credited back to your wallet for missing/damaged items.`,
+        linkUrl: `/retailer/orders/${orderId}/delivery`,
+        category: 'order',
+      });
+    } catch (notifyError) {
+      // The delivery is recorded; a failed notification must not report failure.
+      console.warn('Delivery notification failed:', notifyError instanceof Error ? notifyError.message : notifyError);
     }
   }
-
-  const byItemId = new Map(input.items.map((i) => [i.orderItemId, i]));
-  if (byItemId.size !== input.items.length) return { error: 'Duplicate order lines in the submission.' };
-  if (byItemId.size !== lines.length) {
-    return { error: `Quantities are required for all ${lines.length} order lines.` };
-  }
-
-  const settlementLines: SettlementLine[] = [];
-  for (const line of lines) {
-    const submitted = byItemId.get(line.order_item_id);
-    if (!submitted) return { error: 'Missing quantities for one or more order lines.' };
-
-    const delivered = Number(submitted.delivered);
-    const missing = Number(submitted.missing);
-    const damaged = Number(submitted.damaged);
-    if (
-      !Number.isInteger(delivered) || !Number.isInteger(missing) || !Number.isInteger(damaged) ||
-      delivered < 0 || missing < 0 || damaged < 0
-    ) {
-      return { error: 'Quantities must be whole numbers of 0 or more.' };
-    }
-    if (delivered + missing + damaged !== line.quantity_ordered) {
-      return { error: 'Delivered + missing + damaged must equal the ordered quantity for every line.' };
-    }
-    if (delivered + missing + damaged === 0 && line.quantity_ordered === 0) continue;
-
-    const value = values.get(line.order_item_id);
-    settlementLines.push({
-      // order_items.line_total is rupees numeric(12,2); settlement works in paise.
-      lineTotalPaise: Math.round(Number(value?.line_total ?? 0) * 100),
-      quantityOrdered: line.quantity_ordered,
-      quantityMissing: missing,
-      quantityDamaged: damaged,
-    });
-
-    const { error: itemError } = await supabase
-      .from('order_delivery_items')
-      .update({
-        quantity_delivered: delivered,
-        quantity_missing: missing,
-        quantity_damaged: damaged,
-      } as never)
-      .eq('id', line.id);
-    if (itemError) return { error: itemError.message };
-  }
-
-  const settlement = computePartialSettlement(settlementLines);
-  const finalStatus: DeliveryStatus = settlement.fullyDelivered ? 'delivered' : 'partially_delivered';
-
-  // --- Return window snapshot (platform default 7 days) ---
-  const { data: setting } = await supabase
-    .from('platform_settings')
-    .select('value')
-    .eq('key', 'orders.return_window_days')
-    .maybeSingle<{ value: unknown }>();
-  const returnWindowDays = parseReturnWindowDays(setting?.value);
-
-  const nowIso = new Date().toISOString();
-  // The OTP was verified above. Completion fields are closed to staff sessions
-  // at the database (0094), so they are written through the trusted writer.
-  const completionWriter = trustedWriterFor(user, supabase);
-  if (!completionWriter) return { error: TRUSTED_WRITER_UNAVAILABLE };
-  // Atomic claim: only an open task can transition to a completed status.
-  const { data: claimedDelivery, error: deliveryError } = await completionWriter
-    .from('order_deliveries')
-    .update({
-      delivery_status: finalStatus,
-      delivered_at: nowIso,
-      receiver_name: receiver,
-      otp_verified_at: nowIso,
-      signature_url: input.signatureUrl?.trim() || null,
-      photo_url: input.photoUrl?.trim() || null,
-      delivery_notes: notes || null,
-      return_window_days: returnWindowDays,
-      return_deadline: computeReturnDeadline(nowIso, returnWindowDays),
-      completed_by: user.id,
-    } as never)
-    .eq('id', delivery.id)
-    .in('delivery_status', ['assigned', 'in_progress'])
-    .select('id')
-    .maybeSingle<{ id: string }>();
-
-  if (deliveryError) return { error: deliveryError.message };
-  if (!claimedDelivery) {
-    return { error: 'This delivery was completed concurrently — refresh to see the result.' };
-  }
-
-  // --- Order → delivered (guarded; 0042 trigger also validates). When the
-  // order is already 'delivered' (manual admin path), the update is skipped —
-  // the delivery record is the missing piece, not the status. ---
-  if (order.status === 'dispatched') {
-    const { data: claimedOrder, error: orderError } = await completionWriter
-      .from('orders')
-      .update({ status: 'delivered', delivered_at: nowIso } as unknown as never)
-      .eq('id', orderId)
-      .eq('status', 'dispatched')
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (orderError) return { error: orderError.message };
-    if (!claimedOrder) {
-      return { error: 'The order changed state while completing — refresh and re-check before retrying.' };
-    }
-  }
-
-  // --- Shortfall coin refund (decision D4) ---
-  //
-  // Missing/damaged value goes back as coins. The ledger is admin-only, so this
-  // is written through `order_shortfall_coins` (0053): one linked, bounded,
-  // idempotent REFUND_CREDIT per delivery — which is what makes it possible for
-  // the STAFF member completing the delivery to credit the shop at all.
-  if (settlement.creditBackPaise > 0) {
-    const shortfallNote = `${settlement.shortfallPieces} item(s) missing or damaged at delivery`;
-    const { error: creditError } = await RpcCapable(supabase).rpc('order_shortfall_coins', {
-      p_delivery_id: delivery.id,
-      p_amount_paise: settlement.creditBackPaise,
-      p_reason: shortfallNote,
-      p_created_by: user.id,
-      p_reverse: false,
-    });
-
-    if (creditError && !/does not exist|could not find the function|schema cache/i.test(creditError.message)) {
-      // A duplicate shortfall credit (23505) is the idempotent success.
-      if ((creditError as { code?: string }).code !== '23505') return { error: creditError.message };
-    } else if (creditError) {
-      // Older database without 0053: the direct write still works for admins,
-      // and the unique idempotency key keeps it single.
-      const { data: account } = await supabase
-        .from('retailer_credit_accounts')
-        .select('id')
-        .eq('retailer_id', order.retailer_id)
-        .maybeSingle<{ id: string }>();
-
-      const { error: fallbackError } = await supabase
-        .from('retailer_wallet_ledger')
-        .insert({
-          retailer_id: order.retailer_id,
-          account_id: account?.id ?? null,
-          transaction_type: 'REFUND_CREDIT',
-          amount_paise: settlement.creditBackPaise,
-          direction: 'credit',
-          reference_type: 'delivery',
-          reference_id: delivery.id,
-          description: `Shortfall credit for order ${order.order_number}`,
-          reason: shortfallNote,
-          created_by: user.id,
-          idempotency_key: `delivery-shortfall:${delivery.id}`,
-          metadata: {
-            delivery_id: delivery.id,
-            order_id: orderId,
-            shortfall_pieces: settlement.shortfallPieces,
-            credit_rupees: settlement.creditBackPaise / 100,
-          },
-        } as never);
-      if (fallbackError && fallbackError.code !== '23505') return { error: fallbackError.message };
-    }
-  }
-
-  await notifyOrderEvent({
-    recipientId: order.retailer_id,
-    title: settlement.fullyDelivered ? 'Order delivered' : 'Order partially delivered',
-    body: settlement.fullyDelivered
-      ? `Your order ${order.order_number} was delivered to ${receiver}. Return window: ${returnWindowDays} day(s).`
-      : `Your order ${order.order_number} was partially delivered to ${receiver}. ₹${(settlement.creditBackPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })} was credited back to your wallet for missing/damaged items.`,
-    linkUrl: `/retailer/orders/${orderId}/delivery`,
-    category: 'order',
-  });
 
   revalidateDeliveryPaths(orderId);
   revalidatePath('/retailer/account/ledger');
-  revalidatePath(`/admin/retailers/${order.retailer_id}`);
+  revalidatePath(`/admin/retailers/${data.retailer_id}`);
   return {
     success: true,
-    message: settlement.fullyDelivered
-      ? `Delivery of ${order.order_number} recorded.`
-      : `Partial delivery recorded — ₹${(settlement.creditBackPaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })} credited back to the retailer's wallet.`,
+    message: data.fully_delivered
+      ? `Delivery of ${data.order_number} recorded.`
+      : `Partial delivery recorded — ₹${creditRupees} credited back to the retailer's wallet.`,
   };
 }
 

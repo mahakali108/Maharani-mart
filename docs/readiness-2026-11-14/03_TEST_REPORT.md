@@ -1,5 +1,7 @@
 # Test report — real results, 14 November 2026
 
+> **Latest figures are in `07_FINAL_COMPLETION.md` §2 and §6** (210 files: 18 failed / 192 passed; 3270 tests: 11 failed / 3046 passed / 213 skipped; same 18 failing files as `main`). The table below is the earlier run and is kept for history.
+
 All commands were run in the sandbox on the PR branch. Nothing was run against
 production.
 

@@ -18,6 +18,9 @@ work started. No applied migration file was edited.
 | `0096_delivery_snapshot_integrity.sql` | SEC-16 snapshot guard and completion check. | Delivery completion refused if a line is not fully accounted for. | `0096_….down.sql` |
 | `0097_atomic_split_order_cancellation.sql` | SEC-06 atomic split cancel, `close_sub_order_atomic`, direct-cancel guards, 0069 trigger fix. | Any script writing `status='cancelled'` directly is refused. | `0097_….down.sql` (restores 0088 / 0066 / 0069 bodies) |
 | `0098_seller_agreement_and_marketplace_gate.sql` | SEC-17 marketplace switch (OFF) and agreement gate. | Third-party offers cannot go live until the switch is on. | `0098_….down.sql` (approval log kept in an archive table) |
+| `0099_atomic_delivery_completion.sql` | One-transaction delivery completion (`complete_delivery_atomic`, service role only), idempotency table, loyalty on delivered value. | The new app code needs it: without 0099 delivery completion is refused with a clear message. | `0099_….down.sql` (keeps the idempotency table; roll the app back first) |
+
+**Final completion pass:** rollbacks 0095 and 0098 were changed so that they delete no data (see `07_FINAL_COMPLETION.md` §4). The full chain 0099 → 0094 → 0099 was run twice on one database.
 
 All five are idempotent (re-run tested). Rollback 0098 → 0094 and re-apply was tested on real PostgreSQL with data present.
 

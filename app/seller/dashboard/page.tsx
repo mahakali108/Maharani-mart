@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { AlertTriangle, Clock, PackageCheck, ShieldAlert, Tag, UserCircle } from 'lucide-react';
 import { requireSellerPage } from '@/lib/seller/guard';
 import { listSellerOffers, listSellerOrders } from '@/lib/seller/queries';
+import { SellerGateNotice } from '@/components/seller/seller-gate-notice';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
@@ -12,7 +13,7 @@ const inr = (paise: number) =>
   `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default async function SellerDashboardPage() {
-  const { seller } = await requireSellerPage();
+  const { seller, memberRole } = await requireSellerPage();
   const [offers, orders] = await Promise.all([
     listSellerOffers(seller.id),
     listSellerOrders(seller.id, seller.status === 'active'),
@@ -34,6 +35,8 @@ export default async function SellerDashboardPage() {
           Manage your marketplace offers, quantity-tier pricing, on-hand inventory, and sub-order fulfilment.
         </p>
       </div>
+
+      <SellerGateNotice sellerId={seller.id} memberRole={memberRole} />
 
       {seller.status === 'pending' ? (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

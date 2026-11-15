@@ -3,7 +3,7 @@
  * Why this file exists: PGlite (used by the vitest DB suites) has a single
  * connection, so it cannot prove anything about concurrent sessions. This
  * script starts its own loopback-only temporary cluster, applies every
- * repository migration (0001 - 0098), and then uses SEVERAL connections at
+ * repository migration (0001 - 0099), and then uses SEVERAL connections at
  * once. It accepts no database URL and never connects to a remote or existing
  * database. The cluster directory is deleted on exit.
  *
@@ -274,17 +274,61 @@ async function main() {
       assert.deepEqual(await splitState(f), DONE);
     });
 
-    await test('a direct status write racing the atomic call is refused; the atomic call still completes', async () => {
+    // Rewritten in the final-completion pass. The earlier version fired the three
+    // statements with Promise.allSettled and required BOTH direct writes to be
+    // refused. That was a race in the TEST: when the atomic call commits first,
+    // a direct write that was waiting on the row lock re-reads the row, finds it
+    // already cancelled and is a harmless no-op (no status change, so nothing to
+    // refuse). The three orderings are now forced one by one, and each asserts
+    // the stronger thing: the ledger, stock and coupon state.
+    const DIRECT = `update public.orders set status = 'cancelled' where id = $1`;
+    await test('direct status write BEFORE the atomic call: refused, nothing changes; the atomic call then completes', async () => {
       const f = await splitOrder();
-      const results = await Promise.allSettled([
-        run(f.retailer, `update public.orders set status = 'cancelled' where id = $1`, [f.order]),
-        run(f.retailer, CANCEL, [f.order, 'atomic']),
-        run(adminUser, `update public.orders set status = 'cancelled' where id = $1`, [f.order]),
-      ]);
-      assert.match(results[0].reason?.message ?? '', /CANCEL_GUARD/);
-      assert.match(results[2].reason?.message ?? '', /CANCEL_GUARD/);
-      assert.equal(results[1].status, 'fulfilled');
+      for (const who of [f.retailer, adminUser, 'service']) {
+        await assert.rejects(run(who, DIRECT, [f.order]), /CANCEL_GUARD/);
+      }
+      assert.deepEqual(await splitState(f), UNTOUCHED);
+      assert.equal(Number((await run(f.retailer, CANCEL, [f.order, 'atomic'])).rows[0].n), 50000);
       assert.deepEqual(await splitState(f), DONE);
+    });
+
+    await test('direct status writes WAITING on an uncommitted atomic call: after commit they change nothing (one refund only)', async () => {
+      const f = await splitOrder();
+      const a = await client(), b = await client();
+      await begin(a, f.retailer);
+      assert.equal(Number((await a.query(CANCEL, [f.order, 'atomic'])).rows[0].n), 50000); // holds the row locks
+      await begin(b, adminUser);
+      const waiting = b.query(DIRECT, [f.order]).then(() => null, (e) => e);
+      await sleep(500);
+      assert.equal(await isWaitingOnLock(b), true, 'the Admin direct write waits for the atomic call');
+      assert.deepEqual(await splitState(f), UNTOUCHED, 'nothing is visible before commit');
+      await a.query('commit');
+      // Either refused, or a no-op on an order that is already cancelled.
+      const error = await waiting;
+      if (error) assert.match(error.message, /CANCEL_GUARD/);
+      await b.query(error ? 'rollback' : 'commit');
+      assert.deepEqual(await splitState(f), DONE);
+      // Later direct writes by anyone change nothing either.
+      for (const who of [f.retailer, adminUser, 'service']) {
+        await run(who, DIRECT, [f.order]).catch((e) => assert.match(e.message, /CANCEL_GUARD|row-level security|permission denied/));
+      }
+      assert.deepEqual(await splitState(f), DONE, 'exactly one refund, one stock release, one coupon release');
+    });
+
+    await test('direct status write WAITING on an atomic call that ROLLS BACK: refused, nothing changes', async () => {
+      const f = await splitOrder();
+      const a = await client(), b = await client();
+      await begin(a, f.retailer);
+      await a.query(CANCEL, [f.order, 'atomic']);
+      await begin(b, adminUser);
+      const direct = b.query(DIRECT, [f.order]).then(() => null, (e) => e);
+      await sleep(400);
+      assert.equal(await isWaitingOnLock(b), true);
+      await a.query('rollback');
+      const error = await direct;
+      assert.match(error?.message ?? '', /CANCEL_GUARD/, 'with the order still pending the direct write must be refused');
+      await b.query('rollback');
+      assert.deepEqual(await splitState(f), UNTOUCHED);
     });
 
     // ============================================================ FIX 1: DELIVERY SNAPSHOT
@@ -444,7 +488,7 @@ async function main() {
         ['market: write approval log directly',          'nnnnnnnn', `insert into public.marketplace_launch_approvals (third_party_offers_enabled, recorded_by) values (false, $1)`, [superAdmin]],
         ['market: publish a document version',           'nnnnnnYn', `select public.publish_legal_document_version('seller-agreement', '3.0')`, []],
         ['market: change current version directly',      'nnnnnnn-', `update public.legal_document_current_versions set document_version = '7.0' where document_key = 'seller-agreement'`, []],
-        ['market: read the switch',                      'nYYYYYYY', 'select public.third_party_offers_enabled()', []],
+        ['market: read the switch',                      'nnnnnnnY', 'select public.third_party_offers_enabled()', []],
         ['market: internal agreement predicate',         'nnnnnnnY', 'select public.seller_agreement_is_current($1)', [randomUUID()]],
         // --- 0095: acceptance, privacy, grievance
         ['legal: accept current Terms for myself',       'nYYYYYYn', `select public.record_legal_acceptance('terms', '1.0', 'account')`, []],
@@ -498,7 +542,7 @@ async function main() {
         lines: (await admin.query('select count(*)::int n from public.order_delivery_items')).rows[0].n,
         approvals: (await admin.query('select count(*)::int n from public.marketplace_launch_approvals')).rows[0].n,
       };
-      const review = ['0098_seller_agreement_and_marketplace_gate', '0097_atomic_split_order_cancellation', '0096_delivery_snapshot_integrity', '0095_legal_acceptance_and_privacy_requests', '0094_delivery_trust_and_loyalty_integrity'];
+      const review = ['0099_atomic_delivery_completion', '0098_seller_agreement_and_marketplace_gate', '0097_atomic_split_order_cancellation', '0096_delivery_snapshot_integrity', '0095_legal_acceptance_and_privacy_requests', '0094_delivery_trust_and_loyalty_integrity'];
       // 0095's rollback refuses while rows use the new request types / topics; clear the test rows it would trip on.
       await admin.query(`delete from public.support_tickets where topic in ('grievance', 'privacy')`);
       await admin.query(`delete from public.retailer_account_requests where request_type in ('data_correction', 'consent_withdrawal')`);

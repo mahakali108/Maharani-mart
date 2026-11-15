@@ -8,8 +8,12 @@
 -- still refuses (it fails closed when seller_offer_gate_status is absent), so
 -- third-party offers stay off unless the application is rolled back as well.
 --
--- The approval log is evidence. It is copied to an archive table before the
--- live table is removed; the archive is left in place deliberately.
+-- NO DATA IS DELETED BY THIS SCRIPT. The approval log and the published
+-- version register are evidence. Every row is copied to an archive table
+-- (appended on each rollback, so a second rollback after a re-apply loses
+-- nothing) before the live table is removed. The archives stay in place, with
+-- no API access. Removing the live approval log is deliberate: re-applying
+-- 0098 then starts with the marketplace CLOSED and needs a fresh decision.
 -- ============================================================================
 begin;
 
@@ -24,7 +28,10 @@ drop function if exists public.record_marketplace_launch_approval(boolean, text,
 drop function if exists public.third_party_offers_enabled();
 
 create table if not exists public.marketplace_launch_approvals_rollback_archive as
-  select *, now() as archived_at from public.marketplace_launch_approvals;
+  select *, now() as archived_at from public.marketplace_launch_approvals with no data;
+insert into public.marketplace_launch_approvals_rollback_archive
+  select a.*, now() from public.marketplace_launch_approvals a
+   where not exists (select 1 from public.marketplace_launch_approvals_rollback_archive x where x.id = a.id);
 alter table public.marketplace_launch_approvals_rollback_archive enable row level security;
 revoke all on table public.marketplace_launch_approvals_rollback_archive from public, anon, authenticated;
 drop table if exists public.marketplace_launch_approvals;
@@ -60,6 +67,12 @@ end;
 $$;
 
 drop function if exists public.publish_legal_document_version(text, text);
+create table if not exists public.legal_document_current_versions_rollback_archive as
+  select *, now() as archived_at from public.legal_document_current_versions with no data;
+insert into public.legal_document_current_versions_rollback_archive
+  select v.*, now() from public.legal_document_current_versions v;
+alter table public.legal_document_current_versions_rollback_archive enable row level security;
+revoke all on table public.legal_document_current_versions_rollback_archive from public, anon, authenticated;
 drop table if exists public.legal_document_current_versions;
 
 commit;

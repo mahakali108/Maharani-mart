@@ -24,7 +24,7 @@ holds **0 users, 0 orders, 0 ledger rows**, so none of these has been exploited.
 | SEC-07 | Medium | `anon` and `authenticated` hold TRUNCATE, REFERENCES and TRIGGER on public tables and views (158 TRUNCATE grants live). RLS does not restrict TRUNCATE. | Live `information_schema.table_privileges` | **Fixed in PR** (0094 §6). |
 | SEC-08 | Medium | Partial-delivery settlement read `order_items.line_total` (rupees) as paise, so a shortfall refund would have been 100 times too small. | `lib/delivery/delivery-actions.ts`; column is `numeric(12,2)` rupees | **Fixed in PR** (app); DB function computes the same value independently. |
 | SEC-09 | Medium | Staff and sales roles could set an order to `delivered` from the generic admin status action. | `updateOrderStatusAction` | **Fixed in PR** (app + 0094 trigger). |
-| SEC-10 | Medium | Delivery completion, return-to-warehouse and dispatch are several separate writes, not one transaction. A failure midway leaves a state that needs manual repair. | `completeDeliveryAction`, `recordReturnToWarehouseAction`, `dispatchOrderAction` | **Open.** Each step is guarded and idempotent, but not atomic. |
+| SEC-10 | Medium | Delivery completion, return-to-warehouse and dispatch are several separate writes, not one transaction. A failure midway leaves a state that needs manual repair. | `completeDeliveryAction`, `recordReturnToWarehouseAction`, `dispatchOrderAction` | **Open.** Each step is guarded and idempotent, but not atomic. **Update (final completion): delivery completion is now one transaction (0099, see `07_FINAL_COMPLETION.md`). Return-to-warehouse and dispatch remain multi-step — still OPEN for those two.** |
 | SEC-11 | Low | 4 views are not `security_invoker` and are granted to `anon`/`authenticated`: `ai_product_demand_daily`, `catalog_product_sales`, `inventory_expiry_report`, `inventory_product_totals`. They embed an `is_staff_or_above()` filter. | Live view definitions | **Open** (low). |
 | SEC-12 | Low | 29 SECURITY DEFINER functions are executable by `anon`. Most are trigger functions (not callable as RPC) or RLS helpers. Two are deliberate public endpoints: `is_phone_registered` (allows phone-number enumeration) and `submit_supplier_application`. | Live `pg_proc` | **Open**: needs rate limiting review for `is_phone_registered`. |
 | SEC-13 | Low | 26 UPDATE policies have no `WITH CHECK`; PostgreSQL then reuses the `USING` expression, so this is not a bypass, but it is implicit. `orders_retailer_cancel` lets a retailer cancel directly (non-atomically) through the Data API. | Live `pg_policies` | **Open.** |
@@ -40,7 +40,7 @@ truncated by the query and were **not fully read** — classify as partially
 audited.
 
 | SEC-16 | High | Delivery staff could rewrite, re-point, delete or forge delivery snapshot lines and so change a refund or loyalty award. | `order_delivery_items` | **Fixed in PR (0096)**. |
-| SEC-17 | High | Seller agreement acceptance was recorded but not enforced; no owner/CA sign-off gate on third-party selling. | `seller_offers`, `order_items` | **Fixed in PR (0098)** at the database; Admin screen missing. |
+| SEC-17 | High | Seller agreement acceptance was recorded but not enforced; no owner/CA sign-off gate on third-party selling. | `seller_offers`, `order_items` | **Fixed in PR (0098)** at the database; Super Admin screen added in the final-completion pass (`/admin/marketplace-launch`). Earlier note: Admin screen missing. |
 
 ## 2. What was repaired in this PR
 

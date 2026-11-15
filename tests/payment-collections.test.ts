@@ -224,7 +224,15 @@ describe('collection + shortfall audit trail (gate 12)', () => {
   });
 
   it('the shortfall refund is a first-class ledger entry, reversible on RTO', () => {
-    expect(deliveryActions).toContain("'REFUND_CREDIT'");
-    expect(deliveryActions).toContain('`delivery-shortfall:${delivery.id}`');
+    // PR #126: the ledger entry is written by order_shortfall_coins (0094),
+    // called inside the atomic completion (0099) — not inserted by the app.
+    const sql94 = read('supabase/migrations/0094_delivery_trust_and_loyalty_integrity.sql');
+    const sql99 = read('supabase/migrations/0099_atomic_delivery_completion.sql');
+    expect(sql94).toContain("'REFUND_CREDIT'");
+    expect(sql94).toContain("'delivery-shortfall:' || p_delivery_id::text");
+    expect(sql99).toContain('public.order_shortfall_coins(');
+    // Reversible on return-to-warehouse.
+    expect(deliveryActions).toContain("rpc('order_shortfall_coins'");
+    expect(deliveryActions).toContain('p_reverse: true');
   });
 });

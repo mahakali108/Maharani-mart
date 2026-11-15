@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
  * protected writes go through the trusted writer, and only AFTER the OTP check.
  */
 const actions = readFileSync('lib/delivery/delivery-actions.ts', 'utf8');
+const completionSql = readFileSync('supabase/migrations/0099_atomic_delivery_completion.sql', 'utf8');
+const completionMap = readFileSync('lib/delivery/completion.ts', 'utf8');
 const section = (name: string) => {
   const start = actions.indexOf(`export async function ${name}(`);
   expect(start).toBeGreaterThan(-1);
@@ -17,13 +19,23 @@ const section = (name: string) => {
 describe('delivery actions write protected fields through the trusted writer', () => {
   it('completion verifies the OTP before obtaining the trusted writer', () => {
     const body = section('completeDeliveryAction');
-    const verify = body.indexOf('verifyDeliveryOtp(');
-    const writer = body.indexOf('trustedWriterFor(');
-    expect(verify).toBeGreaterThan(-1);
-    expect(writer).toBeGreaterThan(verify);
-    expect(body).toContain("completionWriter\n    .from('order_deliveries')");
-    expect(body).toMatch(/completionWriter\s*\.from\('orders'\)/);
+    // PR #126 (0099): the action no longer writes order_deliveries / orders
+    // itself. It makes ONE call to complete_delivery_atomic through the
+    // trusted writer, and the OTP is verified INSIDE that transaction before
+    // any completion write. Intent kept: no protected write before the OTP
+    // check, and fail closed without the trusted writer.
+    expect(body).toContain('createTrustedDeliveryWriter()');
     expect(body).toContain('TRUSTED_WRITER_UNAVAILABLE');
+    expect(body.match(/\.rpc\(/g)).toHaveLength(1);
+    expect(body).toContain('rpc(COMPLETE_DELIVERY_RPC');
+    expect(body).not.toMatch(/\.from\(/);
+    expect(body).not.toMatch(/\.(update|insert|upsert|delete)\(/);
+    const otpCheck = completionSql.indexOf('if v_delivery.otp_hash <> p_otp_digest then');
+    const completionWrite = completionSql.indexOf('set delivery_status = v_final_status');
+    const orderWrite = completionSql.indexOf("update public.orders set status = 'delivered'");
+    expect(otpCheck).toBeGreaterThan(-1);
+    expect(completionWrite).toBeGreaterThan(otpCheck);
+    expect(orderWrite).toBeGreaterThan(otpCheck);
   });
 
   it('assignment and OTP regeneration check the permission before the trusted write', () => {
@@ -35,7 +47,13 @@ describe('delivery actions write protected fields through the trusted writer', (
   });
 
   it('settlement converts the rupee line total to paise', () => {
-    expect(actions).toContain('lineTotalPaise: Math.round(Number(value?.line_total ?? 0) * 100)');
+    // PR #126: the conversion is done by the database (0094
+    // delivery_shortfall_paise) from the ORIGINAL order line, never from a
+    // value the app sends. Behaviour: delivery-completion-action-db.test.ts
+    // asserts a ₹200 shortfall is credited as exactly 20000 paise.
+    const sql94 = readFileSync('supabase/migrations/0094_delivery_trust_and_loyalty_integrity.sql', 'utf8');
+    expect(sql94).toMatch(/round\(\s*oi\.line_total\s*\*\s*100\s*\)/);
+    expect(section('completeDeliveryAction')).not.toMatch(/line_total|lineTotalPaise|p_amount_paise/);
   });
 
   it('the trusted writer fails closed without server configuration and is server-only', () => {
@@ -55,13 +73,18 @@ describe('delivery actions write protected fields through the trusted writer', (
   });
   it('completion checks the snapshot against the original order lines before any settlement or write (SEC-16)', () => {
     const body = section('completeDeliveryAction');
-    const check = body.indexOf('This delivery task no longer matches the original order quantities.');
+    // PR #126 (0099): the comparison is inside the completion transaction.
+    expect(body).toContain('mapCompletionError(');
+    expect(completionMap).toContain('This delivery task no longer matches the original order quantities.');
+    expect(completionMap).toContain('This delivery task does not match the order lines.');
+    const check = completionSql.indexOf('DELIVERY_COMPLETE:SNAPSHOT_TAMPERED');
     expect(check).toBeGreaterThan(-1);
-    expect(body).toContain('This delivery task does not match the order lines.');
-    expect(body).toContain('This delivery task contains a line from another order.');
-    expect(body).toContain('original.quantity_pieces ?? original.quantity');
-    // The comparison runs before settlement lines are built and before the trusted write.
-    expect(body.indexOf('const settlementLines')).toBeGreaterThan(check);
-    expect(body.indexOf("completionWriter\n    .from('order_deliveries')")).toBeGreaterThan(check);
+    expect(completionSql).toContain('DELIVERY_COMPLETE:SNAPSHOT_MISMATCH');
+    // A line from another order, or a changed quantity, is caught by the same comparison.
+    expect(completionSql).toContain('or oi.order_id <> v_order.id');
+    expect(completionSql).toContain('di.quantity_ordered is distinct from coalesce(oi.quantity_pieces, oi.quantity)');
+    // It runs before the completion write and before the shortfall credit.
+    expect(completionSql.indexOf('set delivery_status = v_final_status')).toBeGreaterThan(check);
+    expect(completionSql.indexOf('public.order_shortfall_coins(')).toBeGreaterThan(check);
   });
 });

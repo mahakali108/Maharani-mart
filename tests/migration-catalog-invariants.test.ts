@@ -94,10 +94,6 @@ describe('SECURITY DEFINER hygiene', () => {
     const allowedAuthenticatedBooleanPredicates = new Set([
       'product_is_sale_eligible',
       'seller_is_trade_eligible',
-      // 0098: one boolean launch switch (third-party selling on/off). Sellers'
-      // screens read it to explain why an offer cannot go live; it exposes no
-      // row data, no approval references and no PII. anon stays revoked.
-      'third_party_offers_enabled',
     ]);
     const guardTokens = [
       'auth.uid()', 'auth.jwt()', 'auth.role()', 'is_staff_or_above', 'is_admin_or_above',

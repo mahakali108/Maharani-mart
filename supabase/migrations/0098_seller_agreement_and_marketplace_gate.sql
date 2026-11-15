@@ -163,8 +163,11 @@ language sql stable security definer set search_path = public, pg_temp as $$
      limit 1
   ), false)
 $$;
-revoke all on function public.third_party_offers_enabled() from public, anon;
-grant execute on function public.third_party_offers_enabled() to authenticated, service_role;
+-- Internal: read only by the SECURITY DEFINER gate functions and triggers below.
+-- No API session can call it; sellers read seller_offer_gate_status() (which
+-- checks who is asking) and Admins read the approval log under RLS.
+revoke all on function public.third_party_offers_enabled() from public, anon, authenticated;
+grant execute on function public.third_party_offers_enabled() to service_role;
 
 create or replace function public.record_marketplace_launch_approval(
   p_enabled boolean,

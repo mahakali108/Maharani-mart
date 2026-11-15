@@ -118,10 +118,17 @@ describe('the shortfall function (missing/damaged at delivery)', () => {
 describe('the app uses the functions', () => {
   it('settles a delivery shortfall through the function with a fallback', () => {
     const delivery = read('lib/delivery/delivery-actions.ts');
+    // PR #126: the credit is issued by order_shortfall_coins INSIDE the atomic
+    // completion (0099), with the amount computed by the database (0094) —
+    // the app no longer sends an amount and has no direct-insert fallback.
+    // The return-to-warehouse reversal still calls the function from the app.
+    const sql94 = read('supabase/migrations/0094_delivery_trust_and_loyalty_integrity.sql');
+    const sql99 = read('supabase/migrations/0099_atomic_delivery_completion.sql');
+    expect(sql99).toContain('public.order_shortfall_coins(');
     expect(delivery).toContain("rpc('order_shortfall_coins'");
-    expect(delivery).toMatch(/p_amount_paise: settlement\.creditBackPaise/);
+    expect(delivery).not.toContain('p_amount_paise');
     expect(delivery).toMatch(/p_reverse: true/);
-    expect(delivery).toContain('`delivery-shortfall:${delivery.id}`');
+    expect(sql94).toContain("'delivery-shortfall:' || p_delivery_id::text");
   });
 
   it('calls refund_order_coins with the order, reason and actor', () => {

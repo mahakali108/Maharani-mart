@@ -20,6 +20,9 @@ const sql44 = read('supabase/migrations/0044_payment_collections.sql');
 const sql45 = read('supabase/migrations/0045_delivery_payment_proof_buckets.sql');
 const dispatchSrc = read('lib/staff/dispatch-actions.ts');
 const deliverySrc = read('lib/delivery/delivery-actions.ts');
+const completionMapSrc = read('lib/delivery/completion.ts');
+const sql94 = read('supabase/migrations/0094_delivery_trust_and_loyalty_integrity.sql');
+const sql99 = read('supabase/migrations/0099_atomic_delivery_completion.sql');
 const retailerOrderSrc = read('lib/retailer/order-actions.ts');
 const salesmanActions = read('lib/salesman/collection-actions.ts');
 const adminActions = read('lib/admin/collections-actions.ts');
@@ -239,12 +242,25 @@ describe('dispatch creates exactly one delivery task (idempotent)', () => {
 
 describe('delivery actions enforce the workflow', () => {
   it('completion verifies the OTP against the stored hash', () => {
-    expect(deliverySrc).toContain('verifyDeliveryOtp(orderId, input.otp, delivery.otp_hash)');
+    // PR #126 (0099): completion is ONE database transaction, so this rule moved
+    // from the server action into complete_delivery_atomic. The assertion follows
+    // the rule to where it is enforced; behaviour is proven in
+    // tests/delivery-completion-action-db.test.ts.
+    expect(deliverySrc).toContain('otpDigest = hashDeliveryOtp(orderId, input.otp)');
+    expect(deliverySrc).toContain('p_otp_digest: otpDigest');
+    expect(sql99).toContain('if v_delivery.otp_hash <> p_otp_digest then');
+    // The plain OTP is never sent to the database.
+    expect(deliverySrc).not.toMatch(/p_otp\s*:/);
   });
 
   it('counts wrong attempts and locks at the ceiling', () => {
-    expect(deliverySrc).toContain('otp_attempts: attempts');
-    expect(deliverySrc).toContain('delivery.otp_attempts >= MAX_OTP_ATTEMPTS');
+    // PR #126 (0099): completion is ONE database transaction, so this rule moved
+    // from the server action into complete_delivery_atomic. The assertion follows
+    // the rule to where it is enforced; behaviour is proven in
+    // tests/delivery-completion-action-db.test.ts.
+    expect(sql99).toContain('set otp_attempts = otp_attempts + 1');
+    expect(sql99).toContain('if v_delivery.otp_attempts >= c_max_attempts then');
+    expect(sql99).toContain('c_max_attempts constant integer := 10;');
   });
 
   it('validates the receiver name server-side', () => {
@@ -261,16 +277,28 @@ describe('delivery actions enforce the workflow', () => {
   it('validates per-line quantities: non-negative integers that sum to ordered', () => {
     expect(deliverySrc).toContain('Number.isInteger(delivered)');
     expect(deliverySrc).toContain('delivered < 0 || missing < 0 || damaged < 0');
-    expect(deliverySrc).toContain('delivered + missing + damaged !== line.quantity_ordered');
-    expect(deliverySrc).toContain('Quantities are required for all');
+    // PR #126 (0099): completion is ONE database transaction, so this rule moved
+    // from the server action into complete_delivery_atomic. The assertion follows
+    // the rule to where it is enforced; behaviour is proven in
+    // tests/delivery-completion-action-db.test.ts.
+    expect(sql99).toContain('s.delivered + s.missing + s.damaged <> di.quantity_ordered');
+    expect(completionMapSrc).toContain('Quantities are required for all');
   });
 
   it('requires quantities for EVERY order line (no partial submissions)', () => {
-    expect(deliverySrc).toContain('byItemId.size !== lines.length');
+    // PR #126 (0099): completion is ONE database transaction, so this rule moved
+    // from the server action into complete_delivery_atomic. The assertion follows
+    // the rule to where it is enforced; behaviour is proven in
+    // tests/delivery-completion-action-db.test.ts.
+    expect(sql99).toContain('if v_submitted <> v_snapshot then');
+    expect(sql99).toContain('DELIVERY_COMPLETE:MISSING_LINES');
+    expect(sql99).toContain('DELIVERY_COMPLETE:UNKNOWN_LINE');
   });
 
   it('guards the order state before completing/failing/returning', () => {
-    expect(deliverySrc).toContain("order.status !== 'dispatched' && order.status !== 'delivered'");
+    // Completion's order-state guard is inside the 0099 transaction.
+    expect(sql99).toContain("if v_order.status::text not in ('dispatched', 'delivered') then");
+    expect(sql99).toContain("if v_delivery.delivery_status not in ('assigned', 'in_progress') then");
     expect(deliverySrc).toContain("order.status !== 'dispatched' && order.status !== 'processing'");
     expect(deliverySrc).toContain("order.status !== 'delivered' && order.status !== 'returned'");
   });
@@ -282,9 +310,17 @@ describe('delivery actions enforce the workflow', () => {
   });
 
   it('credits missing/damaged value back as a REFUND_CREDIT with an idempotency key', () => {
-    expect(deliverySrc).toContain("'REFUND_CREDIT'");
-    expect(deliverySrc).toContain('`delivery-shortfall:${delivery.id}`');
-    expect(deliverySrc).toContain('computePartialSettlement');
+    // PR #126 (0099): completion is ONE database transaction, so this rule moved
+    // from the server action into complete_delivery_atomic. The assertion follows
+    // the rule to where it is enforced; behaviour is proven in
+    // tests/delivery-completion-action-db.test.ts.
+    expect(sql99).toContain('public.order_shortfall_coins(');
+    expect(sql94).toContain("'REFUND_CREDIT'");
+    expect(sql94).toContain("'delivery-shortfall:' || p_delivery_id::text");
+    expect(sql94).toContain('on conflict (idempotency_key) do nothing');
+    // The credit is computed by the database from the order lines, not sent by the app.
+    expect(sql94).toContain('delivery_shortfall_paise');
+    expect(deliverySrc).not.toContain('p_amount_paise');
   });
 
   it('failed delivery re-opens the order for a re-attempt (decision D3)', () => {
@@ -300,13 +336,20 @@ describe('delivery actions enforce the workflow', () => {
     // admin-only ledger directly, and a second return reverses nothing more.
     expect(deliverySrc).toContain("rpc('order_shortfall_coins'");
     expect(deliverySrc).toContain('p_reverse: true');
-    expect(deliverySrc).toMatch(/delivery-shortfall:\$\{delivery\.id\}/);
+    // The reversal is keyed by the delivery id inside the function (0094).
+    expect(deliverySrc).toContain('p_delivery_id: delivery.id');
+    expect(sql94).toContain("'delivery-shortfall:' || p_delivery_id::text");
   });
 
   it('snapshots the return window from platform_settings at completion', () => {
-    expect(deliverySrc).toContain("eq('key', 'orders.return_window_days')");
-    expect(deliverySrc).toContain('computeReturnDeadline(nowIso, returnWindowDays)');
-    expect(deliverySrc).toContain('return_window_days: returnWindowDays');
+    // PR #126 (0099): completion is ONE database transaction, so this rule moved
+    // from the server action into complete_delivery_atomic. The assertion follows
+    // the rule to where it is enforced; behaviour is proven in
+    // tests/delivery-completion-action-db.test.ts.
+    expect(sql99).toContain("where ps.key = 'orders.return_window_days'");
+    expect(sql99).toContain("v_deadline := ((v_now at time zone 'UTC')::date + v_window);");
+    expect(sql99).toContain('return_window_days = v_window');
+    expect(sql99).toContain('return_deadline = v_deadline');
   });
 
   it('assignment validates the target is an active staff member or salesman', () => {
@@ -488,9 +531,13 @@ describe('dispatch → delivery → collection chain', () => {
     expect(deliverySrc).toContain('Order partially delivered');
     expect(deliverySrc).toContain('credited back to your wallet');
     // The order flip to delivered lives in the SAME action, after the claim.
-    expect(deliverySrc.indexOf("delivery_status: finalStatus")).toBeLessThan(
-      deliverySrc.indexOf("status: 'delivered', delivered_at: nowIso")
-    );
+    // 0099: both flips are in the SAME transaction, delivery first.
+    const deliveryFlip = sql99.indexOf('set delivery_status = v_final_status');
+    const orderFlip = sql99.indexOf("update public.orders set status = 'delivered', delivered_at = v_now");
+    expect(deliveryFlip).toBeGreaterThan(-1);
+    expect(orderFlip).toBeGreaterThan(deliveryFlip);
+    // The retailer is notified only after the transaction has committed.
+    expect(deliverySrc.indexOf('Order partially delivered')).toBeGreaterThan(deliverySrc.indexOf('rpc(COMPLETE_DELIVERY_RPC'));
   });
 
   it('step 4 — a collection is recorded pending, scoped to the salesman\u2019s retailer', () => {

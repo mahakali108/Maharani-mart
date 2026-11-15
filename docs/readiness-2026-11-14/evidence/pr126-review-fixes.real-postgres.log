@@ -1,11 +1,13 @@
-Applied 95 repository migrations (0001 - 0098) on PostgreSQL 17.11.
+Applied 96 repository migrations (0001 - 0099) on PostgreSQL 17.11.
 PASS split cancel: a second session WAITS for the first, then credits nothing (no double refund)
 PASS split cancel: the first session ROLLS BACK, the waiting session then performs the whole refund
 PASS split cancel: 16 simultaneous sessions (retailer, admin, service) refund exactly once
 PASS opposite entry points at once (whole order, child A, child B, legacy status RPC): no deadlock, exact totals - 25 rounds
 PASS two admins close the two children at the same moment: parent cancelled once, coupon released once
 PASS partial failure under concurrency: a failing session changes nothing and does not poison the next one
-PASS a direct status write racing the atomic call is refused; the atomic call still completes
+PASS direct status write BEFORE the atomic call: refused, nothing changes; the atomic call then completes
+PASS direct status writes WAITING on an uncommitted atomic call: after commit they change nothing (one refund only)
+PASS direct status write WAITING on an atomic call that ROLLS BACK: refused, nothing changes
 PASS snapshot: assigned staff cannot rewrite quantity_ordered / order_item_id / delivery_id, delete or forge a line
 PASS snapshot race: completion holds the delivery; a concurrent staff quantity write WAITS and is then refused
 PASS snapshot race: a staff quantity write in flight makes completion WAIT, and completion then re-checks the committed quantities
@@ -31,7 +33,7 @@ PASS seller gate holds for every role on real PostgreSQL (switch off, then on wi
   nnnnnnnn  market: write approval log directly
   nnnnnnYn  market: publish a document version
   nnnnnnny  market: change current version directly
-  nYYYYYYY  market: read the switch
+  nnnnnnnY  market: read the switch
   nnnnnnnY  market: internal agreement predicate
   nYYYYYYn  legal: accept current Terms for myself
   nnnnnnny  legal: write an acceptance row directly
@@ -41,4 +43,4 @@ PASS seller gate holds for every role on real PostgreSQL (switch off, then on wi
 PASS permission matrix: anonymous, retailer, other retailer, delivery staff, other staff, admin, super-admin, service role
 PASS new objects: no anon EXECUTE, fixed search_path, RLS on new tables
 PASS rollback safety: 0098 -> 0094 roll back in order on a database WITH data, then 0094 -> 0098 re-apply
-PR #126 real PostgreSQL 17.11: 16 passed, 0 failed.
+PR #126 real PostgreSQL 17.11: 18 passed, 0 failed.

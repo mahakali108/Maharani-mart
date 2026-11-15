@@ -325,6 +325,26 @@ describe('0098 rollback script', () => {
     expect(await errorOf(fresh, owner, (tx: Tx) => tx.query(`select public.record_legal_acceptance('seller-agreement', '0.9', 'account')`))).toBeNull();
     await fresh.exec(readFileSync('supabase/migrations/0098_seller_agreement_and_marketplace_gate.sql', 'utf8'));
     expect((await fresh.query<{ on: boolean }>(`select public.third_party_offers_enabled() "on"`)).rows[0]!.on).toBe(false); // re-applied CLOSED
+
+    // Final-completion review: a SECOND rollback after the re-apply must not
+    // lose the decisions recorded in between, nor the published version.
+    await as(fresh, owner, (tx: Tx) => tx.query(`select public.publish_legal_document_version('seller-agreement', '1.1')`));
+    await as(fresh, owner, (tx: Tx) => tx.query(`select public.record_marketplace_launch_approval(true, 'OWNER-REF-10', 'CA-REF-10', 'second evidence')`));
+    const down = readFileSync('supabase/rollbacks/0098_seller_agreement_and_marketplace_gate.down.sql', 'utf8');
+    expect(down).not.toMatch(/truncate|delete from|drop column/i);
+    await fresh.exec(down);
+    const { rows: both } = await fresh.query<{ owner_approval_reference: string }>(
+      `select owner_approval_reference from public.marketplace_launch_approvals_rollback_archive order by recorded_at`);
+    expect(both.map((r) => r.owner_approval_reference)).toEqual(['OWNER-REF-9', 'OWNER-REF-10']);
+    const { rows: versions } = await fresh.query<{ document_version: string }>(
+      `select document_version from public.legal_document_current_versions_rollback_archive order by archived_at, document_version`);
+    expect(versions.map((r) => r.document_version)).toEqual(['1.0', '1.1']);
+    // The archives are not reachable from any API session.
+    for (const table of ['marketplace_launch_approvals_rollback_archive', 'legal_document_current_versions_rollback_archive']) {
+      expect(await errorOf(fresh, owner, (tx: Tx) => tx.query(`select 1 from public.${table}`))).toMatch(/permission denied/);
+    }
+    await fresh.exec(readFileSync('supabase/migrations/0098_seller_agreement_and_marketplace_gate.sql', 'utf8'));
+    expect((await fresh.query<{ on: boolean }>(`select public.third_party_offers_enabled() "on"`)).rows[0]!.on).toBe(false);
     await fresh.close();
   }, 120_000);
 });
@@ -343,15 +363,16 @@ describe('0096 rollback script', () => {
     await fresh.close();
   }, 120_000);
 
-  it('all review-only rollbacks apply in reverse order (0098 -> 0094) on one database', async () => {
+  it('all review-only rollbacks apply in reverse order (0099 -> 0094) on one database', async () => {
     const fresh = await createMigratedDb();
     for (const file of [
+      '0099_atomic_delivery_completion',
       '0098_seller_agreement_and_marketplace_gate', '0097_atomic_split_order_cancellation', '0096_delivery_snapshot_integrity',
       '0095_legal_acceptance_and_privacy_requests', '0094_delivery_trust_and_loyalty_integrity',
     ]) {
       await fresh.exec(readFileSync(`supabase/rollbacks/${file}.down.sql`, 'utf8'));
     }
-    const { rows } = await fresh.query(`select 1 from pg_proc where proname in ('is_untrusted_api_caller','record_legal_acceptance','close_sub_order_atomic','third_party_offers_enabled','guard_order_delivery_item_snapshot')`);
+    const { rows } = await fresh.query(`select 1 from pg_proc where proname in ('is_untrusted_api_caller','record_legal_acceptance','close_sub_order_atomic','third_party_offers_enabled','guard_order_delivery_item_snapshot','complete_delivery_atomic','_order_loyalty_points_due')`);
     expect(rows).toHaveLength(0);
     await fresh.close();
   }, 120_000);

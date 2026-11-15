@@ -14,6 +14,11 @@ rows, so nothing has been exploited or lost.
 > in migrations 0096–0098 (SEC-16, SEC-06, SEC-17) and tested on real
 > PostgreSQL with several sessions. See `06_REVIEW_FIXES.md`. The verdict does
 > not change.
+>
+> **Update, final completion pass:** delivery completion is now one database
+> transaction (0099), the Super Admin marketplace screen exists, and the
+> rollbacks no longer delete data. Browser verification of the preview was
+> **not done**. See `07_FINAL_COMPLETION.md`. The verdict does not change.
 
 ## Status by area
 

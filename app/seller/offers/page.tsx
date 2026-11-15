@@ -2,12 +2,13 @@ import { Tag } from 'lucide-react';
 import { requireSellerPage } from '@/lib/seller/guard';
 import { listCataloguePacksForSeller, listSellerOffers } from '@/lib/seller/queries';
 import { SellerCreateOfferCard, SellerOfferCard } from '@/components/seller/seller-offer-manager';
+import { SellerGateNotice } from '@/components/seller/seller-gate-notice';
 import { Card } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SellerOffersPage() {
-  const { seller } = await requireSellerPage();
+  const { seller, memberRole } = await requireSellerPage();
   const [offers, packs] = await Promise.all([
     listSellerOffers(seller.id),
     listCataloguePacksForSeller(),
@@ -26,6 +27,8 @@ export default async function SellerOffersPage() {
           on-hand stock. Commercial edits (price, MOQ, SKU, quantity tiers) require admin approval before going live.
         </p>
       </div>
+
+      <SellerGateNotice sellerId={seller.id} memberRole={memberRole} />
 
       {!isSellerActive ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">

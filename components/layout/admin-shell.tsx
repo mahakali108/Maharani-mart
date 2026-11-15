@@ -42,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   { label: 'Control Center', href: '/admin/control-center', icon: Settings, roles: ['super_admin'] },
   { label: 'Command Center', href: '/admin/command-center', icon: Gauge, roles: ['super_admin'] },
+  { label: 'Marketplace Launch', href: '/admin/marketplace-launch', icon: Store, roles: ['super_admin'] },
   { label: 'Business Copilot', href: '/admin/ai', icon: Sparkles },
   { label: 'Products', href: '/admin/products', icon: Package },
   { label: 'Categories & Brands', href: '/admin/catalog', icon: Tags },
