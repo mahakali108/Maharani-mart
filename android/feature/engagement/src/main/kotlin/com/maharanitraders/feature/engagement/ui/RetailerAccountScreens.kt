@@ -286,6 +286,12 @@ private val retailerHelpFaqs = listOf(
 @Composable
 fun HelpScreen(
   onOpenSupport: () -> Unit,
+  /**
+   * Open Policies & information (About, Terms, Privacy, Delivery, Returns,
+   * Grievance, …). The list and the text come from the server's PUBLISHED managed
+   * content, so this entry point carries no policy text of its own.
+   */
+  onOpenLegal: () -> Unit = {},
   onOpenOrders: () -> Unit = {},
   onOpenCoins: () -> Unit = {},
   onOpenCatalog: () -> Unit = {},
@@ -331,6 +337,7 @@ fun HelpScreen(
           Button(onClick = onOpenCoins, modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget)) { Text("Coins issue · view my balance") }
           Button(onClick = onOpenCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget)) { Text("Product issue · browse catalogue") }
           Button(onClick = onOpenOrders, modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget)) { Text("Delivery issue · track an order") }
+          Button(onClick = onOpenLegal, modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget)) { Text("Policies & information · About, Terms, Privacy") }
         }
       }
     }

@@ -48,6 +48,7 @@ object AccountScreenTags {
   const val BUY_AGAIN = "account_buy_again"
   const val SECURITY = "account_security"
   const val HELP = "account_help"
+  const val POLICIES = "account_policies"
 }
 
 /**
@@ -323,6 +324,15 @@ private fun AccountShortcutGroups(
           tag = AccountScreenTags.HELP,
         )
       }
+      // Policies are public content, not a permission: every signed-in role may
+      // read the terms it accepted, so this row is deliberately NOT gated on the
+      // server's navigation policy (which lists commerce workspaces only).
+      ShortcutRow(
+        label = "Policies & information",
+        detail = "About us, Terms, Privacy, Delivery, Returns and grievance redressal",
+        onClick = { onOpenDestination(MaharaniRoutes.LEGAL) },
+        tag = AccountScreenTags.POLICIES,
+      )
     }
   }
 }

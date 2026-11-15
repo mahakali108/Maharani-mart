@@ -290,6 +290,13 @@ class FakeCatalogApi : MaharaniApi {
   override suspend fun updateNotificationPreferences(body: com.maharanitraders.core.network.dto.MobileNotificationPreferencesDto): ApiEnvelope<AckDto> = unsupported("updateNotificationPreferences")
   override suspend fun schemes(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileSchemesDto> = unsupported("schemes")
   override suspend fun helpDetails(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileHelpDto> = unsupported("helpDetails")
+
+  override suspend fun publishedPages(): ApiEnvelope<com.maharanitraders.core.network.dto.ManagedPagesDto> =
+    unsupported("publishedPages")
+
+  override suspend fun publishedPage(
+    slug: String,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.ManagedPageDto> = unsupported("publishedPage")
   override suspend fun accountRequests(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileAccountRequestsDto> = unsupported("accountRequests")
   override suspend fun createAccountRequest(body: com.maharanitraders.core.network.dto.MobileAccountRequestCreateDto): ApiEnvelope<com.maharanitraders.core.network.dto.MobileAccountRequestDto> = unsupported("createAccountRequest")
   override suspend fun purchaseReports(): ApiEnvelope<com.maharanitraders.core.network.dto.MobileReportsDto> = unsupported("purchaseReports")
