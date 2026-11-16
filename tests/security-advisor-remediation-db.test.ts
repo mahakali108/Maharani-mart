@@ -76,6 +76,34 @@ describe('0103 security advisor remediation', () => {
     expect(Array.isArray(staffRows.rows)).toBe(true);
   });
 
+  it('keeps products.cost_price hidden while preserving anonymous and authenticated catalogue reads', async () => {
+    const { rows } = await db.query<{
+      anon_cost: boolean;
+      authenticated_cost: boolean;
+      anon_name: boolean;
+      authenticated_name: boolean;
+    }>(`
+      select
+        has_column_privilege('anon', 'public.products', 'cost_price', 'SELECT') as anon_cost,
+        has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') as authenticated_cost,
+        has_column_privilege('anon', 'public.products', 'name', 'SELECT') as anon_name,
+        has_column_privilege('authenticated', 'public.products', 'name', 'SELECT') as authenticated_name
+    `);
+    expect(rows[0]!.anon_cost).toBe(false);
+    expect(rows[0]!.authenticated_cost).toBe(false);
+    expect(rows[0]!.anon_name).toBe(true);
+    expect(rows[0]!.authenticated_name).toBe(true);
+
+    const anonRead = await as(db, 'anon', (tx) => tx.query('select id from public.products limit 1'));
+    expect(anonRead.rows).toHaveLength(0);
+
+    const viewDef = await db.query<{ definition: string }>(`
+      select pg_get_viewdef('public.inventory_product_totals'::regclass, true) as definition
+    `);
+    expect(viewDef.rows[0]!.definition).toContain('admin_product_cost');
+    expect(viewDef.rows[0]!.definition).not.toMatch(/p\.cost_price/i);
+  });
+
   it('pins search_path on every function flagged by the live advisor', async () => {
     const expected = [
       'apply_stock_movement',
@@ -129,7 +157,7 @@ describe('0103 security advisor remediation', () => {
         join pg_proc p on p.oid = t.tgfoid
         join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public'
-         and p.oid::regprocedure::text = any($1::text[])
+         and p.oid = any(array(select to_regprocedure(s) from unnest($1::text[]) s))
          and not t.tgisinternal
     `, [triggerFunctions]);
     expect(rows[0]!.enabled).toBe(true);
