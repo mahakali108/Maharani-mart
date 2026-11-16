@@ -223,13 +223,20 @@ published output still shows the last published text).
    select has_table_privilege('anon','public.site_pages','select') as anon_can_read_draft;   -- expect false
    select has_function_privilege('anon','public.published_pages()','execute') as guests_can_read_published; -- expect true
    ```
-5. Apply **0105**. It prints nothing; verify:
+5. Apply **0105**. It prints nothing; verify (**corrected 16 November 2026 — the
+   earlier version of this step said `published = 19` and expected a slug from
+   `published_pages()`; that was wrong: 0105 publishes nothing and the public index
+   is empty until the stage-1 script runs**):
    ```sql
-   select status, count(*) from public.site_pages group by status;                    -- expect published = 19
+   select status, count(*) from public.site_pages group by status;                    -- expect drafts = 19, no published row
    select count(*) from public.site_page_sections;                                     -- expect 70
    select review_status, count(*) from public.site_page_admin_notes group by 1;        -- expect owner_review_pending = 19
-   select public.published_pages() -> 0 ->> 'slug';                                    -- expect a slug, not null
+   select jsonb_array_length(public.published_pages()) as public_index_size;           -- expect 0
    ```
+   Publishing is a separate, per-stage action: `supabase/publication/stage1_publish_live_text.sql`
+   (nine pages whose wording is already live) and, after owner + CA review,
+   `supabase/publication/stage2_publish_reviewed_additions.sql` (the remaining ten).
+   See `docs/release/STAGE1_PAGE_REVIEW.md`.
 6. Deploy the web app **after** the migration (the routes call the new functions;
    until the migration exists they render the honest "could not be loaded" state).
 7. Re-run `select version from supabase_migrations.schema_migrations order by version desc limit 3;`
