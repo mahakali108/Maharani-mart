@@ -18,20 +18,36 @@ begin
 end
 $$;
 
-drop function if exists public.unpublish_site_page(uuid);
+-- Order matters, and it is the reverse of the migration:
+--   1. functions whose body declares a %ROWTYPE of a table below (they depend on
+--      the tables, so they must go first);
+--   2. the tables — this takes their triggers with them;
+--   3. the trigger functions (a trigger function cannot be dropped while a trigger
+--      that uses it still exists);
+--   4. the super-admin helper.
+-- Dropping these in the naive order fails on 2 and 3, which is why this file is now
+-- executed by a test rather than only read.
+
+-- 1. Functions that depend on the tables.
+drop function if exists public.publish_site_page(uuid, boolean);
 drop function if exists public.publish_site_page(uuid);
+drop function if exists public.unpublish_site_page(uuid);
 drop function if exists public.site_page_snapshot(uuid);
 drop function if exists public.published_pages();
 drop function if exists public.published_page(text);
+
+-- 2. Tables (their triggers and policies go with them).
+drop table if exists public.site_page_revisions;
+drop table if exists public.site_page_admin_notes;
+drop table if exists public.site_page_sections;
+drop table if exists public.site_pages;
+
+-- 3. Trigger functions, now unreferenced.
 drop function if exists public.site_page_admin_notes_touch();
 drop function if exists public.site_pages_record_revision();
 drop function if exists public.site_page_sections_touch();
 drop function if exists public.site_pages_block_system_delete();
 drop function if exists public.site_pages_before_write();
 
-drop table if exists public.site_page_revisions;
-drop table if exists public.site_page_admin_notes;
-drop table if exists public.site_page_sections;
-drop table if exists public.site_pages;
-
+-- 4. The helper 0104 created.
 drop function if exists public.is_super_admin();

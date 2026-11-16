@@ -372,3 +372,49 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
     expect(Number(rows[0]!.n)).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The rollback must actually remove what the migration created, and it must do so
+ * only when the operator has accepted that content will be destroyed.
+ */
+describe('0104 rollback (PostgreSQL 16)', () => {
+  it('refuses without the data-loss flag, then removes every object when it is set', async () => {
+    const rollbackDb = await createMigratedDb();
+    try {
+      const sql = readFileSync('supabase/rollbacks/0104_site_content_management.down.sql', 'utf8');
+
+      // Seeded drafts exist, so the guard must fire first. The rollback must run as
+      // the owner of the objects (a plain API role cannot drop them), which is how
+      // an operator runs it: as the database owner, not through the Data API.
+      let refusal = '';
+      try {
+        await rollbackDb.exec(sql);
+      } catch (cause) {
+        refusal = String(cause);
+      }
+      expect(refusal).toMatch(/Rollback refused/);
+      await rollbackDb.exec('rollback').catch(() => {});
+      expect((await rollbackDb.query<{ n: string }>(`select count(*)::text as n from public.site_pages`)).rows[0]!.n)
+        .not.toBe('0');
+
+      // With the flag, it must leave nothing behind — including BOTH overloads of
+      // publish_site_page(), or `drop table site_pages` fails on the %ROWTYPE
+      // dependency and the rollback stops half-applied.
+      await rollbackDb.exec(`set maharani.allow_data_loss = 'true'`);
+      await rollbackDb.exec(sql);
+
+      const objects = await rollbackDb.query<{ tables: string; functions: string }>(
+        `select (select count(*)::text from information_schema.tables
+                  where table_schema = 'public' and table_name like 'site_page%') as tables,
+                (select count(*)::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where n.nspname = 'public'
+                    and (p.proname like 'site_page%' or p.proname like 'published_page%'
+                         or p.proname like 'publish_site_page%' or p.proname = 'is_super_admin')) as functions`,
+      );
+      expect(objects.rows[0]!.tables).toBe('0');
+      expect(objects.rows[0]!.functions).toBe('0');
+    } finally {
+      await rollbackDb.close();
+    }
+  }, 180_000);
+});

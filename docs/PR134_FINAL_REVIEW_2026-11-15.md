@@ -239,6 +239,16 @@ trigger functions that do not need definer rights are `SECURITY INVOKER`.
 * Rollback `0104_…down.sql` refuses to drop anything unless
   `maharani.allow_data_loss = 'true'` is set in the session; it raises otherwise
   (executed by a test).
+* **Two real defects in that rollback were found by executing it** (it had only
+  ever been read before): it still dropped `publish_site_page(uuid)` although the
+  function now takes `(uuid, boolean)`, and it dropped trigger functions **before**
+  the tables whose triggers use them, so it failed with
+  *"cannot drop function … because other objects depend on it"* and stopped
+  half-applied. Fixed: both signatures are dropped, and the file now drops
+  dependent functions → tables → trigger functions → the helper, in that order.
+  `site-content-db.test.ts` executes it end to end against PostgreSQL 16 and
+  asserts that no `site_page*`, `published_page*`, `publish_site_page*` or
+  `is_super_admin` object survives.
 * `0105_…down.sql` deletes only rows whose slug is in the seed **and** `is_system = true`,
   so a page the owner created, or a seeded page they edited into something else, is
   left alone. It cannot delete a page that is not the seed.

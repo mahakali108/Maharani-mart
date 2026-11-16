@@ -34,8 +34,10 @@
 --
 -- Security posture
 -- ----------------
---   * RLS on every table. Anonymous and authenticated callers see only pages
---     whose `status = 'published'` AND whose snapshot exists.
+--   * RLS on every table. NO API role reads these tables on behalf of a
+--     customer: `anon` has no privilege at all, and `authenticated` is limited
+--     to a super admin (the editor). A signed-in retailer or admin gets zero
+--     rows.
 --   * Draft columns have no anon grant at all: a published page cannot leak the
 --     draft title/intro/sections through the Data API (see §6).
 --   * Writes are super_admin-only (`public.is_super_admin()`), enforced in the
@@ -48,7 +50,8 @@
 --     `site_page_admin_notes` or a draft row.
 --
 -- Depends on: 0001_init (profiles), 0052 (current_user_role), 0098
--- (publish_legal_document_version is CALLED by the application, not here).
+-- (publish_legal_document_version is called by publish_site_page ONLY when the
+-- operator explicitly registers a version — see the note above that function).
 -- Rollback: supabase/rollbacks/0104_site_content_management.down.sql
 -- ============================================================================
 
