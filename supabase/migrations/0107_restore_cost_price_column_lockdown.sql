@@ -32,6 +32,9 @@ $$;
 -- Preserve the staff-only invoker view without granting direct cost_price
 -- access. admin_product_cost() returns a value only for admin/super_admin;
 -- for staff below admin it returns NULL. Base-table RLS remains in force.
+alter function public.admin_product_cost(uuid)
+  set search_path = pg_catalog, public, pg_temp;
+
 create or replace view public.inventory_product_totals
 with (security_invoker = true) as
 select
