@@ -101,7 +101,7 @@ describe('0103 security advisor remediation', () => {
       select pg_get_viewdef('public.inventory_product_totals'::regclass, true) as definition
     `);
     expect(viewDef.rows[0]!.definition).toContain('admin_product_cost');
-    expect(viewDef.rows[0]!.definition).not.toMatch(/p\\.cost_price/i);
+    expect(viewDef.rows[0]!.definition).not.toMatch(/p\.cost_price/i);
   });
 
   it('pins search_path on every function flagged by the live advisor', async () => {
