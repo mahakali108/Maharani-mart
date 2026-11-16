@@ -239,6 +239,21 @@ describe('admin-only boundaries in the source', () => {
     expect(read('app/admin/content/page.tsx')).toContain('This notice is internal');
   });
 
+  it('makes acceptance registration an explicit, off-by-default operator choice', () => {
+    const actions = read('lib/admin/site-content-actions.ts');
+    // The RPC's own default is FALSE; the action must forward an explicit boolean
+    // read from the form, never a constant `true`.
+    expect(actions).toContain("formData.get('register_acceptance') === 'on'");
+    expect(actions).toMatch(/p_register_acceptance:\s*registerAcceptance/);
+    expect(actions).not.toMatch(/p_register_acceptance:\s*true/);
+
+    // The checkbox exists on the editor and is not pre-ticked.
+    const editor = read('app/admin/content/[id]/page.tsx');
+    expect(editor).toContain('name="register_acceptance"');
+    expect(editor).not.toMatch(/name="register_acceptance"[^>]*defaultChecked/);
+    expect(editor).toMatch(/Off by default/);
+  });
+
   it('links the module from the admin navigation for super admins only', () => {
     const shell = read('components/layout/admin-shell.tsx');
     const line = shell.split('\n').find((entry) => entry.includes("'/admin/content'"));

@@ -425,11 +425,23 @@ export async function publishPageAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
   const pageId = text(formData, 'page_id');
   const slug = await pageSlugFor(pageId);
+  /**
+   * Publishing makes a page READABLE. It does not, by itself, make the page a
+   * document a customer must ACCEPT: the acceptance registry (0098) is a short
+   * list whose versions the database enforces, and adding an entry pins that
+   * version for every future acceptance. So the operator has to tick the box on
+   * this publish; an unticked box (or any other caller) registers nothing, and
+   * the RPC's own default is FALSE.
+   */
+  const registerAcceptance = formData.get('register_acceptance') === 'on';
   const supabase = await createClient();
-  const { error } = await supabase.rpc('publish_site_page' as never, { p_page_id: pageId } as never);
+  const { error } = await supabase.rpc('publish_site_page' as never, {
+    p_page_id: pageId,
+    p_register_acceptance: registerAcceptance,
+  } as never);
   if (error) fail(pagePath(pageId), error.message);
 
-  await audit('site_page_published', pageId, { slug });
+  await audit('site_page_published', pageId, { slug, registerAcceptance });
   revalidatePublic(slug);
   ok(pagePath(pageId), 'published');
 }

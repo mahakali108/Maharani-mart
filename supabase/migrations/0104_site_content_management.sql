@@ -620,7 +620,21 @@ $$;
 revoke all on function public.site_page_snapshot(uuid) from public, anon, authenticated;
 grant execute on function public.site_page_snapshot(uuid) to service_role;
 
-create or replace function public.publish_site_page(p_page_id uuid)
+--
+-- `p_register_acceptance` is FALSE by default, and that default is the point:
+-- publishing a page makes it READABLE; it does not make it something a customer
+-- must ACCEPT. The acceptance registry (0098) is a short list of documents whose
+-- version the database enforces (today: `seller-agreement`, plus the terms and
+-- privacy entries in `lib/legal/documents.ts` when a row exists). Registering
+-- every informational policy there would pin a version for it and, from that
+-- moment, reject an acceptance of any other version (record_legal_acceptance
+-- raises LEGAL_VERSION_NOT_CURRENT) — a consent change that a copy edit must not
+-- make by accident. A Super Admin registers a version only by ticking the box
+-- that passes TRUE for the one document that needs it.
+create or replace function public.publish_site_page(
+  p_page_id uuid,
+  p_register_acceptance boolean default false
+)
 returns void
 language plpgsql
 security definer
@@ -658,14 +672,16 @@ begin
          published_snapshot = v_snapshot
    where id = p_page_id;
 
-  -- Keep the acceptance registry (0098) in step with what was just published.
-  if v_page.kind = 'legal' and to_regprocedure('public.publish_legal_document_version(text, text)') is not null then
+  -- Acceptance registration is OPT-IN (see the note above the function).
+  if coalesce(p_register_acceptance, false)
+     and v_page.kind = 'legal'
+     and to_regprocedure('public.publish_legal_document_version(text, text)') is not null then
     perform public.publish_legal_document_version(v_page.slug, v_page.version);
   end if;
 end;
 $$;
-revoke all on function public.publish_site_page(uuid) from public, anon;
-grant execute on function public.publish_site_page(uuid) to authenticated, service_role;
+revoke all on function public.publish_site_page(uuid, boolean) from public, anon;
+grant execute on function public.publish_site_page(uuid, boolean) to authenticated, service_role;
 
 create or replace function public.unpublish_site_page(p_page_id uuid)
 returns void

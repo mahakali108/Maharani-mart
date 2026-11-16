@@ -124,8 +124,21 @@ export default async function AdminContentEditorPage({
             <p className="text-mint-700">No outstanding issues found for this draft.</p>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
-            <form action={publishPageAction}>
+            <form action={publishPageAction} className="space-y-2">
               <input type="hidden" name="page_id" value={page.id} />
+              {page.kind === 'legal' ? (
+                <label className="flex items-start gap-2 rounded-xl border border-ink-200 bg-ink-50/60 p-2 text-xs text-ink-700">
+                  <input type="checkbox" name="register_acceptance" className="mt-0.5" />
+                  <span>
+                    <strong className="font-semibold">Also require acceptance of this version</strong>
+                    <span className="block text-ink-500">
+                      Off by default. Ticking this records version {page.version} in the acceptance registry (0098), which
+                      makes {page.title} a document customers must accept — and stops the database accepting any other
+                      version. Publish the page first; only tick this when a consent change is actually intended.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
               <button
                 type="submit"
                 className="inline-flex items-center gap-2 rounded-xl bg-mint-600 px-4 py-2 text-sm font-semibold text-white hover:bg-mint-700"
