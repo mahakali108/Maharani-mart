@@ -33,7 +33,18 @@ const ERROR_AWARE_MARKERS = [
 ];
 
 /** Loaders that throw on a failed read, so their callers inherit the behaviour. */
-const THROWING_LOADERS = ['fetchDeliveryDetail', 'getSellerDetail'];
+const THROWING_LOADERS = [
+  'fetchDeliveryDetail',
+  'getSellerDetail',
+  // Website content editor (0104): loadAdminPage/loadAdminSections/loadAdminNotes/
+  // loadPageRevisions call throwIfReadFailed, so notFound() in
+  // app/admin/content/[id]/** can only mean a genuinely missing id. Tested in
+  // tests/site-content-admin.test.ts ("an unreadable editor read throws").
+  'loadAdminPage',
+  'loadAdminSections',
+  'loadAdminNotes',
+  'loadPageRevisions',
+];
 
 /**
  * Pages allowed to call notFound() without an error marker.

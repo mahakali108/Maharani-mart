@@ -38,6 +38,8 @@ import com.maharanitraders.core.network.dto.MobileRetailerProfileDto
 import com.maharanitraders.core.network.dto.MobileProfilePatchDto
 import com.maharanitraders.core.network.dto.MobileNotificationPreferencesDto
 import com.maharanitraders.core.network.dto.MobileSchemesDto
+import com.maharanitraders.core.network.dto.ManagedPageDto
+import com.maharanitraders.core.network.dto.ManagedPagesDto
 import com.maharanitraders.core.network.dto.MobileHelpDto
 import com.maharanitraders.core.network.dto.MobileReportsDto
 import com.maharanitraders.core.network.dto.MobileSupportTicketsDto
@@ -406,6 +408,26 @@ interface MaharaniApi {
 
   @GET("api/mobile/v1/help")
   suspend fun helpDetails(): ApiEnvelope<MobileHelpDto>
+
+  /**
+   * Every PUBLISHED information page (About, Contact, Terms, Privacy, …).
+   *
+   * Public: the Terms and the grievance route must be readable before sign-in,
+   * exactly like the website. A page the Super Admin has not published is simply
+   * absent from this list, so the app cannot offer a link to a draft.
+   */
+  @GET("api/mobile/v1/pages")
+  suspend fun publishedPages(): ApiEnvelope<ManagedPagesDto>
+
+  /**
+   * One published page, by the slug the list returned.
+   *
+   * Answers `404 not_found` with `details.reason = "unpublished"` when the page
+   * exists but is not published; the app renders the same clean "not available"
+   * message as the website and learns nothing about the draft.
+   */
+  @GET("api/mobile/v1/pages/{slug}")
+  suspend fun publishedPage(@Path("slug") slug: String): ApiEnvelope<ManagedPageDto>
 
   @GET("api/mobile/v1/account/requests")
   suspend fun accountRequests(): ApiEnvelope<MobileAccountRequestsDto>

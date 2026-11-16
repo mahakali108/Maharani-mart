@@ -1,6 +1,8 @@
 package com.maharanitraders.feature.engagement.di
 
 import com.maharanitraders.core.common.SessionScopedStore
+import com.maharanitraders.feature.engagement.ManagedContentRepository
+import com.maharanitraders.feature.engagement.NetworkManagedContentRepository
 import com.maharanitraders.feature.engagement.EngagementRepository
 import com.maharanitraders.feature.engagement.NetworkEngagementRepository
 import com.maharanitraders.feature.engagement.NetworkRetailerUpgradeRepository
@@ -22,6 +24,16 @@ abstract class EngagementFeatureModule {
   abstract fun bindEngagementRepository(
     impl: NetworkEngagementRepository,
   ): EngagementRepository
+
+  /**
+   * Published website content (About / legal pages). One instance is enough: it
+   * holds no state, and every screen asks the server for the current wording.
+   */
+  @Binds
+  @Singleton
+  abstract fun bindManagedContentRepository(
+    impl: NetworkManagedContentRepository,
+  ): ManagedContentRepository
 
   @Binds
   @Singleton

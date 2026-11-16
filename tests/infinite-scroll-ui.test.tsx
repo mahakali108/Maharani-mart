@@ -44,13 +44,44 @@ class FakeIntersectionObserver {
   readonly thresholds: readonly number[] = [];
 }
 
-/** Scroll to the bottom: every live observer reports the sentinel on screen. */
-function scrollToBottom() {
+/**
+ * Scroll to the bottom: every live observer reports the sentinel on screen.
+ *
+ * Waits for a sentinel to be OBSERVED before firing. The observer is registered
+ * in an effect after the previous batch's rows commit, so firing immediately
+ * after an `await waitFor(...)` can find no callback at all on a loaded machine
+ * — the scroll was silently a no-op and the next batch never loaded, which made
+ * this file fail intermittently in CI. The assertion under test is unchanged:
+ * a real intersection loads the next batch.
+ */
+function fireObservers(): void {
   const pending = observerCallbacks;
   observerCallbacks = [];
   act(() => {
     for (const callback of pending) callback([{ isIntersecting: true }]);
   });
+}
+
+/**
+ * A scroll that may legitimately find no live sentinel (the list is already
+ * loading and the sentinel is unmounted). Used only where the test's point is
+ * "extra scrolls change nothing".
+ */
+function scrollToBottomIfObserved(): void {
+  if (observerCallbacks.length > 0) fireObservers();
+}
+
+/**
+ * Waits for a sentinel to be OBSERVED before firing. The observer is registered
+ * in an effect after the previous batch's rows commit, so firing immediately
+ * after an `await waitFor(...)` can find no callback at all on a loaded machine
+ * — the scroll was silently a no-op and the next batch never loaded, which made
+ * this file fail intermittently in CI. The assertion under test is unchanged:
+ * a real intersection loads the next batch.
+ */
+async function scrollToBottom() {
+  await waitFor(() => expect(observerCallbacks.length).toBeGreaterThan(0));
+  fireObservers();
 }
 
 beforeEach(() => {
@@ -120,7 +151,7 @@ describe('infinite scrolling list', () => {
     render(<Harness batches={[['second-1', 'second-2']]} />);
     expect(rowText()).toEqual(['first-1', 'first-2']);
 
-    scrollToBottom();
+    await scrollToBottom();
 
     await waitFor(() => expect(rowText()).toEqual(['first-1', 'first-2', 'second-1', 'second-2']));
     // The list is complete, so the end-of-list line replaces the spinner.
@@ -130,9 +161,9 @@ describe('infinite scrolling list', () => {
   it('keeps loading until the list is exhausted, never showing a page control', async () => {
     render(<Harness batches={[['second'], ['third']]} />);
 
-    scrollToBottom();
+    await scrollToBottom();
     await waitFor(() => expect(rowText()).toContain('second'));
-    scrollToBottom();
+    await scrollToBottom();
     await waitFor(() => expect(rowText()).toContain('third'));
 
     expect(screen.getByText('No more items')).toBeTruthy();
@@ -177,18 +208,19 @@ describe('infinite scrolling list', () => {
     render(<SlowHarness />);
     // Three "scrolled to the bottom" events while the first batch is still in
     // flight: only one request may be outstanding at any moment.
-    scrollToBottom();
-    scrollToBottom();
-    scrollToBottom();
+    await scrollToBottom();
+    // Still in flight: the sentinel is unmounted, so these fire nothing.
+    scrollToBottomIfObserved();
+    scrollToBottomIfObserved();
     await waitFor(() => expect(rowText()).toContain('second'));
-    scrollToBottom();
+    await scrollToBottom();
     await waitFor(() => expect(rowText()).toContain('third'));
     expect(peak).toBe(1);
   });
 
   it('shows a retry button after a failure instead of looping', async () => {
     render(<Harness batches={[['second'], ['third']]} failOnce />);
-    scrollToBottom();
+    await scrollToBottom();
 
     await waitFor(() => expect(screen.getByText('Network unavailable')).toBeTruthy());
     const retry = screen.getByRole('button', { name: /retry/i });
@@ -221,7 +253,7 @@ describe('infinite scrolling list', () => {
     }
 
     render(<PendingHarness />);
-    scrollToBottom();
+    await scrollToBottom();
     await waitFor(() => expect(screen.getByText('loading…')).toBeTruthy());
 
     await act(async () => {
@@ -233,7 +265,7 @@ describe('infinite scrolling list', () => {
 
   it('starts a new list when the filters change instead of appending', async () => {
     const { rerender } = render(<Harness batches={[['second']]} resetKey="filter-a" />);
-    scrollToBottom();
+    await scrollToBottom();
     await waitFor(() => expect(rowText()).toContain('second'));
 
     // A new filter re-renders the page server-side: new first rows, new key.
@@ -244,7 +276,7 @@ describe('infinite scrolling list', () => {
 
   it('stops asking once a batch comes back empty', async () => {
     render(<Harness batches={[[]]} />);
-    scrollToBottom();
+    await scrollToBottom();
     await waitFor(() => expect(screen.getByText('No more items')).toBeTruthy());
     expect(rowText()).toEqual(['first-1', 'first-2']);
   });
@@ -272,7 +304,7 @@ describe('infinite scrolling list', () => {
     }
 
     render(<PendingHarness />);
-    scrollToBottom();
+    await scrollToBottom();
     // Mid-flight: the first batch is untouched and the spinner is showing.
     await waitFor(() => expect(screen.getByText('Loading more…')).toBeTruthy());
     expect(rowText()).toEqual(['first-1', 'first-2']);

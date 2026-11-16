@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getRetailerShoppingContext } from '@/lib/retailer/shopping-context';
 import { createClient } from '@/lib/supabase/server';
 import { RetailerShell } from '@/components/layout/retailer-shell';
+import { loadFooterLinks } from '@/lib/site-content/nav';
 
 export default async function RetailerLayout({ children }: { children: React.ReactNode }) {
   const { user, retailer, areaName } = await getRetailerShoppingContext();
@@ -10,6 +11,7 @@ export default async function RetailerLayout({ children }: { children: React.Rea
   if (retailer?.status === 'pending_approval') redirect('/pending-approval');
   if (retailer?.status === 'suspended') redirect('/login?error=account_suspended');
   const supabase = (await createClient());
+  const footerLinks = await loadFooterLinks();
 
   const [{ count: cartCount }, { count: unreadCount }] = await Promise.all([
     supabase
@@ -30,6 +32,7 @@ export default async function RetailerLayout({ children }: { children: React.Rea
       role={user.role}
       cartCount={cartCount ?? 0}
       unreadCount={unreadCount ?? 0}
+      footerLinks={footerLinks}
     >
       {children}
     </RetailerShell>

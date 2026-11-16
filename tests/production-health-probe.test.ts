@@ -478,3 +478,45 @@ describe('8. the probe behaviour is executed, not only read', () => {  const pyt
     }
   });
 });
+
+describe('the nineteen published pages are probed after every release', () => {
+  // Publication moves /about, /contact and all seventeen policy pages from JSX to
+  // the database. The health checklist above never touches them, so "the site is
+  // up" would stay green while ten policies answered "not available right now".
+  // This guard keeps one anonymous GET per published page in the probe, and keeps
+  // that list equal to the content module's own seed.
+  const probePaths = (() => {
+    const block = /PUBLIC_PAGE_PATHS: tuple\[str, \.\.\.\] = \(([\s\S]*?)\n\)/.exec(PROBE)?.[1] ?? '';
+    return [...block.matchAll(/"(\/[^"]*)"/g)].map((match) => match[1]!);
+  })();
+  const seedSlugs = (
+    JSON.parse(read('content/site-pages.seed.json')) as { pages: { slug: string; kind: string }[] }
+  ).pages.map((page) => (page.slug === 'about' || page.slug === 'contact' ? `/${page.slug}` : `/legal/${page.slug}`));
+
+  it('declares nineteen page paths', () => {
+    expect(probePaths).toHaveLength(19);
+    expect(new Set(probePaths).size).toBe(19);
+  });
+
+  it('covers exactly the pages the content module publishes — no page left unverified', () => {
+    // Adding a page to content/site-pages.seed.json without adding it to the probe
+    // would ship an unverified URL; removing it from the probe would hide a
+    // regression. Comparing sets makes both impossible.
+    expect([...probePaths].sort()).toEqual([...seedSlugs].sort());
+  });
+
+  it('probes them with a plain anonymous GET that expects 200', () => {
+    expect(PROBE).toMatch(/def page_targets\(\) -> list\[Target\]:/);
+    expect(PROBE).toContain('expect=[200]');
+    expect(PROBE).toContain('targets=page_targets() if args.pages else None');
+    // The page sweep must stay read-only: GET only, no method override, no body.
+    expect(codeOnly(PROBE)).not.toMatch(/"method"\s*:\s*"(POST|PUT|PATCH|DELETE)"/);
+    expect(codeOnly(PROBE)).not.toMatch(/data\s*=\s*(json\.dumps|b")/);
+  });
+
+  it('keeps the health checklist separate from the page sweep', () => {
+    // --pages is a second mode, not a replacement: launch health still runs first.
+    expect(PROBE).toMatch(/def production_targets\(\) -> list\[Target\]:/);
+    expect(PROBE).toContain('action="store_true",\n        help="probe the nineteen published information pages');
+  });
+});

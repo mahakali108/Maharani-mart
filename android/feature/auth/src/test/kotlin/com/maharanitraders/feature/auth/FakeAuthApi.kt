@@ -291,6 +291,13 @@ class FakeAuthApi : MaharaniApi {
 
   override suspend fun helpDetails(): ApiEnvelope<MobileHelpDto> = unexpected("helpDetails")
 
+  override suspend fun publishedPages(): ApiEnvelope<com.maharanitraders.core.network.dto.ManagedPagesDto> =
+    unexpected("publishedPages")
+
+  override suspend fun publishedPage(
+    slug: String,
+  ): ApiEnvelope<com.maharanitraders.core.network.dto.ManagedPageDto> = unexpected("publishedPage")
+
   override suspend fun accountRequests(): ApiEnvelope<MobileAccountRequestsDto> =
     unexpected("accountRequests")
 

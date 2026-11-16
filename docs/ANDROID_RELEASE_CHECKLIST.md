@@ -5,7 +5,9 @@ uploaded or offered to any real shop. It is **not** a record of finished work. I
 only where a CI run or a test is cited; everything else is unstarted, and the release phase
 (Phase H) has not begun.
 
-> **Updated 9 October 2026** against CI run `37959400861` (head `d6ec741`, PR #100).
+> **Updated 15 November 2026** against CI run `43741769331` (head `60ff20f`); the
+> 9 October 2026 notes from run `37959400861` are kept below where the numbers
+> changed, because a size is only meaningful with the run that produced it.
 > §0 and §1 previously described a much older build; both are corrected below with
 > measured evidence. The signing, device and Play gates are unchanged and still
 > open — see `docs/ANDROID_RELEASE_SIGNING.md` for the runbook and
@@ -15,13 +17,13 @@ only where a CI run or a test is cited; everything else is unstarted, and the re
 
 | Fact | Status |
 | --- | --- |
-| Debug APK built by CI | **YES** — run `37959400861`, artifact `maharani-traders-debug-apk`, **16,371,253 bytes** |
+| Debug APK built by CI | **YES** — run `43741769331`, artifact `maharani-traders-debug-apk`, **15,602,680 bytes** (9 Oct: 16,371,253) |
 | Package id asserted from the built artifact | **YES** — `aapt dump badging` matched `package: name='com.maharanitraders.app'` |
 | Version asserted from the built artifact | **YES** — `versionName='1.0.0' versionCode='1'`, compared against `android/version.properties` and failed on mismatch |
-| Kotlin unit tests executing in CI | **YES** — `testDebugUnitTest` passes for every module (413 tests, 11 modules) |
+| Kotlin unit tests executing in CI | **YES** — `testDebugUnitTest` passes for every module; the per-module report is uploaded with the run (the 9 Oct figure was 413 tests across 11 modules) |
 | Rendered Compose tests at 360/393/412 dp | **YES** — `RetailerRenderedLayoutTest.kt`, 33 assertions |
 | Lint as a hard gate | **YES** — `abortOnError = true`; `lintDebug` runs in the same invocation |
-| Release APK / AAB built by CI | **YES, but UNSIGNED** — 2,849,725 and 6,409,691 bytes, built for size measurement |
+| Release APK / AAB built by CI | **YES, but UNSIGNED** — 8,524,131 bytes (release APK) and an unsigned AAB, built for size measurement only |
 | Signed release bundle | **NO — BLOCKED** — no upload key exists; CI reports `signed release BLOCKED` and names the four missing secrets |
 | Installed and used on a device | **NO — BLOCKED** — no device, emulator, JDK or Android SDK in the review environment |
 | Live production backend verified | **YES** — 11/11 unauthenticated probes against `https://maharanitraders.vercel.app`, run `37959400920` |
@@ -74,11 +76,22 @@ only where a CI run or a test is cited; everything else is unstarted, and the re
 
 ## 4. Functional gates (per phase, on a device, against staging)
 
-- [ ] **Phase C** — sign-in, registration, pending approval, suspension, access expiry, refresh, sign-out, password reset. Implemented and unit-tested; never run against a live server.
-- [ ] **Phase D** — catalog, search, product detail. Not started.
-- [ ] **Phase E** — cart, checkout, order confirmation, order history. Not started.
-- [ ] **Phase F** — notifications, wallet/coins. Not started.
-- [ ] **Phase G** — staff and admin workspaces. Not started.
+Every row below is **implemented in Kotlin and covered by unit tests, and none of
+it has been run on a device or against a live server** — the review environment
+has no emulator, and no signed build exists. A row is only ticked after a human
+walks the journey on a real build against staging.
+
+- [ ] **Phase C** — sign-in, registration, pending approval, suspension, access expiry, refresh, sign-out, password reset.
+- [ ] **Phase D** — catalog, search, product detail, home dashboard, favourites, quick order.
+- [ ] **Phase E** — cart, checkout, order confirmation, order history, invoice, delivery note, returns.
+- [ ] **Phase F** — notifications, wallet/coins, coupons, schemes, saved carts, support tickets.
+- [ ] **Phase G** — staff and admin workspaces.
+- [ ] **Content & policies (Phase D, 15 Nov 2026)** — Account → *Policies & information* and Help → *Policies & information* both list the **published** pages (About, Contact, Terms, Privacy, Delivery, Returns, Grievance, …) and open each one with its version and effective date. To verify by hand:
+  1. With 0105 applied and deployed, the list matches the website footer.
+  2. Opening `/legal/grievance-redressal` in the app shows the same text as the website.
+  3. Unpublishing a page in `/admin/content` makes it disappear from the list and shows *"This page is not available right now."* if it is opened by an old link — never a draft.
+  4. Airplane mode: the list and a page show the offline/error state with *Try again*, not a blank screen.
+  5. Before any of that: the app must show the honest empty state (*"No published pages yet"*) while 0105 is unapplied.
 
 ## 5. Quality gates
 

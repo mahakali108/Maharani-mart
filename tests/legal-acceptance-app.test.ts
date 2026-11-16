@@ -1,12 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn(), rows: [] as unknown[], readError: null as unknown, user: { id: 'user-1', role: 'retailer' } }));
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  rows: [] as unknown[],
+  readError: null as unknown,
+  versions: [] as { document_key: string; document_version: string }[],
+  user: { id: 'user-1', role: 'retailer' },
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/auth/session', () => ({ requireUser: async () => mocks.user }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     rpc: mocks.rpc,
-    from: () => ({ select: () => ({ eq: () => ({ returns: async () => ({ data: mocks.rows, error: mocks.readError }) }) }) }),
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => ({
+          returns: async () =>
+            table === 'legal_document_acceptances'
+              ? { data: mocks.rows, error: mocks.readError }
+              : { data: mocks.versions, error: null },
+        }),
+        in: () => ({ returns: async () => ({ data: mocks.versions, error: null }) }),
+      }),
+    }),
   }),
 }));
 
@@ -23,6 +39,7 @@ beforeEach(() => {
   mocks.rpc.mockReset().mockResolvedValue({ error: null });
   mocks.rows = [];
   mocks.readError = null;
+  mocks.versions = [];
 });
 
 describe('legal acceptance server action', () => {
@@ -51,6 +68,24 @@ describe('legal acceptance server action', () => {
     mocks.rows = [{ document_key: 'terms', document_version: terms.version, accepted_at: '2026-11-14T00:00:00Z' }];
     status = await getAcceptanceStatus('retailer');
     expect(status).toMatchObject({ available: true, pending: REQUIRED_ACCEPTANCE.retailer.length - 1 });
+  });
+
+  it('accepts the version the database says is current, not the build-time registry', async () => {
+    mocks.versions = [{ document_key: 'terms', document_version: '1.4' }];
+    const terms = legalDocumentByKey('terms')!;
+    expect(terms.version).toBe('1.0');
+
+    await acceptLegalDocumentsAction(form({ audience: 'retailer', confirm: 'on' }));
+    const recorded = mocks.rpc.mock.calls.find(([, args]) => args.p_document_key === 'terms');
+    expect(recorded?.[1].p_document_version).toBe('1.4');
+
+    // An acceptance of the older version no longer counts as current.
+    mocks.rows = [{ document_key: 'terms', document_version: '1.0', accepted_at: '2026-11-14T00:00:00Z' }];
+    const status = await getAcceptanceStatus('retailer');
+    expect(status).toMatchObject({ available: true });
+    const termsItem = status.available ? status.items.find((item) => item.document.key === 'terms') : undefined;
+    expect(termsItem?.acceptedAt).toBeNull();
+    expect(termsItem?.document.version).toBe('1.4');
   });
 
   it('reports unavailable (and so shows nothing) when the table is not installed', async () => {

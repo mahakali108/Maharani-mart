@@ -114,6 +114,22 @@ object MaharaniRoutes {
   /** The help centre: static FAQs mirroring the web help page, plus the account's real shortcuts. */
   const val HELP = "help"
 
+  /**
+   * Policies & information: About, Contact and every PUBLISHED legal page.
+   *
+   * The list is fetched from `GET /api/mobile/v1/pages` — the app stores no page
+   * list of its own, so publishing or unpublishing a page on the website changes
+   * this screen without an app release. A sub-screen (reached from Help and from
+   * the account tab), not a drawer destination.
+   */
+  const val LEGAL = "legal"
+
+  /** One published page, addressed by its slug from the list above. */
+  const val LEGAL_PAGE = "legal/{slug}"
+
+  /** The concrete route for one page, for `NavController.navigate`. */
+  fun legalPage(slug: String): String = "legal/$slug"
+
   /** The retailer's own shop profile (GET/PATCH /api/mobile/v1/profile). */
   const val PROFILE = "account/profile"
 

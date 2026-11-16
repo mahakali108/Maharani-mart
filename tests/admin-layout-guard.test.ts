@@ -18,6 +18,16 @@ const mocks = vi.hoisted(() => ({ requireUser: vi.fn(), redirect: vi.fn() }));
 
 vi.mock('@/lib/auth/session', () => ({ requireUser: mocks.requireUser }));
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }));
+// The layout now loads the managed footer navigation server-side; the loader
+// itself is covered by tests/site-content-footer-nav.test.ts.
+// Plain functions, not vi.fn(): beforeEach() calls vi.resetAllMocks(), which
+// would strip the implementation and leave footerLinks undefined.
+vi.mock('@/lib/site-content/nav', () => ({
+  loadFooterLinks: async () => [],
+  FALLBACK_FOOTER_LINKS: [],
+  footerLinksFromPages: () => [],
+  pageHref: (slug: string, kind: string) => (kind === 'legal' ? `/legal/${slug}` : `/${slug}`),
+}));
 vi.mock('@/components/layout/admin-shell', () => ({
   AdminShell: (props: { fullName: string; role: string; children: unknown }) => props,
 }));
@@ -35,7 +45,7 @@ describe('admin layout role gate', () => {
   it.each(['admin', 'super_admin'])('renders the admin shell for %s', async (role) => {
     mocks.requireUser.mockResolvedValue(user(role));
     const shell = await AdminLayout({ children: 'content' });
-    expect(shell.props).toMatchObject({ fullName: 'Fixture Admin', role });
+    expect(shell.props).toMatchObject({ fullName: 'Fixture Admin', role, footerLinks: [] });
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
 

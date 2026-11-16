@@ -40,6 +40,7 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 | View Supplier Directory & Purchase Ledger (`suppliers.view`, GRN-derived, read-only) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Review supplier applications — approve/reject (`suppliers.review`, 0059) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Manage supplier documents, private bucket (`suppliers.documents.manage`, 0059) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Manage website content & legal pages — edit, publish, unpublish (`content.manage`, 0104) | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Notes
 
@@ -47,4 +48,5 @@ If you change one, change the other. Neither alone is sufficient: RLS without ap
 - **Salesman** never sees another salesman's orders or retailers outside their assigned beat — enforced via `orders.collected_by` and `retailers.assigned_salesman_id` in RLS.
 - **Retailer** RLS scopes every query to `retailer_id = auth.uid()` — there is no code path, buggy or otherwise, that returns another retailer's data.
 - **Admin Dashboard** (`dashboard.view`) is the operational home for Admin and Super Admin. Individual cards still hide behind existing permissions (`orders.view.all`, `inventory.view`, `retailers.manage_wallet`, `collections.verify`, `support.manage`). The Super Admin Command Center stays `command_center.view` only.
+- **Website content** (`content.manage`, migration 0104) is Super Admin only: publishing a legal page is a public promise, so a plain Admin can read the published pages but cannot edit or publish them. RLS enforces the same rule through `is_super_admin()`; see `docs/SITE_CONTENT_MANAGEMENT.md`.
 - Only **Super Admin** can create Staff or Salesman accounts (Phase 2 Admin Panel) — Admin cannot create accounts with equal or greater privilege than itself.

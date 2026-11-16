@@ -431,6 +431,54 @@ therefore a failing web test, not a silently empty product card.
 
 **Explicit invariants:** historical customer credit/payable amount is not a payment method, no online/COD payment flow is exposed, no FEFO/warehouse reservation is reintroduced, no client-side stock mutation is allowed, and an offline/uncertain request is never queued for automatic replay with a new key.
 
+### 2.4.1 IMPLEMENTED — published information pages (website content, migration 0104)
+
+The Android app shows About Us, Contact Us and every policy from the **same
+managed content the website serves**. There is no policy text in the app and no
+page list in the Kotlin code, so a Super Admin publish is visible on both
+surfaces without an app release.
+
+| Method | Path | Auth/role | Server source |
+| --- | --- | --- | --- |
+| GET | `/api/mobile/v1/pages` | public (anonymous) | `public.published_pages()` via `createMobileAnonClient` |
+| GET | `/api/mobile/v1/pages/{slug}` | public (anonymous) | `public.published_page(p_slug)` via `createMobileAnonClient` |
+
+`GET /pages` → `{ data: { pages: [{ slug, kind, audience, navLabel, shortLabel, title, summary, version, effectiveDate }] }, requestId }`.
+
+`GET /pages/{slug}` → `{ data: { slug, kind, audience, navLabel, title, eyebrow, intro,
+version, effectiveDate, publishedAt, showContactDetails, relatedSlugs, sections: [{ heading,
+paragraphs, bullets, tone, imageUrl, linkLabel, linkHref }] }, requestId }`.
+
+Rules the app relies on (enforced server-side, tested in `tests/mobile-pages-api.test.ts`
+and `tests/site-content-db.test.ts`):
+
+- **PUBLISHED content only.** A draft page returns `404 not_found` with
+  `details.reason = "unpublished"`; the app shows the same clean "This page is not
+  available right now." state as the website. It learns nothing about the draft.
+- An unknown slug returns `404 not_found` and a malformed slug is refused before
+  any database call. A read failure returns `503 database_unavailable`, never an
+  empty-but-successful page.
+- Internal operator notices, admin notes, owner review decisions and publishing
+  history are **never serialised** — they live in tables the anonymous role cannot
+  read.
+- Paragraph text may contain `[label](/path)`; the app renders the label as text
+  and opens the path in the in-app page viewer. No HTML is sent.
+
+**Native client (delivered, `feature/engagement`).** `ManagedContentRepository`
+wraps the two calls; `LegalCentreViewModel` / `ManagedPageViewModel` own the four
+states (loading, published, empty, error+retry) and a fifth *unavailable* state
+for the server's `404`, which is rendered with the website's own sentence and
+**no** retry button, because retrying cannot publish a page. Screens:
+`LegalCentreScreen` (index) and `ManagedPageScreen` (one page), reached from
+Account → *Policies & information* and Help → *Policies & information*
+(`MaharaniRoutes.LEGAL`, `MaharaniRoutes.LEGAL_PAGE`). An on-site link
+(`/contact`) opens the same page inside the app; only `https`, `mailto:` and
+`tel:` are handed to the platform; any other scheme becomes plain text. Section
+`imageUrl` is carried by the contract but **not rendered** in this release (no
+published page uses one). Contract tests:
+`android/core/network/src/test/.../ManagedContentSerializationTest.kt` and
+`android/feature/engagement/src/test/.../ManagedContentViewModelTest.kt`.
+
 ### 2.5 PLANNED — Phase F (coins, notifications, banners, account)
 
 | Method | Path | Auth/role | Reuse |

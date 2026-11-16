@@ -1,0 +1,1144 @@
+{
+  "generatedFrom": "app/about, app/contact, app/legal/*, lib/legal/{documents,content}.ts",
+  "pages": [
+    {
+      "slug": "terms",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Terms",
+      "short_label": "Terms",
+      "eyebrow": "Legal policies",
+      "title": "Terms and Conditions",
+      "intro": "These terms cover Maharani Traders’ current own-stock wholesale and retail sales.",
+      "meta_description": "The basic rules for using the website, placing orders and paying.",
+      "version": "1.0",
+      "effective_date": "2026-11-04",
+      "sort_order": 10,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Acceptance and business model",
+          "body": [
+            "By using the website, creating an account, placing an order or purchasing products, you agree to these terms and the applicable website policies. If you do not agree, please do not use the website.",
+            "Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity. These policies cover own-stock cosmetics, personal-care products and non-food FMCG. Food products are excluded.",
+            "The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Product information, prices and taxes",
+          "body": [
+            "We endeavour to display accurate product names, descriptions, photographs, prices and quantities. Packaging, colour and other visual details may vary. Please check the actual label, ingredients, directions, warnings, manufacturer details and expiry or use-before information before use.",
+            "Prices, applicable taxes, any delivery or compulsory charges, and applicable wholesale quantities, slabs or minimum orders will be displayed or communicated before confirmation. GST will be charged and invoiced as required by law. An obvious listing or pricing error may be corrected before order acceptance; if an amount was collected for an unfulfilled order, it will be refunded."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Order placement and acceptance",
+          "body": [
+            "An order is a request to purchase, subject to stock availability, delivery serviceability and confirmation. We may contact you to verify the order, quantity, address or phone number.",
+            "An order may be declined or cancelled if the product is unavailable, the address is outside the serviceable area, information is incomplete or appears fraudulent, the listing contains a material error, or fulfilment would violate applicable law. Amounts collected for an unfulfilled cancelled order will be refunded."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Payment and customer responsibilities",
+          "body": [
+            "The current cash payment method is Cash on Delivery (COD). The checkout may apply an available Coins balance automatically; the remaining confirmed amount is payable to an authorised delivery representative on delivery. Review the checkout total before confirming.",
+            "Provide accurate contact and delivery information, check your order, keep account credentials confidential, use the site lawfully and pay the confirmed COD balance when accepting delivery. Do not send money to an unknown personal account or unauthorised payment link. Additional payment methods, if introduced, will be displayed before use."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Intellectual property and applicable law",
+          "body": [
+            "The Maharani Traders name, original site design, logos, text and graphics may not be reproduced or commercially used without permission except as permitted by law. Third-party product names and trademarks belong to their respective owners.",
+            "Nothing in these terms excludes a right or remedy that cannot lawfully be excluded. Indian law applies; disputes may be handled by the competent authority or court having jurisdiction under applicable law. See our [cancellation and return policy](/legal/returns) and [contact details](/contact)."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "privacy",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Privacy",
+      "short_label": "Privacy",
+      "eyebrow": "Legal policies",
+      "title": "Privacy Policy",
+      "intro": "This policy describes website privacy practices and contacts; all uses, including any marketplace processing, require verification before publication.",
+      "meta_description": "What personal data we collect, why, who sees it, and how to ask for access, correction or deletion.",
+      "version": "1.0",
+      "effective_date": "2026-11-04",
+      "sort_order": 20,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Information we may collect",
+          "body": [
+            "Depending on your use, we may collect your name, mobile number, email, billing and delivery addresses, order and purchase history, COD collection and payment status, support messages and complaints, account, login and device-related information, and information needed for tax, accounting, security, fraud prevention or legal compliance.",
+            "Do not send passwords, OTPs or unnecessary sensitive personal information through customer support."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "How information is used and shared",
+          "body": [
+            "Information may be used to manage accounts, confirm and deliver orders, communicate about orders and returns, maintain invoices and tax records, handle support and refunds, detect fraud and misuse, improve the website and comply with applicable law. Unrelated uses require an appropriate lawful basis.",
+            "Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. The application also supports third-party seller fulfilment: if used, the relevant seller may receive order and delivery information, including the recipient address and phone where provided. Marketplace data flows and disclosures require verification before any third-party operation. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Cookies and security",
+          "body": [
+            "The site may use cookies or similar technologies for login, cart functionality, security, preferences and performance. Any legally required consent mechanism must be implemented and verified before publication. Browser settings can control cookies, but disabling essential cookies may affect functionality.",
+            "Reasonable technical and organisational measures are intended to protect information, but no internet service can guarantee absolute security. Use strong passwords and do not share OTPs or login credentials."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Retention, requests and updates",
+          "body": [
+            "Information may be retained for fulfilment, accounting, tax, complaint handling, disputes and legal compliance. Retention periods and deletion procedures require verification; some transaction or tax records may need statutory retention.",
+            "For questions, corrections or other privacy requests, contact AJAY KUMAR, Proprietor, using the details below. Requests will be reviewed under applicable law. This policy may be updated when practices or requirements change; the latest version will carry its effective date.",
+            "Proprietor: AJAY KUMAR",
+            "Registered trade name: AJAY GENERAL",
+            "Brand: MAHARANI TRADERS",
+            "Grievance Officer: AJAY KUMAR, Proprietor",
+            "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403",
+            "Phone: [8987023959](tel:8987023959)",
+            "Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)"
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "returns",
+      "kind": "legal",
+      "audience": "buyers",
+      "nav_label": "Returns",
+      "short_label": "Returns",
+      "eyebrow": "Legal policies",
+      "title": "Cancellation, Return and Refund Policy",
+      "intro": "Contact us as soon as reasonably possible about a cancellation or product issue.",
+      "meta_description": "When an order can be cancelled, how refunds work and what happens to Coins.",
+      "version": "1.0",
+      "effective_date": "2026-11-04",
+      "sort_order": 30,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Order cancellation",
+          "body": [
+            "Contact us as soon as possible to request cancellation. A request before dispatch may be accepted; an order already dispatched may not be cancellable through the ordinary process. Cancellation depends on order status and applicable law. If we cancel an order after collecting payment, the amount paid for the unfulfilled order will be refunded."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Product issues and return requests",
+          "body": [
+            "Contact us if a product is damaged, defective, wrong, a wrong quantity, materially different from its description, suspected spurious or non-genuine, or has a relevant labelling, quality or legal issue. We will review the complaint and provide the remedy required by applicable law, which may include replacement, return, refund or another appropriate remedy.",
+            "Please provide your order number, name and mobile number, product and quantity, issue description and photographs or video if reasonably available. We may ask for additional information; a missing photograph alone does not automatically remove statutory rights.",
+            "The website return-request form may have an order-specific deadline. If the form is closed, contact support; an internal deadline does not remove statutory rights or remedies."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Cosmetics, hygiene and refunds",
+          "body": [
+            "A change-of-mind return for opened or used cosmetics may be refused for hygiene and safety where lawful. This does not prevent a legally available remedy for a defective, damaged, wrong, spurious or misdescribed product.",
+            "For an approved COD refund, support will arrange a reasonable and lawful refund method and verify necessary details. We will communicate an expected processing time after approval. Never share an OTP, password or card PIN to obtain a refund. No unverified blanket return period or automatic refund is promised.",
+            "Nothing in this policy limits rights or remedies available under applicable consumer-protection or other Indian law."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Return and refund contact",
+          "body": [
+            "Proprietor: AJAY KUMAR",
+            "Registered trade name: AJAY GENERAL",
+            "Brand: MAHARANI TRADERS",
+            "Grievance Officer: AJAY KUMAR, Proprietor",
+            "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403",
+            "Phone: [8987023959](tel:8987023959)",
+            "Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)"
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "shipping",
+      "kind": "legal",
+      "audience": "buyers",
+      "nav_label": "Delivery",
+      "short_label": "Delivery",
+      "eyebrow": "Legal policies",
+      "title": "Shipping and Delivery Policy",
+      "intro": "Delivery is limited to local serviceable areas in and around Belaganj, Gaya, Bihar.",
+      "meta_description": "Where we deliver, delivery OTP, and what to check at the door.",
+      "version": "1.0",
+      "effective_date": "2026-11-04",
+      "sort_order": 40,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Serviceability, charges and estimates",
+          "body": [
+            "Delivery is available only when the address is confirmed as serviceable by the website or support. Not all Gaya PINs are serviceable; we do not promise delivery throughout Gaya district or Bihar. An active serviceable PIN and applicable minimum order are checked at checkout.",
+            "Delivery or other compulsory charges will be disclosed before confirmation. If no charge is shown, confirm it with support before placing an order. The current checkout blocks online ordering for PINs configured with a positive delivery fee until that fee can be accounted for correctly.",
+            "Estimated timing will be communicated at checkout or confirmation, depending on availability and location. Estimates can be affected by weather, local conditions or operational issues. Contact support about significant delays; order status is not real-time location tracking."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Address and delivery inspection",
+          "body": [
+            "Provide an accurate address and reachable phone number. You or your authorised recipient should be available to receive the order and pay the confirmed COD balance. Support may contact you if the address is incorrect, the recipient is unavailable or the order is refused.",
+            "Check the package and quantity at delivery. Report visible damage to the representative and contact support promptly. This does not affect statutory rights concerning defective, damaged, wrong, spurious or misdescribed products."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Delivery contact",
+          "body": [
+            "Use the [Help centre](/retailer/help) for an existing order, or contact us:",
+            "Proprietor: AJAY KUMAR",
+            "Registered trade name: AJAY GENERAL",
+            "Brand: MAHARANI TRADERS",
+            "Grievance Officer: AJAY KUMAR, Proprietor",
+            "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403",
+            "Phone: [8987023959](tel:8987023959)",
+            "Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)"
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "damaged-goods",
+      "kind": "legal",
+      "audience": "buyers",
+      "nav_label": "Damaged goods",
+      "short_label": "Damaged goods",
+      "eyebrow": "Legal policies",
+      "title": "Return, Replacement and Damaged Goods Procedure",
+      "intro": "What to do when goods arrive damaged, short, wrong, expired or not as described. This procedure works together with the Cancellation, Return and Refund Policy.",
+      "meta_description": "Step-by-step procedure for damaged, short, wrong or expired goods.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 50,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "returns",
+        "shipping",
+        "grievance",
+        "marketplace-disclaimer"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Check the goods at delivery",
+          "body": [
+            "Delivery is completed with a one-time password (OTP) that only you receive. Please count and inspect the goods before you share the OTP with the delivery person.",
+            "If any item is missing or visibly damaged, tell the delivery person before the delivery is completed. They record the missing or damaged quantity against each item, and the delivery is saved as a partial delivery."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "What happens for a shortfall recorded at the door",
+          "body": [
+            "You pay only for the goods actually delivered. The amount to collect is recalculated from the quantities recorded.",
+            "If Coins were applied to goods that were not delivered, the value of that shortfall is credited back to your Coins balance. The system calculates this amount from the recorded quantities; it cannot be typed in by the delivery person."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Problems found after delivery",
+          "body": [
+            "Raise a return request from the order page, or contact us using the details below. Each delivered order shows the last date for raising a return request in the app. If that date has passed, you can still contact us: an internal deadline does not take away a remedy the law gives you.",
+            "Tell us the order number, the product, the quantity affected and what is wrong. Photographs of the product, the batch number and the outer carton help us act quickly and trace the batch. A missing photograph does not by itself defeat a valid complaint."
+          ],
+          "bullets": [
+            "Damaged in transit or leaking.",
+            "Wrong product, wrong variant or wrong quantity.",
+            "Expired, or past its “use before” date when delivered.",
+            "Seal broken, label missing or label does not match the listing.",
+            "Suspected counterfeit or not genuine."
+          ]
+        },
+        {
+          "heading": "How we resolve it",
+          "body": [
+            "After checking the complaint we will offer the remedy that fits the problem: replacement, collection of the goods with a refund, or a price adjustment. For goods sold by an independent seller, we pass the complaint to that seller and follow it up; see the Marketplace Disclaimer.",
+            "Please keep the product, its packaging and the invoice until the complaint is closed. Do not use or resell a product you believe is unsafe or not genuine.",
+            "Opened or used cosmetics and personal-care products are not accepted back for a change of mind, for hygiene reasons. This does not apply where the product is defective, damaged, wrong, expired or not genuine."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [
+        "Confirm the return-request window (the software default is 7 days from delivery; it is not yet set by the owner).",
+        "Confirm how refunds for Cash on Delivery orders are paid (Coins credit, bank transfer or cash) and the time taken."
+      ],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "seller-agreement",
+      "kind": "legal",
+      "audience": "sellers",
+      "nav_label": "Seller agreement",
+      "short_label": "Seller agreement",
+      "eyebrow": "Legal policies",
+      "title": "Seller Agreement",
+      "intro": "The agreement between Maharani Traders (the marketplace operator) and each independent seller who lists goods on this website. A seller must accept the current version before any offer can go live.",
+      "meta_description": "Duties of third-party sellers: registration, genuine goods, labelling, fulfilment, taxes and payouts.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 60,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "prohibited-products",
+        "marketplace-disclaimer",
+        "gst-pricing-invoice",
+        "suspension-termination",
+        "ip-complaints"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Who can sell",
+          "body": [
+            "Selling is by invitation only. A seller account is created only from an invitation issued by the Super Admin. There is no public seller sign-up.",
+            "Before the account is activated the seller must provide true and current business details and documents for verification, including legal name, business address, GST registration details and PAN where applicable, and bank account details for payouts. The seller must tell us promptly if any of these change.",
+            "We may refuse, pause or end onboarding if details cannot be verified."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "What can be listed",
+          "body": [
+            "Only cosmetics, personal-care and non-food FMCG goods in categories that we have approved may be listed. Food and drink of every kind are not permitted on this website. See the Prohibited and Restricted Products Policy.",
+            "Every offer is reviewed before it is shown to buyers. We keep a record of each approval, rejection and suspension and the reason for it."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Seller’s promises about the goods",
+          "body": [],
+          "bullets": [
+            "The goods are genuine, lawfully sourced and the seller has the right to sell them.",
+            "Cosmetics are made by a licensed manufacturer or lawfully imported, and carry the label particulars required by the Cosmetics Rules, 2020.",
+            "Pre-packaged goods carry the declarations required by the Legal Metrology (Packaged Commodities) Rules, 2011, including MRP, net quantity, month and year of manufacture or packing, manufacturer or importer details, consumer-care details and, for imported goods, country of origin.",
+            "Goods are not expired, recalled, tampered with or re-labelled, and have a reasonable remaining shelf life when dispatched.",
+            "The description, images, price and stock shown on the listing are accurate and are kept up to date.",
+            "The seller will give us invoices, licences, test reports or brand authorisations when we ask for them to check a listing or a complaint."
+          ]
+        },
+        {
+          "heading": "Orders, delivery and returns",
+          "body": [
+            "The seller must make the ordered goods ready in the quantity and condition ordered. If the seller cannot fulfil an order it must tell us at once so the buyer can be informed.",
+            "The seller is responsible for the goods it sells and must accept back, replace or refund goods that are damaged, defective, wrong, expired, not genuine or not as described, in line with the policies published on this website and with the law.",
+            "The seller must name a person who will respond to buyer complaints that we forward, and must respond within the timelines in the Grievance Redressal Policy."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Prices, taxes, fees and payouts",
+          "body": [
+            "The seller sets its selling price, which must not exceed the MRP printed on the pack. The seller is the supplier of its goods for GST purposes and is responsible for its own tax invoices, returns and tax payments.",
+            "Our commission or fees, and the payout cycle, are those agreed with the seller in writing and recorded against the seller account. Payouts are made after deducting agreed fees, refunds, and any tax that the law requires us to collect or deduct on the seller’s sales, and are shown in the seller ledger.",
+            "We may hold a payout for an order that is the subject of an open complaint, return or investigation until it is resolved."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Buyer data",
+          "body": [
+            "The seller receives only the buyer information needed to fulfil an order. It must be used only for that order, kept secure, and not used for marketing or shared with anyone else."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Suspension and ending the agreement",
+          "body": [
+            "We may remove a listing or suspend a seller where there is a safety concern, a suspected counterfeit, a breach of this agreement or of the law, or a failure to respond to complaints. When a seller is suspended its offers are withdrawn from sale automatically.",
+            "Either side may end the agreement by written notice. Orders already accepted, complaints, returns, payouts due and record-keeping duties continue until they are completed. See the Suspension, Termination and Dispute Policy."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Changes to this agreement",
+          "body": [
+            "When this agreement changes we publish a new version with a new version number and date. A seller is asked to accept the new version; the version accepted and the time of acceptance are recorded."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [
+        "Commission / fee rates and the payout cycle (kept out of this document on purpose; they must be agreed in writing with each seller).",
+        "Whether the operator has registered for, and will collect, tax at source on seller sales under section 52 of the CGST Act, and deduct tax under section 194-O of the Income-tax Act. Confirm with a Chartered Accountant before the first third-party sale.",
+        "Liability caps, indemnity wording, notice period and governing court: to be settled by a lawyer before the first seller is onboarded."
+      ],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "retailer-terms",
+      "kind": "legal",
+      "audience": "buyers",
+      "nav_label": "Retailer terms",
+      "short_label": "Retailer terms",
+      "eyebrow": "Legal policies",
+      "title": "Retailer and Wholesale Buyer Terms",
+      "intro": "Additional terms for shops and wholesale buyers. They apply together with the general Terms and Conditions.",
+      "meta_description": "Extra terms for shops buying for resale: account approval, pricing category, resale duties.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 70,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "terms",
+        "returns",
+        "damaged-goods",
+        "coins-loyalty",
+        "gst-pricing-invoice"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Who can buy",
+          "body": [
+            "This website serves retailers and wholesale buyers in the areas we deliver to. An account is reviewed before it can place orders. Please give true shop details, including the shop name, address, mobile number and, if you are registered, your GSTIN.",
+            "You are responsible for orders placed from your account. Keep your password private and tell us at once if you think someone else has used your account."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Prices and your pricing category",
+          "body": [
+            "Prices, pack sizes, minimum quantities and any quantity slabs are shown before you confirm an order. The price that applies is the one shown at checkout for your account.",
+            "Your account may be placed in a pricing category by our team. A category is not a paid membership: there is no fee, no subscription and no renewal. We may change a category, and the change applies to orders placed after it."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Payment",
+          "body": [
+            "Orders are paid by Cash on Delivery. Any Coins balance applied is shown at checkout, and the remaining amount is payable to our delivery person when you accept the goods. Pay only against the order shown in the app, and never share your delivery OTP before you have checked the goods."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Resale",
+          "body": [],
+          "bullets": [
+            "Sell the goods in their original, unopened packs, with the label intact.",
+            "Do not sell above the MRP printed on the pack.",
+            "Do not sell goods after the “use before” or expiry date. Store goods as the label directs.",
+            "If we tell you about a recall or a safety problem with a batch, stop selling it and follow our instructions."
+          ]
+        },
+        {
+          "heading": "Your rights as a business buyer",
+          "body": [
+            "Some consumer-protection laws apply only to people who buy for personal use and may not apply to goods bought for resale. Whatever the legal position, the complaint, return and grievance procedures published on this website are open to every buyer."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [
+        "Whether credit terms are offered to any retailer (this document assumes Cash on Delivery only).",
+        "Minimum order value, if any."
+      ],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "marketplace-disclaimer",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Marketplace",
+      "short_label": "Marketplace",
+      "eyebrow": "Legal policies",
+      "title": "Marketplace Disclaimer",
+      "intro": "This website sells goods from our own stock and can also show offers from independent sellers. This page explains the difference.",
+      "meta_description": "Which goods are sold by us and which by independent sellers, and who is responsible for what.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 80,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "seller-agreement",
+        "product-safety",
+        "grievance",
+        "ip-complaints"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Two kinds of offer",
+          "body": [
+            "Own stock: goods bought, stored and sold by Maharani Traders. We are the seller and issue the invoice.",
+            "Seller offer: goods offered by an independent seller that we have invited and verified. That seller is the seller of those goods and is responsible for their quality, labelling, authenticity and tax invoice. The offer shows the seller’s name."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "What we do for seller offers",
+          "body": [],
+          "bullets": [
+            "Invite sellers individually and check their business details before they can list.",
+            "Review each offer before it is shown, and allow only approved cosmetics and non-food FMCG categories.",
+            "Take a written agreement from each seller that goods are genuine and correctly labelled.",
+            "Receive your complaints, forward them to the seller, and follow them up to a conclusion.",
+            "Remove listings and suspend sellers where we find a problem."
+          ]
+        },
+        {
+          "heading": "What we do not do",
+          "body": [
+            "We do not manufacture any product sold here. We do not make any health, medical or treatment claim for any product. Product descriptions and images for seller offers come from the seller; always read the label on the pack before using or reselling a product.",
+            "This page does not limit any liability that the law places on a marketplace operator or on a seller, and it does not limit your right to complain to us about any order placed on this website."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "grievance",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Grievance",
+      "short_label": "Grievance",
+      "eyebrow": "Legal policies",
+      "title": "Grievance Redressal Policy",
+      "intro": "Contact us about products, orders, delivery, payment, returns, refunds or website services.",
+      "meta_description": "How to complain, who handles it, and the acknowledgement and resolution timelines.",
+      "version": "1.0",
+      "effective_date": "2026-11-04",
+      "sort_order": 90,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Grievance Officer",
+          "body": [
+            "Proprietor: AJAY KUMAR",
+            "Registered trade name: AJAY GENERAL",
+            "Brand: MAHARANI TRADERS",
+            "Grievance Officer: AJAY KUMAR, Proprietor",
+            "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403",
+            "Phone: [8987023959](tel:8987023959)",
+            "Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)"
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "How to submit a complaint",
+          "body": [
+            "Call 8987023959, email [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com), or use the [website Help centre](/retailer/help) where available. Include your order number, contact details and a clear description."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Acknowledgement, resolution and escalation",
+          "body": [
+            "The proposed targets are acknowledgement within 48 hours and an endeavour to resolve the grievance within one month from receipt. These targets and the complaint-handling workflow require operational and legal verification before publication; applicable statutory rights and timelines are not affected. A complaint reference number will be provided where the registration system supports reference tracking.",
+            "If you are dissatisfied, reply to the support email requesting escalation to the Grievance Officer. You may also approach the appropriate consumer protection authority or forum available under Indian law."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "business-disclosure",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Business disclosure",
+      "short_label": "Business disclosure",
+      "eyebrow": "Legal policies",
+      "title": "Contact and Legal Information",
+      "intro": "Maharani Traders is the customer-facing brand of AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL.",
+      "meta_description": "Who operates this website, where, and how to reach us.",
+      "version": "1.0",
+      "effective_date": "2026-11-04",
+      "sort_order": 100,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Business details",
+          "body": [
+            "Business activity: Wholesale and retail trading of own-stock cosmetics and non-food FMCG products. Maharani Traders is not a separate incorporated company or legal entity.",
+            "Proprietor: AJAY KUMAR",
+            "Registered trade name: AJAY GENERAL",
+            "Brand: MAHARANI TRADERS",
+            "Grievance Officer: AJAY KUMAR, Proprietor",
+            "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403",
+            "Phone: [8987023959](tel:8987023959)",
+            "Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)"
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Tax and policy scope",
+          "body": [
+            "The owner reports that the business is registered for GST as an active regular taxpayer. The GST certificate, GSTIN, registration status and invoice configuration have not been independently verified. Any applicable GST details should be provided on invoices and other statutory documents as required by law.",
+            "The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.",
+            "Food is excluded from the stated current product scope. If online payment gateways, wider delivery areas, food products or other services are introduced later, the relevant policies and disclosures must be reviewed and updated before launch."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "gst-pricing-invoice",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "GST & invoices",
+      "short_label": "GST & invoices",
+      "eyebrow": "Legal policies",
+      "title": "GST, Pricing and Invoice Policy",
+      "intro": "How prices and taxes are shown on this website and what invoice you receive.",
+      "meta_description": "How prices and taxes are shown, and when a tax invoice is issued.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 110,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "terms",
+        "retailer-terms",
+        "seller-agreement",
+        "business-disclosure"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Prices",
+          "body": [
+            "The price for each product, the pack size and the quantity are shown before you place an order, and the order summary shows the total payable. Any delivery or other charge is shown separately before you confirm.",
+            "No product is sold above the Maximum Retail Price (MRP) printed on its pack. If a pack you receive shows a lower MRP than the price charged, tell us and we will correct it.",
+            "If a price was shown wrongly because of an obvious error, we will contact you before dispatch and you may cancel the order without any charge."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "GST",
+          "body": [
+            "Where GST applies, it is charged at the rate that applies to the product and is shown in the order summary and on the invoice.",
+            "If you want your GSTIN on the invoice, add the correct GSTIN and registered business name to your account before placing the order. We cannot add or change a GSTIN on an invoice that has already been issued, except as the GST law allows."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Invoices",
+          "body": [
+            "An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.",
+            "The app shows a tax invoice only when the registration and tax details needed for a valid tax invoice are complete. Until then the document is marked as an order summary and is not a tax invoice.",
+            "For returns and price corrections, a credit note or revised document is issued as the GST law requires."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [
+        "GSTIN of the business (the owner reports GST registration; the number has not been supplied, so no tax invoice can be issued yet).",
+        "Invoice numbering series and financial-year prefix.",
+        "HSN codes and GST rates for every product, confirmed by a Chartered Accountant.",
+        "Tax-collection-at-source registration and returns for third-party seller sales, if seller offers are switched on."
+      ],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "product-safety",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Product safety",
+      "short_label": "Product safety",
+      "eyebrow": "Legal policies",
+      "title": "Product Authenticity and Safety Policy",
+      "intro": "Maharani Traders intends to source products through lawful suppliers and offer genuine products.",
+      "meta_description": "Genuine goods, labelling, expiry and how to report a safety concern.",
+      "version": "1.0",
+      "effective_date": "2026-11-04",
+      "sort_order": 120,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Product information and safety",
+          "body": [
+            "We will take reasonable steps to offer products that are lawfully sourced, carry applicable manufacturer, packer or importer information and declarations such as batch, quantity, MRP, manufacturing and expiry or use-before details, and display applicable warnings and usage information.",
+            "We will not knowingly offer products after expiry or where sale is prohibited by law. Customers should check labels and instructions before use, stop using a product if they discover a safety, quality or labelling concern, and contact support.",
+            "Maharani Traders does not claim to manufacture branded products it resells unless expressly stated for a particular product. Current policy scope is cosmetics and non-food FMCG; food is excluded."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Product concerns",
+          "body": [
+            "Proprietor: AJAY KUMAR",
+            "Registered trade name: AJAY GENERAL",
+            "Brand: MAHARANI TRADERS",
+            "Grievance Officer: AJAY KUMAR, Proprietor",
+            "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403",
+            "Phone: [8987023959](tel:8987023959)",
+            "Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)"
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "prohibited-products",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Prohibited products",
+      "short_label": "Prohibited products",
+      "eyebrow": "Legal policies",
+      "title": "Prohibited and Restricted Products Policy",
+      "intro": "This website is for cosmetics, personal-care and non-food FMCG goods only. The following may never be listed, whether by us or by a seller.",
+      "meta_description": "What may never be listed here — including all food products.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 130,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "product-safety",
+        "seller-agreement",
+        "ip-complaints",
+        "grievance"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Never allowed",
+          "body": [],
+          "bullets": [
+            "Food and drink of any kind, including packaged food, snacks, beverages, baby food, edible oils, spices, confectionery, pan masala and health or nutrition supplements.",
+            "Medicines and drugs, including anything that needs a prescription, and products that claim to prevent, treat or cure a disease.",
+            "Tobacco, nicotine, e-cigarettes, alcohol and intoxicants.",
+            "Counterfeit, replica, smuggled or stolen goods, and goods sold without the brand owner’s authority where that is required.",
+            "Cosmetics that are not made by a licensed manufacturer or not lawfully imported, or that contain an ingredient that is not permitted.",
+            "Expired, recalled, tampered, re-labelled, repacked or tester/“not for sale” goods.",
+            "Goods without the label declarations required by law, or with an altered MRP.",
+            "Hazardous, flammable or dangerous goods that cannot be carried safely, and any goods whose sale is prohibited by law."
+          ]
+        },
+        {
+          "heading": "How this is enforced",
+          "body": [
+            "Every product category carries a compliance classification set by the Super Admin. Only categories classified as cosmetics or non-food FMCG can hold products for sale; the database rejects a product or seller offer placed in any other category.",
+            "Seller offers are reviewed before they go live, and each decision is recorded with the reviewer and the reason."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Report a listing",
+          "body": [
+            "If you see a product here that you believe is prohibited, unsafe or not genuine, tell us using the contact details below. We will review it, and remove it from sale while we check where there is a safety concern."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "ip-complaints",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "IP complaints",
+      "short_label": "IP complaints",
+      "eyebrow": "Legal policies",
+      "title": "Intellectual Property Complaints Policy",
+      "intro": "For brand owners and their authorised agents who believe a listing on this website infringes a trade mark, copyright or design, or is counterfeit.",
+      "meta_description": "How a brand owner can report a counterfeit or infringing listing.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 140,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "prohibited-products",
+        "marketplace-disclaimer",
+        "grievance"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "What to send us",
+          "body": [],
+          "bullets": [
+            "Your name, organisation, address, phone number and email.",
+            "The right you rely on (for example the registered trade mark and its registration number) and proof that you own it or are authorised to act.",
+            "The exact listing: the product name as shown and the page link.",
+            "Why you believe it infringes or is counterfeit.",
+            "A statement that the information is true and that you are the owner or authorised by the owner."
+          ]
+        },
+        {
+          "heading": "What we do",
+          "body": [
+            "We acknowledge the complaint, check it, and where it appears valid we remove or disable the listing. For a seller offer we inform the seller, who may reply with evidence such as purchase invoices or a brand authorisation.",
+            "If the seller’s reply shows the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. Repeated or serious infringement leads to suspension of the seller.",
+            "We keep a record of each complaint and its outcome. Complaints that are knowingly false may be rejected and may lead to restriction of the complainant’s account."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Our own content",
+          "body": [
+            "Product names, logos and pack images shown on this website belong to their respective owners and are used only to identify the goods offered for sale."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "suspension-termination",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Suspension & disputes",
+      "short_label": "Suspension & disputes",
+      "eyebrow": "Legal policies",
+      "title": "Suspension, Termination and Dispute Policy",
+      "intro": "When an account can be restricted or closed, and how a decision or dispute is handled. It applies to buyers and sellers.",
+      "meta_description": "When an account can be restricted or closed, and how to dispute it.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 150,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "grievance",
+        "privacy",
+        "seller-agreement",
+        "terms"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "When we may restrict or close an account",
+          "body": [],
+          "bullets": [
+            "False or unverifiable registration details or documents.",
+            "Fraud, misuse of Coins, coupons or offers, or attempts to interfere with the website or other accounts.",
+            "Repeated refusal of delivered orders or non-payment of Cash on Delivery orders without a valid reason.",
+            "Abuse or threats towards our staff, delivery persons or other users.",
+            "For sellers: unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints.",
+            "Where the law or an order of a court or authority requires it."
+          ]
+        },
+        {
+          "heading": "How we do it",
+          "body": [
+            "Where it is safe to do so we tell you the reason and give you a chance to explain before a lasting restriction. Where there is a risk to buyers, to payments or to the security of the service, we may act first and tell you afterwards.",
+            "Restriction decisions are recorded with the reason and the person who made them."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Closing your own account",
+          "body": [
+            "A retailer can ask for account closure from Account → Security in the app, or by contacting us. Open orders, returns and amounts due are settled first.",
+            "After closure we delete or anonymise personal data that we no longer need, and keep only what the law requires us to keep, such as invoices and tax and accounting records, for the period the law requires. See the Privacy Policy."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "What continues after closure or suspension",
+          "body": [
+            "Orders already delivered, complaints, returns, refunds due to you and payments due from you are not cancelled by a suspension or closure. A Coins balance that represents money refunded to you remains yours; ask us how it will be returned."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Disputes",
+          "body": [
+            "Start with the Grievance Redressal Policy: most problems are settled there. If you are not satisfied with the outcome you may ask for it to be reviewed by the proprietor.",
+            "These policies are governed by the laws of India. Nothing here stops you from approaching a consumer commission, court or authority that has jurisdiction under the law."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [
+        "How a remaining Coins balance is paid out when an account is closed.",
+        "Whether disputes with sellers go to arbitration or to court, and the place — to be drafted by a lawyer."
+      ],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "cookies",
+      "kind": "legal",
+      "audience": "everyone",
+      "nav_label": "Cookies",
+      "short_label": "Cookies",
+      "eyebrow": "Legal policies",
+      "title": "Cookie and Device Storage Notice",
+      "intro": "This website stores a small amount of information on your device so that it can work. It does not use advertising cookies.",
+      "meta_description": "The small files this website stores on your device and why.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 160,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "privacy"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "What is stored and why",
+          "body": [],
+          "bullets": [
+            "Sign-in session cookies: keep you signed in securely and protect your account. They are necessary; the website cannot work without them.",
+            "Device storage for convenience: recently viewed products, recent searches, your product-comparison list and whether you dismissed a notice. This stays on your device and is not used to build an advertising profile.",
+            "Offline app files: if you install the website as an app, your browser keeps copies of app files so pages load faster."
+          ]
+        },
+        {
+          "heading": "Usage statistics",
+          "body": [
+            "We use Vercel Web Analytics to count page visits so that we can keep the website working well. According to its provider it does not use cookies and does not identify individual visitors. We do not use it for advertising."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "What we do not use",
+          "body": [
+            "No advertising cookies, no social-media tracking pixels and no sale of browsing data. If that ever changes, this notice will be updated first and, where the law requires consent, you will be asked before anything is stored."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Your choices",
+          "body": [
+            "You can clear cookies and site data in your browser settings at any time. Clearing them signs you out and removes your recently viewed list. Blocking necessary cookies will stop sign-in from working."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "coins-loyalty",
+      "kind": "legal",
+      "audience": "buyers",
+      "nav_label": "Coins & points",
+      "short_label": "Coins & points",
+      "eyebrow": "Legal policies",
+      "title": "Coins and Loyalty Points Terms",
+      "intro": "Coins and loyalty points are two separate records on a retailer account. This page explains each. There is no paid membership on this website.",
+      "meta_description": "How Coins and loyalty points are added, used, reversed and corrected.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 170,
+      "show_in_footer": true,
+      "show_in_index": true,
+      "show_contact_details": true,
+      "related_slugs": [
+        "retailer-terms",
+        "returns",
+        "suspension-termination"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Coins",
+          "body": [
+            "Coins are a balance on your account. Coins are added when we credit a refund or adjustment to you, for example for goods that were short or damaged at delivery, or for a cancelled order on which Coins had been used.",
+            "At checkout the available Coins balance may be applied to the order automatically, and the amount applied is shown before you confirm. The rest is paid by Cash on Delivery.",
+            "If an order is cancelled or returned, Coins used on it are credited back. Each credit is recorded once against the order or delivery, so the same refund cannot be credited twice.",
+            "Every Coins entry appears in your account ledger with its date and reason."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Loyalty points",
+          "body": [
+            "Loyalty points are added automatically when an order is delivered: 1 point for every full ₹100 of the order. If the order is later returned, the points for it are removed.",
+            "Points are a record of your buying activity. They are not money, they have no cash value, they cannot be transferred, and at present they cannot be redeemed against an order. If a redemption scheme is introduced, its terms will be published here first.",
+            "Points are only ever added by the system on a verified delivery, or adjusted by an Admin with a recorded reason."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Corrections and misuse",
+          "body": [
+            "If you think a Coins or points entry is wrong, contact us with the order number. We will check it against the ledger and correct a genuine error.",
+            "We may reverse Coins or points that were credited by mistake or obtained by fraud or misuse, and will record the reason for doing so."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [
+        "Whether Coins ever expire (the software sets no expiry; none is stated here).",
+        "Whether loyalty points will become redeemable, and on what terms."
+      ],
+      "internal_notes": "Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions."
+    },
+    {
+      "slug": "about",
+      "kind": "page",
+      "audience": "everyone",
+      "nav_label": "About",
+      "short_label": "About",
+      "eyebrow": "What we do",
+      "title": "Wholesale, with clearer choices",
+      "intro": "Maharani Traders is the brand of AJAY KUMAR, Proprietor, trading as AJAY GENERAL. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG.",
+      "meta_description": "Maharani Traders is the brand of AJAY KUMAR, Proprietor, trading as AJAY GENERAL. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 1,
+      "show_in_footer": true,
+      "show_in_index": false,
+      "show_contact_details": true,
+      "related_slugs": [
+        "terms",
+        "shipping"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "How ordering works",
+          "body": [
+            "Approved retailer accounts can maintain a cart and choose a saved delivery address. The order service rechecks product availability, pricing, GST, applicable offers, available Coins and the address at checkout. A pending order is not a delivery guarantee.",
+            "The application includes marketplace and seller features, subject to configuration. The own-stock sales policies do not provide complete terms for third-party transactions; any launch or ongoing operation requires separate review. Food products are excluded from the stated current scope."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Where can we deliver?",
+          "body": [
+            "Gaya, Bihar is the initial configuration default, not blanket coverage. A retailer can order online only to an active, individually verified district/state/PIN combination. Delivery availability is checked again when an order is placed. [Read delivery details](/legal/shipping)."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Identity and trust",
+          "body": [
+            "Owner-provided business and contact details are available for review; GST and other statutory invoice information must be verified before publication. See the [contact options](/contact) or sign in to raise a support ticket."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Business identity and contact details must be confirmed by the owner before launch. The text was carried over from the pre-CMS page unchanged."
+    },
+    {
+      "slug": "contact",
+      "kind": "page",
+      "audience": "everyone",
+      "nav_label": "Contact",
+      "short_label": "Contact",
+      "eyebrow": "Support",
+      "title": "Get help with your account or order",
+      "intro": "Contact Maharani Traders about your order, delivery, products or account.",
+      "meta_description": "Contact Maharani Traders about your order, delivery, products or account.",
+      "version": "1.0",
+      "effective_date": "2026-11-14",
+      "sort_order": 2,
+      "show_in_footer": true,
+      "show_in_index": false,
+      "show_contact_details": true,
+      "related_slugs": [
+        "grievance",
+        "privacy"
+      ],
+      "is_system": true,
+      "sections": [
+        {
+          "heading": "Public support and grievance contact",
+          "body": [
+            "Proprietor: AJAY KUMAR",
+            "Registered trade name: AJAY GENERAL",
+            "Brand: MAHARANI TRADERS",
+            "Grievance Officer: AJAY KUMAR, Proprietor",
+            "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403",
+            "Phone: [8987023959](tel:8987023959)",
+            "Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)"
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "For signed-in retailers",
+          "body": [
+            "Open the [Help centre](/retailer/help) to raise a support ticket for an order, delivery, payment, product or Coins issue. Include your order number when available. You can review replies in your support list."
+          ],
+          "bullets": []
+        },
+        {
+          "heading": "Seller and account access",
+          "body": [
+            "Seller accounts are created by Super Admin invitation. If you have an invitation, use the emailed link; verification and approval are required before trading. The current own-stock sales policies do not provide complete terms for third-party seller transactions, which require separate review. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support."
+          ],
+          "bullets": []
+        }
+      ],
+      "owner_decisions": [],
+      "internal_notes": "Contact details are owner-provided. Until the storefront contact block is marked verified in Super Admin → Business & contact details, launch readiness treats them as unconfirmed."
+    }
+  ]
+}

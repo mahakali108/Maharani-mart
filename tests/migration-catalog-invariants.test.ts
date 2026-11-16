@@ -18,6 +18,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createMigratedDb, migrationFiles, type Db } from './helpers/pg-harness';
+import { classifyMigrationGaps } from './helpers/migration-reservations';
 
 const ROOT = join(__dirname, '..');
 let db: Db;
@@ -54,11 +55,19 @@ describe('RLS coverage', () => {
     // ai_cleanup_runs + ai_retention_rules (0084, AI-only 14-day retention) are
     // server-scheduler-only: no client policy exists by design. The supplier
     // rate-limit table is the same shape.
+    //
+    // 0106's two bootstrap tables are deny-by-default on purpose: no API role
+    // holds ANY grant on them (anon/authenticated/service_role revoked, with only
+    // a service_role SELECT re-granted), so a policy would have nothing to
+    // evaluate. They are written solely by bootstrap_super_admin(), which no API
+    // role may execute. Asserted in tests/super-admin-bootstrap-db.test.ts.
     expect(rows.map((r) => r.table_name)).toEqual([
       'ai_cleanup_runs',
       'ai_retention_rules',
       'cleanup_runs',
       'data_retention_rules',
+      'super_admin_bootstrap_allowlist',
+      'super_admin_bootstrap_events',
       'supplier_application_rate_limits',
     ]);
   });
@@ -88,6 +97,13 @@ describe('SECURITY DEFINER hygiene', () => {
       'is_phone_registered',        // public registration phone pre-check (0057 decision)
       'submit_supplier_application', // public supplier form; rate-limited server-side
       'can_current_staff_read_profile', // boolean predicate evaluated INSIDE a policy
+      // 0104: anonymous readers of the published website content. Both return
+      // ONLY the published snapshot (or the "unpublished"/"missing" state) and
+      // cannot reach a draft, an internal note, an owner decision or a history
+      // row. Justification and negative tests: docs/SITE_CONTENT_MANAGEMENT.md §3
+      // and tests/site-content-db.test.ts.
+      'published_page',
+      'published_pages',
     ]);
     // Authenticated-only (anon=false) boolean predicates evaluated inside
     // catalogue / seller-offer RLS policies (0086/0087); leak zero row/PII data.
@@ -283,21 +299,17 @@ describe('application references resolve against the schema', () => {
     });
   }, 60_000);
 
-  it('the migration set is contiguous apart from the documented gaps', () => {
-    const versions = migrationFiles().map((file) => file.slice(0, 4));
-    const numeric = versions.map((v) => Number(v));
-    const gaps: string[] = [];
-    for (let i = 1; i < numeric.length; i += 1) {
-      if (numeric[i]! - numeric[i - 1]! > 1) {
-        for (let missing = numeric[i - 1]! + 1; missing < numeric[i]!; missing += 1) {
-          gaps.push(String(missing).padStart(4, '0'));
-        }
-      }
-    }
-    // 0061 was never committed; 0075 is the on-hold retention archive and 0076
-    // the deferred banner alt_text. Anything else appearing here is a numbering
-    // accident that must be reviewed before it is applied.
-    expect(gaps).toEqual(['0061', '0075', '0076']);
+  it('the migration set is contiguous apart from the documented reservations', () => {
+    const numbers = migrationFiles().map((file) => Number(file.slice(0, 4)));
+    // The one registry of allowed skips: tests/helpers/migration-reservations.ts
+    // A number that is missing without an entry there fails here; a
+    // 'never-authored' number that suddenly has a file also fails, so a
+    // reservation can never become a licence to reuse a number.
+    const gaps = classifyMigrationGaps(numbers);
+    expect({
+      undocumented: gaps.undocumented,
+      presentDespiteReservation: gaps.presentDespiteReservation,
+    }).toEqual({ undocumented: [], presentDespiteReservation: [] });
   });
 
   it('never ships two migrations with the same version', () => {

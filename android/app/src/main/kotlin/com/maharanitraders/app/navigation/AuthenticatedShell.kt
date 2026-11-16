@@ -106,6 +106,9 @@ import com.maharanitraders.feature.engagement.ui.SchemesScreen
 import com.maharanitraders.feature.engagement.ui.PurchaseReportsScreen
 import com.maharanitraders.feature.engagement.ui.SupportScreen
 import com.maharanitraders.feature.engagement.ui.HelpScreen
+import com.maharanitraders.feature.engagement.ui.LegalCentreScreen
+import com.maharanitraders.feature.engagement.ui.ManagedPageScreen
+import com.maharanitraders.feature.engagement.ManagedPageViewModel
 import com.maharanitraders.feature.engagement.ui.SecurityScreen
 import com.maharanitraders.feature.orders.CartCheckoutViewModel
 import com.maharanitraders.feature.orders.OrderDetailViewModel
@@ -553,6 +556,30 @@ private fun RoutedShell(
         // checkout opens.
         composable(MaharaniRoutes.ADDRESS_BOOK) {
           AddressBookScreen()
+        }
+
+        // Policies & information, and one page. Both read PUBLISHED managed
+        // content from the server, so the app never ships policy text and an
+        // unpublished page can only ever answer "not available right now" —
+        // never a draft. Public content: they work before sign-in too, which is
+        // why they are plain routes rather than account-gated surfaces.
+        composable(MaharaniRoutes.LEGAL) {
+          LegalCentreScreen(
+            onOpenPage = { slug -> navController.navigate(MaharaniRoutes.legalPage(slug)) },
+            onOpenContact = { navController.navigate(MaharaniRoutes.legalPage("contact")) },
+          )
+        }
+
+        composable(
+          route = MaharaniRoutes.LEGAL_PAGE,
+          arguments = listOf(
+            navArgument(ManagedPageViewModel.ARG_SLUG) { type = NavType.StringType },
+          ),
+        ) {
+          ManagedPageScreen(
+            onOpenPage = { slug -> navController.navigate(MaharaniRoutes.legalPage(slug)) { launchSingleTop = true } },
+            onOpenIndex = { navController.navigate(MaharaniRoutes.LEGAL) { launchSingleTop = true } },
+          )
         }
 
         // Order sub-screens. The history list opens the detail record; the
@@ -1095,6 +1122,7 @@ private fun DestinationSurface(
     MaharaniRoutes.SUPPORT -> SupportScreen()
 
     MaharaniRoutes.HELP -> HelpScreen(
+      onOpenLegal = { onOpenDestination(MaharaniRoutes.LEGAL) },
       onOpenSupport = { onOpenDestination(MaharaniRoutes.SUPPORT) },
       onOpenOrders = { onOpenDestination(MaharaniRoutes.ORDERS) },
       onOpenCoins = { onOpenDestination(MaharaniRoutes.COINS) },
