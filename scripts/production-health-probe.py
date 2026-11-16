@@ -424,6 +424,62 @@ def production_targets() -> list[Target]:
     ]
 
 
+# The nineteen public pages the website-content module publishes: About, Contact
+# and the seventeen documents in the legal registry. After publication these are
+# served from the database instead of JSX, so a page that answers 404 (or the
+# "This page is not available right now." state) is a content regression that the
+# health checklist above would not notice — none of its eleven targets is a public
+# information page.
+#
+# Kept in sync with `content/site-pages.seed.json` by
+# tests/production-health-probe.test.ts, so adding a page to the module without
+# adding it here fails the suite instead of shipping an unverified URL.
+PUBLIC_PAGE_PATHS: tuple[str, ...] = (
+    "/about",
+    "/contact",
+    "/legal/terms",
+    "/legal/privacy",
+    "/legal/returns",
+    "/legal/shipping",
+    "/legal/damaged-goods",
+    "/legal/seller-agreement",
+    "/legal/retailer-terms",
+    "/legal/marketplace-disclaimer",
+    "/legal/grievance",
+    "/legal/business-disclosure",
+    "/legal/gst-pricing-invoice",
+    "/legal/product-safety",
+    "/legal/prohibited-products",
+    "/legal/ip-complaints",
+    "/legal/suspension-termination",
+    "/legal/cookies",
+    "/legal/coins-loyalty",
+)
+
+
+def page_targets() -> list[Target]:
+    """One probe per published page — the post-deploy "every URL still answers" check.
+
+    Read-only, anonymous, GET only: it proves reachability, not readability. The
+    wording itself is proven offline by the seed generator drift test and by
+    tests/site-content-continuity.test.ts.
+    """
+    return [
+        Target(
+            f"page {path}",
+            path,
+            expect=[200],
+            gate="Every published page is reachable",
+            why=(
+                "Served from the database after publication. A 404, a redirect or the "
+                "'not available right now' state means a page that was live before the "
+                "release has disappeared for customers."
+            ),
+        )
+        for path in PUBLIC_PAGE_PATHS
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Probing
 # ---------------------------------------------------------------------------
@@ -966,6 +1022,28 @@ def self_test() -> int:
     check("unreachable host FAILS the probe", not dead.passed, str(dead.reasons))
     check("unreachable host records the transport error", "name or service not known" in (dead.error or ""))
 
+    # --- the nineteen page probes -----------------------------------------
+    page_list = page_targets()
+    check("page probe covers nineteen pages", len(PUBLIC_PAGE_PATHS) == 19, str(len(PUBLIC_PAGE_PATHS)))
+    check("page probe has no duplicate path", len(set(PUBLIC_PAGE_PATHS)) == len(PUBLIC_PAGE_PATHS))
+    check(
+        "every page probe expects 200",
+        all(target.expect == (200,) for target in page_list),
+        str([t.path for t in page_list if t.expect != (200,)]),
+    )
+    check(
+        "page probes are anonymous public GETs under /legal, /about or /contact",
+        all(
+            path == "/about" or path == "/contact" or path.startswith("/legal/")
+            for path in PUBLIC_PAGE_PATHS
+        ),
+        str([p for p in PUBLIC_PAGE_PATHS if not (p in ("/about", "/contact") or p.startswith("/legal/"))]),
+    )
+    check(
+        "the page probe does not replace the health checklist",
+        len(production_targets()) == 11 and not any(t.path in PUBLIC_PAGE_PATHS for t in production_targets()),
+    )
+
     # --- report rendering --------------------------------------------------
     markdown = render_markdown(PRODUCTION_ORIGIN, results + [dead])
     check("report states the origin", PRODUCTION_ORIGIN in markdown)
@@ -994,6 +1072,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--attempts", type=int, default=DEFAULT_ATTEMPTS, help="bounded retries per target")
     parser.add_argument("--backoff", type=float, default=DEFAULT_BACKOFF_SECONDS, help="linear backoff base in seconds")
     parser.add_argument("--json", dest="json_path", default=None, help="also write machine-readable results here")
+    parser.add_argument(
+        "--pages",
+        action="store_true",
+        help="probe the nineteen published information pages instead of the health checklist",
+    )
     parser.add_argument("--self-test", action="store_true", help="run the offline logic test and exit (no network)")
     args = parser.parse_args(argv)
 
@@ -1002,7 +1085,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         origin, results = probe_production(
-            args.origin, timeout=args.timeout, attempts=args.attempts, backoff=args.backoff
+            args.origin,
+            timeout=args.timeout,
+            attempts=args.attempts,
+            backoff=args.backoff,
+            targets=page_targets() if args.pages else None,
         )
     except OriginRejected as error:
         print(f"::error::Refusing to probe: {error}", file=sys.stderr)

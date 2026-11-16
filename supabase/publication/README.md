@@ -35,20 +35,47 @@ a `published_at` or a `published_by`. Three reasons:
 3. run verify_publication.sql   -> expect 0 published, 19 draft, anon reads nothing
 4. run stage1_publish_live_text.sql                <- owner approval
 5. run verify_publication.sql   -> expect 9 published, 10 draft
-6. DEPLOY the application (the /about, /contact, /legal routes now read the database)
-7. run stage2_publish_reviewed_additions.sql       <- owner + legal approval, any time later
-8. run verify_publication.sql   -> expect 19 published
+6. run stage2_publish_reviewed_additions.sql       <- owner + legal approval, SAME WINDOW
+7. run verify_publication.sql   -> expect 19 published
+8. DEPLOY the application (the /about, /contact, /legal routes now read the database)
+9. re-run verify_publication.sql and check all 19 URLs
 ```
 
-**Step 4 must happen before step 6.** The deployed site reads pages from the
-database; a deploy with nothing published would show "This page is not available
-right now." on `/about`, `/contact` and every policy. Unpublishing everything
-first and deploying afterwards is the one ordering that produces a visible
-regression.
+**Steps 4 and 6 must both happen before step 8.** The deployed site reads pages
+from the database; a page that is still a draft answers "This page is not
+available right now." Unpublishing everything first and deploying afterwards is
+the one ordering that produces a visible regression.
 
-Step 7 is deliberately not urgent: the 10 stage-2 pages are beyond what the site
-published before, so leaving them as drafts keeps the public surface exactly as
-it is today.
+**Correction (verified against production on 16 November 2026).** An earlier
+version of this file said the ten stage-2 pages "are beyond what the site
+published before", and that deferring stage 2 kept the public surface unchanged.
+That is **wrong**, and following it would have taken ten live URLs off the air:
+
+```
+/legal/damaged-goods     /legal/seller-agreement   /legal/retailer-terms
+/legal/marketplace-disclaimer   /legal/gst-pricing-invoice
+/legal/prohibited-products      /legal/ip-complaints
+/legal/suspension-termination   /legal/cookies     /legal/coins-loyalty
+```
+
+All nineteen pages — these ten, the seven legal pages in stage 1, `/about` and
+`/contact` — are served by the deployed application today (the live `/legal` index
+lists all seventeen registry documents, and pages from both stages were fetched
+directly). `tests/site-content-continuity.test.ts` already encodes the same fact:
+nineteen URLs live before the change, nineteen published after both stages.
+
+The wording in both stages is byte-identical to what is live today: regenerating
+`content/site-pages.seed.json` and `0105` from the current page sources is a no-op
+(`tests/site-content-seed.test.ts` → "generator drift"). So publishing stage 2 is
+not a new publication in substance — it is the same text moving from JSX to the
+database — and doing it in the same window as stage 1 removes the dark-page risk
+instead of creating it.
+
+Deferring stage 2 is only acceptable if the owner explicitly accepts that these
+ten URLs will answer "This page is not available right now." until stage 2 runs.
+`seller-agreement` makes that worse than cosmetic: acceptance is already enforced
+at `1.0` by `legal_document_current_versions`, so a seller invitation issued in
+that window would ask for acceptance of a page that cannot be read.
 
 ## What a stage does, mechanically
 

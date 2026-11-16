@@ -7,6 +7,13 @@
 deploy, no signing, no Play Store action.
 **Package:** `docs/release/` — seven companion documents, referenced per section.
 
+> **Superseded in part — read `PHASE4_REPORT_2026-11-16.md` first.** Phase 4
+> re-verified the live state and corrected one assumption in the release order:
+> all nineteen pages (including all ten previously described as "stage-2
+> additions") are live in production today, so **stage 2 must run in the same
+> window as stage 1, before the deploy**. The signable version of the whole
+> release is `FINAL_OWNER_APPROVAL_AND_LAUNCH_CHECKLIST.md`.
+
 How to read this report: **[VERIFIED]** means this pass executed or read the thing
 itself; **[ASSUMED]** means it rests on the repository or on a prior report and was
 not re-tested; **[DECISION]** means a human must choose.

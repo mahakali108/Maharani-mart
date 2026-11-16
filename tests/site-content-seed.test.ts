@@ -157,6 +157,22 @@ describe('the staged publication scripts', () => {
     expect(stageTwo).toHaveLength(10);
   });
 
+  it('publishes both stages before the deploy (deferring stage 2 would darken ten live URLs)', () => {
+    // All nineteen pages are served by the deployed app today, so a deploy that
+    // lands after stage 1 only takes ten live URLs offline until stage 2 runs.
+    // This pins the corrected order and the fact it depends on.
+    const order = readme.slice(readme.indexOf('## Order of operations'), readme.indexOf('## What a stage does'));
+    const stageTwo = order.search(/stage2_publish_reviewed_additions\.sql/);
+    const deploy = order.search(/DEPLOY the application/);
+    expect(stageTwo).toBeGreaterThan(-1);
+    expect(deploy).toBeGreaterThan(-1);
+    expect(stageTwo).toBeLessThan(deploy);
+    expect(order).toMatch(/must both happen before step 8/i);
+    expect(readme).not.toMatch(/Step 7 is deliberately not urgent/);
+    expect(readme).toMatch(/seller-agreement[\s\S]*acceptance is already enforced/);
+    for (const slug of slugsOf(stage2)) expect(readme, slug).toContain(`/legal/${slug}`);
+  });
+
   it('records the real publication time and never a backdated one', () => {
     for (const [name, sql] of [['stage 1', stage1], ['stage 2', stage2]] as const) {
       expect(sql, name).toContain('published_at = now()');
