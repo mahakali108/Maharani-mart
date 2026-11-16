@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Store, LayoutDashboard, Tag, PackageCheck, UserCircle, LogOut } from 'lucide-react';
+import { Store, LayoutDashboard, Tag, PackageCheck, UserCircle, LogOut, Megaphone } from 'lucide-react';
 import { requireSellerPage } from '@/lib/seller/guard';
 import { logoutAction } from '@/lib/auth/actions';
 import { StatusBadge } from '@/components/admin/status-badge';
@@ -22,6 +22,7 @@ export default async function SellerPortalLayout({
     { href: '/seller/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/seller/offers', label: 'Offers & Tiers', icon: Tag },
     { href: '/seller/orders', label: 'Sub-Orders', icon: PackageCheck },
+    { href: '/seller/campaigns', label: 'Ad Campaigns', icon: Megaphone },
     { href: '/seller/profile', label: 'Business Profile', icon: UserCircle },
   ];
 

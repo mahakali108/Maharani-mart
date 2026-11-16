@@ -1,5 +1,7 @@
+import Link from 'next/link';
 import { Tag, History } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
@@ -44,6 +46,7 @@ const SCOPE_LABELS: Record<PriceListRow['scope'], string> = {
 };
 
 export default async function PricingPage() {
+  await requirePagePermission('pricing.manage');
   const supabase = (await createClient());
 
   const [{ data: productData, error: productError }, { data: areaData, error: areaError }, { data: retailerData, error: retailerError }, { data: priceListData, error: priceListError }] =
@@ -77,10 +80,16 @@ export default async function PricingPage() {
           Set base, area-specific, and retailer-specific prices. The pricing engine picks the highest-priority
           matching price automatically at order time.
         </p>
-        <p className="mt-2 text-sm">
-          <a href="/admin/pricing/schemes" className="font-medium text-primary-600 hover:text-primary-700">
+        <p className="mt-2 flex flex-wrap gap-4 text-sm">
+          <Link href="/admin/pricing/wholesale" className="font-medium text-primary-600 hover:text-primary-700">
+            Super Admin wholesale pricing rules &amp; limits →
+          </Link>
+          <Link href="/admin/pricing/schemes" className="font-medium text-primary-600 hover:text-primary-700">
             Manage trade &amp; festival schemes →
-          </a>
+          </Link>
+          <Link href="/admin/pricing/tiers" className="font-medium text-primary-600 hover:text-primary-700">
+            Category tier pricing →
+          </Link>
         </p>
       </div>
 

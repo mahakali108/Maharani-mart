@@ -7,6 +7,8 @@ import { loadRetailerCategory } from '@/lib/retailer/category-pricing';
 import { RETAILER_CATEGORY_LABELS } from '@/lib/pricing/category-pricing';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReadFailureNotice } from '@/components/ui/read-failure-notice';
+import { RetailerMembershipOverview } from '@/components/retailer/retailer-membership-overview';
+import type { RetailerMembershipOverviewPayload } from '@/lib/membership/rules';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
 
 export const dynamic = 'force-dynamic';
@@ -27,15 +29,25 @@ export default async function RetailerCategoryPage() {
   const user = await requireUser();
   const supabase = (await createClient());
 
-  const [category, loyaltyBalRes, loyaltyLedgerRes] = await Promise.all([
+  const [category, loyaltyBalRes, loyaltyLedgerRes, overviewRpcRes] = await Promise.all([
     loadRetailerCategory(supabase, user.id).catch(() => 'general' as const),
     getRetailerLoyaltyPosition(supabase, user.id),
     getRetailerLoyaltyLedger(supabase, user.id, 20),
+    Promise.resolve(
+      supabase.rpc('get_retailer_membership_overview' as never, {
+        p_retailer_id: user.id,
+      } as never)
+    ).catch(() => ({ data: null, error: null })),
   ]);
 
   const readFailureMessage = loyaltyBalRes.error ?? loyaltyLedgerRes.error ?? null;
   const loyaltyBalance = loyaltyBalRes.balance;
   const loyaltyLedger = loyaltyLedgerRes.entries;
+  const rawOverview = overviewRpcRes?.data as RetailerMembershipOverviewPayload | null | undefined;
+  const membershipOverview =
+    rawOverview && typeof rawOverview === 'object' && 'current' in rawOverview && 'plans' in rawOverview
+      ? rawOverview
+      : null;
   const label = RETAILER_CATEGORY_LABELS[category];
 
   return (
@@ -102,6 +114,8 @@ export default async function RetailerCategoryPage() {
           </Link>
         </div>
       </Card>
+
+      <RetailerMembershipOverview overview={membershipOverview} />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

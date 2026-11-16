@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { recordSuperAdminAudit } from '@/lib/admin/super-admin-audit';
 import {
   normalizeSellerInput,
   validateSellerInput,
@@ -171,7 +172,7 @@ export async function reviewSellerAction(
   decision: 'active' | 'rejected',
   reason?: string
 ): Promise<SellerActionResult> {
-  await requirePermission('sellers.review');
+  const actor = await requirePermission('sellers.review');
   if (!UUID_RE.test(sellerId)) return { ok: false, error: 'Invalid seller record.' };
   if (decision !== 'active' && decision !== 'rejected') {
     return { ok: false, error: 'Invalid review decision.' };
@@ -206,6 +207,15 @@ export async function reviewSellerAction(
     return { ok: false, error: 'Only a pending seller can be reviewed.' };
   }
 
+  await recordSuperAdminAudit(supabase, {
+    actorId: actor.id,
+    actorRole: actor.role,
+    action: decision === 'active' ? 'SELLER_APPROVED' : 'SELLER_REJECTED',
+    beforeData: { seller_id: sellerId, status: 'pending' },
+    afterData: { seller_id: sellerId, status: decision },
+    reason: decision === 'rejected' ? trimmed : 'Seller application approved',
+  });
+
   revalidateSellerPages(sellerId);
   return { ok: true };
 }
@@ -218,7 +228,7 @@ export async function suspendSellerAction(
   sellerId: string,
   reason: string
 ): Promise<SellerActionResult> {
-  await requirePermission('sellers.review');
+  const actor = await requirePermission('sellers.review');
   if (!UUID_RE.test(sellerId)) return { ok: false, error: 'Invalid seller record.' };
   const reasonError = validateSellerReason(reason, 'suspension');
   if (reasonError) return { ok: false, error: reasonError };
@@ -238,6 +248,15 @@ export async function suspendSellerAction(
     return { ok: false, error: 'Only an active seller can be suspended.' };
   }
 
+  await recordSuperAdminAudit(supabase, {
+    actorId: actor.id,
+    actorRole: actor.role,
+    action: 'SELLER_SUSPENDED',
+    beforeData: { seller_id: sellerId, status: 'active' },
+    afterData: { seller_id: sellerId, status: 'suspended' },
+    reason: reason.trim().slice(0, 500),
+  });
+
   revalidateSellerPages(sellerId);
   return { ok: true };
 }
@@ -247,7 +266,7 @@ export async function suspendSellerAction(
  * each offer is reactivated as an explicit, separately reviewed decision.
  */
 export async function reinstateSellerAction(sellerId: string): Promise<SellerActionResult> {
-  await requirePermission('sellers.review');
+  const actor = await requirePermission('sellers.review');
   if (!UUID_RE.test(sellerId)) return { ok: false, error: 'Invalid seller record.' };
 
   const supabase = (await createClient());
@@ -261,6 +280,15 @@ export async function reinstateSellerAction(sellerId: string): Promise<SellerAct
   if (!data || (data as unknown[]).length === 0) {
     return { ok: false, error: 'Only a suspended seller can be reinstated.' };
   }
+
+  await recordSuperAdminAudit(supabase, {
+    actorId: actor.id,
+    actorRole: actor.role,
+    action: 'SELLER_REINSTATED',
+    beforeData: { seller_id: sellerId, status: 'suspended' },
+    afterData: { seller_id: sellerId, status: 'active' },
+    reason: 'Suspended seller reinstated',
+  });
 
   revalidateSellerPages(sellerId);
   return { ok: true };

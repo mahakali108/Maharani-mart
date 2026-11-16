@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { requireSuperAdmin } from '@/lib/admin/control-center/guard';
+import { recordSuperAdminAudit } from '@/lib/admin/super-admin-audit';
 import {
   parsePaise,
   parsePositiveInt,
@@ -107,7 +109,64 @@ export async function moderateOfferAction(
   if (error) return { ok: false, error: mapSellerGateError(error.message) ?? error.message };
   if (!data || (data as unknown[]).length === 0) return { ok: false, error: 'Offer not found.' };
 
+  await recordSuperAdminAudit(supabase, {
+    actorId: user.id,
+    actorRole: user.role,
+    action: decision === 'approved' ? 'OFFER_APPROVED' : 'OFFER_REJECTED',
+    afterData: { offer_id: offerId, moderation_status: decision },
+    reason: decision === 'rejected' ? trimmed : 'Seller offer approved',
+  });
+
   revalidateOfferPages();
+  return { ok: true };
+}
+
+/**
+ * Super Admin removal of a prohibited or non-compliant seller listing.
+ * Marks the offer rejected AND inactive in a single atomic update with a
+ * mandatory reason prefixed `[PROHIBITED]` (trigger 0109 logs `removed_prohibited`
+ * in `product_moderation_history` while preserving order/cart history).
+ */
+export async function removeProhibitedOfferAction(
+  offerId: string,
+  reason: string
+): Promise<OfferActionResult> {
+  const actor = await requireSuperAdmin();
+  if (!UUID_RE.test(offerId)) return { ok: false, error: 'Invalid offer.' };
+  const trimmed = (reason ?? '').trim().slice(0, 480);
+  if (trimmed.length < 8) {
+    return {
+      ok: false,
+      error: 'Provide a clear policy or compliance reason (at least 8 characters) to remove a prohibited listing.',
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('seller_offers' as never)
+    .update({
+      moderation_status: 'rejected',
+      is_active: false,
+      moderation_by: actor.id,
+      moderated_at: new Date().toISOString(),
+      moderation_reason: `[PROHIBITED] ${trimmed}`,
+    } as never)
+    .eq('id', offerId)
+    .select('id, seller_id, pack_id');
+  if (error) return { ok: false, error: mapSellerGateError(error.message) ?? error.message };
+  if (!data || (data as unknown[]).length === 0) return { ok: false, error: 'Offer not found.' };
+
+  const row = (data as unknown as Array<{ id: string; seller_id?: string; pack_id?: string }>)[0];
+  await recordSuperAdminAudit(supabase, {
+    actorId: actor.id,
+    actorRole: actor.role,
+    action: 'OFFER_REMOVED_PROHIBITED',
+    afterData: { offer_id: offerId, seller_id: row?.seller_id ?? null, moderation_status: 'rejected', is_active: false },
+    reason: trimmed,
+  });
+
+  revalidateOfferPages(row?.pack_id);
+  if (row?.seller_id) revalidatePath(`/admin/sellers/${row.seller_id}`);
   return { ok: true };
 }
 

@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import Image from 'next/image';
 import { Image as ImageIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { requirePagePermission } from '@/lib/admin/guard';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminEmptyState } from '@/components/admin/empty-state';
 import { BannerForm } from '@/components/admin/banner-form';
@@ -22,6 +24,7 @@ interface BannerRow {
 }
 
 export default async function BannersPage() {
+  await requirePagePermission('banners.manage');
   const supabase = (await createClient());
 
   // Separate queries rather than an embed — same reasoning as the fix
@@ -40,11 +43,19 @@ export default async function BannersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-ink-950">Banners</h1>
-        <p className="mt-1 text-sm text-ink-500">
-          Promotional banners shown at the top of the retailer home screen.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink-950">Banners</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            Promotional banners shown at the top of the retailer home screen.
+          </p>
+        </div>
+        <Link
+          href="/admin/banners/campaigns"
+          className="text-sm font-medium text-primary-700 hover:underline"
+        >
+          Paid Seller Ad Campaigns (Super Admin) →
+        </Link>
       </div>
 
       {bannerError ? (

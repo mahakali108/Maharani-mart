@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { throwIfReadFailed } from '@/lib/supabase/read-guard';
+import { formatIndiaDateTime } from '@/lib/datetime/india';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProductForm } from '@/components/admin/product-form';
 import { ProductImageManager } from '@/components/admin/product-image-manager';
@@ -14,6 +16,7 @@ import { loadStockMap } from '@/lib/admin/catalog-data';
 interface ProductDetail {
   id: string;
   name: string;
+  description: string | null;
   brand_id: string | null;
   category_id: string | null;
   unit: string;
@@ -79,12 +82,13 @@ export default async function EditProductPage({ params: paramsPromise }: { param
     { data: categoryData },
     { data: imageData },
     { data: packData },
+    { data: moderationHistoryData },
   ] = await Promise.all([
     supabase
       .from('products')
       // Purchase cost remains role-checked through its dedicated accessor.
       .select(
-        'id, name, brand_id, category_id, unit, units_per_case, base_price, gst_percent, hsn_code, barcode, lead_time_days, is_new_launch'
+        'id, name, description, brand_id, category_id, unit, units_per_case, base_price, gst_percent, hsn_code, barcode, lead_time_days, is_new_launch'
       )
       .eq('id', params.id)
       .single<Omit<ProductDetail, 'cost_price'>>(),
@@ -99,6 +103,12 @@ export default async function EditProductPage({ params: paramsPromise }: { param
       .eq('product_id', params.id)
       .order('sort_order')
       .order('created_at'),
+    supabase
+      .from('product_moderation_history' as never)
+      .select('id, entity_type, action, previous_status, new_status, reason, created_at')
+      .eq('product_id', params.id)
+      .order('created_at', { ascending: false })
+      .limit(30),
   ]);
 
   // `.single()` reports a missing row AND a failed read as null data; only the
@@ -236,6 +246,54 @@ export default async function EditProductPage({ params: paramsPromise }: { param
           <CardTitle>Pack sizes &amp; case pricing</CardTitle>
         </CardHeader>
         <ProductPackManager productId={params.id} packs={packs} gstPercent={product?.gst_percent ?? 0} />
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Moderation &amp; availability history</CardTitle>
+            <Link href="/admin/offers" className="text-xs font-medium text-primary-700 hover:underline">
+              Review seller offers →
+            </Link>
+          </div>
+        </CardHeader>
+        {(() => {
+          const history = (moderationHistoryData ?? []) as unknown as Array<{
+            id: string;
+            entity_type: string;
+            action: string;
+            previous_status: string | null;
+            new_status: string | null;
+            reason: string | null;
+            created_at: string;
+          }>;
+          if (history.length === 0) {
+            return (
+              <p className="text-sm text-ink-500">
+                No moderation or stock availability events recorded for this product yet.
+              </p>
+            );
+          }
+          return (
+            <ul className="divide-y divide-ink-100 text-xs">
+              {history.map((entry) => (
+                <li key={entry.id} className="flex flex-wrap items-start justify-between gap-2 py-2.5">
+                  <div>
+                    <p className="font-medium text-ink-900">
+                      <span className="capitalize">{entry.entity_type.replace(/_/g, ' ')}</span> ·{' '}
+                      {entry.action.replace(/_/g, ' ')}
+                      {entry.previous_status && entry.new_status
+                        ? ` (${entry.previous_status} → ${entry.new_status})`
+                        : ''}
+                    </p>
+                    {entry.reason ? <p className="mt-0.5 text-ink-600">{entry.reason}</p> : null}
+                  </div>
+                  <span className="text-ink-500">{formatIndiaDateTime(entry.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
       </Card>
     </div>
   );

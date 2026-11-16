@@ -224,3 +224,215 @@ export async function listOfferFloors(packId: string): Promise<OfferPriceFloorRo
   if (error) return [];
   return (data ?? []) as unknown as OfferPriceFloorRow[];
 }
+
+export interface SellerComplianceSummary {
+  review_status: string;
+  business_identity_verified: boolean;
+  business_address_verified: boolean;
+  business_contact_verified: boolean;
+  gst_applicable: boolean;
+  gstin_verified: boolean;
+  settlement_verified: boolean;
+  cosmetics_authorization_required: boolean;
+  cosmetics_authorization_verified: boolean;
+  seller_agreement_version: string | null;
+  seller_agreement_accepted_at: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+}
+
+export interface SellerComplianceDocument {
+  id: string;
+  evidence_type: string;
+  file_name: string | null;
+  content_type: string | null;
+  created_at: string;
+}
+
+export interface SellerOrderStats {
+  totalSubOrders: number;
+  deliveredSubOrders: number;
+  cancelledSubOrders: number;
+  pendingSubOrders: number;
+  grossPaise: number;
+  deliveredPayablePaise: number;
+  ledgerEntryCount: number;
+  ledgerNetPaise: number;
+}
+
+export interface SellerPricingPermissionSummary {
+  can_set_custom_slabs: boolean;
+  can_apply_discounts: boolean;
+  max_discount_percent: number;
+  min_moq_override: number | null;
+  notes: string | null;
+}
+
+export interface SellerHistoryEvent {
+  id: string;
+  source: 'seller_audit' | 'offer_moderation';
+  action: string;
+  summary: string;
+  reason: string | null;
+  created_at: string;
+}
+
+/**
+ * Loads real DB compliance, sub-order sales stats, ledger summary, pricing
+ * permissions, and action history for `/admin/sellers/[id]`.
+ */
+export async function getSellerGovernanceOverview(sellerId: string): Promise<{
+  compliance: SellerComplianceSummary | null;
+  documents: SellerComplianceDocument[];
+  stats: SellerOrderStats;
+  pricingPermission: SellerPricingPermissionSummary | null;
+  history: SellerHistoryEvent[];
+}> {
+  const supabase = await createClient();
+
+  const [
+    complianceRes,
+    docsRes,
+    subOrdersRes,
+    ledgerRes,
+    pricingPermRes,
+    auditRes,
+    moderationRes,
+  ] = await Promise.all([
+    supabase
+      .from('seller_compliance_reviews' as never)
+      .select(
+        'review_status, business_identity_verified, business_address_verified, business_contact_verified, gst_applicable, gstin_verified, settlement_verified, cosmetics_authorization_required, cosmetics_authorization_verified, seller_agreement_version, seller_agreement_accepted_at, reviewed_at, review_reason'
+      )
+      .eq('seller_id', sellerId)
+      .maybeSingle<SellerComplianceSummary>(),
+    supabase
+      .from('seller_compliance_evidence' as never)
+      .select('id, evidence_type, file_name, content_type, created_at')
+      .eq('seller_id', sellerId)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase
+      .from('sub_orders' as never)
+      .select('status, gross_paise, payable_paise')
+      .eq('seller_id', sellerId)
+      .limit(2000),
+    supabase
+      .from('seller_ledger' as never)
+      .select('amount_paise')
+      .eq('seller_id', sellerId)
+      .limit(2000),
+    supabase
+      .from('seller_pricing_permissions' as never)
+      .select('can_set_custom_slabs, can_apply_discounts, max_discount_percent, min_moq_override, notes')
+      .eq('seller_id', sellerId)
+      .maybeSingle<SellerPricingPermissionSummary>(),
+    supabase
+      .from('audit_logs' as never)
+      .select('id, action, table_name, new_data, old_data, created_at')
+      .eq('table_name', 'sellers')
+      .eq('record_id', sellerId)
+      .order('created_at', { ascending: false })
+      .limit(30),
+    supabase
+      .from('product_moderation_history' as never)
+      .select('id, action, previous_status, new_status, reason, created_at')
+      .eq('seller_id', sellerId)
+      .order('created_at', { ascending: false })
+      .limit(30),
+  ]);
+
+  const subOrders = ((subOrdersRes.data ?? []) as unknown as Array<{
+    status: string;
+    gross_paise: number | null;
+    payable_paise: number | null;
+  }>);
+
+  let deliveredSubOrders = 0;
+  let cancelledSubOrders = 0;
+  let pendingSubOrders = 0;
+  let grossPaise = 0;
+  let deliveredPayablePaise = 0;
+
+  for (const row of subOrders) {
+    const gross = Number(row.gross_paise ?? 0);
+    const payable = Number(row.payable_paise ?? 0);
+    if (row.status === 'delivered') {
+      deliveredSubOrders += 1;
+      grossPaise += gross;
+      deliveredPayablePaise += payable;
+    } else if (row.status === 'cancelled' || row.status === 'returned' || row.status === 'failed') {
+      cancelledSubOrders += 1;
+    } else {
+      pendingSubOrders += 1;
+      grossPaise += gross;
+    }
+  }
+
+  const ledgerRows = ((ledgerRes.data ?? []) as unknown as Array<{ amount_paise: number | null }>);
+  const ledgerNetPaise = ledgerRows.reduce((acc, row) => acc + Number(row.amount_paise ?? 0), 0);
+
+  const auditEvents: SellerHistoryEvent[] = ((auditRes.data ?? []) as unknown as Array<{
+    id: string;
+    action: string;
+    old_data: Record<string, unknown> | null;
+    new_data: Record<string, unknown> | null;
+    created_at: string;
+  }>).map((row) => {
+    const oldStatus = typeof row.old_data?.status === 'string' ? row.old_data.status : null;
+    const newStatus = typeof row.new_data?.status === 'string' ? row.new_data.status : null;
+    const reasonVal =
+      (typeof row.new_data?.suspension_reason === 'string' && row.new_data.suspension_reason) ||
+      (typeof row.new_data?.rejection_reason === 'string' && row.new_data.rejection_reason) ||
+      null;
+    const summary =
+      oldStatus && newStatus && oldStatus !== newStatus
+        ? `Seller status changed: ${oldStatus} → ${newStatus}`
+        : `Seller record ${row.action.toLowerCase()}`;
+    return {
+      id: `audit-${row.id}`,
+      source: 'seller_audit',
+      action: row.action,
+      summary,
+      reason: reasonVal,
+      created_at: row.created_at,
+    };
+  });
+
+  const moderationEvents: SellerHistoryEvent[] = ((moderationRes.data ?? []) as unknown as Array<{
+    id: string;
+    action: string;
+    previous_status: string | null;
+    new_status: string | null;
+    reason: string | null;
+    created_at: string;
+  }>).map((row) => ({
+    id: `mod-${row.id}`,
+    source: 'offer_moderation',
+    action: row.action,
+    summary: `Offer ${row.action.replace(/_/g, ' ')}${row.previous_status && row.new_status ? ` (${row.previous_status} → ${row.new_status})` : ''}`,
+    reason: row.reason,
+    created_at: row.created_at,
+  }));
+
+  const history = [...auditEvents, ...moderationEvents]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 40);
+
+  return {
+    compliance: complianceRes.error ? null : (complianceRes.data ?? null),
+    documents: docsRes.error ? [] : ((docsRes.data ?? []) as unknown as SellerComplianceDocument[]),
+    stats: {
+      totalSubOrders: subOrders.length,
+      deliveredSubOrders,
+      cancelledSubOrders,
+      pendingSubOrders,
+      grossPaise,
+      deliveredPayablePaise,
+      ledgerEntryCount: ledgerRows.length,
+      ledgerNetPaise,
+    },
+    pricingPermission: pricingPermRes.error ? null : (pricingPermRes.data ?? null),
+    history,
+  };
+}
