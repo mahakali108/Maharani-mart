@@ -1,6 +1,8 @@
 # Phase 2 — Super Admin, Admin Dashboard, Website Content Management, Secure Bootstrap
 
 **Branch:** `arena/a1a3a8cb-maharani-mart`
+**Pull request:** [#136](https://github.com/mahakali108/Maharani-mart/pull/136) (open, not merged)
+**Head SHA:** `c7b27dcd717709840341edd41eb2e46e19569487`
 **Base commit:** `b2143e7be5c8dfb065a9475e29bdf9d8c76cdb48` (= merge commit of PR #135)
 **Report date:** 2026-11-16
 **Production touched:** **no.** No migration applied, no auth setting changed, no account created, no page published, no environment variable changed, no deployment made.
@@ -499,17 +501,32 @@ asserted structurally, not concurrently.
 
 ## 16. CI result
 
-| Job | Result |
-| --- | --- |
-| `Web checks (typecheck, lint, tests, build)` | see the PR — must be read on the exact head SHA |
-| Local `typecheck` | **PASS** |
-| Local `lint` | **PASS** |
-| Local `test` | **PASS** — 229 files / 3493 tests |
-| Local `build` | **PASS** |
-| `Supabase Preview` | **fails, pre-existing** — §4, not a web-gate failure |
-| Vercel | not claimed; the owner controls deployment |
+**PR #136** — https://github.com/mahakali108/Maharani-mart/pull/136
+**Head SHA verified:** `c7b27dcd717709840341edd41eb2e46e19569487`
 
-No CI result is claimed as green until it is green on the exact pushed head.
+Read from the GitHub API against that exact SHA, not from the PR summary:
+
+| Check | Result |
+| --- | --- |
+| `Web checks (typecheck, lint, tests, build)` | **success** (3m13s) |
+| `Vercel Preview Comments` | **success** |
+| `Vercel` (status context) | **success** |
+| `Supabase Preview` | **skipped** |
+| Combined commit status | **success** |
+
+| Local gate | Result |
+| --- | --- |
+| `typecheck` | **PASS** |
+| `lint` | **PASS** |
+| `test` | **PASS** — 229 files / 3493 tests |
+| `build` | **PASS** |
+
+Note on `Supabase Preview`: it reported **failure** on `main` (§4) and **skipped**
+on this branch and on PR #135. The skipping behaviour depends on the
+integration's push context, not on this branch's content — no migration was
+applied either way, and the live history is unchanged (§18). Treating the
+`main` failure as fixed would be wrong; the underlying timestamp mismatch is
+still there and is still the owner's decision (§4).
 
 ---
 
