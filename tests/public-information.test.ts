@@ -31,6 +31,15 @@ describe('public information pages come from managed content', () => {
     expect(existsSync(join(root, 'components/legal/business-contact.tsx'))).toBe(false);
   });
 
+  it('keeps the public disclosure of which document is deliberately not published', () => {
+    // The pre-rewrite /legal page told readers that the advertising/sponsored-
+    // listing policy does not exist as a feature. Dropping that card would remove
+    // a public disclosure, so the index must keep rendering NOT_APPLICABLE_DOCUMENTS.
+    const index = read('app/legal/page.tsx');
+    expect(index).toContain('NOT_APPLICABLE_DOCUMENTS');
+    expect(index).toContain('Not published because the feature does not exist');
+  });
+
   it('keeps a clean customer-facing answer for an unpublished page', () => {
     const page = read('app/legal/[slug]/page.tsx');
     expect(page).toContain('UnavailablePage');

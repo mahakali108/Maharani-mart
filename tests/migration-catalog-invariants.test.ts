@@ -55,11 +55,19 @@ describe('RLS coverage', () => {
     // ai_cleanup_runs + ai_retention_rules (0084, AI-only 14-day retention) are
     // server-scheduler-only: no client policy exists by design. The supplier
     // rate-limit table is the same shape.
+    //
+    // 0106's two bootstrap tables are deny-by-default on purpose: no API role
+    // holds ANY grant on them (anon/authenticated/service_role revoked, with only
+    // a service_role SELECT re-granted), so a policy would have nothing to
+    // evaluate. They are written solely by bootstrap_super_admin(), which no API
+    // role may execute. Asserted in tests/super-admin-bootstrap-db.test.ts.
     expect(rows.map((r) => r.table_name)).toEqual([
       'ai_cleanup_runs',
       'ai_retention_rules',
       'cleanup_runs',
       'data_retention_rules',
+      'super_admin_bootstrap_allowlist',
+      'super_admin_bootstrap_events',
       'supplier_application_rate_limits',
     ]);
   });

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { InfoCard, PublicInfoShell } from '@/components/legal/public-info-shell';
 import { informationNav } from '@/components/legal/managed-page';
 import { loadPublishedPages } from '@/lib/site-content/queries';
+import { NOT_APPLICABLE_DOCUMENTS } from '@/lib/legal/documents';
 import { AUDIENCE_LABEL, type SitePageAudience } from '@/lib/site-content/types';
 import { formatPolicyDate } from '@/lib/site-content/render';
 
@@ -71,6 +72,21 @@ export default async function LegalIndexPage() {
           );
         })
       )}
+      {/* Restored 16 November 2026: the previous /legal page disclosed which
+          document is deliberately not published, and why. That card is public
+          content; losing it in the rewrite would have removed a disclosure, not
+          just a paragraph. */}
+      {NOT_APPLICABLE_DOCUMENTS.length > 0 ? (
+        <InfoCard title="Not published because the feature does not exist">
+          <ul className="space-y-2">
+            {NOT_APPLICABLE_DOCUMENTS.map((doc) => (
+              <li key={doc.ref}>
+                <strong>{doc.title}.</strong> {doc.reason}
+              </li>
+            ))}
+          </ul>
+        </InfoCard>
+      ) : null}
       <InfoCard title="How changes are made">
         <p>
           When a policy changes we publish a new version and update the version number and effective date shown on

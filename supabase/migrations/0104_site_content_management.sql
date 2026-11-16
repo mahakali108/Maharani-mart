@@ -278,6 +278,12 @@ drop policy if exists "site_pages_public_read" on public.site_pages;
 
 -- The editor is the only authenticated reader of the draft table.
 drop policy if exists "site_pages_authenticated_read" on public.site_pages;
+-- Every CREATE POLICY below is preceded by a matching DROP: the Supabase SQL
+-- editor does not wrap a migration in a transaction, so a file that failed
+-- halfway must be re-runnable after its earlier statements took effect. Without
+-- these drops a second run stops at "policy already exists" and leaves the
+-- operator guessing which half is applied.
+drop policy if exists "site_pages_super_admin_read" on public.site_pages;
 create policy "site_pages_super_admin_read" on public.site_pages
   for select to authenticated
   using (public.is_super_admin());
@@ -297,6 +303,7 @@ create policy "site_pages_super_admin_delete" on public.site_pages
 drop policy if exists "site_page_sections_public_read" on public.site_page_sections;
 
 drop policy if exists "site_page_sections_authenticated_read" on public.site_page_sections;
+drop policy if exists "site_page_sections_super_admin_read" on public.site_page_sections;
 create policy "site_page_sections_super_admin_read" on public.site_page_sections
   for select to authenticated
   using (public.is_super_admin());
