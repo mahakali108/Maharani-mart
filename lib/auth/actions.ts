@@ -1,15 +1,32 @@
 'use server';
 
 import { z } from 'zod';
+import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { homeForRole, type UserRole } from '@/lib/auth/roles';
 import { normalizePhone } from '@/lib/utils/phone';
+import { assertSignInAllowed } from '@/lib/auth/sign-in-gate';
+import {
+  OTP_COOKIE_ATTEMPTS,
+  OTP_COOKIE_EMAIL,
+  OTP_COOKIE_SENT_AT,
+  OTP_MAX_VERIFY_ATTEMPTS,
+  OTP_RESEND_COOLDOWN_SECONDS,
+  classifyOtpVerifyError,
+  isOtpRateLimitError,
+  maskEmail,
+  normalizeOtpCode,
+  otpCooldownRemaining,
+  otpErrorMessage,
+  otpSentMessage,
+  resolveOtpCodeLength,
+} from '@/lib/auth/otp-rules';
 
-export type { AuthErrorCode, FormState } from '@/lib/auth/helpers';
+export type { AuthErrorCode, FormState, OtpFormState } from '@/lib/auth/helpers';
 import { isDuplicateSignup, mapSignInError, safeRedirectPath } from '@/lib/auth/helpers';
-import type { FormState } from '@/lib/auth/helpers';
+import type { FormState, OtpFormState } from '@/lib/auth/helpers';
 
 interface ProfileRoleRow {
   role: UserRole;
@@ -65,14 +82,23 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
     return mapSignInError(error, 'email');
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', data.user.id)
-    .single<ProfileRoleRow>();
+  // Role AND approval status are read server-side from `profiles` / `retailers`
+  // and gated identically to the OTP path (lib/auth/sign-in-gate.ts). The role
+  // is never taken from the form, a cookie, or any browser-supplied value.
+  const decision = await assertSignInAllowed(
+    supabase as never,
+    data.user.id,
+    safeRedirectPath(parsed.data.redirect),
+    homeForRole
+  );
+  if (!decision.allowed) {
+    // Reachable ONLY after Supabase accepted the password, so naming the real
+    // reason is not an enumeration oracle: an attacker would already need
+    // valid credentials. (Refusal on a failed password stays generic above.)
+    return { code: decision.code, error: decision.error };
+  }
 
-  const role = profile?.role ?? 'retailer';
-  redirect(safeRedirectPath(parsed.data.redirect) ?? homeForRole(role));
+  redirect(decision.destination);
 }
 
 /**
@@ -148,18 +174,316 @@ export async function loginWithPhoneAction(_prevState: FormState, formData: Form
       return mapSignInError(error, 'mobile number');
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', data.user.id)
-      .single<ProfileRoleRow>();
-
-    const role = profile?.role ?? 'retailer';
-    destination = safeRedirectPath(parsed.data.redirect) ?? homeForRole(role);
+    const decision = await assertSignInAllowed(
+      supabase as never,
+      data.user.id,
+      safeRedirectPath(parsed.data.redirect),
+      homeForRole
+    );
+    if (!decision.allowed) {
+      return { code: 'invalid_credentials', error: decision.error };
+    }
+    destination = decision.destination;
   } catch {
     return genericError;
   }
   redirect(destination);
+}
+
+/* ------------------------------------------------------------------------ *
+ * Email OTP (one-time code) sign-in — SECOND credential, same session model.
+ *
+ * Security invariants (tested in tests/auth-otp.test.ts):
+ *   - `shouldCreateUser: false` → an unknown address never becomes an account.
+ *   - Every outcome of the send step returns the SAME generic message, so the
+ *     endpoint cannot be used to discover which emails have accounts.
+ *   - The code is issued, stored (hashed) and compared by Supabase Auth. This
+ *     app never persists it; there is no OTP table and no plaintext fallback.
+ *   - The pending email lives in an httpOnly cookie, never in the URL,
+ *     localStorage or sessionStorage, so it cannot be read or tampered with by
+ *     client JavaScript.
+ *   - Resend is limited by a server-set cooldown AND by GoTrue's own
+ *     rate limits; the client countdown is cosmetic only.
+ *   - The role is read server-side after verification — never from the form.
+ * ------------------------------------------------------------------------ */
+
+const emailOtpRequestSchema = z.object({
+  // Optional: a RESEND leaves the field blank and the address is taken from
+  // the httpOnly cookie instead, so the browser never re-supplies it.
+  email: z.string().trim().toLowerCase().email('Enter a valid email address.').optional(),
+  redirect: z.string().optional(),
+});
+
+const emailOtpVerifySchema = z.object({
+  token: z.string().min(1, 'Enter the code from your email.'),
+  redirect: z.string().optional(),
+});
+
+const OTP_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+};
+
+/** Reads the pending-OTP cookies. Never throws: a missing cookie is normal. */
+async function readOtpCookies(): Promise<{ email: string | null; sentAt: number | null; attempts: number }> {
+  const store = await cookies();
+  const email = store.get(OTP_COOKIE_EMAIL)?.value ?? null;
+  const sentAtRaw = store.get(OTP_COOKIE_SENT_AT)?.value ?? '';
+  const attemptsRaw = store.get(OTP_COOKIE_ATTEMPTS)?.value ?? '0';
+  const sentAt = Number.parseInt(sentAtRaw, 10);
+  const attempts = Number.parseInt(attemptsRaw, 10);
+  return {
+    email: email && email.includes('@') ? email : null,
+    sentAt: Number.isFinite(sentAt) ? sentAt : null,
+    attempts: Number.isFinite(attempts) && attempts >= 0 ? attempts : 0,
+  };
+}
+
+/**
+ * Explains a GoTrue token-length rejection in terms the user can act on.
+ *
+ * The code length is a PROJECT setting (`mailer_otp_length`), and apps cannot
+ * read it with the anon key. GoTrue validates the submitted token against that
+ * setting, so if the owner configures 8 while the UI renders 6, every code
+ * fails with "Token has invalid length" and — worse — spends an attempt.
+ * Rather than guess, we detect that specific error and say so.
+ */
+function isOtpLengthMismatch(error: { message?: string; code?: string } | null | undefined): boolean {
+  const haystack = `${error?.code ?? ''} ${error?.message ?? ''}`.toLowerCase();
+  return haystack.includes('invalid length') || haystack.includes('length');
+}
+
+/** Shared shell for the "we sent something (or maybe nothing)" response. */
+function otpSentState(email: string, sentAtMs: number, extra?: Partial<NonNullable<OtpFormState>>): NonNullable<OtpFormState> {
+  return {
+    stage: 'verify',
+    success: otpSentMessage(maskEmail(email)),
+    maskedEmail: maskEmail(email),
+    codeLength: resolveOtpCodeLength(),
+    cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS,
+    sentAt: sentAtMs,
+    attemptsRemaining: OTP_MAX_VERIFY_ATTEMPTS,
+    ...extra,
+  };
+}
+
+/**
+ * Issues a code for an address that is already pending in the cookie.
+ * Used by "Resend" and by an in-window repeat of step 1. Keeps every outcome
+ * generic, and refuses (silently, with the same copy) while the cooldown runs
+ * so the endpoint cannot be used to burn the project's email quota.
+ */
+async function resendEmailOtp(
+  email: string,
+  sentAt: number | null
+): Promise<NonNullable<OtpFormState>> {
+  const now = Date.now();
+  const remaining = otpCooldownRemaining(sentAt, now);
+  if (remaining > 0) {
+    return otpSentState(email, sentAt as number, { cooldownSeconds: remaining });
+  }
+
+  const store = await cookies();
+  const supabase = (await createClient());
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: false },
+  });
+
+  if (error && isOtpRateLimitError(error)) {
+    return { ...otpSentState(email, now), warning: otpErrorMessage('rate_limited') };
+  }
+
+  store.set(OTP_COOKIE_EMAIL, email, { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+  store.set(OTP_COOKIE_SENT_AT, String(now), { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+  store.set(OTP_COOKIE_ATTEMPTS, '0', { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+
+  return otpSentState(email, now);
+}
+
+/**
+ * Step 1 — email a sign-in code.
+ *
+ * Always reports success (generic copy) so the caller cannot learn whether the
+ * address is registered, deactivated or suspended. A deactivated or suspended
+ * account still receives the generic message but is refused at verify time,
+ * where the session is destroyed again — refusing earlier would leak status.
+ */
+export async function requestEmailOtpAction(
+  _prevState: OtpFormState,
+  formData: FormData
+): Promise<OtpFormState> {
+  const redirectField = (formData.get('redirect') as string | null) || undefined;
+  const parsed = emailOtpRequestSchema.safeParse({
+    email: formData.get('email'),
+    redirect: redirectField,
+  });
+
+  const store = await cookies();
+  const existing = await readOtpCookies();
+
+  if (!parsed.success) {
+    // Blank field on a resend is expected; the cookie supplies the address.
+    if (formData.get('email') === null || String(formData.get('email')).trim() === '') {
+      if (existing.email) {
+        return resendEmailOtp(existing.email, existing.sentAt);
+      }
+    }
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      if (issue.path[0]) fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  const email = parsed.data.email as string;
+  const now = Date.now();
+
+  // Same address inside the cooldown window: do not spend a second email.
+  // Report the SAME state as a fresh send so it is not an oracle either.
+  const remaining = otpCooldownRemaining(existing.sentAt, now);
+  if (existing.email === email && remaining > 0) {
+    return otpSentState(email, existing.sentAt as number, { cooldownSeconds: remaining });
+  }
+
+  const supabase = (await createClient());
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      // NEVER create an account from the login screen. New retailers use
+      // /register-retailer; sellers are created by Super Admin invitation.
+      shouldCreateUser: false,
+    },
+  });
+
+  if (error && isOtpRateLimitError(error)) {
+    return {
+      ...otpSentState(email, now, { cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS }),
+      // Rate limiting is safe to surface: it depends on request volume, not on
+      // whether the address exists, so it reveals nothing about the account.
+      warning: otpErrorMessage('rate_limited'),
+    };
+  }
+
+  // Record the attempt window in httpOnly cookies. `redirect` is carried in a
+  // hidden form field, so nothing auth-related needs to travel in the URL.
+  store.set(OTP_COOKIE_EMAIL, email, { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+  store.set(OTP_COOKIE_SENT_AT, String(now), { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+  store.set(OTP_COOKIE_ATTEMPTS, '0', { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+
+  return otpSentState(email, now);
+}
+
+/**
+ * Step 2 — verify the code and open a normal session.
+ *
+ * `redirect()` throws NEXT_REDIRECT, so it is called after every try/catch and
+ * only once the server-side role gate has approved the session.
+ */
+export async function verifyEmailOtpAction(
+  _prevState: OtpFormState,
+  formData: FormData
+): Promise<OtpFormState> {
+  const parsed = emailOtpVerifySchema.safeParse({
+    token: formData.get('token'),
+    redirect: formData.get('redirect') || undefined,
+  });
+
+  const pending = await readOtpCookies();
+
+  // The email comes from the httpOnly cookie, NOT from the form: a caller
+  // cannot verify a code against an address they did not just request.
+  if (!pending.email) {
+    return {
+      error: 'Your sign-in session expired. Please enter your email again.',
+      fieldErrors: { email: 'Enter your email to receive a new code.' },
+    };
+  }
+
+  if (pending.attempts >= OTP_MAX_VERIFY_ATTEMPTS) {
+    return {
+      maskedEmail: maskEmail(pending.email),
+      error: otpErrorMessage('rate_limited'),
+      attemptsRemaining: 0,
+      expired: true,
+    };
+  }
+
+  const codeLength = resolveOtpCodeLength();
+  const token = normalizeOtpCode(parsed.success ? parsed.data.token : formData.get('token'), codeLength);
+
+  if (!token) {
+    return {
+      maskedEmail: maskEmail(pending.email),
+      fieldErrors: { token: `Enter the ${codeLength}-digit code from your email.` },
+      attemptsRemaining: Math.max(OTP_MAX_VERIFY_ATTEMPTS - pending.attempts, 0),
+    };
+  }
+
+  const store = await cookies();
+  const supabase = (await createClient());
+
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: pending.email,
+    token,
+    type: 'email',
+  });
+
+  if (error || !data.user) {
+    const attempts = pending.attempts + 1;
+    store.set(OTP_COOKIE_ATTEMPTS, String(attempts), { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+
+    // A length rejection means configuration and UI disagree; tell the truth
+    // instead of implying the user mistyped (and refund the attempt below,
+    // because a rejected LENGTH is our bug, not their wrong guess).
+    if (isOtpLengthMismatch(error) && !/expired/i.test(error?.message ?? '')) {
+      store.set(OTP_COOKIE_ATTEMPTS, String(pending.attempts), { ...OTP_COOKIE_OPTIONS, maxAge: 15 * 60 });
+      return {
+        maskedEmail: maskEmail(pending.email),
+        error:
+          'Sign-in codes are not configured correctly for this site. Please contact your distributor so the code length can be fixed.',
+        attemptsRemaining: Math.max(OTP_MAX_VERIFY_ATTEMPTS - pending.attempts, 0),
+        configMismatch: true,
+      };
+    }
+
+    const code = classifyOtpVerifyError(error);
+    return {
+      maskedEmail: maskEmail(pending.email),
+      error: otpErrorMessage(code),
+      attemptsRemaining: Math.max(OTP_MAX_VERIFY_ATTEMPTS - attempts, 0),
+      expired: code === 'expired_code',
+      // On an expired code the cookie pair is useless — clear the email so the
+      // user restarts at step 1 rather than retrying a dead code.
+      ...(code === 'expired_code' ? { stage: 'expired' as const } : {}),
+    };
+  }
+
+  const decision = await assertSignInAllowed(
+    supabase as never,
+    data.user.id,
+    safeRedirectPath(parsed.success ? parsed.data.redirect : undefined),
+    homeForRole
+  );
+
+  // One-time use: clear the pending-OTP cookies whether or not access is
+  // granted, so the same code/state cannot be replayed from this browser.
+  store.delete(OTP_COOKIE_ATTEMPTS);
+  store.delete(OTP_COOKIE_SENT_AT);
+  store.delete(OTP_COOKIE_EMAIL);
+
+  if (!decision.allowed) {
+    return {
+      error: decision.error,
+      code: decision.code === 'account_suspended' ? 'account_suspended' : 'account_inactive',
+      attemptsRemaining: 0,
+    };
+  }
+
+  revalidatePath('/', 'layout');
+  redirect(decision.destination);
 }
 
 export async function requestPasswordResetAction(_prevState: FormState, formData: FormData): Promise<FormState> {

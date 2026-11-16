@@ -73,6 +73,19 @@ const PUBLIC_ALLOWLIST = new Set([
   'lib/auth/actions.ts::loginAction',
   'lib/auth/actions.ts::loginWithPhoneAction',
   'lib/auth/actions.ts::requestPasswordResetAction',
+  // Email-OTP sign-in: public BY DESIGN, and the ONLY two OTP endpoints.
+  //   requestEmailOtpAction — unauthenticated by definition (the caller has no
+  //     session yet). Defences are structural rather than session-based:
+  //     `shouldCreateUser: false` (never creates an account), an identical
+  //     generic response for every outcome (no account enumeration), a
+  //     server-set httpOnly resend cooldown, and GoTrue's own rate limits.
+  //   verifyEmailOtpAction — authorizes by possession of the short-lived code
+  //     itself; the pending email is read from an httpOnly cookie, never from
+  //     the request, and GoTrue performs the comparison. After success the
+  //     role/active/approval gate in lib/auth/sign-in-gate.ts runs before any
+  //     redirect, so OTP grants no privilege that password login does not.
+  'lib/auth/actions.ts::requestEmailOtpAction',
+  'lib/auth/actions.ts::verifyEmailOtpAction',
   'lib/auth/actions.ts::resendConfirmationAction',
   'lib/auth/actions.ts::logoutAction',
   'lib/auth/actions.ts::registerRetailerAction',

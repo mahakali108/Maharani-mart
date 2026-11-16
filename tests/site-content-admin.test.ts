@@ -44,6 +44,8 @@ const page: SitePageRow = {
   related_slugs: [],
   is_system: true,
   updated_at: '2026-11-14T00:00:00Z',
+  updated_by: null,
+  published_by: null,
 };
 
 const section = (overrides: Partial<SitePageSectionRow>): SitePageSectionRow => ({
@@ -66,6 +68,7 @@ const notes: SitePageAdminNotes = {
   internal_notes: 'Owner verification pending.',
   owner_decisions: [],
   review_status: 'owner_review_pending',
+  reviewed_by: null,
   reviewed_at: null,
   updated_at: '2026-11-14T00:00:00Z',
 };

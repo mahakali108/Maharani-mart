@@ -12,6 +12,7 @@ import {
   toLines,
   toParagraphs,
 } from '@/lib/site-content/types';
+import { revisionToDraft } from '@/lib/site-content/draft-preview';
 
 /**
  * Server Actions for Super Admin website content management.
@@ -28,7 +29,7 @@ import {
  * version (0098) and the history row are written together or not at all.
  */
 
-type FormResult = 'saved' | 'published' | 'unpublished' | 'deleted' | 'order-updated';
+type FormResult = 'saved' | 'published' | 'unpublished' | 'deleted' | 'order-updated' | 'restored';
 
 function fail(path: string, message: string): never {
   redirect(`${path}?error=${encodeURIComponent(message)}`);
@@ -458,4 +459,72 @@ export async function unpublishPageAction(formData: FormData): Promise<void> {
   await audit('site_page_unpublished', pageId, { slug });
   revalidatePublic(slug);
   ok(pagePath(pageId), 'unpublished');
+}
+
+/* -------------------------------------------------------------------------- */
+/* Revision restore                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Restores a previous published revision into the DRAFT.
+ *
+ * It deliberately does NOT republish. A rollback that published automatically
+ * would put old legal wording live without the operator re-reading it, and it
+ * would make `site_page_revisions` an editable source of public content. The
+ * operator reviews the restored draft in the existing preview, then publishes —
+ * which is the same authorized path every other change takes, and which records
+ * its own history row.
+ *
+ * The history table stays append-only: nothing here writes to it directly.
+ */
+export async function restoreRevisionAction(formData: FormData): Promise<void> {
+  await requireSuperAdmin();
+  const pageId = text(formData, 'page_id');
+  const revisionId = text(formData, 'revision_id');
+  if (!revisionId) fail(pagePath(pageId), 'Choose a revision to restore.');
+
+  const supabase = await createClient();
+  const { data: revision, error: revisionError } = await supabase
+    .from('site_page_revisions' as never)
+    .select('id, version, event, snapshot, page_id')
+    .eq('id', revisionId)
+    .eq('page_id', pageId)
+    .maybeSingle<{ id: string; version: string; event: string; snapshot: unknown; page_id: string }>();
+  if (revisionError) fail(pagePath(pageId), revisionError.message);
+  if (!revision) fail(pagePath(pageId), 'That revision no longer exists for this page.');
+
+  const restored = revisionToDraft(revision.snapshot);
+  if (!restored) {
+    fail(pagePath(pageId), 'This revision cannot be restored automatically. Restore it by hand from the preview.');
+  }
+
+  const { error: pageError } = await supabase
+    .from('site_pages' as never)
+    .update({ ...restored.page } as never)
+    .eq('id', pageId);
+  if (pageError) fail(pagePath(pageId), pageError.message);
+
+  // Replace the draft sections with the revision's blocks. A failure here leaves
+  // the page settings restored but the sections untouched; report it loudly
+  // instead of redirecting to a success notice.
+  const { error: clearError } = await supabase
+    .from('site_page_sections' as never)
+    .delete()
+    .eq('page_id', pageId);
+  if (clearError) fail(pagePath(pageId), `Page settings restored, but the sections could not be replaced: ${clearError.message}`);
+
+  const { error: insertError } = await supabase
+    .from('site_page_sections' as never)
+    .insert(restored.sections.map((section) => ({ ...section, page_id: pageId, is_visible: true })) as never);
+  if (insertError) fail(pagePath(pageId), `Page settings restored, but the sections could not be written: ${insertError.message}`);
+
+  const slug = await pageSlugFor(pageId);
+  await audit('site_page_revision_restored', pageId, {
+    slug,
+    revision_id: revision.id,
+    revision_version: revision.version,
+    revision_event: revision.event,
+  });
+  revalidatePublic(slug);
+  ok(pagePath(pageId), 'restored');
 }

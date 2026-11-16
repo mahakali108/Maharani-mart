@@ -88,7 +88,19 @@ describe('Supabase-only auth architecture guards', () => {
 
   it('verifies passwords only through Supabase Auth', () => {
     expect(authSource).toContain('signInWithPassword');
-    expect(authSource).not.toMatch(/signInWithOtp|verifyOtp/);
+    // UPDATED for dual login: the module now ALSO runs Supabase Auth's own
+    // email OTP. This guard's intent is "no custom credential verification",
+    // not "no second Supabase method" — so it must forbid hand-rolled
+    // comparison and non-Supabase providers, while allowing Supabase's
+    // signInWithOtp/verifyOtp. The stricter per-path checks live in
+    // tests/auth-otp.test.ts.
+    expect(authSource).not.toMatch(/bcrypt|argon2|scrypt|crypto\.timingSafeEqual/);
+    expect(authSource).not.toMatch(/firebase|appwrite|clerk|auth0|next-auth/i);
+    // OTP verification must delegate to Supabase, never to a local code store.
+    if (/verifyOtp/.test(authSource)) {
+      expect(authSource).toMatch(/supabase\.auth\.verifyOtp\(/);
+      expect(authSource).not.toMatch(/otp_codes|otp_code\b/);
+    }
   });
 
   it('adds no Firebase / Appwrite / alternate auth provider', () => {
@@ -98,7 +110,10 @@ describe('Supabase-only auth architecture guards', () => {
   });
 
   it('stores no plain-text password and exposes no service-role key to auth UI', () => {
-    expect(authSource).not.toMatch(/password_hash|hashed_password|plaintext/i);
+    // Match CREDENTIAL STORAGE, not prose: the OTP design comment legitimately
+    // contains the word "plaintext" while explaining that no such store exists.
+    expect(authSource).not.toMatch(/password_hash|hashed_password/);
+    expect(authSource).not.toMatch(/\bplaintext_?pass|plaintextPassword|password_plain/i);
     for (const file of readdirSync(join(root, 'components/auth'))) {
       const source = read(join('components/auth', file));
       expect(source, file).not.toMatch(/createServiceRoleClient|SUPABASE_SERVICE_ROLE_KEY/);

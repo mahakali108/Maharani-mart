@@ -8,18 +8,26 @@ import {
   deleteSectionAction,
   moveSectionAction,
   publishPageAction,
+  restoreRevisionAction,
   saveAdminNotesAction,
   unpublishPageAction,
   updatePageSettingsAction,
   updateSectionAction,
 } from '@/lib/admin/site-content-actions';
 import {
+  loadActorNames,
   loadAdminNotes,
   loadAdminPage,
   loadAdminSections,
   loadPageRevisions,
 } from '@/lib/site-content/queries';
-import { draftIssues, hasUnpublishedChanges, visibleSections } from '@/lib/site-content/draft-preview';
+import {
+  draftIssues,
+  hasUnpublishedChanges,
+  revisionSummary,
+  revisionToDraft,
+  visibleSections,
+} from '@/lib/site-content/draft-preview';
 import { formatPolicyDate } from '@/lib/site-content/render';
 import { REVIEW_STATUS_LABEL, type SiteSectionTone } from '@/lib/site-content/types';
 import { ContentNotice } from '@/components/admin/site-content/content-notice';
@@ -51,6 +59,7 @@ export default async function AdminContentEditorPage({
     loadAdminNotes(page.id),
     loadPageRevisions(page.id),
   ]);
+  const actorNames = await loadActorNames([page.updated_by, page.published_by, notes?.reviewed_by ?? null]);
 
   const issues = draftIssues(page, sections, notes);
   const stale = hasUnpublishedChanges(page, sections);
@@ -148,15 +157,27 @@ export default async function AdminContentEditorPage({
               </button>
             </form>
             {page.status === 'published' ? (
-              <form action={unpublishPageAction}>
-                <input type="hidden" name="page_id" value={page.id} />
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 rounded-xl border border-ink-200 px-4 py-2 text-sm font-semibold text-ink-700 hover:bg-ink-50"
-                >
+              /* Unpublishing removes a customer-facing page immediately, so it is
+                 behind an explicit disclosure + confirmation, never a bare button. */
+              <details>
+                <summary className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-ink-200 px-4 py-2 text-sm font-semibold text-ink-700 hover:bg-ink-50">
                   <Upload className="h-4 w-4 rotate-180" aria-hidden /> Unpublish
-                </button>
-              </form>
+                </summary>
+                <form action={unpublishPageAction} className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <input type="hidden" name="page_id" value={page.id} />
+                  <p className="text-xs text-amber-950">
+                    <strong className="font-semibold">Customers lose this page immediately.</strong> “{page.title}” is
+                    removed from the public site and its address answers “not available right now”. The draft, the
+                    history and any acceptance version already recorded are kept — republishing restores the page.
+                  </p>
+                  <button
+                    type="submit"
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
+                  >
+                    Yes, unpublish this page
+                  </button>
+                </form>
+              </details>
             ) : null}
             {!page.is_system ? (
               <details className="ml-auto">
@@ -263,8 +284,11 @@ export default async function AdminContentEditorPage({
             </button>
           </div>
           <p className="text-xs text-ink-500 sm:col-span-2">
-            Saved at {new Date(page.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST. Saving never
-            changes the live page until you publish.
+            Last modified {new Date(page.updated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+            {page.updated_by
+              ? ` by ${actorNames.get(page.updated_by) ?? 'another Super Admin'}`
+              : ''}
+            . Saving never changes the live page until you publish.
           </p>
         </form>
       </Card>
@@ -466,7 +490,11 @@ export default async function AdminContentEditorPage({
           </button>
           {notes?.reviewed_at ? (
             <p className="text-xs text-ink-500">
-              Last review recorded {new Date(notes.reviewed_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST.
+              Last review recorded {new Date(notes.reviewed_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+              {notes.reviewed_by
+                ? ` by ${actorNames.get(notes.reviewed_by) ?? 'another Super Admin'}`
+                : ''}
+              .
             </p>
           ) : null}
         </form>
@@ -482,19 +510,53 @@ export default async function AdminContentEditorPage({
           <p className="p-1 text-sm text-ink-600">Nothing has been published from this page yet.</p>
         ) : (
           <ul className="space-y-2 p-1 text-sm">
-            {revisions.map((revision) => (
-              <li key={revision.id} className="rounded-xl border border-ink-100 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-semibold text-ink-900">
-                    {revision.event === 'published' ? 'Published' : revision.event === 'unpublished' ? 'Unpublished' : 'Published new version'}{' '}
-                    <span className="font-normal text-ink-500">v{revision.version}</span>
-                  </span>
-                  <span className="text-xs text-ink-500">
-                    {new Date(revision.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
-                  </span>
-                </div>
-              </li>
-            ))}
+            {revisions.map((revision) => {
+              const summary = revisionSummary(revision.snapshot);
+              const restorable = revisionToDraft(revision.snapshot) !== null;
+              return (
+                <li key={revision.id} className="rounded-xl border border-ink-100 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-ink-900">
+                      {revision.event === 'published' ? 'Published' : revision.event === 'unpublished' ? 'Unpublished' : 'Published new version'}{' '}
+                      <span className="font-normal text-ink-500">v{revision.version}</span>
+                    </span>
+                    <span className="text-xs text-ink-500">
+                      {new Date(revision.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+                    </span>
+                  </div>
+                  {summary ? (
+                    <p className="mt-1 text-xs text-ink-600">
+                      “{summary.title}” · {summary.sectionCount} section{summary.sectionCount === 1 ? '' : 's'}
+                    </p>
+                  ) : null}
+                  {restorable ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs font-semibold text-ink-700 hover:text-ink-900">
+                        Restore this revision into the draft
+                      </summary>
+                      <form action={restoreRevisionAction} className="mt-2 rounded-xl border border-ink-200 bg-ink-50/60 p-3">
+                        <input type="hidden" name="page_id" value={page.id} />
+                        <input type="hidden" name="revision_id" value={revision.id} />
+                        <p className="text-xs text-ink-600">
+                          This replaces the working draft with the wording recorded above. The live page does not change
+                          until you publish, and this revision stays in the history.
+                        </p>
+                        <button
+                          type="submit"
+                          className="mt-2 rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink-800"
+                        >
+                          Restore into the draft
+                        </button>
+                      </form>
+                    </details>
+                  ) : (
+                    <p className="mt-1 text-xs text-ink-500">
+                      This entry has no complete page wording to restore (it records an unpublish).
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>

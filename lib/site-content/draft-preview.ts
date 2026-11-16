@@ -121,3 +121,155 @@ export function draftIssues(
   }
   return issues;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Revision restore                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The shape `site_pages_record_revision()` (0104) stores for each event:
+ * `{ page: <the row minus published_snapshot>, sections: [...], published_snapshot }`.
+ * Everything is re-validated on the way back in — a history row is data from the
+ * database, not a trusted literal, and a rollback must not be able to write a
+ * field the editor form would have rejected.
+ */
+export type RevisionSnapshot = {
+  page?: {
+    title?: unknown;
+    nav_label?: unknown;
+    short_label?: unknown;
+    eyebrow?: unknown;
+    intro?: unknown;
+    meta_description?: unknown;
+    hero_image_url?: unknown;
+    version?: unknown;
+    effective_date?: unknown;
+    show_in_footer?: unknown;
+    show_in_index?: unknown;
+    show_contact_details?: unknown;
+    related_slugs?: unknown;
+  };
+  sections?: Array<{
+    heading?: unknown;
+    body?: unknown;
+    bullets?: unknown;
+    tone?: unknown;
+    image_url?: unknown;
+    link_label?: unknown;
+    link_href?: unknown;
+    sort_order?: unknown;
+  }>;
+};
+
+export type RestoredDraft = {
+  page: {
+    title: string;
+    nav_label: string;
+    short_label: string | null;
+    eyebrow: string | null;
+    intro: string;
+    meta_description: string | null;
+    hero_image_url: string | null;
+    version: string;
+    effective_date: string | null;
+    show_in_footer: boolean;
+    show_in_index: boolean;
+    show_contact_details: boolean;
+    related_slugs: string[];
+  };
+  sections: Array<{
+    heading: string;
+    body: string[];
+    bullets: string[];
+    tone: SitePageSectionRow['tone'];
+    image_url: string | null;
+    link_label: string | null;
+    link_href: string | null;
+    sort_order: number;
+  }>;
+};
+
+const str = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback);
+const strArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
+const nullableStr = (value: unknown): string | null => {
+  const text = str(value).trim();
+  return text.length > 0 ? text : null;
+};
+
+/**
+ * Turns a stored revision into the exact draft payload to write back.
+ *
+ * Returns `null` when the snapshot cannot produce a valid draft (no title, no
+ * intro, no sections, or a heading-less section) rather than restoring a
+ * half-page. Restoring is a DRAFT operation on purpose: it never publishes, so a
+ * rollback cannot become an unreviewed publication of old legal wording.
+ */
+export function revisionToDraft(snapshot: unknown): RestoredDraft | null {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const raw = snapshot as RevisionSnapshot;
+  const page = raw.page ?? {};
+
+  const title = str(page.title).trim();
+  const intro = str(page.intro).trim();
+  const navLabel = str(page.nav_label).trim() || title;
+  if (title.length < 2 || intro.length < 10) return null;
+
+  const version = str(page.version).trim();
+  if (!/^\d+\.\d+$/.test(version)) return null;
+
+  const effectiveDate = nullableStr(page.effective_date);
+  // The column is a `date`; anything else would fail at write time.
+  if (effectiveDate && !/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) return null;
+
+  const sections = (Array.isArray(raw.sections) ? raw.sections : [])
+    .map((section) => {
+      const heading = str(section.heading).trim();
+      const body = strArray(section.body);
+      const bullets = strArray(section.bullets);
+      return {
+        heading,
+        body,
+        bullets,
+        tone: (section.tone === 'highlight' ? 'highlight' : 'standard') as SitePageSectionRow['tone'],
+        image_url: nullableStr(section.image_url),
+        link_label: nullableStr(section.link_label),
+        link_href: nullableStr(section.link_href),
+        sort_order: typeof section.sort_order === 'number' && Number.isFinite(section.sort_order) ? section.sort_order : 0,
+      };
+    })
+    .filter((section) => section.heading.length > 0 && (section.body.length > 0 || section.bullets.length > 0));
+
+  if (sections.length === 0) return null;
+
+  return {
+    page: {
+      title,
+      nav_label: navLabel,
+      short_label: nullableStr(page.short_label),
+      eyebrow: nullableStr(page.eyebrow),
+      intro,
+      meta_description: nullableStr(page.meta_description),
+      hero_image_url: nullableStr(page.hero_image_url),
+      version,
+      effective_date: effectiveDate,
+      show_in_footer: page.show_in_footer === true,
+      show_in_index: page.show_in_index === true,
+      show_contact_details: page.show_contact_details === true,
+      related_slugs: strArray(page.related_slugs),
+    },
+    sections,
+  };
+}
+
+/** A short, human summary of a revision, for the history list. */
+export function revisionSummary(snapshot: unknown): { title: string; sectionCount: number } | null {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const raw = snapshot as RevisionSnapshot;
+  const title = str(raw.page?.title).trim();
+  if (!title) return null;
+  return {
+    title,
+    sectionCount: (Array.isArray(raw.sections) ? raw.sections : []).filter((s) => str(s.heading).trim().length > 0).length,
+  };
+}
