@@ -452,11 +452,21 @@ writeFileSync(path.join(root, 'supabase/rollbacks/0105_seed_site_content.down.sq
 -- A page that no longer exactly matches the seeded content is left in place:
 -- once an editor has changed it, it is their content, not the seed's. Pages
 -- created in /admin/content are never touched.
+--
+-- DESTRUCTIVE, and deliberately gated: every seeded page is \`is_system = true\`,
+-- which trg_site_pages_block_system_delete (0104) refuses to delete unless the
+-- operator opts in first. That opt-in is the \`set\` below - the same GUC the 0104
+-- rollback uses - so this file cannot run by accident. Run it BEFORE the 0104
+-- rollback, which drops the tables wholesale.
 -- ============================================================================
+
+set maharani.allow_data_loss = 'true';
 
 delete from public.site_pages
  where slug in (${pages.map((p) => q(p.slug)).join(', ')})
    and is_system = true;
+
+reset maharani.allow_data_loss;
 `);
 
 console.log(`Wrote content/site-pages.seed.json and migrations/0105 (${pages.length} pages, ${pages.reduce((n, p) => n + p.sections.length, 0)} sections).`);

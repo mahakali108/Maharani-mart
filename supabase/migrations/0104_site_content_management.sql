@@ -374,7 +374,13 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  if old.is_system then
+  -- A required page cannot be deleted from the admin UI or the API. The only
+  -- exception is an explicit, session-scoped opt-in by whoever is running a
+  -- rollback by hand (supabase/rollbacks/0105_seed_site_content.down.sql sets this
+  -- GUC and the same one guards the 0104 rollback). Without it a rollback of the
+  -- seed cannot run at all, because every seeded page is a system page.
+  if old.is_system
+     and coalesce(current_setting('maharani.allow_data_loss', true), 'false') <> 'true' then
     raise exception 'This page is required by the website and cannot be deleted. Unpublish or edit it instead.'
       using errcode = '23514';
   end if;

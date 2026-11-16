@@ -495,3 +495,43 @@ anywhere, and the platform does not claim one.
 * No device or emulator test was performed.
 * No legal, tax or CA opinion was formed or implied — §8 lists what a human must
   decide.
+
+---
+
+## 11. Addendum — 16 November 2026 (release-readiness pass)
+
+This review's conclusions stand. Three defects were found *by executing the files*
+rather than reading them, and are fixed in the same pull request:
+
+1. **`0105_seed_site_content.down.sql` could never have run.** Every seeded page is
+   `is_system = true`, and `trg_site_pages_block_system_delete` refused every delete
+   of a system page — so the rollback raised before deleting anything. The trigger
+   now allows the delete only under `maharani.allow_data_loss = 'true'` (the guard the
+   0104 rollback already uses), and the rollback sets it for its own session.
+2. **The generator silently reverted that rollback.** `scripts/generate-site-content-seed.mjs`
+   writes `supabase/rollbacks/0105_*.down.sql`, and `tests/site-content-seed.test.ts`
+   ran the generator but restored only the JSON and the migration — so every test run
+   undid a hand-edit to the rollback. The template now emits the guarded file, and the
+   drift test snapshots and restores all three files and asserts all three are
+   byte-identical.
+3. **`docs/0104_0105_MIGRATION_AUDIT.md` §7 step 5 was wrong**: it said to expect
+   `published = 19` after 0105 and a slug from `published_pages()`. 0105 publishes
+   nothing. Corrected in place.
+
+New evidence: `tests/site-content-release.test.ts` executes the real release files in
+order (stage 1 → verify → 0105 down → 0104 down) on PostgreSQL 16, and a mutation
+check (reverting the trigger fix) makes it fail, so the test depends on the fix. Full
+suite at this head: **221 files / 3,387 tests passing**, typecheck, lint and
+`next build` clean.
+
+Release package: `docs/release/` — `MIGRATION_0104_APPROVAL.md`,
+`MIGRATION_0105_APPROVAL.md`, `ROLLBACK_AND_RECOVERY.md`, `STAGE1_PAGE_REVIEW.md`,
+`STAGE2_OWNER_CA_CHECKLIST.md`, `ACCEPTANCE_REGISTRY_OPTIONS.md`,
+`ANDROID_RELEASE_READINESS.md`, `FINAL_RELEASE_REPORT_2026-11-16.md`.
+
+One conclusion in §5 above needs correcting: the ten "stage-2" pages are **not new
+writing**. They are live today, rendered from `lib/legal/content.ts` by
+`/legal/[slug]`; a sentence-level diff against `656a6a4` finds 0 added and 0 dropped
+sentences on all ten. Stage 2 republishes existing public text, and the deploy gap
+between stage 1 and stage 2 takes ten live policy pages offline until it closes —
+`docs/release/STAGE1_PAGE_REVIEW.md` §1.1 and Decision D2.

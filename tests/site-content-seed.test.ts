@@ -195,8 +195,13 @@ describe('generator drift', () => {
   it('regenerating produces byte-identical files (the seed matches the page sources)', () => {
     const jsonPath = join(root, 'content/site-pages.seed.json');
     const sqlPath = join(root, 'supabase/migrations/0105_seed_site_content.sql');
+    // The generator writes three files. The rollback used to be left out of this
+    // snapshot, so running the suite silently reverted a hand-edit to it — which is
+    // exactly what happened when the seed rollback was given its data-loss guard.
+    const rollbackPath = join(root, 'supabase/rollbacks/0105_seed_site_content.down.sql');
     const beforeJson = readFileSync(jsonPath, 'utf8');
     const beforeSql = readFileSync(sqlPath, 'utf8');
+    const beforeRollback = readFileSync(rollbackPath, 'utf8');
     expect(existsSync(join(root, 'scripts/generate-site-content-seed.mjs'))).toBe(true);
 
     try {
@@ -206,9 +211,11 @@ describe('generator drift', () => {
       });
       expect(readFileSync(jsonPath, 'utf8')).toBe(beforeJson);
       expect(readFileSync(sqlPath, 'utf8')).toBe(beforeSql);
+      expect(readFileSync(rollbackPath, 'utf8')).toBe(beforeRollback);
     } finally {
       writeFileSync(jsonPath, beforeJson);
       writeFileSync(sqlPath, beforeSql);
+      writeFileSync(rollbackPath, beforeRollback);
     }
   }, 60_000);
 });
