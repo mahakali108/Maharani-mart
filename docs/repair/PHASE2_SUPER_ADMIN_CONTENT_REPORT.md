@@ -2,7 +2,7 @@
 
 **Branch:** `arena/a1a3a8cb-maharani-mart`
 **Pull request:** [#136](https://github.com/mahakali108/Maharani-mart/pull/136) (open, not merged)
-**Head SHA:** `c7b27dcd717709840341edd41eb2e46e19569487`
+**Head SHA:** `bf5390e39a0357f3839cb173628f0f5cc7339951` (code commit `c7b27dc` + this report)
 **Base commit:** `b2143e7be5c8dfb065a9475e29bdf9d8c76cdb48` (= merge commit of PR #135)
 **Report date:** 2026-11-16
 **Production touched:** **no.** No migration applied, no auth setting changed, no account created, no page published, no environment variable changed, no deployment made.
@@ -502,17 +502,21 @@ asserted structurally, not concurrently.
 ## 16. CI result
 
 **PR #136** — https://github.com/mahakali108/Maharani-mart/pull/136
-**Head SHA verified:** `c7b27dcd717709840341edd41eb2e46e19569487`
+**Head SHA verified:** `bf5390e39a0357f3839cb173628f0f5cc7339951`
+(the code commit `c7b27dc` plus this report; `mergeable = MERGEABLE`)
 
 Read from the GitHub API against that exact SHA, not from the PR summary:
 
 | Check | Result |
 | --- | --- |
-| `Web checks (typecheck, lint, tests, build)` | **success** (3m13s) |
+| `Web checks (typecheck, lint, tests, build)` | **success** |
 | `Vercel Preview Comments` | **success** |
 | `Vercel` (status context) | **success** |
 | `Supabase Preview` | **skipped** |
 | Combined commit status | **success** |
+
+The same three checks were also green on the preceding code commit `c7b27dc`
+(Web checks success in 3m13s), so both pushes were verified independently.
 
 | Local gate | Result |
 | --- | --- |
