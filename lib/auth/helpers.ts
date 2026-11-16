@@ -11,7 +11,9 @@ export type AuthErrorCode =
   | 'email_not_confirmed'
   | 'duplicate_email'
   | 'duplicate_phone'
-  | 'recovery_failed';
+  | 'recovery_failed'
+  | 'account_inactive'
+  | 'account_suspended';
 
 export type FormState = {
   error?: string;
@@ -20,6 +22,39 @@ export type FormState = {
    *  (e.g. a "resend confirmation email" box) without parsing messages. */
   code?: AuthErrorCode;
   fieldErrors?: Record<string, string>;
+} | null;
+
+/**
+ * State machine for the email-OTP sign-in form.
+ *
+ *   enter   → ask for an email address
+ *   verify  → a code was (requested and) is being entered
+ *   expired → a code was sent but GoTrue rejected it as expired
+ *
+ * Note what is NOT in here: the email itself is masked for display only, and
+ * because `maskEmail()` is lossy it can never be used to rebuild the address.
+ * The authoritative pending email lives in an httpOnly cookie.
+ */
+export type OtpFormState = {
+  stage?: 'enter' | 'verify' | 'expired';
+  error?: string;
+  warning?: string;
+  success?: string;
+  code?: AuthErrorCode;
+  fieldErrors?: Record<string, string>;
+  /** Display-only, e.g. `r***@gmail.com`. */
+  maskedEmail?: string;
+  /** How many boxes to render — must match the project's `mailer_otp_length`. */
+  codeLength?: number;
+  /** Server-computed resend cooldown, so a reload cannot reset the countdown. */
+  cooldownSeconds?: number;
+  /** Epoch ms of the last send; lets the client rebuild the countdown. */
+  sentAt?: number;
+  attemptsRemaining?: number;
+  expired?: boolean;
+  /** True when the submitted length was rejected by the project's
+   *  `mailer_otp_length` — a setup problem, not a user mistake. */
+  configMismatch?: boolean;
 } | null;
 
 /**

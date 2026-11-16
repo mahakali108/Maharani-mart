@@ -15,6 +15,26 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      /**
+       * Pin the implicit flow for server-side auth.
+       *
+       * WHY: `signInWithOtp()` behaves differently per flow type. Under PKCE it
+       * also mints a `code_verifier` cookie and sends `{{ .ConfirmationURL }}`
+       * (a magic LINK) in the email; the numeric `{{ .Token }}` then only
+       * exists to satisfy a later `verifyOtp()`. Two consequences:
+       *   1. A code-based login would depend on a second cookie surviving
+       *      round-trips, and a stale verifier makes `verifyOtp()` fail —
+       *      burning one of only 30 verify attempts per hour. `verifyOtp()`
+       *      does not need PKCE: it posts email+token and receives the session
+       *      directly (auth-js 2.110.7, GoTrueClient.verifyOtp).
+       *   2. Under PKCE the emailed template must differ from the Magic Link
+       *      template, which doubles the owner's setup surface.
+       *
+       * With the implicit flow the SAME `Magic Link` template can carry the
+       * code, and email-OTP needs no verifier cookie at all. The password and
+       * phone flows are unaffected — they never use flowType.
+       */
+      auth: { flowType: 'implicit' },
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;

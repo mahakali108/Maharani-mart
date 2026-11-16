@@ -3,17 +3,21 @@
 import { useState } from 'react';
 import { useFormState } from 'react-dom';
 import Link from 'next/link';
-import { Eye, EyeOff, Smartphone, Mail } from 'lucide-react';
+import { Eye, EyeOff, Smartphone, Mail, KeyRound } from 'lucide-react';
 import { loginAction, loginWithPhoneAction, type FormState } from '@/lib/auth/actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { ResendConfirmationForm } from '@/components/auth/resend-confirmation-form';
+import { EmailOtpForm } from '@/components/auth/email-otp-form';
 
 const initialState: FormState = null;
 
 export function LoginForm({ redirectTo }: { redirectTo?: string }) {
-  const [activeTab, setActiveTab] = useState<'phone' | 'email'>('phone');
+  // 'email' and 'otp' are the SAME email address, entered once: 'email' is
+  // password sign-in, 'otp' is code sign-in. Password login is untouched and
+  // stays the default email method, so nobody who uses it today is affected.
+  const [activeTab, setActiveTab] = useState<'phone' | 'email' | 'otp'>('phone');
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordEmail, setShowPasswordEmail] = useState(false);
 
@@ -49,6 +53,19 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
         >
           <Mail className="h-4 w-4" />
           Email
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('otp')}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+            activeTab === 'otp'
+              ? 'bg-white text-ink-900 shadow-card border border-ink-100'
+              : 'text-ink-500 hover:text-ink-700'
+          }`}
+          aria-pressed={activeTab === 'otp'}
+        >
+          <KeyRound className="h-4 w-4" />
+          Code
         </button>
       </div>
 
@@ -133,7 +150,7 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
             Staff / Admin? Use the Email tab to sign in.
           </p>
         </form>
-      ) : (
+      ) : activeTab === 'email' ? (
         <form action={emailAction} className="space-y-5">
           {redirectTo ? <input type="hidden" name="redirect" value={redirectTo} /> : null}
 
@@ -198,6 +215,8 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
             </Link>
           </p>
         </form>
+      ) : (
+        <EmailOtpForm redirectTo={redirectTo} />
       )}
     </div>
   );

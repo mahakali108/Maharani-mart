@@ -1,0 +1,17 @@
+MAHARANI TRADERS — YOUR SIGN-IN CODE
+
+{{ .Token }}
+
+This one-time code expires in {{ .OTPExpiryMinutes }} minutes.
+
+NEVER SHARE THIS CODE.
+Maharani Traders staff will never ask you for it - by phone, WhatsApp,
+email or in person. Anyone who asks is trying to take over your account.
+
+Didn't try to sign in? You can safely ignore this email. The code expires
+and no one gets in without it. If this keeps happening, contact your
+distributor.
+
+--
+Maharani Traders - Wholesale distribution
+This is an automated message; replies are not monitored.
