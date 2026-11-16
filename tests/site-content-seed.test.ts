@@ -96,8 +96,19 @@ describe('the seed migration', () => {
 
   it('seeds exactly the pages in the reviewed JSON', () => {
     for (const page of seed.pages) expect(sql, page.slug).toContain(`$seed$${page.slug}$seed$`);
-    expect(sql).toContain('public.site_page_snapshot');
-    expect(sql).toContain('published_at = timestamptz');
+    expect(sql).toContain("'draft'");
+  });
+
+  it('publishes NOTHING: no status change, no snapshot, no invented timestamp', () => {
+    // Publication is a legal act the owner takes page by page, not a side effect
+    // of a seed. These four assertions are the guard rail: if any of them starts
+    // failing, a migration has begun putting policy text in front of customers.
+    expect(sql).not.toMatch(/status\s*=\s*'published'/);
+    expect(sql).not.toContain('published_at =');
+    expect(sql).not.toMatch(/published_snapshot\s*=/);
+    expect(sql).not.toMatch(/timestamptz '20/);
+    // The migration proves the same thing at run time, in the same transaction.
+    expect(sql).toContain('0105 must not publish');
   });
 
   it('is idempotent and never overwrites an edit made in the admin screen', () => {
@@ -119,6 +130,64 @@ describe('the seed migration', () => {
     const rollback = read('supabase/rollbacks/0105_seed_site_content.down.sql');
     expect(rollback).toContain('delete from public.site_pages');
     expect(rollback).toContain('is_system = true');
+  });
+});
+
+describe('the staged publication scripts', () => {
+  const stage1 = read('supabase/publication/stage1_publish_live_text.sql');
+  const stage2 = read('supabase/publication/stage2_publish_reviewed_additions.sql');
+  const verify = read('supabase/publication/verify_publication.sql');
+  const readme = read('supabase/publication/README.md');
+
+  /** The slugs a stage publishes, read from its own `v_slugs` array. */
+  const slugsOf = (sql: string): string[] => {
+    const block = /v_slugs text\[\] := array\[([\s\S]*?)\]/.exec(sql)?.[1] ?? '';
+    return [...block.matchAll(/'([a-z][a-z0-9-]*)'/g)].map((match) => match[1]!);
+  };
+
+  it('publishes the seeded pages in two stages that exactly cover the seed', () => {
+    const stageOne = slugsOf(stage1);
+    const stageTwo = slugsOf(stage2);
+    const seeded = seed.pages.map((page) => page.slug);
+    expect(new Set([...stageOne, ...stageTwo]).size).toBe(stageOne.length + stageTwo.length);
+    expect([...stageOne, ...stageTwo].sort()).toEqual([...seeded].sort());
+    // Stage 1 carries only wording that was already public before the module.
+    for (const slug of stageOne) expect(stageOne.length, slug).toBeGreaterThan(0);
+    expect(stageOne).toHaveLength(9);
+    expect(stageTwo).toHaveLength(10);
+  });
+
+  it('records the real publication time and never a backdated one', () => {
+    for (const [name, sql] of [['stage 1', stage1], ['stage 2', stage2]] as const) {
+      expect(sql, name).toContain('published_at = now()');
+      expect(sql, name).not.toMatch(/published_at\s*=\s*timestamptz/);
+      expect(sql, name).not.toMatch(/timestamptz '20\d\d-\d\d-\d\d/);
+      expect(sql, name).not.toMatch(/published_at\s*=\s*'(20\d\d)/);
+    }
+    // 0105 is also clean; the seed may not fabricate a date either.
+    expect(read('supabase/migrations/0105_seed_site_content.sql')).not.toMatch(/timestamptz '20\d\d-\d\d-\d\d/);
+  });
+
+  it('does not touch the acceptance registry', () => {
+    for (const [name, sql] of [['stage 1', stage1], ['stage 2', stage2]] as const) {
+      // Publishing a page is not a consent decision (see migration 0104's opt-in
+      // flag); the scripts must never register a version on their own.
+      expect(sql, name).not.toMatch(/^\s*select\s+public\.publish_legal_document_version/m);
+      expect(sql, name).not.toMatch(/insert into public\.legal_document_current_versions/i);
+    }
+  });
+
+  it('is explicitly not a migration and is never picked up by db push', () => {
+    // The whole safety argument depends on these files not being auto-applied.
+    expect(existsSync(join(root, 'supabase/publication'))).toBe(true);
+    for (const sql of [stage1, stage2]) expect(sql).toMatch(/NOT a migration/i);
+    expect(readme).toMatch(/NOT migrations/i);
+  });
+
+  it('ships a read-only verification file', () => {
+    expect(verify).not.toMatch(/^\s*(insert|update|delete|alter|drop|create)\b/m);
+    expect(verify).toContain('published_pages()');
+    expect(verify).toContain('legal_document_current_versions');
   });
 });
 

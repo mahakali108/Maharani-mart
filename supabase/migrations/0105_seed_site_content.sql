@@ -1,6 +1,5 @@
 -- ============================================================================
--- 0105: seed the Super Admin website content module with the text that was
---       already published before it existed.
+-- 0105: seed the Super Admin website content module with DRAFTS.
 --
 -- FOR REVIEW ONLY. NOT APPLIED TO ANY REMOTE PROJECT BY THIS CHANGE.
 --
@@ -14,13 +13,29 @@
 --     legal registry) ONLY when that slug does not exist yet, so it is
 --     idempotent and never overwrites an edit made in /admin/content;
 --   * copies the current wording into ordered sections;
---   * publishes each page with the version and effective date the page already
---     showed, so nothing a customer could read today disappears;
+--   * leaves every page in DRAFT. This migration publishes NOTHING.
+--   * writes no published_at, no published_by and no published_snapshot, so no
+--     page can be served to a customer by this file, and there is no backdated
+--     publication timestamp anywhere;
 --   * moves the operator notices ("Publication review required", the open
 --     owner decisions) into site_page_admin_notes, which no customer can read.
 --
 -- It inserts NO approval: every page is marked owner_review_pending.
--- Depends on: 0104 (site_pages), 0098 (legal_document_current_versions).
+--
+-- WHY DRAFTS AND NOT PUBLISHED
+-- Publishing is an owner decision with a legal consequence: it is what makes a
+-- policy publicly readable, and (for a document that is acceptance-required) what
+-- fixes the version a customer must accept. A seed cannot make that decision for
+-- 19 pages at once, and a fabricated historical timestamp would claim the owner
+-- published them on a date they did not choose. Publication is therefore a
+-- separate, reviewed, per-stage action:
+--
+--   supabase/publication/stage1_publish_live_text.sql
+--   supabase/publication/stage2_publish_reviewed_additions.sql
+--   (see supabase/publication/README.md for the order, the approvals and the
+--    verification queries)
+--
+-- Depends on: 0104 (site_pages).
 -- Rollback: supabase/rollbacks/0105_seed_site_content.down.sql
 -- ============================================================================
 
@@ -65,12 +80,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Intellectual property and applicable law$seed$, array[$seed$The Maharani Traders name, original site design, logos, text and graphics may not be reproduced or commercially used without permission except as permitted by law. Third-party product names and trademarks belong to their respective owners.$seed$, $seed$Nothing in these terms excludes a right or remedy that cannot lawfully be excluded. Indian law applies; disputes may be handled by the competent authority or court having jurisdiction under applicable law. See our [cancellation and return policy](/legal/returns) and [contact details](/contact).$seed$]::text[], '{}'::text[], 50);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -110,12 +121,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Retention, requests and updates$seed$, array[$seed$Information may be retained for fulfilment, accounting, tax, complaint handling, disputes and legal compliance. Retention periods and deletion procedures require verification; some transaction or tax records may need statutory retention.$seed$, $seed$For questions, corrections or other privacy requests, contact AJAY KUMAR, Proprietor, using the details below. Requests will be reviewed under applicable law. This policy may be updated when practices or requirements change; the latest version will carry its effective date.$seed$, $seed$Proprietor: AJAY KUMAR$seed$, $seed$Registered trade name: AJAY GENERAL$seed$, $seed$Brand: MAHARANI TRADERS$seed$, $seed$Grievance Officer: AJAY KUMAR, Proprietor$seed$, $seed$Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403$seed$, $seed$Phone: [8987023959](tel:8987023959)$seed$, $seed$Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)$seed$]::text[], '{}'::text[], 40);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -155,12 +162,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Return and refund contact$seed$, array[$seed$Proprietor: AJAY KUMAR$seed$, $seed$Registered trade name: AJAY GENERAL$seed$, $seed$Brand: MAHARANI TRADERS$seed$, $seed$Grievance Officer: AJAY KUMAR, Proprietor$seed$, $seed$Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403$seed$, $seed$Phone: [8987023959](tel:8987023959)$seed$, $seed$Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)$seed$]::text[], '{}'::text[], 40);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -198,12 +201,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Delivery contact$seed$, array[$seed$Use the [Help centre](/retailer/help) for an existing order, or contact us:$seed$, $seed$Proprietor: AJAY KUMAR$seed$, $seed$Registered trade name: AJAY GENERAL$seed$, $seed$Brand: MAHARANI TRADERS$seed$, $seed$Grievance Officer: AJAY KUMAR, Proprietor$seed$, $seed$Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403$seed$, $seed$Phone: [8987023959](tel:8987023959)$seed$, $seed$Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -243,12 +242,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$How we resolve it$seed$, array[$seed$After checking the complaint we will offer the remedy that fits the problem: replacement, collection of the goods with a refund, or a price adjustment. For goods sold by an independent seller, we pass the complaint to that seller and follow it up; see the Marketplace Disclaimer.$seed$, $seed$Please keep the product, its packaging and the invoice until the complaint is closed. Do not use or resell a product you believe is unsafe or not genuine.$seed$, $seed$Opened or used cosmetics and personal-care products are not accepted back for a change of mind, for hygiene reasons. This does not apply where the product is defective, damaged, wrong, expired or not genuine.$seed$]::text[], '{}'::text[], 40);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, array[$seed$Confirm the return-request window (the software default is 7 days from delivery; it is not yet set by the owner).$seed$, $seed$Confirm how refunds for Cash on Delivery orders are paid (Coins credit, bank transfer or cash) and the time taken.$seed$]::text[], 'owner_review_pending')
@@ -296,12 +291,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Changes to this agreement$seed$, array[$seed$When this agreement changes we publish a new version with a new version number and date. A seller is asked to accept the new version; the version accepted and the time of acceptance are recorded.$seed$]::text[], '{}'::text[], 80);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, array[$seed$Commission / fee rates and the payout cycle (kept out of this document on purpose; they must be agreed in writing with each seller).$seed$, $seed$Whether the operator has registered for, and will collect, tax at source on seller sales under section 52 of the CGST Act, and deduct tax under section 194-O of the Income-tax Act. Confirm with a Chartered Accountant before the first third-party sale.$seed$, $seed$Liability caps, indemnity wording, notice period and governing court: to be settled by a lawyer before the first seller is onboarded.$seed$]::text[], 'owner_review_pending')
@@ -343,12 +334,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Your rights as a business buyer$seed$, array[$seed$Some consumer-protection laws apply only to people who buy for personal use and may not apply to goods bought for resale. Whatever the legal position, the complaint, return and grievance procedures published on this website are open to every buyer.$seed$]::text[], '{}'::text[], 50);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, array[$seed$Whether credit terms are offered to any retailer (this document assumes Cash on Delivery only).$seed$, $seed$Minimum order value, if any.$seed$]::text[], 'owner_review_pending')
@@ -386,12 +373,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$What we do not do$seed$, array[$seed$We do not manufacture any product sold here. We do not make any health, medical or treatment claim for any product. Product descriptions and images for seller offers come from the seller; always read the label on the pack before using or reselling a product.$seed$, $seed$This page does not limit any liability that the law places on a marketplace operator or on a seller, and it does not limit your right to complain to us about any order placed on this website.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -429,12 +412,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Acknowledgement, resolution and escalation$seed$, array[$seed$The proposed targets are acknowledgement within 48 hours and an endeavour to resolve the grievance within one month from receipt. These targets and the complaint-handling workflow require operational and legal verification before publication; applicable statutory rights and timelines are not affected. A complaint reference number will be provided where the registration system supports reference tracking.$seed$, $seed$If you are dissatisfied, reply to the support email requesting escalation to the Grievance Officer. You may also approach the appropriate consumer protection authority or forum available under Indian law.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -470,12 +449,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Tax and policy scope$seed$, array[$seed$The owner reports that the business is registered for GST as an active regular taxpayer. The GST certificate, GSTIN, registration status and invoice configuration have not been independently verified. Any applicable GST details should be provided on invoices and other statutory documents as required by law.$seed$, $seed$The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.$seed$, $seed$Food is excluded from the stated current product scope. If online payment gateways, wider delivery areas, food products or other services are introduced later, the relevant policies and disclosures must be reviewed and updated before launch.$seed$]::text[], '{}'::text[], 20);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -513,12 +488,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Invoices$seed$, array[$seed$An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.$seed$, $seed$The app shows a tax invoice only when the registration and tax details needed for a valid tax invoice are complete. Until then the document is marked as an order summary and is not a tax invoice.$seed$, $seed$For returns and price corrections, a credit note or revised document is issued as the GST law requires.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, array[$seed$GSTIN of the business (the owner reports GST registration; the number has not been supplied, so no tax invoice can be issued yet).$seed$, $seed$Invoice numbering series and financial-year prefix.$seed$, $seed$HSN codes and GST rates for every product, confirmed by a Chartered Accountant.$seed$, $seed$Tax-collection-at-source registration and returns for third-party seller sales, if seller offers are switched on.$seed$]::text[], 'owner_review_pending')
@@ -554,12 +525,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Product concerns$seed$, array[$seed$Proprietor: AJAY KUMAR$seed$, $seed$Registered trade name: AJAY GENERAL$seed$, $seed$Brand: MAHARANI TRADERS$seed$, $seed$Grievance Officer: AJAY KUMAR, Proprietor$seed$, $seed$Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403$seed$, $seed$Phone: [8987023959](tel:8987023959)$seed$, $seed$Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)$seed$]::text[], '{}'::text[], 20);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -597,12 +564,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Report a listing$seed$, array[$seed$If you see a product here that you believe is prohibited, unsafe or not genuine, tell us using the contact details below. We will review it, and remove it from sale while we check where there is a safety concern.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -640,12 +603,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Our own content$seed$, array[$seed$Product names, logos and pack images shown on this website belong to their respective owners and are used only to identify the goods offered for sale.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -687,12 +646,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Disputes$seed$, array[$seed$Start with the Grievance Redressal Policy: most problems are settled there. If you are not satisfied with the outcome you may ask for it to be reviewed by the proprietor.$seed$, $seed$These policies are governed by the laws of India. Nothing here stops you from approaching a consumer commission, court or authority that has jurisdiction under the law.$seed$]::text[], '{}'::text[], 50);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, array[$seed$How a remaining Coins balance is paid out when an account is closed.$seed$, $seed$Whether disputes with sellers go to arbitration or to court, and the place — to be drafted by a lawyer.$seed$]::text[], 'owner_review_pending')
@@ -732,12 +687,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Your choices$seed$, array[$seed$You can clear cookies and site data in your browser settings at any time. Clearing them signs you out and removes your recently viewed list. Blocking necessary cookies will stop sign-in from working.$seed$]::text[], '{}'::text[], 40);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, '{}'::text[], 'owner_review_pending')
@@ -775,12 +726,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Corrections and misuse$seed$, array[$seed$If you think a Coins or points entry is wrong, contact us with the order number. We will check it against the ledger and correct a genuine error.$seed$, $seed$We may reverse Coins or points that were credited by mistake or obtained by fraud or misuse, and will record the reason for doing so.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Owner verification pending. This wording was published before website content management existed and was carried over verbatim by migration 0105 so no customer-visible policy text changed. It still requires the owner and an Indian legal/tax reviewer to confirm the commercial points listed in the open decisions.$seed$, array[$seed$Whether Coins ever expire (the software sets no expiry; none is stated here).$seed$, $seed$Whether loyalty points will become redeemable, and on what terms.$seed$]::text[], 'owner_review_pending')
@@ -818,12 +765,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Identity and trust$seed$, array[$seed$Owner-provided business and contact details are available for review; GST and other statutory invoice information must be verified before publication. See the [contact options](/contact) or sign in to raise a support ticket.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Business identity and contact details must be confirmed by the owner before launch. The text was carried over from the pre-CMS page unchanged.$seed$, '{}'::text[], 'owner_review_pending')
@@ -861,12 +804,8 @@ begin
     insert into public.site_page_sections (page_id, heading, body, bullets, sort_order)
     values (v_page, $seed$Seller and account access$seed$, array[$seed$Seller accounts are created by Super Admin invitation. If you have an invitation, use the emailed link; verification and approval are required before trading. The current own-stock sales policies do not provide complete terms for third-party seller transactions, which require separate review. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support.$seed$]::text[], '{}'::text[], 30);
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, $seed$Contact details are owner-provided. Until the storefront contact block is marked verified in Super Admin → Business & contact details, launch readiness treats them as unconfirmed.$seed$, '{}'::text[], 'owner_review_pending')
@@ -875,18 +814,30 @@ end
 $$;
 
 -- ----------------------------------------------------------------------------
--- Result check: every seeded page is published and carries a snapshot.
+-- Result check: every seeded page exists as a DRAFT and nothing was published.
+--
+-- This runs in the same transaction as the inserts, so a future edit that
+-- reintroduces a publish (or a backdated timestamp) fails the migration instead
+-- of quietly putting policy text in front of a customer.
 -- ----------------------------------------------------------------------------
 do $$
 declare
-  v_bad integer;
+  v_missing integer;
+  v_published integer;
 begin
-  select count(*) into v_bad
+  select count(*) into v_missing
+    from unnest(array[$seed$terms$seed$, $seed$privacy$seed$, $seed$returns$seed$, $seed$shipping$seed$, $seed$damaged-goods$seed$, $seed$seller-agreement$seed$, $seed$retailer-terms$seed$, $seed$marketplace-disclaimer$seed$, $seed$grievance$seed$, $seed$business-disclosure$seed$, $seed$gst-pricing-invoice$seed$, $seed$product-safety$seed$, $seed$prohibited-products$seed$, $seed$ip-complaints$seed$, $seed$suspension-termination$seed$, $seed$cookies$seed$, $seed$coins-loyalty$seed$, $seed$about$seed$, $seed$contact$seed$]) as s(slug)
+   where not exists (select 1 from public.site_pages p where p.slug = s.slug);
+  if v_missing > 0 then
+    raise exception '0105 did not create % seeded page(s)', v_missing;
+  end if;
+
+  select count(*) into v_published
     from public.site_pages
    where slug in ($seed$terms$seed$, $seed$privacy$seed$, $seed$returns$seed$, $seed$shipping$seed$, $seed$damaged-goods$seed$, $seed$seller-agreement$seed$, $seed$retailer-terms$seed$, $seed$marketplace-disclaimer$seed$, $seed$grievance$seed$, $seed$business-disclosure$seed$, $seed$gst-pricing-invoice$seed$, $seed$product-safety$seed$, $seed$prohibited-products$seed$, $seed$ip-complaints$seed$, $seed$suspension-termination$seed$, $seed$cookies$seed$, $seed$coins-loyalty$seed$, $seed$about$seed$, $seed$contact$seed$)
-     and (status <> 'published' or published_snapshot is null);
-  if v_bad > 0 then
-    raise exception '0105 left % seeded page(s) unpublished', v_bad;
+     and (status <> 'draft' or published_snapshot is not null or published_at is not null or published_by is not null);
+  if v_published > 0 then
+    raise exception '0105 must not publish: % seeded page(s) are not pure drafts', v_published;
   end if;
 end
 $$;

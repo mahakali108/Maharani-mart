@@ -4,7 +4,8 @@
  *   content/site-pages.seed.json                 - the starter content (one
  *                                                  entry per public page)
  *   supabase/migrations/0105_seed_site_content.sql - inserts that content as
- *                                                  PUBLISHED v1.0 pages
+ *                                                  DRAFT pages (publishing is a
+ *                                                  separate, owner-approved stage)
  *
  * WHY a generator instead of hand-written SQL
  * -------------------------------------------
@@ -12,9 +13,9 @@
  * repository. The owner could not edit a phone number without a deploy, and the
  * pages carried an internal "Publication review required" notice that must
  * never be shown to a customer. 0105 carries that SAME wording into the
- * database so the public site does not lose content the day the CMS ships —
- * turned into structured sections, with the internal review notices moved to
- * the super-admin-only notes table.
+ * database, turned into structured sections, with the internal review notices
+ * moved to the super-admin-only notes table. It publishes none of it: publication
+ * is an owner decision (supabase/publication/README.md).
  *
  * The extraction is mechanical: it reads the registries and the page files, so
  * the seed cannot drift from what was published. Run with:
@@ -306,7 +307,7 @@ mkdirSync(path.join(root, 'content'), { recursive: true });
 writeFileSync(path.join(root, 'content/site-pages.seed.json'), `${JSON.stringify({ generatedFrom: 'app/about, app/contact, app/legal/*, lib/legal/{documents,content}.ts', pages }, null, 2)}\n`);
 
 // ---------------------------------------------------------------------------
-// SQL: one DO block per page, idempotent, published at 2026-11-14.
+// SQL: one DO block per page, idempotent, DRAFT only (publication is separate).
 // ---------------------------------------------------------------------------
 const q = (value) => (value == null ? 'null' : `$seed$${value}$seed$`);
 const arr = (values) => {
@@ -315,8 +316,7 @@ const arr = (values) => {
 };
 
 const preamble = `-- ============================================================================
--- 0105: seed the Super Admin website content module with the text that was
---       already published before it existed.
+-- 0105: seed the Super Admin website content module with DRAFTS.
 --
 -- FOR REVIEW ONLY. NOT APPLIED TO ANY REMOTE PROJECT BY THIS CHANGE.
 --
@@ -330,13 +330,29 @@ const preamble = `-- ===========================================================
 --     legal registry) ONLY when that slug does not exist yet, so it is
 --     idempotent and never overwrites an edit made in /admin/content;
 --   * copies the current wording into ordered sections;
---   * publishes each page with the version and effective date the page already
---     showed, so nothing a customer could read today disappears;
+--   * leaves every page in DRAFT. This migration publishes NOTHING.
+--   * writes no published_at, no published_by and no published_snapshot, so no
+--     page can be served to a customer by this file, and there is no backdated
+--     publication timestamp anywhere;
 --   * moves the operator notices ("Publication review required", the open
 --     owner decisions) into site_page_admin_notes, which no customer can read.
 --
 -- It inserts NO approval: every page is marked owner_review_pending.
--- Depends on: 0104 (site_pages), 0098 (legal_document_current_versions).
+--
+-- WHY DRAFTS AND NOT PUBLISHED
+-- Publishing is an owner decision with a legal consequence: it is what makes a
+-- policy publicly readable, and (for a document that is acceptance-required) what
+-- fixes the version a customer must accept. A seed cannot make that decision for
+-- 19 pages at once, and a fabricated historical timestamp would claim the owner
+-- published them on a date they did not choose. Publication is therefore a
+-- separate, reviewed, per-stage action:
+--
+--   supabase/publication/stage1_publish_live_text.sql
+--   supabase/publication/stage2_publish_reviewed_additions.sql
+--   (see supabase/publication/README.md for the order, the approvals and the
+--    verification queries)
+--
+-- Depends on: 0104 (site_pages).
 -- Rollback: supabase/rollbacks/0105_seed_site_content.down.sql
 -- ============================================================================
 
@@ -382,12 +398,8 @@ begin
 
 ${sectionInserts}
 
-  update public.site_pages
-     set status = 'published',
-         published_at = timestamptz '2026-11-14T00:00:00+00',
-         published_by = null,
-         published_snapshot = public.site_page_snapshot(v_page)
-   where id = v_page;
+  -- Deliberately NOT published here: see the header. The page stays a draft
+  -- until the owner runs a publication stage for its slug.
 
   insert into public.site_page_admin_notes (page_id, internal_notes, owner_decisions, review_status)
   values (v_page, ${q(page.internal_notes)}, ${arr(page.owner_decisions)}, 'owner_review_pending')
@@ -399,18 +411,30 @@ $$;
 
 const footer = `
 -- ----------------------------------------------------------------------------
--- Result check: every seeded page is published and carries a snapshot.
+-- Result check: every seeded page exists as a DRAFT and nothing was published.
+--
+-- This runs in the same transaction as the inserts, so a future edit that
+-- reintroduces a publish (or a backdated timestamp) fails the migration instead
+-- of quietly putting policy text in front of a customer.
 -- ----------------------------------------------------------------------------
 do $$
 declare
-  v_bad integer;
+  v_missing integer;
+  v_published integer;
 begin
-  select count(*) into v_bad
+  select count(*) into v_missing
+    from unnest(array[${pages.map((p) => q(p.slug)).join(', ')}]) as s(slug)
+   where not exists (select 1 from public.site_pages p where p.slug = s.slug);
+  if v_missing > 0 then
+    raise exception '0105 did not create % seeded page(s)', v_missing;
+  end if;
+
+  select count(*) into v_published
     from public.site_pages
    where slug in (${pages.map((p) => q(p.slug)).join(', ')})
-     and (status <> 'published' or published_snapshot is null);
-  if v_bad > 0 then
-    raise exception '0105 left % seeded page(s) unpublished', v_bad;
+     and (status <> 'draft' or published_snapshot is not null or published_at is not null or published_by is not null);
+  if v_published > 0 then
+    raise exception '0105 must not publish: % seeded page(s) are not pure drafts', v_published;
   end if;
 end
 $$;

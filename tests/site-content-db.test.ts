@@ -30,16 +30,47 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
     as(db, who, async (tx: Tx) =>
       (await tx.query<{ p: Record<string, unknown> }>(`select public.published_page($1) as p`, [slug])).rows[0]!.p);
 
-  it('seeds every registered public page as published, with a snapshot', async () => {
-    const { rows } = await db.query<{ total: string; published: string; snapshots: string }>(
+  /**
+   * The owner's stage-1 publication (supabase/publication/stage1_publish_live_text.sql):
+   * the pages whose wording was already public before this module existed. Lazy, so
+   * the draft-only assertions above run against the database exactly as 0105 left
+   * it; every later test that needs a published page asks for this first.
+   */
+  let stageOne: Promise<void> | null = null;
+  const ensureStageOne = () =>
+    (stageOne ??= (async () => {
+      for (const slug of ['contact', 'terms', 'privacy', 'returns', 'shipping', 'grievance', 'business-disclosure', 'product-safety']) {
+        const id = await pageId(slug);
+        await as(db, superAdmin, (tx) => tx.query(`select public.publish_site_page($1)`, [id]));
+      }
+    })());
+
+  it('seeds every registered public page as a DRAFT and publishes nothing', async () => {
+    // 0105 is a seed, not a publication: publishing is a legal act the owner takes
+    // page by page (supabase/publication/*). If this assertion ever fails, a
+    // migration has started putting policy text in front of customers on its own.
+    const { rows } = await db.query<{
+      total: string;
+      published: string;
+      snapshots: string;
+      backdated: string;
+      with_notes: string;
+    }>(
       `select count(*)::text as total,
               count(*) filter (where status = 'published')::text as published,
-              count(*) filter (where published_snapshot is not null)::text as snapshots
-         from public.site_pages`,
+              count(*) filter (where published_snapshot is not null)::text as snapshots,
+              count(*) filter (where published_at is not null or published_by is not null)::text as backdated,
+              count(*) filter (where exists (
+                select 1 from public.site_page_admin_notes n where n.page_id = p.id
+              ))::text as with_notes
+         from public.site_pages p`,
     );
-    expect(Number(rows[0]!.total)).toBeGreaterThanOrEqual(19);
-    expect(rows[0]!.published).toBe(rows[0]!.total);
-    expect(rows[0]!.snapshots).toBe(rows[0]!.total);
+    const row = rows[0]!;
+    expect(Number(row.total)).toBeGreaterThanOrEqual(19);
+    expect(row.published, 'no page may be published by the seed').toBe('0');
+    expect(row.snapshots, 'a draft must not carry a published snapshot').toBe('0');
+    expect(row.backdated, 'no publication timestamp may be invented').toBe('0');
+    expect(Number(row.with_notes)).toBe(Number(row.total));
 
     // Each seeded page kept its real wording, not an empty shell.
     const { rows: sectionCounts } = await db.query<{ slug: string; sections: string }>(
@@ -49,9 +80,36 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
     );
     expect(sectionCounts.length).toBeGreaterThanOrEqual(19);
     for (const row of sectionCounts) expect(Number(row.sections), row.slug).toBeGreaterThan(0);
+
+    // And none of it is readable yet: the public function answers "unpublished"
+    // for every slug, and the index is empty.
+    const aboutDraft = await publishedPage('anon', 'about');
+    expect(aboutDraft.state).toBe('unpublished');
+    const indexRows = await as(db, 'anon', async (tx: Tx) =>
+      (await tx.query<{ pages: Array<{ slug: string }> }>(`select public.published_pages() as pages`)).rows);
+    expect(indexRows[0]!.pages).toEqual([]);
+  });
+
+  it('publishing is an explicit owner action with a real timestamp, not a seeded one', async () => {
+    const id = await pageId('about');
+    const before = await db.query<{ published_at: string | null }>(
+      `select published_at::text from public.site_pages where id = $1`, [id]);
+    expect(before.rows[0]!.published_at).toBeNull();
+
+    await as(db, superAdmin, (tx) => tx.query(`select public.publish_site_page($1)`, [id]));
+
+    const after = await db.query<{ status: string; published_at: string | null; snapshot: boolean }>(
+      `select status, published_at::text, published_snapshot is not null as snapshot
+         from public.site_pages where id = $1`, [id]);
+    expect(after.rows[0]!.status).toBe('published');
+    expect(after.rows[0]!.snapshot).toBe(true);
+    // now(), not a backdated constant: the timestamp is inside this test's run.
+    const publishedAt = new Date(after.rows[0]!.published_at!).getTime();
+    expect(Math.abs(Date.now() - publishedAt)).toBeLessThan(10 * 60 * 1000);
   });
 
   it('lets an anonymous visitor read a published page through the public function only', async () => {
+    await ensureStageOne();
     const page = await publishedPage('anon', 'about');
     expect(page.state).toBe('published');
     expect(typeof page.version).toBe('string');
@@ -86,6 +144,7 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
   });
 
   it('lets a plain admin read the published output but not the draft table, and never edit', async () => {
+    await ensureStageOne();
     // A plain admin reads exactly what a customer reads (the SECURITY DEFINER
     // snapshot functions) — not the draft columns, which are super-admin only.
     expect((await publishedPage('admin', 'about')).state).toBe('published');
@@ -108,6 +167,7 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
   });
 
   it('keeps a draft invisible until it is published, and records the publishing history', async () => {
+    await ensureStageOne();
     const id = await pageId('about');
 
     // A super admin edits the draft. The public output must not change.
@@ -131,6 +191,7 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
   });
 
   it('no API role can read a draft column of a published page', async () => {
+    await ensureStageOne();
     // The page is PUBLISHED, so a row-level policy would say "yes". The draft
     // columns must still be unreachable: a column grant cannot be made
     // row-conditional, which is why anon has no grant at all and authenticated
@@ -166,32 +227,37 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
   });
 
   it('unpublishes without leaving any content readable, and answers "not published" instead of 404', async () => {
-    const id = await pageId('cookies');
+    await ensureStageOne();
+    const id = await pageId('returns');
     await as(db, superAdmin, (tx) => tx.query(`select public.unpublish_site_page($1)`, [id]));
 
-    const page = await publishedPage('anon', 'cookies');
+    const page = await publishedPage('anon', 'returns');
     expect(page.state).toBe('unpublished');
     expect(page).not.toHaveProperty('page');
     expect(JSON.stringify(page)).not.toContain('device storage');
 
     // Guests have no SELECT privilege on the draft table at all, so this is a
     // permission error rather than "0 rows" (see the next test).
-    expect(await errorOf(db, 'anon', (tx) => tx.query(`select title from public.site_pages where slug = 'cookies'`)))
+    expect(await errorOf(db, 'anon', (tx) => tx.query(`select title from public.site_pages where slug = 'returns'`)))
       .toMatch(/permission denied/i);
 
     // Publishing again restores it, so the action is reversible.
     await as(db, superAdmin, (tx) => tx.query(`select public.publish_site_page($1)`, [id]));
-    expect((await publishedPage('anon', 'cookies')).state).toBe('published');
+    expect((await publishedPage('anon', 'returns')).state).toBe('published');
   });
 
-  it('hides unpublished pages from the index list', async () => {
-    const id = await pageId('ip-complaints');
-    await as(db, superAdmin, (tx) => tx.query(`select public.unpublish_site_page($1)`, [id]));
+  it('hides the pages left as drafts from the index list', async () => {
+    // `ip-complaints` and the other nine stage-2 pages are still drafts: they must
+    // never appear in the footer/index list the website and the app read.
     const rows = await as(db, 'anon', async (tx: Tx) =>
       (await tx.query<{ pages: Array<{ slug: string }> }>(`select public.published_pages() as pages`)).rows);
     const slugs = rows[0]!.pages.map((page) => page.slug);
-    expect(slugs).not.toContain('ip-complaints');
+    for (const draft of ['ip-complaints', 'cookies', 'coins-loyalty', 'seller-agreement', 'retailer-terms']) {
+      expect(slugs, draft).not.toContain(draft);
+      expect((await publishedPage('anon', draft)).state, draft).toBe('unpublished');
+    }
     expect(slugs).toContain('about');
+    expect(slugs).toContain('terms');
   });
 
   it('refuses to publish an incomplete page, for every caller including service', async () => {
@@ -212,17 +278,48 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
     expect(await errorOf(db, 'anon', (tx) => tx.query(`select public.publish_site_page($1)`, [id]))).toMatch(/permission denied/);
   });
 
-  it('keeps the acceptance registry in step when a policy version is published', async () => {
+  it('does NOT touch the acceptance registry unless the operator asks for it', async () => {
+    // Publishing a page makes it READABLE. Making it something a customer must
+    // ACCEPT is a consent change, so the RPC's default registers nothing — even
+    // for a legal page with a new version.
+    const id = await pageId('suspension-termination');
+    await as(db, superAdmin, (tx) =>
+      tx.query(`update public.site_pages set version = '2.0', effective_date = date '2026-12-01' where id = $1`, [id]));
+
+    const before = await db.query<{ n: string }>(
+      `select count(*)::text as n from public.legal_document_current_versions where document_key = 'suspension-termination'`);
+    expect(before.rows[0]!.n).toBe('0');
+
+    await as(db, superAdmin, (tx) => tx.query(`select public.publish_site_page($1)`, [id]));
+    const page = await publishedPage('anon', 'suspension-termination');
+    expect(page.state).toBe('published');
+    expect(page.version).toBe('2.0');
+
+    const after = await db.query<{ n: string }>(
+      `select count(*)::text as n from public.legal_document_current_versions where document_key = 'suspension-termination'`);
+    expect(after.rows[0]!.n, 'a plain publish must not create an acceptance requirement').toBe('0');
+
+    // The registry still holds exactly the one document the platform enforces.
+    const registry = await db.query<{ document_key: string }>(
+      `select document_key from public.legal_document_current_versions order by 1`);
+    expect(registry.rows.map((row) => row.document_key)).toEqual(['seller-agreement']);
+  });
+
+  it('registers a version only when the explicit opt-in is used, and then enforces it', async () => {
     const id = await pageId('privacy');
     await as(db, superAdmin, (tx) =>
       tx.query(`update public.site_pages set version = '1.3', effective_date = date '2026-12-01' where id = $1`, [id]));
-    await as(db, superAdmin, (tx) => tx.query(`select public.publish_site_page($1)`, [id]));
+
+    // The opt-in is the second argument; the default is FALSE (tested above).
+    await as(db, superAdmin, (tx) =>
+      tx.query(`select public.publish_site_page($1, true)`, [id]));
 
     const { rows } = await db.query<{ document_version: string }>(
       `select document_version from public.legal_document_current_versions where document_key = 'privacy'`);
     expect(rows[0]!.document_version).toBe('1.3');
 
-    // A user can accept the newly published version, and the old one is refused.
+    // Having registered the version, the database accepts that one and refuses the
+    // old one — which is exactly why this must never happen by accident.
     const accepted = await as(db, retailer, (tx: Tx) =>
       tx.query(`select public.record_legal_acceptance('privacy', '1.3', 'account')`));
     expect(accepted.rows).toHaveLength(1);
