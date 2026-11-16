@@ -100,6 +100,8 @@ navigation argument → unavailable without a network call (tested).
 
 | Run | Commit | Result |
 | --- | --- | --- |
+| [43784055991](https://github.com/mahakali108/Maharani-mart/actions/runs/43784055991) | `bcc5c87` (code head) | **SUCCESS** — the full workflow on the tree this review signs off |
+| [43781274242](https://github.com/mahakali108/Maharani-mart/actions/runs/43781274242) | `8cc3fb3` | **SUCCESS** — same matrix, including the data-driven contact shortcut |
 | [43774795591](https://github.com/mahakali108/Maharani-mart/actions/runs/43774795591) | `683fac9` | **SUCCESS** — production probe, web typecheck/lint/tests/build, Android unit tests + lint, debug APK identity/version, unsigned release artifacts |
 | [43773560359](https://github.com/mahakali108/Maharani-mart/actions/runs/43773560359) | `e9be8f8` | failure — `:core:auth:compileDebugUnitTestKotlin`, `FakeMaharaniApi` missing the new endpoints (fixed in `683fac9`) |
 | [43772660295](https://github.com/mahakali108/Maharani-mart/actions/runs/43772660295) | `50ba90d` | failure — `:feature:engagement:compileDebugKotlin`, smart cast across modules (fixed in `e9be8f8`) |
@@ -114,7 +116,7 @@ are fixed, and the third run is fully green. The Android workflow is
 | --- | --- |
 | `pnpm run typecheck` | **PASS** |
 | `pnpm run lint` | **PASS**, 0 warnings |
-| `pnpm test` | **PASS** — 220 files / 3,381 tests |
+| `pnpm test` | **PASS** — 220 files / 3,382 tests |
 
 ### 1.6 Regressions checked specifically
 
