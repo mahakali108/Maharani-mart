@@ -18,7 +18,7 @@ GitHub Actions `Web CI` on `main` (run `43837455809`) failed at `Unit and integr
 
 2. **`tests/simplified-pack-stock-db.test.ts:305`**
    - **Root Cause (Real Security Regression):** Migration `0103_security_advisor_remediation.sql` ran `grant select on public.products to authenticated;`, which in PostgreSQL overrides the column-level `REVOKE SELECT (cost_price)` from `0025_cost_price_column_lockdown.sql` and exposed `products.cost_price` to `authenticated` users.
-   - **Fix:** Added `supabase/migrations/0107_restore_cost_price_column_lockdown.sql` to revoke table-level `SELECT` on `public.products` from `public, anon, authenticated` and grant column-level `SELECT` on all columns except `cost_price` to `authenticated`.
+   - **Fix:** Added `supabase/migrations/0107_restore_cost_price_column_lockdown.sql` to revoke table-level `SELECT` and restore column-level `SELECT` on all columns except `cost_price` to `anon` and `authenticated`. It also replaces the `SECURITY INVOKER` `inventory_product_totals` view so purchase cost is obtained only through the existing admin-gated `admin_product_cost()` accessor; that accessor's `search_path` is pinned.
 
 ### Verification Results
 - `tests/security-advisor-remediation-db.test.ts`: **7 passed, 0 failed**
@@ -76,3 +76,25 @@ GitHub Actions `Web CI` on `main` (run `43837455809`) failed at `Unit and integr
 - No live Supabase Auth settings modified.
 - No production users, sellers, retailers, or Super Admin accounts created.
 - No legal pages published, no Vercel deployment triggered, no PR merged.
+
+
+## 7. Follow-up CI Regression and Correction
+
+The first PR CI run on head `2a40a97` (run `43843130296`) found that the initial 0107 implementation revoked all SELECT access from `anon` and did not preserve the anonymous catalogue's base-table access needed by RLS-backed policies and `security_invoker` views. It also caused `inventory_product_totals` to lose access to `products` after 0103 changed it to an invoker view.
+
+Correction committed on the same PR branch:
+
+- Restore column-level SELECT for `anon` and `authenticated` on every `products` column except `cost_price`; RLS continues to decide which rows are visible.
+- Keep `products.cost_price` denied to both API roles.
+- Replace the `inventory_product_totals` definition so it calls the existing `admin_product_cost(uuid)` accessor rather than selecting `products.cost_price` directly. The accessor returns a value only for admin/super_admin.
+- Pin `admin_product_cost(uuid)` to `search_path = pg_catalog, public, pg_temp`.
+- Add a regression test for the column privileges, anonymous fail-closed catalogue read, and the invoker-view definition.
+
+### Latest verification status
+
+- Initial PR CI run `43843130296`: **FAIL** — 3 failing assertions (2 test files); this was the regression that prompted the correction.
+- Follow-up CI run `43869598451` was started on head `0ab98b0`; it was still in progress at the time of this report update.
+- Latest PR head after the search_path hardening commit: `37989ab5f725b59167c29aeb96c1b2f7d9c18884`. A completed CI run against this exact latest head is still required.
+- PR #135 remains **OPEN / NOT MERGED**.
+- Live Supabase remains at migration `0103`; migrations `0104`–`0107` have not been applied.
+- No live Auth configuration or production deployment has been changed.
