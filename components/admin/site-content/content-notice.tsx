@@ -8,6 +8,8 @@ const NOTICES: Record<string, string> = {
   unpublished: 'Unpublished. Customers now see a short “not available” message.',
   deleted: 'Page deleted.',
   'order-updated': 'Section order updated.',
+  restored:
+    'Revision restored into the draft. The published page has not changed — review it in Preview, then publish when you are ready.',
 };
 
 export function ContentNotice({ notice, error }: { notice?: string; error?: string }) {

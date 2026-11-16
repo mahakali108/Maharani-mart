@@ -46,6 +46,33 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
   const [selectedRole, setSelectedRole] = useState<UserRole>(userView.role as UserRole);
   const [accessDays, setAccessDays] = useState<number | null>(7);
   const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /**
+   * Runs a Server Action and reports its outcome.
+   *
+   * Server Actions reject with the thrown message over the RSC boundary, so a
+   * bare `await action()` inside startTransition silently discarded every
+   * refusal ("only a Super Admin may…", "record why you are…") and the operator
+   * saw a button that appeared to do nothing. Every button routes through here.
+   */
+  const run = (label: string, action: () => Promise<void>) => {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      try {
+        await action();
+        setNotice(label);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        // Next.js encodes redirects/notFound as thrown sentinels; rethrow those
+        // untouched so navigation still works.
+        if (/NEXT_REDIRECT|NEXT_NOT_FOUND/.test(message)) throw cause;
+        setError(message);
+      }
+    });
+  };
 
   const overrideMap = new Map(overrides.map((o) => [o.feature_key, o]));
 
@@ -81,6 +108,20 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
         </div>
       </div>
 
+      {/* Outcome of the last action. Without this an authorization refusal or a
+          database guard rejection looked like a button that did nothing. */}
+      {error ? (
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-error-200 bg-error-50 p-3 text-sm text-error-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span className="min-w-0 break-words">{error}</span>
+        </div>
+      ) : null}
+      {notice && !error ? (
+        <div role="status" className="rounded-xl border border-mint-200 bg-mint-50 p-3 text-sm text-mint-900">
+          {notice}
+        </div>
+      ) : null}
+
       {/* Quick Actions */}
       <div className="rounded-xl border border-ink-100 bg-white p-5">
         <h3 className="mb-3 text-sm font-semibold text-ink-900">Quick Actions</h3>
@@ -100,9 +141,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
               </select>
               <button
                 onClick={() => {
-                  startTransition(async () => {
-                    await extendAccess(userView.id, accessDays ?? 365, reason || undefined);
-                  });
+                  run('Access extended', () => extendAccess(userView.id, accessDays ?? 365, reason || undefined));
                 }}
                 disabled={isPending}
                 className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
@@ -125,17 +164,10 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
                 <option value="salesman">Salesman</option>
                 <option value="staff">Staff</option>
                 <option value="admin">Admin</option>
-                <option value="super_admin">Super Admin</option>
               </select>
               <button
                 onClick={() => {
-                  if (selectedRole === 'super_admin') {
-                    setConfirmAction('role_super_admin');
-                  } else {
-                    startTransition(async () => {
-                      await changeUserRole(userView.id, selectedRole, reason || undefined);
-                    });
-                  }
+                  run('Role changed', () => changeUserRole(userView.id, selectedRole, reason || undefined));
                 }}
                 disabled={isPending || selectedRole === userView.role}
                 className="rounded-lg bg-ink-950 px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-900 disabled:opacity-50"
@@ -159,9 +191,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
             ) : (
               <button
                 onClick={() => {
-                  startTransition(async () => {
-                    await reactivateUser(userView.id, reason || undefined);
-                  });
+                  run('Account reactivated', () => reactivateUser(userView.id, reason || undefined));
                 }}
                 disabled={isPending}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-mint-50 px-3 py-2 text-sm font-medium text-mint-700 hover:bg-mint-100 disabled:opacity-50"
@@ -226,14 +256,12 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      startTransition(async () => {
-                        await setUserFeatureOverride({
+                      run('Feature override saved', () => setUserFeatureOverride({
                           userId: userView.id,
                           featureKey: feature.key,
                           enabled: true,
                           reason: reason || undefined,
-                        });
-                      });
+                        }));
                     }}
                     disabled={isPending}
                     className={`rounded-lg px-2 py-1 text-xs font-medium ${
@@ -246,14 +274,12 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
                   </button>
                   <button
                     onClick={() => {
-                      startTransition(async () => {
-                        await setUserFeatureOverride({
+                      run('Feature override saved', () => setUserFeatureOverride({
                           userId: userView.id,
                           featureKey: feature.key,
                           enabled: false,
                           reason: reason || undefined,
-                        });
-                      });
+                        }));
                     }}
                     disabled={isPending}
                     className={`rounded-lg px-2 py-1 text-xs font-medium ${
@@ -267,9 +293,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
                   {isOverridden && (
                     <button
                       onClick={() => {
-                        startTransition(async () => {
-                          await removeUserFeatureOverride(userView.id, feature.key);
-                        });
+                        run('Feature override removed', () => removeUserFeatureOverride(userView.id, feature.key));
                       }}
                       disabled={isPending}
                       className="rounded-lg px-2 py-1 text-xs text-ink-400 hover:bg-ink-100 hover:text-ink-600"
@@ -340,10 +364,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
         <ConfirmDialog
           message={`Suspend ${userView.fullName}? They will be logged out and unable to access the platform.`}
           onConfirm={() => {
-            startTransition(async () => {
-              await suspendUser(userView.id, reason || undefined);
-              setConfirmAction(null);
-            });
+            run('Account suspended', () => suspendUser(userView.id, reason || undefined));
           }}
           onCancel={() => setConfirmAction(null)}
         />
@@ -352,22 +373,7 @@ export function UserManagementClient({ userView, overrides, accessPeriods, featu
         <ConfirmDialog
           message={`Expire access for ${userView.fullName} immediately? They will lose platform access.`}
           onConfirm={() => {
-            startTransition(async () => {
-              await expireAccess(userView.id, reason || undefined);
-              setConfirmAction(null);
-            });
-          }}
-          onCancel={() => setConfirmAction(null)}
-        />
-      )}
-      {confirmAction === 'role_super_admin' && (
-        <ConfirmDialog
-          message={`Grant SUPER ADMIN to ${userView.fullName}? This gives them full platform control including the ability to manage all users and features. This action is irreversible from the UI.`}
-          onConfirm={() => {
-            startTransition(async () => {
-              await changeUserRole(userView.id, 'super_admin', reason || 'Granted Super Admin');
-              setConfirmAction(null);
-            });
+            run('Access expired', () => expireAccess(userView.id, reason || undefined));
           }}
           onCancel={() => setConfirmAction(null)}
         />

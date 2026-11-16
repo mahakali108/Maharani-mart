@@ -16,8 +16,29 @@ import type {
   SecurityAlert,
 } from '@/lib/admin/control-center/types';
 import { computeAccessStatus } from '@/lib/admin/control-center/types';
+import {
+  assertAccessDays,
+  assertNotSelf,
+  assertReactivationAllowed,
+  assertReason,
+  assertRoleChangeAllowed,
+  assertSuspensionAllowed,
+  isAssignableRole,
+} from '@/lib/admin/control-center/user-admin-rules';
 import { indiaAddDaysToKey, indiaDayEnd, indiaTodayDateKey } from '@/lib/datetime/india';
 import type { UserRole } from '@/lib/auth/roles';
+
+/**
+ * Every write below must be checked. A Supabase update that fails still returns
+ * `{ error }` rather than throwing, so an unchecked call followed by an audit
+ * insert records a change that never happened — the worst possible audit trail.
+ * This helper turns that into a refusal the operator actually sees.
+ */
+function assertWrite(error: { message: string } | null, what: string): void {
+  if (error) {
+    throw new Error(`${what} failed: ${error.message}`);
+  }
+}
 
 // ── Audit Helper ───────────────────────────────────────────────────────────
 
@@ -187,6 +208,8 @@ export async function grantAccess(input: {
 
   const role = (profile as unknown as { role: string }).role;
   if (role === 'super_admin') throw new Error('Cannot modify Super Admin access — it is always unlimited.');
+  assertNotSelf(user.id, input.userId, 'access');
+  assertAccessDays(input.days);
 
   const now = new Date();
   const expiresAt = input.days
@@ -194,12 +217,15 @@ export async function grantAccess(input: {
     : null;
   const status: AccessStatus = input.days === null ? 'unlimited' : 'active';
 
-  // Expire any existing active periods
-  await supabase
+  // Expire any existing active periods. If this fails the new period would be
+  // created alongside the old one, leaving two "active" rows and an ambiguous
+  // access state, so the failure is fatal rather than logged.
+  const { error: expireError } = await supabase
     .from('user_access_periods')
     .update({ status: 'expired', updated_by: user.id, updated_at: now.toISOString() } as never)
     .eq('user_id', input.userId)
     .in('status', ['active', 'expiring_soon']);
+  assertWrite(expireError, 'Closing the previous access period');
 
   // Create new period
   const { error } = await supabase.from('user_access_periods').insert({
@@ -241,6 +267,8 @@ export async function extendAccess(userId: string, days: number, reason?: string
   if ((profile as unknown as { role: string }).role === 'super_admin') {
     throw new Error('Super Admin access is always unlimited.');
   }
+  assertNotSelf(user.id, userId, 'access');
+  assertAccessDays(days);
 
   // Get current active period
   const { data: current } = await supabase
@@ -348,6 +376,8 @@ export async function suspendUser(userId: string, reason?: string): Promise<void
   const user = await requireSuperAdmin();
   const supabase = (await createClient());
 
+  assertNotSelf(user.id, userId, 'suspend');
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, is_active')
@@ -359,19 +389,25 @@ export async function suspendUser(userId: string, reason?: string): Promise<void
   }
 
   const before = profile as unknown as { role: string; is_active: boolean };
+  assertSuspensionAllowed(before.is_active);
+  const recordedReason = assertReason(reason, 'suspending this account');
 
   // Deactivate profile
-  await supabase
+  const { error: profileError } = await supabase
     .from('profiles')
     .update({ is_active: false, updated_at: new Date().toISOString() } as never)
     .eq('id', userId);
+  assertWrite(profileError, 'Suspending the account');
 
   // Mark access as suspended
-  await supabase
+  const { error: periodError } = await supabase
     .from('user_access_periods')
     .update({ status: 'suspended', updated_by: user.id, updated_at: new Date().toISOString() } as never)
     .eq('user_id', userId)
     .in('status', ['active', 'expiring_soon']);
+  if (periodError) {
+    console.error('[user-admin] access-period suspension failed', { userId, message: periodError.message });
+  }
 
   await logSuperAdminAction(
     user.id,
@@ -379,7 +415,7 @@ export async function suspendUser(userId: string, reason?: string): Promise<void
     'USER_SUSPENDED',
     { is_active: before.is_active },
     { is_active: false },
-    reason,
+    recordedReason,
   );
 
   revalidatePath('/admin/control-center');
@@ -390,6 +426,8 @@ export async function reactivateUser(userId: string, reason?: string): Promise<v
   const user = await requireSuperAdmin();
   const supabase = (await createClient());
 
+  assertNotSelf(user.id, userId, 'deactivate');
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, is_active')
@@ -398,18 +436,24 @@ export async function reactivateUser(userId: string, reason?: string): Promise<v
   if (!profile) throw new Error('User not found.');
 
   const before = profile as unknown as { role: string; is_active: boolean };
+  assertReactivationAllowed(before.is_active);
+  const recordedReason = assertReason(reason, 'reactivating this account');
 
-  await supabase
+  const { error: profileError } = await supabase
     .from('profiles')
     .update({ is_active: true, updated_at: new Date().toISOString() } as never)
     .eq('id', userId);
+  assertWrite(profileError, 'Reactivating the account');
 
   // Restore access to active if it was suspended
-  await supabase
+  const { error: periodError } = await supabase
     .from('user_access_periods')
     .update({ status: 'active', updated_by: user.id, updated_at: new Date().toISOString() } as never)
     .eq('user_id', userId)
     .eq('status', 'suspended');
+  if (periodError) {
+    console.error('[user-admin] access-period reactivation failed', { userId, message: periodError.message });
+  }
 
   await logSuperAdminAction(
     user.id,
@@ -417,7 +461,7 @@ export async function reactivateUser(userId: string, reason?: string): Promise<v
     'USER_REACTIVATED',
     { is_active: before.is_active },
     { is_active: true },
-    reason,
+    recordedReason,
   );
 
   revalidatePath('/admin/control-center');
@@ -428,9 +472,9 @@ export async function changeUserRole(userId: string, newRole: UserRole, reason?:
   const user = await requireSuperAdmin();
   const supabase = (await createClient());
 
-  // Prevent self-demotion from super_admin (safety)
-  if (userId === user.id) {
-    throw new Error('Cannot change your own role.');
+  assertNotSelf(user.id, userId, 'role');
+  if (!isAssignableRole(newRole)) {
+    throw new Error('That role cannot be assigned from user management.');
   }
 
   const { data: profile } = await supabase
@@ -441,23 +485,27 @@ export async function changeUserRole(userId: string, newRole: UserRole, reason?:
   if (!profile) throw new Error('User not found.');
 
   const oldRole = (profile as unknown as { role: string }).role;
+  assertRoleChangeAllowed(oldRole, newRole);
+  const recordedReason = assertReason(reason, 'changing the account role');
 
-  // Only super_admin can grant super_admin
-  if (newRole === 'super_admin') {
-    // Already super_admin — this is the only caller that can do this
-  }
-
-  await supabase
+  const { error: roleError } = await supabase
     .from('profiles')
     .update({ role: newRole, updated_at: new Date().toISOString() } as never)
     .eq('id', userId);
+  // Without this check a refusal by guard_profile_privileged_columns() (0052)
+  // was swallowed and the ROLE_CHANGED row below claimed success.
+  assertWrite(roleError, 'Changing the account role');
 
-  // Update access period role
-  await supabase
+  // Update access period role. A failure here must not roll back the audit
+  // entry for the role change that DID happen, so it is reported but recorded.
+  const { error: periodError } = await supabase
     .from('user_access_periods')
     .update({ role: newRole, updated_by: user.id, updated_at: new Date().toISOString() } as never)
     .eq('user_id', userId)
     .in('status', ['active', 'expiring_soon', 'unlimited']);
+  if (periodError) {
+    console.error('[user-admin] access-period role sync failed', { userId, message: periodError.message });
+  }
 
   await logSuperAdminAction(
     user.id,
@@ -465,7 +513,7 @@ export async function changeUserRole(userId: string, newRole: UserRole, reason?:
     'ROLE_CHANGED',
     { role: oldRole },
     { role: newRole },
-    reason,
+    recordedReason,
   );
 
   revalidatePath('/admin/control-center');

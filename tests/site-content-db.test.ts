@@ -344,7 +344,7 @@ describe('0104/0105 website content management (PostgreSQL 16)', () => {
   it('rejects a page whose published state would be incomplete at the table level', async () => {
     expect(await errorOf(db, superAdmin, (tx) => tx.query(
       `insert into public.site_pages (slug, nav_label, title, intro, status) values ('sneaky', 'Sneaky', 'Sneaky', 'x', 'published')`)))
-      .toMatch(/publish_complete|violates check constraint/);
+      .toMatch(/publish_complete|violates check constraint|created as a draft/);
   });
 
   it('accepts any syntactically valid page the Super Admin creates, including one not in the code', async () => {

@@ -135,6 +135,10 @@ export type SitePageRow = {
   related_slugs: string[];
   is_system: boolean;
   updated_at: string;
+  /** Who last saved the draft. Needed for the "last modified by" line. */
+  updated_by: string | null;
+  /** Who published the current live snapshot, if any. */
+  published_by: string | null;
 };
 
 export type SitePageAdminNotes = {
@@ -142,6 +146,8 @@ export type SitePageAdminNotes = {
   internal_notes: string | null;
   owner_decisions: string[];
   review_status: SitePageReviewStatus;
+  /** Who recorded the approval. NULL until a review is recorded. */
+  reviewed_by: string | null;
   reviewed_at: string | null;
   updated_at: string;
 };

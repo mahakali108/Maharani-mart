@@ -154,7 +154,7 @@ export async function loadPublishedPages(): Promise<PublishedPageSummary[]> {
 /* -------------------------------------------------------------------------- */
 
 const PAGE_COLUMNS =
-  'id, slug, kind, audience, nav_label, short_label, eyebrow, title, intro, meta_description, hero_image_url, status, version, effective_date, published_at, published_snapshot, sort_order, show_in_footer, show_in_index, show_contact_details, related_slugs, is_system, updated_at';
+  'id, slug, kind, audience, nav_label, short_label, eyebrow, title, intro, meta_description, hero_image_url, status, version, effective_date, published_at, published_snapshot, sort_order, show_in_footer, show_in_index, show_contact_details, related_slugs, is_system, updated_at, updated_by, published_by';
 
 export async function loadAdminPages(): Promise<SitePageRow[] | null> {
   const supabase = await createClient();
@@ -215,7 +215,7 @@ export async function loadAdminNotes(pageId: string): Promise<SitePageAdminNotes
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('site_page_admin_notes' as never)
-    .select('page_id, internal_notes, owner_decisions, review_status, reviewed_at, updated_at')
+    .select('page_id, internal_notes, owner_decisions, review_status, reviewed_by, reviewed_at, updated_at')
     .eq('page_id', pageId)
     .maybeSingle<SitePageAdminNotes>();
   // An unreadable notes row must not look like "no review recorded": that would
@@ -237,6 +237,35 @@ export async function loadPageRevisions(pageId: string): Promise<SitePageRevisio
   // merely unreadable — an operator would republish to be safe.
   throwIfReadFailed(error, 'Publishing history');
   return data ?? [];
+}
+
+/**
+ * Display names for the accounts that touched a page ("last modified by").
+ *
+ * Read from `profiles` under the caller's own RLS. A name that cannot be read
+ * (the account was deleted) yields `null` and the caller renders the id-less
+ * fallback rather than inventing an author — attribution must never be guessed.
+ */
+export async function loadActorNames(ids: ReadonlyArray<string | null>): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0))];
+  const names = new Map<string, string>();
+  if (wanted.length === 0) return names;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('profiles' as never)
+    .select('id, full_name')
+    .in('id', wanted)
+    .returns<Array<{ id: string; full_name: string | null }>>();
+  // Attribution is a nicety; an unreadable name must not break the editor.
+  if (error) {
+    console.error('[site-content] actor names failed', { message: error.message });
+    return names;
+  }
+  for (const row of data ?? []) {
+    if (row.full_name && row.full_name.trim().length > 0) names.set(row.id, row.full_name.trim());
+  }
+  return names;
 }
 
 /** Public pages linked from a page ("Related policies"), in configured order. */
