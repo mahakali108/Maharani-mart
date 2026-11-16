@@ -129,7 +129,7 @@ describe('0103 security advisor remediation', () => {
         join pg_proc p on p.oid = t.tgfoid
         join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public'
-         and p.oid::regprocedure::text = any($1::text[])
+         and p.oid = any(array(select to_regprocedure(s) from unnest($1::text[]) s))
          and not t.tgisinternal
     `, [triggerFunctions]);
     expect(rows[0]!.enabled).toBe(true);
