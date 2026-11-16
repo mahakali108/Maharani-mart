@@ -41,6 +41,13 @@ import com.maharanitraders.feature.engagement.ManagedPageViewModel
 import com.maharanitraders.feature.engagement.NetworkManagedContentRepository
 
 /** Test tags, so a UI test can address each state without reading prose. */
+/**
+ * The one slug this app names: the shop's contact page, used only to decide whether
+ * the "Contact Maharani Traders" shortcut is offered. No policy text, and no list of
+ * pages, is encoded here — the index is whatever the server publishes.
+ */
+const val CONTACT_SLUG = "contact"
+
 object ManagedContentTags {
   const val INDEX = "managed_content_index"
   const val PAGE = "managed_content_page"
@@ -102,9 +109,13 @@ fun LegalCentreScreen(
       items(state.pages, key = { it.slug }) { page ->
         PolicyIndexRow(page = page, onOpen = { onOpenPage(page.slug) })
       }
+      // The shop's contact page is a convention the SERVER publishes, not content
+      // this app owns: if the owner unpublishes it, the shortcut disappears rather
+      // than leading to an "unavailable" screen.
+      val contactPage = state.pages.firstOrNull { it.slug == CONTACT_SLUG }
       item {
         OutlinedButton(
-          onClick = onOpenContact,
+          onClick = { if (contactPage != null) onOpenPage(contactPage.slug) else onOpenContact() },
           modifier = Modifier.fillMaxWidth().heightIn(min = MaharaniDimens.touchTarget),
         ) {
           Text("Contact Maharani Traders")

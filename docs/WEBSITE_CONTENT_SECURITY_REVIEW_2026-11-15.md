@@ -126,15 +126,17 @@ Regression coverage: `tests/site-content-db.test.ts`
 
 ## 7. Open items for the owner
 
-1. **R2 — legal registry.** `0105` seeds and publishes 19 pages but registers only
-   `seller-agreement` in the `0098` acceptance registry through
-   `publish_legal_document_version`. If the Terms/Privacy must be *accepted* (not
-   merely read), the owner must decide whether the remaining documents are
-   registered too; today they are readable but not tracked as accepted versions.
-2. **R4 — immediate publication.** Applying `0105` publishes all 19 pages at once
-   with `published_at = 2026-11-14T00:00:00+00`. Nothing goes live until the
-   deployment that serves them, but the moment the migration is applied to a
-   database the web app reads, the pages are public.
+1. **R2 — legal registry (RESOLVED, now a choice).** Publishing a page no longer
+   registers it: `publish_site_page()` takes `p_register_acceptance` (default
+   `false`) and the registry still holds only `seller-agreement`. Whether
+   `terms`/`privacy`/`retailer-terms`/`prohibited-products` should be version-enforced
+   is the owner's decision, with the rationale and three options in
+   `docs/PR134_FINAL_REVIEW_2026-11-15.md` §5.
+2. **R4 — immediate publication (RESOLVED).** `0105` now seeds 19 **drafts** and
+   publishes nothing, with no backdated timestamp anywhere. Publication is two
+   owner-run stages in `supabase/publication/`: stage 1 (nine pages whose wording is
+   already live) must run **before** the deploy; stage 2 (ten new pages) waits for
+   owner and legal approval.
 3. **R8 — wording.** Every seeded page carries
    `review_status = 'owner_review_pending'`. The text is the wording already live
    on the site or engineering-standard legal boilerplate; the owner, the CA and

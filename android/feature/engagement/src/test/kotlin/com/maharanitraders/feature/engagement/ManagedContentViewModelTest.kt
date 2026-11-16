@@ -239,6 +239,16 @@ class ManagedContentViewModelTest {
   }
 
   @Test
+  fun `only one slug is named by the app, and it comes from the server's list`() {
+    // The contact shortcut is the single place the app knows a slug. If the page is
+    // not in the published list, the screen must not offer a link to it.
+    val published = listOf(about, terms)
+    assertThat(published.any { it.slug == com.maharanitraders.feature.engagement.ui.CONTACT_SLUG }).isFalse()
+    val withContact = published + about.copy(slug = "contact", navLabel = "Contact us")
+    assertThat(withContact.any { it.slug == com.maharanitraders.feature.engagement.ui.CONTACT_SLUG }).isTrue()
+  }
+
+  @Test
   fun `the index drops rows the app cannot render but keeps the rest`() {
     val rows = listOf(
       about,

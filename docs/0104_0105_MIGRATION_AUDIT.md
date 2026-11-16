@@ -119,7 +119,7 @@ the seven 0104 object names exists live.
         └── 0105 seed
                preflight: requires public.site_pages (0104)
                writes:    site_pages, site_page_sections, site_page_admin_notes
-               publishes by direct UPDATE + site_page_snapshot()   ← see R2
+               now inserts DRAFTS only: publication is staged and owner-run
 ```
 
 Safe order is **0104 → 0105**, and nothing else in the repository may be applied
@@ -179,9 +179,9 @@ published output still shows the last published text).
   are preserved. Verified by `tests/site-content-seed.test.ts` (10 tests) and the
   PGlite catalog test.
 * All 19 rows are inserted with `is_system = true`, `version = '1.0'`,
-  `effective_date` set, then published with
-  `published_at = timestamptz '2026-11-14T00:00:00+00'` (backdated),
-  `published_by = null`, `published_snapshot = public.site_page_snapshot(v_page)`.
+  `effective_date` set, and **status `draft`** — no `published_at`, no
+  `published_by`, no `published_snapshot`. (Earlier revisions of this file published
+  all 19 with a backdated `2026-11-14T00:00:00+00`; that was removed — see R4.)
 * Internal notes are inserted with `review_status = 'owner_review_pending'`
   (`on conflict do nothing`) and list the open owner decisions. No approval is
   invented.
@@ -196,9 +196,9 @@ published output still shows the last published text).
 | # | Risk | Severity | State |
 | --- | --- | --- | --- |
 | **R1** | Draft columns readable by anonymous/any authenticated user for a currently published page (row-level policy cannot filter columns) | **High (content leak)** | **FIXED** in this branch — grants revoked, policies super-admin only, regression test added |
-| **R2** | `0105` publishes legal pages with a direct `UPDATE`, so `publish_legal_document_version()` is **not** called and the 0098 acceptance registry is not seeded (today it holds only `seller-agreement`). Republishing the same page from `/admin/content` later **would** register it and start asking users to accept it | Medium (behaviour surprise) | **OPEN — owner decision**, deliberately not changed: registering 19 policies would immediately change acceptance UX |
+| **R2** | **CLOSED (changed 15 Nov, later session).** Two separate problems were behind this row. (a) `0105` published by direct `UPDATE`, bypassing `publish_legal_document_version()`. (b) `publish_site_page()` registered **every** legal page in the 0098 registry on every publish, which pins the version and makes `record_legal_acceptance()` reject any other one — a copy edit could have created a consent requirement. Fixed: `0105` no longer publishes at all, and the RPC registers only when the operator passes `p_register_acceptance = true` (default `false`, off-by-default checkbox). Registry still holds exactly `seller-agreement` | Was Medium | **Resolved** — see `docs/PR134_FINAL_REVIEW_2026-11-15.md` §5 for the Terms/Privacy rationale and options |
 | **R3** | Live migration versions are mixed: `0102` (file prefix) and `20261115155706` (`0103`). Applying `0104` via CLI records `0104`; applying via the Dashboard SQL editor records nothing at all | Low (audit trail) | Recommendation in §7 |
-| **R4** | `0105` makes 19 pages public at the moment it runs (backdated `published_at`, no future scheduling) | Expected, but irreversible without the rollback | Owner must approve the wording before applying |
+| **R4** | **CLOSED (changed 15 Nov, later session).** `0105` used to publish all 19 pages at once with a backdated `published_at = 2026-11-14T00:00:00+00`. It now seeds 19 **drafts** and publishes nothing; its final check raises if any seeded row is not a pure draft. Publication is two reviewed, owner-run stages in `supabase/publication/` with `published_at = now()` — 9 pages whose wording is already live (stage 1, before the deploy) and 10 new pages after owner/legal approval (stage 2) | Was High (irreversibility + invented history) | **Resolved** — `supabase/publication/README.md` |
 | **R5** | `0104` is 717 lines of DDL. The Supabase CLI wraps a migration in a transaction; the Dashboard SQL editor does **not**. A failure halfway through in the editor leaves a partial schema | Medium (operational) | Apply with the CLI, or paste the file inside an explicit `begin; … commit;` |
 | **R6** | `create table if not exists` / `create index if not exists` / `drop policy if exists` make re-runs safe, but a *partially* applied 0104 from an older revision would keep old grants | Low | §5.2 revision drops the old anon policies explicitly, so re-applying closes the hole |
 | **R7** | FK `references auth.users(id)` requires ownership of `auth.users`; a non-owner role fails the migration | Low | Apply as `postgres` (CLI/Dashboard does) |
@@ -256,7 +256,7 @@ data-loss flag is set in the same transaction.
 1. **Approve the wording** of the 19 seeded pages (or ask for the specific pages
    to stay unpublished). Without this, applying `0105` publishes unapproved
    policy text.
-2. **Decide R2**: should the seeded legal documents be recorded in the acceptance
+2. **Decide R2 (now a choice, not a bug)**: should the acceptance-required documents (`terms`, `privacy`, `retailer-terms`, `prohibited-products`) be recorded in the acceptance
    registry (users are asked to accept them) or not (current behaviour: only the
    seller agreement)?
 3. **Choose the apply channel** (CLI vs SQL editor) and confirm the transaction

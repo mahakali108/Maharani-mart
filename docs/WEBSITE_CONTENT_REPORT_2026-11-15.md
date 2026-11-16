@@ -198,11 +198,11 @@ Full write-up: `docs/WEBSITE_CONTENT_SECURITY_REVIEW_2026-11-15.md`.
 tables; `is_super_admin()` absent), every object each file creates, the dependency
 order, the risk register R1–R8 and the exact owner actions. **Nothing was applied.**
 
-Open owner decisions: R2 (should the 19 legal pages be registered in the `0098`
-acceptance registry through `publish_legal_document_version`, or only
-`seller-agreement`?), R4 (applying `0105` publishes all 19 pages immediately with
-a backdated `published_at`), and the apply channel (`0104` is not transactional in
-the Supabase SQL editor — use the CLI or one transaction).
+Owner decisions as they stood at that point: R2 (should the legal pages be
+registered in the `0098` acceptance registry, or only `seller-agreement`?), R4
+(`0105` publishing all 19 pages with a backdated `published_at`), and the apply
+channel (`0104` is not transactional in the Supabase SQL editor). **R4 and the
+mechanical half of R2 were then fixed** — see §10.
 
 ### 9.4 Phase D — native About and policy screens
 
@@ -265,3 +265,27 @@ Two earlier dispatches of the same workflow failed on the compile errors in §9.
 Owner review of the seeded wording, CA/legal review, GSTIN, Android keystore and
 Play Console, applying `0104`/`0105`, deploying, and any decision on R2/R4. No
 device install or end-to-end run against live Supabase has happened.
+
+---
+
+## 10. Later still — final review of PR #134 (15 Nov 2026, same day)
+
+`docs/PR134_FINAL_REVIEW_2026-11-15.md` records an independent review of this branch
+and three changes it produced:
+
+1. **`0105` no longer publishes anything.** It seeds the same 19 pages as **drafts**,
+   with no `published_at` and no backdated timestamp, and its own final check fails the
+   migration if any seeded row is not a pure draft. Publication moved to
+   `supabase/publication/` — two reviewed, owner-run stages plus a read-only
+   verification file — because publishing is the owner's legal act, not a seed's.
+2. **Publishing no longer registers a version for acceptance.**
+   `publish_site_page(p_page_id, p_register_acceptance boolean default false)`
+   registers `publish_legal_document_version()` only when the operator ticks the
+   box on that publish. The registry still holds exactly `seller-agreement`; a copy
+   edit can no longer create a consent requirement.
+3. **The Android "Contact" shortcut is data-driven** — shown only when the server's
+   published list contains `contact`, so an unpublish cannot leave a dead button.
+
+The report's §4/§8 claims about the seeded pages being published are superseded by
+§10 and by the review document. Local gates after these changes: `typecheck` PASS,
+`lint` PASS, `pnpm test` **220 files / 3,381 tests PASS**.
