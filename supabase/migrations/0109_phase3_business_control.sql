@@ -5,6 +5,40 @@
 --
 -- LOCAL / REVIEW ONLY — DO NOT APPLY TO PRODUCTION WITHOUT OWNER APPROVAL.
 --
+-- DEPENDENCIES (enforced by the §0 pre-flight guard, which aborts before DDL):
+--   relations (12)
+--     public.products                            <- 0001_init
+--     public.banners                             <- 0001_init
+--     public.super_admin_audit_logs              <- 0020_super_admin_control_center
+--     public.product_pricing_tiers               <- 0022_case_based_pricing
+--     public.product_packs                       <- 0004_product_packs
+--     public.suppliers                           <- 0059_supplier_applications
+--     public.supplier_application_rate_limits    <- 0060_supplier_application_rate_limit
+--     public.sellers                             <- 0062_seller_identity
+--     public.seller_offers                       <- 0063_seller_offers
+--     public.seller_offer_tiers                  <- 0069_seller_portal_access
+--     public.membership_plans                    <- 0080_retailer_memberships_and_loyalty
+--     public.retailer_memberships                <- 0080_retailer_memberships_and_loyalty
+--   helper functions (7, exact signatures)
+--     public.is_admin_or_above()                 <- 0001_init, hardened by 0052_phase0_security_hardening
+--     public.is_staff_or_above()                 <- 0001_init, hardened by 0052_phase0_security_hardening
+--     public.current_user_role()                 <- 0001_init, hardened by 0052_phase0_security_hardening
+--     public.is_retailer_area_assigned_to_current_staff(uuid) <- 0037_staff_scope_policies
+--     public.is_active_seller_member(uuid)       <- 0072_super_admin_seller_invitations
+--     public.consume_supplier_application_rate_limit(text,text,integer,integer)
+--                                                <- 0060_supplier_application_rate_limit
+--     public.log_audit()                         <- 0001_init, hardened by 0057_security_definer_hardening
+--   ordering
+--     0109 §1 grants column-level SELECT on the NEW `products.description`
+--     column. 0107_restore_cost_price_column_lockdown revoked table-level
+--     SELECT on `products` and re-granted every column except `cost_price`, so
+--     0109 MUST run after 0107. The guard enforces that ordering.
+--
+-- Required order on the current production baseline (0001..0103 applied):
+--     0104 -> 0105 -> 0106 -> 0107 -> 0108 -> 0109
+-- See docs/repair/MIGRATION_0109_DEPENDENCY_REPORT.md for the read-only
+-- production evidence behind this list and the owner-run verification script.
+--
 -- WHAT THIS MIGRATION ADDS (additive & idempotent):
 --   1. Products description + append-only `product_moderation_history` (with
 --      column-level SELECT grant on `products.description` preserving 0107's
@@ -55,34 +89,86 @@
 
 -- ---------------------------------------------------------------------------
 -- 0. Pre-flight prerequisite check (fails fast before any DDL)
+--
+-- Every dependency is still REQUIRED and still blocks the migration; what
+-- changed is only the REPORTING: each unmet object is now named together with
+-- the migration that creates it, instead of collapsing twelve relations and
+-- seven functions into one opaque sentence. The object -> migration matrix is
+-- derived from `supabase/migrations/0001..0108` (see
+-- docs/repair/MIGRATION_0109_DEPENDENCY_REPORT.md).
+--
+-- It also verifies the 0107 dependency explicitly: 0109 §1 writes a
+-- column-level SELECT grant on the new `products.description` column precisely
+-- so that 0107's `products.cost_price` lockdown keeps holding. That only works
+-- when 0107 has actually run, so a database still at the pre-0107 shape (live
+-- production: `authenticated` can still SELECT `products.cost_price`) is
+-- reported as a migration-order problem instead of silently staying exposed.
 -- ---------------------------------------------------------------------------
 do $$
+declare
+  v_missing text;
 begin
-  if to_regclass('public.products') is null
-     or to_regclass('public.product_packs') is null
-     or to_regclass('public.product_pricing_tiers') is null
-     or to_regclass('public.sellers') is null
-     or to_regclass('public.seller_offers') is null
-     or to_regclass('public.seller_offer_tiers') is null
-     or to_regclass('public.membership_plans') is null
-     or to_regclass('public.retailer_memberships') is null
-     or to_regclass('public.banners') is null
-     or to_regclass('public.suppliers') is null
-     or to_regclass('public.supplier_application_rate_limits') is null
-     or to_regclass('public.super_admin_audit_logs') is null then
-    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires base catalog, seller, supplier, membership, banner and control-center tables (0001–0108).'
+  -- Required relations: object -> creating migration.
+  with required(obj, migration) as (
+    values
+      ('public.products',                           '0001_init'),
+      ('public.banners',                            '0001_init'),
+      ('public.super_admin_audit_logs',             '0020_super_admin_control_center'),
+      ('public.product_pricing_tiers',              '0022_case_based_pricing'),
+      ('public.product_packs',                      '0004_product_packs'),
+      ('public.suppliers',                          '0059_supplier_applications'),
+      ('public.supplier_application_rate_limits',   '0060_supplier_application_rate_limit'),
+      ('public.sellers',                            '0062_seller_identity'),
+      ('public.seller_offers',                      '0063_seller_offers'),
+      ('public.seller_offer_tiers',                 '0069_seller_portal_access'),
+      ('public.membership_plans',                   '0080_retailer_memberships_and_loyalty'),
+      ('public.retailer_memberships',               '0080_retailer_memberships_and_loyalty')
+  )
+  select string_agg(format('%s (from %s)', required.obj, required.migration), ', ' order by required.migration)
+    into v_missing
+    from required
+   where to_regclass(required.obj) is null;
+
+  if v_missing is not null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires base catalog, seller, supplier, membership, banner and control-center tables (0001–0108). Missing relation(s): %.', v_missing
       using errcode = 'undefined_table';
   end if;
 
-  if to_regprocedure('public.is_admin_or_above()') is null
-     or to_regprocedure('public.is_staff_or_above()') is null
-     or to_regprocedure('public.current_user_role()') is null
-     or to_regprocedure('public.is_retailer_area_assigned_to_current_staff(uuid)') is null
-     or to_regprocedure('public.is_active_seller_member(uuid)') is null
-     or to_regprocedure('public.consume_supplier_application_rate_limit(text,text,integer,integer)') is null
-     or to_regprocedure('public.log_audit()') is null then
-    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires helper functions from 0001, 0037, 0060, and 0072.'
+  -- Required helper functions with their EXACT signatures: object -> migration.
+  with required(obj, migration) as (
+    values
+      ('public.is_admin_or_above()',                                          '0052_phase0_security_hardening'),
+      ('public.is_staff_or_above()',                                          '0052_phase0_security_hardening'),
+      ('public.current_user_role()',                                          '0052_phase0_security_hardening'),
+      ('public.is_retailer_area_assigned_to_current_staff(uuid)',              '0037_staff_scope_policies'),
+      ('public.is_active_seller_member(uuid)',                                 '0072_super_admin_seller_invitations'),
+      ('public.consume_supplier_application_rate_limit(text,text,integer,integer)', '0060_supplier_application_rate_limit'),
+      ('public.log_audit()',                                                  '0057_security_definer_hardening')
+  )
+  select string_agg(format('%s (from %s)', required.obj, required.migration), ', ' order by required.migration)
+    into v_missing
+    from required
+   where to_regprocedure(required.obj) is null;
+
+  if v_missing is not null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires helper functions from 0001, 0037, 0052, 0057, 0060, and 0072. Missing or wrong-signature function(s): %.', v_missing
       using errcode = 'undefined_function';
+  end if;
+
+  -- 0107 dependency: the cost_price lockdown must already be in force.
+  -- `has_column_privilege()` raises 42703 when the column does not exist, so the
+  -- probe is guarded by an explicit column-exists test.
+  if exists (
+       select 1
+         from pg_catalog.pg_attribute a
+        where a.attrelid = to_regclass('public.products')
+          and a.attname = 'cost_price'
+          and a.attnum > 0
+          and not a.attisdropped
+     )
+     and has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') then
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 must run AFTER 0107_restore_cost_price_column_lockdown. In this database the API role "authenticated" can still SELECT public.products.cost_price, which means the 0107 column-privilege lockdown is not in force. Apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 first (0107 writes the column grants 0109 §1 extends), then re-run 0109.'
+      using errcode = 'insufficient_privilege';
   end if;
 end;
 $$;
