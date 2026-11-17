@@ -81,6 +81,14 @@ jobs:
       - name: Lint
         run: corepack pnpm run lint
 
+      # `tests/design-system-contract.test.ts` runs its raster branding audit
+      # via ImageMagick `convert` and skips it when `convert` is absent.
+      - name: Install ImageMagick for raster branding audit
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends imagemagick
+          convert -version
+
       - name: Unit and integration tests
         run: corepack pnpm test
 

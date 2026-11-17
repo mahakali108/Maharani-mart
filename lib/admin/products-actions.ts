@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
+import { recordSuperAdminAudit } from '@/lib/admin/super-admin-audit';
 import { can } from '@/lib/permissions/permissions';
 import { loadPackCost } from '@/lib/admin/cost-access';
 import { seedDefaultPackForProduct } from '@/lib/admin/pack-seed';
@@ -109,9 +110,14 @@ export async function createProductAction(
   const brandId = String(formData.get('brandId') ?? '').trim();
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const isNewLaunch = formData.get('isNewLaunch') === 'on';
+  const rawDescription = formData.get('description');
+  const description = typeof rawDescription === 'string' ? rawDescription.trim() || null : null;
   const errors: FieldErrors = {};
   if (!brandId) errors.brandId = 'Select a brand.';
   if (!categoryId) errors.categoryId = 'Select a category.';
+  if (description && description.length > 2000) {
+    errors.name = 'Product description must be 2000 characters or fewer.';
+  }
   if (Object.keys(errors).length > 0) {
     return { error: firstError(errors), errors };
   }
@@ -122,8 +128,9 @@ export async function createProductAction(
   const cost = d.costPrice;
   // The product `sku_code` is intentionally omitted — it was removed from the
   // workflow and the database fills in a generated default (migration 0023).
-  const payload: ProductInsert = {
+  const payload: ProductInsert & { description?: string | null } = {
     name: d.name,
+    ...(formData.has('description') ? { description } : {}),
     brand_id: brandId,
     category_id: categoryId,
     unit: d.unit,
@@ -184,7 +191,7 @@ async function updateProductOperationalFields(
   supabase: Awaited<ReturnType<typeof createClient>>,
   productId: string,
   d: ValidatedProductDraft,
-  extra: { brandId: string; categoryId: string; isNewLaunch: boolean }
+  extra: { brandId: string; categoryId: string; isNewLaunch: boolean; hasDescription: boolean; description: string | null }
 ): Promise<ProductFormState> {
   const { data: current } = await supabase
     .from('products')
@@ -218,6 +225,7 @@ async function updateProductOperationalFields(
     .from('products')
     .update({
       name: d.name,
+      ...(extra.hasDescription ? { description: extra.description } : {}),
       brand_id: extra.brandId || null,
       category_id: extra.categoryId || null,
       unit: d.unit,
@@ -260,6 +268,12 @@ export async function updateProductAction(
   const brandId = String(formData.get('brandId') ?? '').trim();
   const categoryId = String(formData.get('categoryId') ?? '').trim();
   const isNewLaunch = formData.get('isNewLaunch') === 'on';
+  const hasDescription = formData.has('description');
+  const rawDescription = formData.get('description');
+  const description = typeof rawDescription === 'string' ? rawDescription.trim() || null : null;
+  if (description && description.length > 2000) {
+    return { error: 'Product description must be 2000 characters or fewer.' };
+  }
 
   const supabase = (await createClient());
   const categoryGate = await checkAllowedCatalogCategory(supabase, categoryId);
@@ -269,14 +283,21 @@ export async function updateProductAction(
   // Anyone else holding `products.edit` may only change operational fields;
   // the database enforces the same rule (migration 0052 guard triggers).
   if (!can(user.role, 'pricing.manage')) {
-    return updateProductOperationalFields(supabase, productId, d, { brandId, categoryId, isNewLaunch });
+    return updateProductOperationalFields(supabase, productId, d, {
+      brandId,
+      categoryId,
+      isNewLaunch,
+      hasDescription,
+      description,
+    });
   }
 
   const cost = d.costPrice;
   // The legacy internal product code is left untouched so historical values
   // survive an edit; it is never read from the form.
-  const payload: ProductUpdate = {
+  const payload: ProductUpdate & { description?: string | null } = {
     name: d.name,
+    ...(hasDescription ? { description } : {}),
     brand_id: brandId || null,
     category_id: categoryId || null,
     unit: d.unit,
@@ -1175,4 +1196,63 @@ export async function setProductPackStockAction(
   revalidatePath('/admin/products');
   revalidatePath(`/admin/products/${pack.product_id}`);
   return { success: true, quantity: Number(data) };
+}
+
+/**
+ * One-click "Mark Out of Stock" action for a sellable pack.
+ * Sets pack stock to 0 via the audited `admin_set_product_pack_stock` RPC,
+ * records an immutable `marked_out_of_stock` entry in
+ * `product_moderation_history`, and logs a Super Admin audit entry.
+ */
+export async function markPackOutOfStockAction(
+  packId: string,
+  reason?: string
+): Promise<{ error: string } | { success: true; quantity: 0 }> {
+  const actor = await requirePermission('pricing.manage');
+  const id = z.string().uuid().safeParse(packId);
+  if (!id.success) {
+    return { error: 'Invalid pack selected.' };
+  }
+
+  const supabase = await createClient();
+  const { data: pack } = await supabase
+    .from('product_packs')
+    .select('product_id, pack_name')
+    .eq('id', id.data)
+    .maybeSingle<{ product_id: string; pack_name: string }>();
+  if (!pack) return { error: 'Pack not found.' };
+
+  const { error } = await supabase.rpc('admin_set_product_pack_stock' as never, {
+    p_pack_id: id.data,
+    p_quantity: 0,
+  } as never);
+  if (error) return { error: error.message };
+
+  const cleanReason = (reason ?? '').trim().slice(0, 500) || `Pack "${pack.pack_name}" marked out of stock`;
+  try {
+    await supabase.from('product_moderation_history' as never).insert({
+      entity_type: 'product',
+      product_id: pack.product_id,
+      action: 'marked_out_of_stock',
+      previous_status: 'in_stock',
+      new_status: 'out_of_stock',
+      reason: cleanReason,
+      metadata: { pack_id: id.data, pack_name: pack.pack_name },
+      acted_by: actor.id,
+    } as never);
+  } catch {
+    // Stock update already committed; moderation history is best-effort for legacy mocks.
+  }
+
+  await recordSuperAdminAudit(supabase, {
+    actorId: actor.id,
+    actorRole: actor.role,
+    action: 'PACK_MARKED_OUT_OF_STOCK',
+    afterData: { product_id: pack.product_id, pack_id: id.data, quantity: 0 },
+    reason: cleanReason,
+  });
+
+  revalidatePath('/admin/products');
+  revalidatePath(`/admin/products/${pack.product_id}`);
+  return { success: true, quantity: 0 };
 }

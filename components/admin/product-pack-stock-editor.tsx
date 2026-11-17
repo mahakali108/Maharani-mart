@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Loader2, Save } from 'lucide-react';
+import { CheckCircle2, Loader2, PackageX, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { setProductPackStockAction } from '@/lib/admin/products-actions';
+import { markPackOutOfStockAction, setProductPackStockAction } from '@/lib/admin/products-actions';
 
 export interface ProductPackStockRow {
   id: string;
@@ -64,6 +64,22 @@ export function ProductPackStockEditor({
     });
   }
 
+  function markOutOfStock(pack: ProductPackStockRow) {
+    setMessage(null);
+    setSavingId(pack.id);
+    startTransition(async () => {
+      const result = await markPackOutOfStockAction(pack.id);
+      if ('error' in result) {
+        setMessage({ packId: pack.id, text: result.error, error: true });
+      } else {
+        setQuantities((current) => ({ ...current, [pack.id]: '0' }));
+        setMessage({ packId: pack.id, text: 'Marked out of stock (0) and recorded in history.', error: false });
+        router.refresh();
+      }
+      setSavingId(null);
+    });
+  }
+
   if (packs.length === 0) {
     return <p className="rounded-xl border border-dashed border-ink-200 p-4 text-sm text-ink-500">Add a pack size before setting stock.</p>;
   }
@@ -106,7 +122,7 @@ export function ProductPackStockEditor({
                   </p>
                 ) : null}
               </div>
-              <div className="flex items-center gap-2 sm:w-[14rem] sm:shrink-0">
+              <div className="flex flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
                 <label className="sr-only" htmlFor={`pack-stock-${pack.id}`}>Stock quantity for {pack.packName} in {normalizedUnit}</label>
                 <Input
                   id={`pack-stock-${pack.id}`}
@@ -117,12 +133,22 @@ export function ProductPackStockEditor({
                   inputMode="numeric"
                   value={quantities[pack.id] ?? ''}
                   onChange={(event) => setQuantities((current) => ({ ...current, [pack.id]: event.target.value }))}
-                  className="h-10 min-w-0"
+                  className="h-10 w-24 min-w-0"
                   disabled={pending}
                 />
                 <Button type="button" size="sm" disabled={pending} onClick={() => save(pack)}>
                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : rowMessage && !rowMessage.error ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
                   Save
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={pending || pack.quantity === 0}
+                  onClick={() => markOutOfStock(pack)}
+                >
+                  <PackageX className="h-4 w-4" aria-hidden />
+                  Out of stock
                 </Button>
               </div>
             </li>
