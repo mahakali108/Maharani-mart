@@ -32,6 +32,9 @@ import {
   ClipboardCheck,
   Scale,
   FileText,
+  SlidersHorizontal,
+  Crown,
+  Megaphone,
 } from 'lucide-react';
 
 import { Sidebar, type NavItem } from '@/components/layout/sidebar';
@@ -54,7 +57,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Sellers', href: '/admin/sellers', icon: Store, roles: ['super_admin'] },
   { label: 'Seller offers', href: '/admin/offers', icon: ShieldCheck, roles: ['super_admin', 'admin'] },
   { label: 'Pricing & Schemes', href: '/admin/pricing', icon: Tag },
+  { label: 'Wholesale Pricing', href: '/admin/pricing/wholesale', icon: SlidersHorizontal, roles: ['super_admin'] },
   { label: 'Category Pricing', href: '/admin/pricing/tiers', icon: IndianRupee, roles: ['super_admin', 'admin'] },
+  { label: 'Memberships', href: '/admin/memberships', icon: Crown, roles: ['super_admin'] },
   { label: 'Retailer Approvals', href: '/admin/retailer-applications', icon: ClipboardCheck, roles: ['super_admin', 'admin'] },
   { label: 'Coupons', href: '/admin/coupons', icon: Ticket },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
@@ -69,6 +74,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Support', href: '/admin/support', icon: Headset },
   { label: 'Website Content', href: '/admin/content', icon: FileText, roles: ['super_admin'] },
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
+  { label: 'Ad Campaigns', href: '/admin/banners/campaigns', icon: Megaphone, roles: ['super_admin'] },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/admin/notifications', icon: Bell },
   { label: 'Data Retention', href: '/admin/cleanup', icon: Database, roles: ['admin', 'super_admin'] },

@@ -31,6 +31,7 @@ import type {
   DashboardTicketRow,
   RecentActivity,
   SectionStatus,
+  SuperAdminBusinessOperations,
 } from './types';
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -130,6 +131,7 @@ export async function gatherDashboardData(
     pendingReturns,
     pendingCollections,
     failedNotifications,
+    businessOps,
   ] = await Promise.all([
     trySection('orders:range', () => fetchOrders(supabase, range.fromIso, range.toIso)),
     trySection('orders:previous', () => fetchOrders(supabase, range.previousFromIso, range.previousToIso)),
@@ -260,6 +262,75 @@ export async function gatherDashboardData(
         .limit(100);
       if (error) throw new Error(error.message);
       return (data ?? []).length;
+    }),
+    trySection('business-operations', async (): Promise<SuperAdminBusinessOperations> => {
+      const nowIso = new Date().toISOString();
+      const [
+        totalSellers,
+        activeSellers,
+        pendingSellerApprovals,
+        pendingOfferReviews,
+        pendingProductComplianceReviews,
+        activeMembershipPlans,
+        activeRetailerMemberships,
+        activePublishedBanners,
+        activeSellerAds,
+        pendingSellerAds,
+        saAuditRes,
+      ] = await Promise.all([
+        headCount(supabase.from('sellers' as never).select('id', { count: 'exact', head: true })).catch(() => 0),
+        headCount(supabase.from('sellers' as never).select('id', { count: 'exact', head: true }).eq('status', 'active')).catch(() => 0),
+        headCount(supabase.from('sellers' as never).select('id', { count: 'exact', head: true }).eq('status', 'pending')).catch(() => 0),
+        headCount(supabase.from('seller_offers' as never).select('id', { count: 'exact', head: true }).eq('moderation_status', 'pending')).catch(() => 0),
+        headCount(supabase.from('product_compliance_reviews' as never).select('id', { count: 'exact', head: true }).in('review_status', ['pending', 'submitted'])).catch(() => 0),
+        headCount(supabase.from('membership_plans' as never).select('id', { count: 'exact', head: true }).eq('is_active', true)).catch(() => 0),
+        headCount(
+          supabase
+            .from('retailer_memberships' as never)
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'active')
+            .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+        ).catch(() => 0),
+        headCount(supabase.from('banners').select('id', { count: 'exact', head: true }).eq('status', 'published').eq('is_active', true)).catch(() => 0),
+        headCount(supabase.from('seller_ad_campaigns' as never).select('id', { count: 'exact', head: true }).eq('approval_status', 'approved').eq('is_active', true)).catch(() => 0),
+        headCount(supabase.from('seller_ad_campaigns' as never).select('id', { count: 'exact', head: true }).eq('approval_status', 'pending_approval')).catch(() => 0),
+        supabase
+          .from('super_admin_audit_logs' as never)
+          .select('id, action, reason, created_at')
+          .order('created_at', { ascending: false })
+          .limit(8),
+      ]);
+
+      const recentSuperAdminActivity = (
+        saAuditRes.error
+          ? []
+          : ((saAuditRes.data ?? []) as unknown as Array<{
+              id: string;
+              action: string;
+              reason: string | null;
+              created_at: string;
+            }>)
+      ).map((row) => ({
+        id: row.id,
+        action: row.action,
+        reason: row.reason,
+        createdAt: row.created_at,
+      }));
+
+      return {
+        status: 'ok',
+        totalSellers,
+        activeSellers,
+        pendingSellerApprovals,
+        pendingOfferReviews,
+        pendingProductComplianceReviews,
+        activeMembershipPlans,
+        activeRetailerMemberships,
+        activePublishedBanners,
+        activeSellerAds,
+        pendingSellerAds,
+        recentSuperAdminActivity,
+      };
     }),
   ]);
 
@@ -406,5 +477,22 @@ export async function gatherDashboardData(
     support,
     alerts,
     activity: activitySection,
+    businessOperations:
+      businessOps.status === 'unavailable'
+        ? {
+            status: 'unavailable',
+            totalSellers: 0,
+            activeSellers: 0,
+            pendingSellerApprovals: 0,
+            pendingOfferReviews: 0,
+            pendingProductComplianceReviews: 0,
+            activeMembershipPlans: 0,
+            activeRetailerMemberships: 0,
+            activePublishedBanners: 0,
+            activeSellerAds: 0,
+            pendingSellerAds: 0,
+            recentSuperAdminActivity: [],
+          }
+        : businessOps.value ?? undefined,
   };
 }

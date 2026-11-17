@@ -732,6 +732,93 @@ export function DashboardView({
           ) : null}
         </div>
       ) : null}
+
+      {visibility.commandCenter && data.businessOperations ? (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardHeader>
+              <CardTitle>Super Admin Marketplace &amp; Business Control</CardTitle>
+            </CardHeader>
+            <div className="flex flex-wrap gap-3 text-xs font-medium">
+              <Link href="/admin/sellers" className="text-primary-600 hover:underline">
+                Sellers →
+              </Link>
+              <Link href="/admin/pricing/wholesale" className="text-primary-600 hover:underline">
+                Wholesale Pricing →
+              </Link>
+              <Link href="/admin/memberships" className="text-primary-600 hover:underline">
+                Memberships →
+              </Link>
+              <Link href="/admin/banners/campaigns" className="text-primary-600 hover:underline">
+                Ad Campaigns →
+              </Link>
+            </div>
+          </div>
+
+          <SectionState
+            status={data.businessOperations.status}
+            emptyTitle="No marketplace control records yet"
+            emptyBody="Counts populate automatically from live database tables."
+          >
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+              <Link href="/admin/sellers" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+                <dt className="text-xs text-ink-500">Total Sellers</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.totalSellers}</dd>
+                <p className="text-[11px] text-ink-500">
+                  {data.businessOperations.activeSellers} active · {data.businessOperations.pendingSellerApprovals} pending
+                </p>
+              </Link>
+              <Link href="/admin/offers?moderation=pending" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+                <dt className="text-xs text-ink-500">Pending Product Reviews</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink-900">
+                  {data.businessOperations.pendingOfferReviews + data.businessOperations.pendingProductComplianceReviews}
+                </dd>
+                <p className="text-[11px] text-ink-500">
+                  {data.businessOperations.pendingOfferReviews} seller offers · {data.businessOperations.pendingProductComplianceReviews} compliance
+                </p>
+              </Link>
+              <Link href="/admin/memberships" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+                <dt className="text-xs text-ink-500">Active Membership Plans</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.activeMembershipPlans}</dd>
+                <p className="text-[11px] text-ink-500">
+                  {data.businessOperations.activeRetailerMemberships} active retailer records
+                </p>
+              </Link>
+              <Link href="/admin/banners" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+                <dt className="text-xs text-ink-500">Active Banners</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.activePublishedBanners}</dd>
+                <p className="text-[11px] text-ink-500">Published homepage banners</p>
+              </Link>
+              <Link href="/admin/banners/campaigns" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+                <dt className="text-xs text-ink-500">Active Paid Ads</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.activeSellerAds}</dd>
+                <p className="text-[11px] text-ink-500">
+                  {data.businessOperations.pendingSellerAds} pending approval
+                </p>
+              </Link>
+            </dl>
+
+            <div className="mt-4 border-t border-ink-100 pt-3">
+              <p className="text-xs font-semibold text-ink-700">Recent Super Admin governance activity</p>
+              {data.businessOperations.recentSuperAdminActivity.length === 0 ? (
+                <p className="mt-1 text-xs text-ink-500">No Super Admin governance actions recorded yet.</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-ink-100 text-xs">
+                  {data.businessOperations.recentSuperAdminActivity.map((entry) => (
+                    <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                      <span className="text-ink-800">
+                        <strong>{entry.action.replace(/_/g, ' ')}</strong>
+                        {entry.reason ? ` — ${entry.reason}` : ''}
+                      </span>
+                      <span className="text-ink-400">{formatIndiaDateTime(entry.createdAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </SectionState>
+        </Card>
+      ) : null}
     </div>
   );
 }

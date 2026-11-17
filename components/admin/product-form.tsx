@@ -16,6 +16,7 @@ interface Option {
 
 interface ProductDefaults {
   name: string;
+  description?: string | null;
   brand_id: string | null;
   category_id: string | null;
   unit: string;
@@ -109,6 +110,23 @@ export function ProductForm({
             placeholder="e.g. Tata Tea Gold 1kg"
             required
             maxLength={160}
+          />
+        </Field>
+
+        <Field
+          id="description"
+          label="Description (optional)"
+          hint="Key product details, packaging notes, or usage guidance (max 2000 characters)."
+          className="sm:col-span-2"
+        >
+          <textarea
+            id="description"
+            name="description"
+            rows={3}
+            maxLength={2000}
+            defaultValue={defaults?.description ?? ''}
+            placeholder="Describe pack contents, formulation, shelf life, or wholesale handling notes…"
+            className="w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
         </Field>
 

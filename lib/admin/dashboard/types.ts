@@ -307,6 +307,28 @@ export interface RecentActivity {
   rows: ActivityRow[];
 }
 
+export interface SuperAdminActivityRow {
+  id: string;
+  action: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface SuperAdminBusinessOperations {
+  status: SectionStatus;
+  totalSellers: number;
+  activeSellers: number;
+  pendingSellerApprovals: number;
+  pendingOfferReviews: number;
+  pendingProductComplianceReviews: number;
+  activeMembershipPlans: number;
+  activeRetailerMemberships: number;
+  activePublishedBanners: number;
+  activeSellerAds: number;
+  pendingSellerAds: number;
+  recentSuperAdminActivity: SuperAdminActivityRow[];
+}
+
 export type DashboardSection =
   | 'sales'
   | 'orders'
@@ -349,4 +371,5 @@ export interface DashboardData {
   support: SupportSummary;
   alerts: SystemAlert[];
   activity: RecentActivity;
+  businessOperations?: SuperAdminBusinessOperations;
 }
