@@ -263,6 +263,46 @@ describe('Phase 3 — Rollback 0109 Data-Loss Protection, Atomicity & Re-Apply (
       );
     });
 
+    it('blocks rollback when membership_plans.expiry_behavior diverges from its migration default', async () => {
+      await expectBlockedBySingleSurface(
+        db,
+        async () => {
+          // Temporarily relax 0109's immediate-stop constraint/trigger inside this
+          // rolled-back transaction to simulate non-default stored expiry_behavior data.
+          await db.exec(`
+            alter table public.membership_plans
+              drop constraint membership_plans_expiry_behavior_check;
+            alter table public.membership_plans
+              disable trigger trg_guard_membership_plan_changes;
+            update public.membership_plans
+               set expiry_behavior = 'grace_window'
+             where id = 'silver';
+          `);
+        },
+        /membership_plans.*:\s*1/i
+      );
+    });
+
+    it('blocks rollback when membership_plans.grace_period_days diverges from its migration default', async () => {
+      await expectBlockedBySingleSurface(
+        db,
+        async () => {
+          // Temporarily relax 0109's immediate-stop constraint/trigger inside this
+          // rolled-back transaction to simulate non-default stored grace_period_days data.
+          await db.exec(`
+            alter table public.membership_plans
+              drop constraint membership_plans_expiry_behavior_check;
+            alter table public.membership_plans
+              disable trigger trg_guard_membership_plan_changes;
+            update public.membership_plans
+               set grace_period_days = 7
+             where id = 'gold';
+          `);
+        },
+        /membership_plans.*:\s*1/i
+      );
+    });
+
     it('blocks rollback when membership_program_settings has non-default configuration', async () => {
       await expectBlockedBySingleSurface(
         db,

@@ -113,7 +113,7 @@ Key schema additions:
 |---|---|---|
 | Phase 2 code & local test verification | **Completed** | Verified on `a99e8f6`; production migrations `0104`–`0108` remain awaiting owner approval |
 | Phase 3 Modules A–F code, migration `0109` + rollback, UI, server actions | **Completed (Local / PR)** | All 6 modules implemented cleanly on `arena/db779fee-maharani-mart` |
-| Typecheck, ESLint, Full Test Suite (236 files / 3,620 tests), Next.js Build | **Completed (PASS)** | 0 errors, 0 failures (includes 12 new rollback data-loss protection & atomicity DB tests) |
+| Typecheck, ESLint, Full Test Suite (236 files / 3,622 tests), Next.js Build | **Completed (PASS)** | 0 errors, 0 failures (includes 14 rollback data-loss protection & atomicity DB tests covering all 8 `membership_plans` Phase 3 columns) |
 | Vercel API project inspection | **Blocked (Token Scope)** | Vercel connector token is `"limited": true`; deployment health confirmed via GitHub status & live probe |
 | Supabase Preview CI check on `main` | **Pre-existing Failure** | `0103` timestamp mismatch on Supabase Preview branch (predates Phase 3) |
 | Production DB migrations (`0104`–`0109`) | **Awaiting Owner Approval — NOT Executed** | Strictly prohibited without explicit owner go-ahead |
