@@ -150,7 +150,8 @@ select count(*)                                                          as obje
 
 -- ---------------------------------------------------------------------------
 -- 3. MIGRATION HISTORY — what this database believes it has applied.
---    `expected_presence` compares the ledger with the repository file list.
+--    Compares the ledger with the repository file list and classifies each
+--    repository migration as APPLIED / ABSENT / LEDGER MISMATCH.
 --
 --    Historical facts this encodes:
 --      * 0061, 0075 and 0076 never existed in the repository (documented gaps).
@@ -226,6 +227,12 @@ select r.version,
        l.name                                      as ledger_name,
        case
          when l.version is null                                   then 'ABSENT (not applied)'
+         -- 0103 was applied by the Supabase CLI, so the ledger row is keyed
+         -- 20261115155706 with the name '0103_security_advisor_remediation'.
+         -- The SQL is byte-identical to the repository file, so this is KNOWN
+         -- and is NOT a mismatch. Reconcile only if you deploy via CLI.
+         when r.version = '0103' and l.version = '20261115155706'
+              then 'APPLIED (CLI-recorded as 20261115155706 — KNOWN, content identical)'
          when l.name is not null and l.name <> r.name             then 'LEDGER MISMATCH (name differs)'
          else 'APPLIED'
        end                                         as ledger_state

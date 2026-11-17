@@ -178,12 +178,27 @@ Nothing here connects to Supabase.
    * The file header now documents the full object → migration matrix and the required
      order.
 2. **`supabase/audits/0109_dependency_diagnostic_readonly.sql`** *(new)* — the read-only
-   diagnostic in §8. Ten `SELECT`-only blocks; validated against production.
+   diagnostic in §8. Ten `SELECT`/`WITH`-only blocks. Validated three ways:
+   * AST check: 10 top-level statements, **0 non-`SELECT`**;
+   * all 10 blocks executed against `fhrmsrumsraprvutrpeo` (PostgreSQL 17.11) — blocks
+     1, 2, 5, 6, 7, 8, 9, 10 returned the values tabulated in §8 step 3, block 3
+     classified `0103` as `APPLIED (CLI-recorded as 20261115155706 — KNOWN, content
+     identical)`, block 4 returned exactly one row (`20261115155706`, `KNOWN`);
+   * all 10 blocks executed on a disposable **PostgreSQL 17.11** cluster at the exact
+     production baseline **inside a single `set transaction read only` transaction** —
+     no block raised.
+   * Its embedded repository list is checked against `supabase/migrations` (106/106
+     versions, zero name mismatches) — see the test in item 4.
 3. **`tests/migration-0109-dependency-guard.test.ts`** *(new)* — 11 regression tests
    (dependency matrix vs. repository, named-relation reporting, wrong-signature
    reporting, zero-partial-object failure, 0107 ordering both failing and succeeding,
    `42703` hardening, idempotent replay, owner gates closed after a full rollout).
-4. **`docs/repair/MIGRATION_0109_DEPENDENCY_REPORT.md`** *(this file)*.
+4. **`tests/migration-0109-diagnostic-readonly.test.ts`** *(new)* — 3 tests: no write
+   statement anywhere in the diagnostic; all blocks run unchanged on the live
+   production baseline (`0001..0103`) and report `GUARD SHOULD PASS` / `0107 NOT IN
+   FORCE`; a genuinely missing dependency is reported as `MISSING (from 0060…)`
+   instead of crashing.
+5. **`docs/repair/MIGRATION_0109_DEPENDENCY_REPORT.md`** *(this file)*.
 
 Nothing else was touched: no new migration number, no edit to `0104`–`0108`, no rollback
 weakening, no security relaxation, no `CASCADE`, no destructive statement.
@@ -291,9 +306,18 @@ select * from public.membership_plans;                 -- expect every is_active
 |---|---|
 | Full repository suite, before changes | **237 files / 3626 tests passed**, 0 failed, 0 skipped |
 | New `tests/migration-0109-dependency-guard.test.ts` | **11 tests passed** (PGlite PostgreSQL 16) |
+| New `tests/migration-0109-diagnostic-readonly.test.ts` | **3 tests passed** (PGlite PostgreSQL 16) |
+| Full repository suite, after changes | **239 files / 3640 tests passed**, **0 failed, 0 skipped** |
 | `tests/migration-validation-0103-to-0109-db.test.ts` | passes (baseline → 0104–0109, parity, idempotency, fail-fast) |
 | `tests/phase3-business-control-db.test.ts`, `tests/phase3-rollback-protection-db.test.ts` | pass |
 | Real PostgreSQL 17.11 runs T0–T4, L1–L4, V1, P1, and the six fixed-guard scenarios | as tabulated in §6 |
+
+One caveat on the count above: the `42703` regression test **passes by early return** on the
+PGlite schema, because `alter table public.products drop column cost_price` is refused there
+(dependent objects). It therefore does not exercise the column probe in PGlite; that probe is
+covered by the disposable **PostgreSQL 17.11** run and by the read-only diagnostic's block 6,
+which was executed against production. Vitest reports it as passed, not skipped, so the raw
+count alone overstates its coverage — this note is the correction.
 
 Honest limits: PGlite is PostgreSQL 16 (WASM) with stubbed `auth`/`storage`; the
 PostgreSQL 17.11 evidence in §6 comes from a separate disposable native cluster and is
