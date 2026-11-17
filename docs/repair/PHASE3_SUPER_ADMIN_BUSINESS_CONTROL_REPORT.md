@@ -39,7 +39,7 @@ All Phase 3 additions preserve existing architecture, authentication, roles (`re
 
 ### Database Migration (`0109`) & Guarded Rollback
 - **`supabase/migrations/0109_phase3_business_control.sql`** (idempotent, ordered after `0108`, zero dependency on `0104` rollback objects)
-- **`supabase/rollbacks/0109_phase3_business_control.down.sql`** (refuses to drop non-empty Phase 3 audit/moderation/campaign tables unless `maharani.allow_data_loss = 'true'` is explicitly set)
+- **`supabase/rollbacks/0109_phase3_business_control.down.sql`** (single atomic `DO $rollback_0109$` block, zero `CASCADE` drops, safe idempotent retry, explicit itemized preflight data-loss protection across all 11 Phase 3 data surfaces: `products.description`, `product_moderation_history`, `wholesale_pricing_rules` non-default/edited rows, `seller_pricing_permissions`, `product_wholesale_limits`, all 8 added `membership_plans` Phase 3 configuration columns, `membership_program_settings` non-default/edited rows, `membership_upgrade_requests`, `ad_program_settings` non-default/edited rows, `seller_ad_campaigns`, and `seller_ad_campaign_audit`. Requires explicit transaction-local `BEGIN; SET LOCAL maharani.allow_data_loss = 'true'; ... COMMIT;` to force destructive teardown, emits an itemized `RAISE WARNING` listing every record being deleted, and immediately disarms `maharani.allow_data_loss` on completion. Removes all 9 Phase 3 tables, 9 columns, 7 constraints, 8 indexes, 19 table policies, 24 triggers, and 15 functions while restoring `0080` `membership_plans` policies and preserving all pre-existing business data, `0083` membership retirement, `0107` `cost_price` lockdown, and `super_admin_audit_logs` records/hardening.)
 
 Key schema additions:
 1. `products.description` (nullable `text`, max 2000 chars) + explicit `grant select (description) on public.products to anon, authenticated` preserving `0107`'s column-level `cost_price` lockdown.
@@ -113,7 +113,7 @@ Key schema additions:
 |---|---|---|
 | Phase 2 code & local test verification | **Completed** | Verified on `a99e8f6`; production migrations `0104`–`0108` remain awaiting owner approval |
 | Phase 3 Modules A–F code, migration `0109` + rollback, UI, server actions | **Completed (Local / PR)** | All 6 modules implemented cleanly on `arena/db779fee-maharani-mart` |
-| Typecheck, ESLint, Full Test Suite (235 files / 3,608 tests), Next.js Build | **Completed (PASS)** | 0 errors, 0 failures |
+| Typecheck, ESLint, Full Test Suite (236 files / 3,620 tests), Next.js Build | **Completed (PASS)** | 0 errors, 0 failures (includes 12 new rollback data-loss protection & atomicity DB tests) |
 | Vercel API project inspection | **Blocked (Token Scope)** | Vercel connector token is `"limited": true`; deployment health confirmed via GitHub status & live probe |
 | Supabase Preview CI check on `main` | **Pre-existing Failure** | `0103` timestamp mismatch on Supabase Preview branch (predates Phase 3) |
 | Production DB migrations (`0104`–`0109`) | **Awaiting Owner Approval — NOT Executed** | Strictly prohibited without explicit owner go-ahead |

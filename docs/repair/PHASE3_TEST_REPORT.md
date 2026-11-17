@@ -12,8 +12,8 @@
 |---|---|---|
 | `corepack pnpm run typecheck` (`tsc --noEmit`) | **PASS** | 0 TypeScript errors |
 | `corepack pnpm run lint` (`eslint .`) | **PASS** | 0 errors, 0 warnings |
-| `corepack pnpm run test` (`vitest run`) | **PASS** | **235 / 235 test files passed**, **3,608 / 3,608 tests passed** (0 failed, 0 skipped; +2 new files / +25 new tests over `main` baseline 233 / 3,583) |
-| `NEXT_TELEMETRY_DISABLED=1 corepack pnpm run build` | **PASS** | Compiled in 14.4s, TypeScript verified in 35.2s, 114/114 routes generated cleanly |
+| `corepack pnpm run test` (`vitest run`) | **PASS** | **236 / 236 test files passed**, **3,620 / 3,620 tests passed** (0 failed, 0 skipped; +3 new files / +37 new tests over `main` baseline 233 / 3,583) |
+| `NEXT_TELEMETRY_DISABLED=1 corepack pnpm run build` | **PASS** | Compiled in 22.8s, TypeScript verified in 37.8s, 114/114 routes generated cleanly |
 
 ---
 
@@ -43,6 +43,21 @@
    - **Anonymous access restriction:** `anon` receives `permission denied` on all 10 Phase 3 / Super Admin governance tables (`wholesale_pricing_rules`, `seller_pricing_permissions`, `product_wholesale_limits`, `product_moderation_history`, `membership_program_settings`, `membership_upgrade_requests`, `ad_program_settings`, `seller_ad_campaigns`, `seller_ad_campaign_audit`, `super_admin_audit_logs`).
    - **Role escalation prevention & Super Admin audit integrity:** `retailer` and `seller` blocked from updating `profiles.role`; Super Admin blocked from forging `super_admin_audit_logs.actor_id`; `UPDATE`/`DELETE` on `super_admin_audit_logs` blocked (`append-only`).
    - **Migration `0109` idempotency & guarded rollback:** Replaying `0109` UP succeeds with 0 errors; rollback refuses to run when Phase 3 tables contain data without `maharani.allow_data_loss = 'true'`; rollback succeeds cleanly when authorized and re-applying `0109` restores default singleton state.
+
+3. **`tests/phase3-rollback-protection-db.test.ts` (12 tests — Real PostgreSQL 16 via PGlite — PASS)**
+   - **Zero `CASCADE` drops:** Verifies executable SQL in `0109_phase3_business_control.down.sql` contains zero `CASCADE` clauses.
+   - **Per-surface preflight data-loss protection (11/11 protected surfaces verified individually on isolated clean post-`0109` DBs):**
+     - Non-empty `products.description` blocks destructive rollback.
+     - Non-default or operator-edited `wholesale_pricing_rules` (including notes/`updated_by`-only edits) blocks rollback.
+     - `seller_pricing_permissions` rows block rollback.
+     - `product_wholesale_limits` rows block rollback.
+     - Customized `membership_plans` Phase 3 configuration columns (`product_discount_percent`, `order_value_discount_percent`, `min_order_value_paise`, `max_discount_paise`, `eligibility_rules`, `renewal_mode`) block rollback.
+     - Non-default or operator-edited `membership_program_settings` blocks rollback.
+     - `membership_upgrade_requests` rows block rollback.
+     - Non-default or operator-edited `ad_program_settings` (placement rules, slot limits, notes/`updated_by`) blocks rollback.
+     - `product_moderation_history`, `seller_ad_campaigns`, and `seller_ad_campaign_audit` remain protected and block rollback.
+   - **Atomicity, no-`CASCADE` enforcement, clean empty rollback, idempotent retry & re-apply:** External dependent view on `wholesale_pricing_rules` causes rollback to fail cleanly with zero partial drops (Step 5/4/3 objects all remain intact); once removed, clean empty rollback succeeds with 0 warnings and removes all 9 Phase 3 tables, 9 columns, and 15 functions while preserving pre-existing `products`/`sellers`/`membership_plans` rows, `0083` inactive state, and `0107` `products.cost_price` lockdown; retrying rollback a second time succeeds cleanly; re-applying `0109` restores all tables, columns, defaults, and privileges cleanly.
+   - **Explicit authorized transaction-local override contract:** Bare `SET LOCAL` outside a transaction and invalid values (`'yes'`) are refused with full itemized counts across all 11 surfaces; `BEGIN; SET LOCAL maharani.allow_data_loss = 'true'; <rollback>; COMMIT;` emits a captured PostgreSQL `WARNING` message itemizing every affected surface, preserves pre-existing `products`, `membership_plans`, and `super_admin_audit_logs` rows, and immediately disarms `maharani.allow_data_loss` so subsequent rollbacks refuse again.
 
 ---
 

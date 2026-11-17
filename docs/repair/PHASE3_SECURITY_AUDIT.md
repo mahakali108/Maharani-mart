@@ -30,23 +30,30 @@ All existing roles (`super_admin`, `admin`, `staff`, `salesman`, `retailer`, `se
 
 ---
 
-## 2. Security Defects Discovered & Fixed During Phase 3 Testing
+## 2. Security Defects Discovered & Fixed During Phase 3 Testing & Independent Review
 
-Writing real PostgreSQL 16 (PGlite) adversarial tests caught **five genuine defects** before code freeze; all five were fixed and verified with regression tests:
+Writing real PostgreSQL 16 (PGlite) adversarial tests plus the independent PR #137 rollback review caught **six genuine defects** before merge; all six were fixed and verified with regression tests:
 
 1. **`SECURITY DEFINER` `current_user` bypass in `enforce_seller_ad_campaign_rules()` (HIGH — Caught & Fixed):**
    - Initially checked `current_user in ('authenticated', 'anon')` inside a `SECURITY DEFINER` trigger. Because PostgreSQL sets `current_user` to the function owner (`postgres`) inside `SECURITY DEFINER`, an authenticated seller could fall into the Super Admin branch (still blocked by `SELLER_ADS_DISABLED`, but would have bypassed anti-self-approval if ads were later enabled).
    - **Fix:** Switched the check to `(current_setting('role', true) in ('authenticated', 'anon') or auth.uid() is not null) and not v_is_super`. Verified in PostgreSQL 16 that sellers are explicitly rejected with `Sellers can only submit unapproved draft/pending campaigns` and `Sellers cannot activate / self-approve`.
-2. **Legacy `anon` grant on `super_admin_audit_logs` from Migration `0020` (MEDIUM — Caught & Fixed):**
+2. **Incomplete Rollback Data-Loss Preflight & Non-Atomic Retry in `0109_phase3_business_control.down.sql` (CRITICAL — Caught in Independent PR #137 Review & Fixed):**
+   - The initial rollback only guarded `product_moderation_history`, `seller_ad_campaigns`, `seller_ad_campaign_audit`, and `membership_upgrade_requests`, leaving `products.description`, `wholesale_pricing_rules`, `seller_pricing_permissions`, `product_wholesale_limits`, `membership_program_settings`, `ad_program_settings`, and the 8 added `membership_plans` configuration columns unprotected from silent deletion. It also executed DDL statements outside a single atomic block and called `DROP TRIGGER` on tables that might already be absent on retry.
+   - **Fix:** Rewrote `supabase/rollbacks/0109_phase3_business_control.down.sql` as a single atomic `DO $rollback_0109$` block with zero `CASCADE` drops:
+     - Guards all **11** Phase 3 data surfaces (`products.description`, `product_moderation_history`, `wholesale_pricing_rules` non-default/edited rows, `seller_pricing_permissions`, `product_wholesale_limits`, all 8 added `membership_plans` Phase 3 configuration columns checked dynamically via `information_schema.columns`, `membership_program_settings` non-default/edited rows, `membership_upgrade_requests`, `ad_program_settings` non-default/edited rows, `seller_ad_campaigns`, and `seller_ad_campaign_audit`).
+     - Refuses (`SQLSTATE 23514`) with an itemized count of every affected source unless explicitly overridden inside a transaction via `BEGIN; SET LOCAL maharani.allow_data_loss = 'true'; ... COMMIT;`.
+     - On authorized override, emits an itemized `RAISE WARNING` listing every record count that will be permanently deleted, executes all teardowns cleanly without `CASCADE` (preserving all pre-existing data, `0083` membership retirement, `0107` `cost_price` lockdown, and `super_admin_audit_logs` rows + `anon`/`UPDATE`/`DELETE` revocations), and immediately disarms the flag via `RESET maharani.allow_data_loss;`.
+     - Guards every table- and column-scoped check/drop for safe idempotent retry and zero partial rollback on failure (verified in `tests/phase3-rollback-protection-db.test.ts`).
+3. **Legacy `anon` grant on `super_admin_audit_logs` from Migration `0020` (MEDIUM — Caught & Fixed):**
    - `0020_super_admin_control_center.sql` enabled RLS on `super_admin_audit_logs` but did not revoke table grants from `public`/`anon`, and did not prevent `UPDATE`/`DELETE` or `actor_id` spoofing.
    - **Fix:** `0109` revokes all privileges from `public, anon`, revokes `UPDATE, DELETE` from `authenticated`, adds `trg_guard_super_admin_audit_insert` (non-`SECURITY DEFINER`, pins `actor_id = auth.uid()`), and adds `trg_prevent_sa_audit_mutation` (`42501` append-only).
-3. **`BEFORE INSERT` Trigger Ordering vs RLS Error Disclosure (MEDIUM — Caught & Fixed):**
+4. **`BEFORE INSERT` Trigger Ordering vs RLS Error Disclosure (MEDIUM — Caught & Fixed):**
    - `BEFORE INSERT` wholesale limit triggers ran before RLS `WITH CHECK`, returning a discount-limit message to unauthorized `staff` callers instead of a clean RLS rejection.
    - **Fix:** Moved `trg_enforce_seller_offer_wholesale_limits`, `trg_enforce_seller_tier_wholesale_limits`, `trg_enforce_product_tier_wholesale_limits`, and `trg_guard_membership_plan_changes` to `AFTER INSERT OR UPDATE`. Unauthorized callers fail RLS first; authorized writes are validated atomically and rolled back on limit violation.
-4. **Missing Page-Level Permission Guards on `/admin/pricing` and `/admin/banners` (MEDIUM — Caught & Fixed):**
+5. **Missing Page-Level Permission Guards on `/admin/pricing` and `/admin/banners` (MEDIUM — Caught & Fixed):**
    - Both pages previously relied on `/admin` middleware without explicit `requirePagePermission(...)` checks (unlike `/admin/banners/[id]` and `/admin/pricing/tiers`).
    - **Fix:** Added `requirePagePermission('pricing.manage')` to `app/admin/pricing/page.tsx` and `requirePagePermission('banners.manage')` to `app/admin/banners/page.tsx`, and guarded all 3 new Super Admin routes (`/admin/pricing/wholesale`, `/admin/memberships`, `/admin/banners/campaigns`) with `requireSuperAdminPage()`.
-5. **Cross-Migration Rollback Coupling (`0109` -> `0104` `is_super_admin()`) (LOW/OPERATIONAL — Caught & Fixed):**
+6. **Cross-Migration Rollback Coupling (`0109` -> `0104` `is_super_admin()`) (LOW/OPERATIONAL — Caught & Fixed):**
    - Referencing `0104`'s `is_super_admin()` inside `0109` RLS policies prevented `0104.down.sql` from rolling back cleanly in isolation.
    - **Fix:** Standardized `0109` to use `public.current_user_role() = 'super_admin'` (defined in `0001_init.sql`, matching `0020`, `0072`, `0086`, and `0098`). Verified `site-content-db.test.ts` and `site-content-release.test.ts` pass 100%.
 
