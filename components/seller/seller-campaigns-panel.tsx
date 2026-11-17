@@ -104,7 +104,7 @@ export function SellerCampaignsPanel({
             <Input id="campaign-artwork" name="artworkUrl" maxLength={1000} placeholder="https://..." required />
           </div>
           <div>
-            <Label htmlFor="campaign-dest">Destination Link (optional)</Label>
+            <Label htmlFor="campaign-dest">Destination Link (optional, internal /retailer/... path only)</Label>
             <Input id="campaign-dest" name="destinationUrl" maxLength={500} placeholder="/retailer/catalog" />
           </div>
           <div>

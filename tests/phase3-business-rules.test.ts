@@ -4,6 +4,7 @@ import {
   DEFAULT_GLOBAL_WHOLESALE_RULES,
   calculateDiscountPercent,
   computeEffectiveWholesaleLimits,
+  exceedsDiscountCap,
   mapWholesalePricingDbError,
   validateGlobalWholesaleInput,
   validateProductLimitInput,
@@ -17,6 +18,7 @@ import {
   validateMembershipPlanConfigInput,
 } from '@/lib/membership/rules';
 import {
+  isSafeCampaignDestinationUrl,
   isSafeCampaignUrl,
   mapAdCampaignDbError,
   validateAdCampaignProposalInput,
@@ -129,6 +131,29 @@ describe('Phase 3 — Wholesale pricing rules engine', () => {
     );
     expect(overCap.ok).toBe(false);
     if (!overCap.ok) expect(overCap.code).toBe('DISCOUNT_EXCEEDS_MAX_LIMIT');
+
+    // Blocks compounded offer + slab discount exceeding pack base price cap
+    const compounded = validateSellerSlabAgainstLimits(
+      {
+        packBasePricePaise: 10000,
+        offerUnitPricePaise: 8500, // 15% off pack
+        offerMoq: 5,
+        slabMinQuantity: 20,
+        slabUnitPricePaise: 7500, // 11.76% off offer, but 25% off pack (>15%)
+      },
+      { minMoq: 5, maxDiscountPercent: 15, allowSellerCustomSlabs: true }
+    );
+    expect(compounded.ok).toBe(false);
+    if (!compounded.ok) expect(compounded.code).toBe('DISCOUNT_EXCEEDS_MAX_LIMIT');
+
+    // Exact rational ceiling: 10.0033% (26999/30000) must NOT slip past a 10% cap via 2-decimal rounding
+    expect(exceedsDiscountCap(30000, 26999, 10)).toBe(true);
+    expect(exceedsDiscountCap(30000, 27000, 10)).toBe(false);
+    const offByOnePaise = validateSellerOfferAgainstLimits(
+      { basePricePaise: 30000, unitPricePaise: 26999, moq: 5 },
+      { minMoq: 5, maxDiscountPercent: 10, allowSellerCustomSlabs: true }
+    );
+    expect(offByOnePaise.ok).toBe(false);
   });
 
   it('validates global, seller, and pack rule bounds and maps DB error codes', () => {
@@ -288,13 +313,47 @@ describe('Phase 3 — Retailer membership rules & immediate expiry stop', () => 
 });
 
 describe('Phase 3 — Paid seller ad campaign validation', () => {
-  it('rejects unsafe URLs (javascript:, data:, http:, //) and invalid windows', () => {
+  it('rejects unsafe URLs, unauthorized external destination links, HTML copy, and invalid windows', () => {
     expect(isSafeCampaignUrl('javascript:alert(1)')).toBe(false);
     expect(isSafeCampaignUrl('data:image/svg+xml,<svg/>')).toBe(false);
     expect(isSafeCampaignUrl('http://insecure.example/ad.png')).toBe(false);
     expect(isSafeCampaignUrl('//evil.example/ad.png')).toBe(false);
+    expect(isSafeCampaignUrl('https://user:pass@evil.example/ad.png')).toBe(false);
+    expect(isSafeCampaignUrl('/banners/../secrets.png')).toBe(false);
     expect(isSafeCampaignUrl('https://cdn.maharani.example/banner.png')).toBe(true);
     expect(isSafeCampaignUrl('/retailer/catalog')).toBe(true);
+
+    // Destination links must be strictly internal /retailer storefront routes
+    expect(isSafeCampaignDestinationUrl('/retailer')).toBe(true);
+    expect(isSafeCampaignDestinationUrl('/retailer/catalog')).toBe(true);
+    expect(isSafeCampaignDestinationUrl('/retailer/catalog?category=cosmetics')).toBe(true);
+    expect(isSafeCampaignDestinationUrl('https://phishing.evil/login')).toBe(false);
+    expect(isSafeCampaignDestinationUrl('//phishing.evil/login')).toBe(false);
+    expect(isSafeCampaignDestinationUrl('/admin/dashboard')).toBe(false);
+    expect(isSafeCampaignDestinationUrl('/api/orders')).toBe(false);
+    expect(isSafeCampaignDestinationUrl('/retailer/../admin')).toBe(false);
+
+    const externalDest = validateAdCampaignProposalInput({
+      title: 'Diwali Promo',
+      artworkUrl: 'https://cdn.example.com/ad.png',
+      destinationUrl: 'https://phishing.evil/steal',
+      placement: 'homepage_strip',
+      startsAt: '2026-12-01T10:00:00Z',
+      endsAt: '2026-12-09T10:00:00Z',
+      budgetRupees: 5000,
+    });
+    expect(externalDest.ok).toBe(false);
+
+    const htmlTitle = validateAdCampaignProposalInput({
+      title: '<script>alert(1)</script>',
+      artworkUrl: 'https://cdn.example.com/ad.png',
+      destinationUrl: '/retailer/catalog',
+      placement: 'homepage_strip',
+      startsAt: '2026-12-01T10:00:00Z',
+      endsAt: '2026-12-09T10:00:00Z',
+      budgetRupees: 5000,
+    });
+    expect(htmlTitle.ok).toBe(false);
 
     const badWindow = validateAdCampaignProposalInput({
       title: 'Diwali Promo',

@@ -87,6 +87,22 @@ export function calculateDiscountPercent(basePricePaise: number, offeredPricePai
   return Number((((basePricePaise - offeredPricePaise) * 100) / basePricePaise).toFixed(2));
 }
 
+/**
+ * Exact rational ceiling test: `(base - offered) * 100 > base * maxDiscountPercent`
+ * (scaled by 100 to keep integer arithmetic exact for 2-decimal percentages) so
+ * rounding down to 2 decimals never lets an off-by-one paise discount slip past.
+ */
+export function exceedsDiscountCap(
+  basePricePaise: number,
+  offeredPricePaise: number,
+  maxDiscountPercent: number
+): boolean {
+  if (!Number.isFinite(basePricePaise) || basePricePaise <= 0) return false;
+  if (!Number.isFinite(offeredPricePaise) || offeredPricePaise >= basePricePaise) return false;
+  const maxPctBasisPoints = Math.round(maxDiscountPercent * 100);
+  return (basePricePaise - offeredPricePaise) * 10_000 > basePricePaise * maxPctBasisPoints;
+}
+
 export function validateSellerOfferAgainstLimits(
   offer: { basePricePaise: number; unitPricePaise: number; moq: number },
   limits: EffectiveWholesaleLimits
@@ -98,8 +114,8 @@ export function validateSellerOfferAgainstLimits(
       error: `Minimum order quantity must be at least ${limits.minMoq} pieces under Super Admin wholesale rules.`,
     };
   }
-  const discountPct = calculateDiscountPercent(offer.basePricePaise, offer.unitPricePaise);
-  if (discountPct > limits.maxDiscountPercent) {
+  if (exceedsDiscountCap(offer.basePricePaise, offer.unitPricePaise, limits.maxDiscountPercent)) {
+    const discountPct = calculateDiscountPercent(offer.basePricePaise, offer.unitPricePaise);
     return {
       ok: false,
       code: 'DISCOUNT_EXCEEDS_MAX_LIMIT',
@@ -110,7 +126,13 @@ export function validateSellerOfferAgainstLimits(
 }
 
 export function validateSellerSlabAgainstLimits(
-  slab: { offerUnitPricePaise: number; offerMoq: number; slabMinQuantity: number; slabUnitPricePaise: number },
+  slab: {
+    offerUnitPricePaise: number;
+    offerMoq: number;
+    slabMinQuantity: number;
+    slabUnitPricePaise: number;
+    packBasePricePaise?: number;
+  },
   limits: EffectiveWholesaleLimits
 ): { ok: true } | { ok: false; code: string; error: string } {
   if (!limits.allowSellerCustomSlabs) {
@@ -128,12 +150,23 @@ export function validateSellerSlabAgainstLimits(
       error: `Slab minimum quantity must be at least ${minQty} pieces.`,
     };
   }
-  const discountPct = calculateDiscountPercent(slab.offerUnitPricePaise, slab.slabUnitPricePaise);
-  if (discountPct > limits.maxDiscountPercent) {
+  if (exceedsDiscountCap(slab.offerUnitPricePaise, slab.slabUnitPricePaise, limits.maxDiscountPercent)) {
+    const discountPct = calculateDiscountPercent(slab.offerUnitPricePaise, slab.slabUnitPricePaise);
     return {
       ok: false,
       code: 'DISCOUNT_EXCEEDS_MAX_LIMIT',
       error: `Slab discount (${discountPct}%) exceeds the Super Admin maximum discount limit (${limits.maxDiscountPercent}%).`,
+    };
+  }
+  if (
+    slab.packBasePricePaise != null &&
+    exceedsDiscountCap(slab.packBasePricePaise, slab.slabUnitPricePaise, limits.maxDiscountPercent)
+  ) {
+    const combinedPct = calculateDiscountPercent(slab.packBasePricePaise, slab.slabUnitPricePaise);
+    return {
+      ok: false,
+      code: 'DISCOUNT_EXCEEDS_MAX_LIMIT',
+      error: `Combined offer and slab discount (${combinedPct}%) relative to pack base price exceeds the Super Admin maximum discount limit (${limits.maxDiscountPercent}%).`,
     };
   }
   return { ok: true };

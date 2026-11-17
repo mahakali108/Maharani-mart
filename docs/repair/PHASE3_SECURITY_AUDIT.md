@@ -56,6 +56,23 @@ Writing real PostgreSQL 16 (PGlite) adversarial tests plus the independent PR #1
 6. **Cross-Migration Rollback Coupling (`0109` -> `0104` `is_super_admin()`) (LOW/OPERATIONAL — Caught & Fixed):**
    - Referencing `0104`'s `is_super_admin()` inside `0109` RLS policies prevented `0104.down.sql` from rolling back cleanly in isolation.
    - **Fix:** Standardized `0109` to use `public.current_user_role() = 'super_admin'` (defined in `0001_init.sql`, matching `0020`, `0072`, `0086`, and `0098`). Verified `site-content-db.test.ts` and `site-content-release.test.ts` pass 100%.
+7. **Unchecked Caller Role in `public.can_current_staff_read_profile(uuid)` (HIGH — Caught in Final Audit & Fixed in `0109`):**
+   - Pre-existing `0037` helper was `SECURITY DEFINER` with `PUBLIC`/`anon`/`authenticated` `EXECUTE` (required for `profiles_self_select` policy evaluation) but lacked a caller-role guard, allowing any `anon`, `retailer`, `seller`, or `salesman` caller to probe whether an arbitrary UUID belonged to `super_admin`/`admin`/`staff`/`salesman` via direct PostgREST RPC.
+   - **Fix:** Added `and public.is_staff_or_above()` + `set search_path = pg_catalog, public, pg_temp` inside `0109` Section 6.2 (restored cleanly in `0109.down.sql`). Verified in PostgreSQL 16 that `anon`, `retailer`, and `seller` always receive `false` for staff/admin/super_admin UUIDs while `staff` retains assigned-scope access.
+8. **Direct-PostgREST Rate-Limit Bypass on `public.submit_supplier_application(...)` (HIGH — Caught in Final Audit & Fixed in `0109`):**
+   - `0060` enforced rate limiting only in the Next.js server action via `service_role`, leaving direct `anon` PostgREST RPC calls to `submit_supplier_application` unthrottled.
+   - **Fix:** Added durable DB-level anti-abuse rate limiting inside `submit_supplier_application(...)` (`0109` Section 6.3) using `0060`'s `consume_supplier_application_rate_limit` with SHA-256 hashes (5/10min per phone hash in `supplier-rpc-phone` + 30/10min global API burst ceiling in `supplier-rpc-burst`; zero raw phone numbers stored; exact 11-arg signature & `search_path = public, pg_temp` preserved; restored cleanly in `0109.down.sql`).
+9. **Unrevoked `EXECUTE` on 13 Internal `0109` Trigger Functions (MEDIUM — Caught in Final Audit & Fixed in `0109`):**
+   - PostgreSQL/Supabase default privileges granted `EXECUTE` to `public`/`anon`/`authenticated` on new trigger handlers.
+   - **Fix:** Explicitly revoked `ALL ON FUNCTION ... FROM public, anon, authenticated` on all 13 `0109` trigger functions (`0109` Section 6.1) and asserted zero API privileges in `tests/phase3-business-control-db.test.ts`.
+10. **Wholesale Pricing Compounded-Discount & Rounding Boundary Bypass (HIGH — Caught in Final Audit & Fixed in `0109` & `lib/admin/wholesale-pricing-rules.ts`):**
+    - `enforce_seller_tier_wholesale_limits()` previously validated slab discounts only against `seller_offers.unit_price_paise` (allowing stacked offer + slab discounts to exceed Super Admin's cap relative to `product_packs.base_price`), and 2-decimal rounding allowed sub-basis-point overages (e.g., `10.0033%` rounding to `10.00%`).
+    - **Fix:** Enforced exact rational inequalities across all 3 pricing triggers and `exceedsDiscountCap(...)`, plus combined slab-vs-pack-base validation in `enforce_seller_tier_wholesale_limits()` and `validateSellerSlabAgainstLimits(...)`.
+11. **Unauthorized External Phishing Links, Protocol-Relative URLs (`//`), & HTML Copy in `seller_ad_campaigns` (HIGH — Caught in Final Audit & Fixed in `0109` & `lib/admin/ad-campaign-rules.ts`):**
+    - `destination_url LIKE '/%'` previously permitted `//evil.com` and arbitrary external `https://` URLs.
+    - **Fix:** Restricted `seller_ad_campaigns.destination_url` strictly to internal retailer routes (`^/retailer($|/|\?)`, rejecting external links, `//`, `..`, `\`, whitespace/control chars, `/admin`, `/api`), hardened `artwork_url`, and rejected `<`/`>` HTML markup in `title` and `headline` at both DB CHECK and TypeScript layers.
+12. **Membership Overview Inactive-Program Discount Guard & Assignment Eligibility Enforcement (MEDIUM — Caught in Final Audit & Fixed in `0109`):**
+    - `get_retailer_membership_overview(uuid)` now gates non-free benefits & effective discounts on BOTH `program_enabled = true` AND `mp.is_active = true` AND non-expired; `super_admin_assign_membership(...)` now verifies retailer existence, `requireApprovedRetailer`, and `allowedCategories` eligibility rules server-side.
 
 ---
 
@@ -63,15 +80,31 @@ Writing real PostgreSQL 16 (PGlite) adversarial tests plus the independent PR #1
 
 - **No Browser-Trusted Roles / IDs:** Every Server Action calls `requireSuperAdmin()`, `requirePermission(...)`, or `requireActiveSeller()` and derives `actor.id` / `seller.id` strictly from the verified Supabase session + database lookup.
 - **No Service-Role Bypass on Dashboards:** `app/admin/dashboard/page.tsx` and `lib/admin/dashboard/data.ts` strictly use the cookie-bound `createClient()` (never `createServiceRoleClient`).
-- **XSS / Unsafe URL Prevention on Campaigns:** `isSafeCampaignUrl` and SQL `CHECK` constraints enforce `https://` or relative `/` paths only (`javascript:`, `data:`, `http://`, and protocol-relative `//` URLs are rejected).
+- **XSS / Phishing / Unsafe URL Prevention on Campaigns:** `isSafeCampaignDestinationUrl` and SQL `CHECK` constraints restrict ad click targets strictly to internal `/retailer` paths and forbid `//`, `..`, external domains, HTML `<`/`>`, `javascript:`, `data:`, and `http://`.
 - **No Payment Credentials or Live Collection:** Both `membership_program_settings.live_payment_collection_enabled` and `ad_program_settings.live_payment_collection_enabled` carry PostgreSQL `CHECK (live_payment_collection_enabled = false)` constraints. No third-party payment keys or checkout webhooks were added.
 - **Zero Storage Bucket Drift:** Verified exact 11 buckets remain unchanged (`tests/migration-catalog-invariants.test.ts`).
-- **Zero `SECURITY DEFINER` Unpinned `search_path`:** Every new `SECURITY DEFINER` function pins `set search_path = public, pg_temp` and revokes `PUBLIC`/`anon` execute privileges where applicable (`tests/migration-catalog-invariants.test.ts` 14/14 PASS).
+- **Zero `SECURITY DEFINER` Unpinned `search_path`:** Every new `SECURITY DEFINER` function pins `set search_path = public, pg_temp` (or `pg_catalog, public, pg_temp`) and revokes `PUBLIC`/`anon` execute privileges where applicable (`tests/migration-catalog-invariants.test.ts` 14/14 PASS).
 
 ---
 
-## 4. Open Pre-Existing Items (Documented Honestly, Out of Phase 3 Scope)
+## 4. Function-by-Function Security Disposition (Externally Executable Functions)
 
-1. **`Supabase Preview` CI Failure on `main` (`a99e8f6`):** Pre-existing migration `0103` timestamp mismatch between production Supabase history (`20261115155706`) and repository numbering. Requires owner-coordinated migration history reconciliation before production rollout.
-2. **Unapplied Production Migrations (`0104`–`0108`, plus new `0109`):** Production database `fhrmsrumsraprvutrpeo` remains cleanly at `0103`; no production SQL was run.
-3. **Vercel Connector Scope (`limited: true`):** Direct Vercel project API reads were denied by token scope; production web health was verified via GitHub checks and live health probe.
+| Function | Live `fhrmsrumsraprvutrpeo` State | Risk | Action in PR #137 |
+|---|---|---|---|
+| `can_current_staff_read_profile(uuid)` | `anon`/`auth`/`PUBLIC` `EXECUTE`, no caller role check | **HIGH** — anonymous/non-staff staff-UUID enumeration | **FIXED in `0109`** (`is_staff_or_above()` guard + `pg_catalog, public, pg_temp`; restored in `0109.down.sql`) |
+| `submit_supplier_application(text x 11)` | `anon`/`auth` `EXECUTE` (no `PUBLIC`), app-only rate limit | **HIGH** — direct PostgREST spam bypass | **FIXED in `0109`** (durable DB-level SHA-256 rate limiter via `0060`; exact signature preserved; restored in `0109.down.sql`) |
+| `current_user_role()` | `anon`/`auth`/`PUBLIC` `EXECUTE`, `auth.uid()`-bound, `search_path=public` | **LOW / SAFE** — required by `PUBLIC` RLS policies; returns `NULL` for `anon` | **RETAINED** (justified RLS dependency; no cross-user leakage) |
+| `is_admin_or_above()` | `anon`/`auth`/`PUBLIC` `EXECUTE`, `auth.uid()`-bound, `search_path=public` | **LOW / SAFE** — required by `PUBLIC` RLS policies; returns `false` for `anon` | **RETAINED** (justified RLS dependency; no cross-user leakage) |
+| `is_phone_registered(text)` | `anon`/`auth`/`PUBLIC` `EXECUTE`, `search_path=public`, queries `profiles.phone` | **MEDIUM–HIGH** — unauthenticated phone-number enumeration oracle | **DOCUMENTED FOR COORDINATED FOLLOW-UP** (called server-side only by `lib/auth/actions.ts`, `lib/admin/team-actions.ts`, and `/api/mobile/v1/retailers/register`; modifying PR #136's `lib/auth/actions.ts` and mobile route contracts requires a separate owner-approved PR — full privacy-preserving replacement design in `docs/repair/MIGRATION_AND_RELEASE_READINESS_AUDIT.md`) |
+| 10 other `anon`-exec `SECURITY DEFINER` RLS predicates | `auth.uid()`-bound (`is_staff_or_above`, `is_area_assigned_to_current_staff`, etc.) | **LOW / SAFE** — required by `PUBLIC` RLS policies; return `false` for `anon` | **RETAINED** (audited individually; zero cross-tenant leakage) |
+| 13 new `0109` trigger functions | N/A (new in `0109`) | **MEDIUM** if left with default grants | **REVOKED** from `public, anon, authenticated` in `0109` Section 6.1 |
+
+---
+
+## 5. Open Pre-Existing Items (Documented Honestly, Owner Action Required)
+
+1. **`MIGRATIONS_FAILED` on `main` (`a99e8f6`):** Proven from GitHub check-run `#133450841369` (`Remote migration versions not found in local migrations directory.`): live `fhrmsrumsraprvutrpeo` recorded `0103_security_advisor_remediation` as version `20261115155706` instead of `0103`. Requires owner-coordinated migration history reconciliation before applying `0104`–`0109` (runbook in `docs/repair/MIGRATION_AND_RELEASE_READINESS_AUDIT.md`).
+2. **Unapplied Production Migrations (`0104`–`0109`) & Live `products.cost_price` Exposure:** Live `fhrmsrumsraprvutrpeo` remains cleanly at `0103` (`products.cost_price` is selectable by `authenticated`, 0 live products/users). Applying `0104`–`0109` after owner approval closes `cost_price` (`0107`) and applies Phase 3 + Section 6 security hardening (`0109`).
+3. **`pg_net` Extension in `public` Schema:** Live Supabase Security Advisor warning (`extension_in_public`). Non-relocatable extension; requires scheduled maintenance recreate into `extensions` schema if owner wishes to clear advisory.
+4. **Live `data_retention_rules` 120-Day Deletion of Commercial Records (`business_120`):** Live production has 6 `business_120` rules enabled (`orders`, `payment_collections`, `retailer_wallet_ledger`, `return_requests`, `stock_movements`, `order_stock_allocations`). Under Indian CGST Act Section 36 (72-month retention), owner must disable or archive before live commercial GST invoicing.
+5. **Vercel Connector Scope (`limited: true`):** Direct Vercel project API/env/plan reads were denied by token scope; preview deployment status was verified via GitHub Deployments/Commit Statuses API, and Vercel plan commercial-use compliance must be verified by the owner directly.

@@ -25,6 +25,7 @@ describe('Phase 3 — Super Admin Business Control, RLS, Triggers & Rollback (Po
   let db: PGlite;
   let superAdminId: string;
   let adminId: string;
+  let staffId: string;
   let retailer1Id: string;
   let retailer2Id: string;
   let sellerOwnerId: string;
@@ -41,6 +42,7 @@ describe('Phase 3 — Super Admin Business Control, RLS, Triggers & Rollback (Po
 
     superAdminId = await createUser(db, 'super_admin', 'Phase3 Owner');
     adminId = await createUser(db, 'admin', 'Phase3 Admin');
+    staffId = await createUser(db, 'staff', 'Phase3 Staff');
     retailer1Id = (await createRetailer(db)).id;
     retailer2Id = (await createRetailer(db)).id;
     sellerOwnerId = await createUser(db, 'seller', 'Phase3 Seller 1');
@@ -396,6 +398,41 @@ describe('Phase 3 — Super Admin Business Control, RLS, Triggers & Rollback (Po
         )
       ).toMatch(/DISCOUNT_EXCEEDS_MAX_LIMIT/);
 
+      // Compounded discount bypass check: offer is already ₹90 (10% off ₹100 pack base)
+      // and seller cap is 10%. A slab at ₹85 (5.56% off offer) is 15% off pack base -> BLOCKED!
+      expect(
+        await expectFail(
+          as(db, 'service', (tx: Tx) =>
+            tx.query(
+              `insert into public.seller_offer_tiers (seller_offer_id, min_quantity, unit_price_paise)
+               values ($1, 10, 8500)`,
+              [offerId]
+            )
+          )
+        )
+      ).toMatch(/DISCOUNT_EXCEEDS_MAX_LIMIT/);
+
+      // Off-by-one paise rounding bypass check: pack ₹300 (30000 paise), cap 10% -> ₹269.99 (26999 paise)
+      // has true discount 10.0033% (rounds to 10.00% at 2 decimals) -> MUST BE BLOCKED!
+      const roundingPack = await createPack(db, { publish: false });
+      await as(db, 'service', (tx: Tx) =>
+        tx.query(`update public.product_packs set base_price = 300.00, mrp = 350.00 where id = $1`, [roundingPack.packId])
+      );
+      await publishProduct(db, roundingPack.productId);
+      expect(
+        await expectFail(
+          as(db, 'service', (tx: Tx) =>
+            tx.query(
+              `insert into public.seller_offers (
+                 seller_id, product_id, pack_id, fulfilment_type,
+                 unit_price_paise, moq, stock_quantity, moderation_status, is_active
+               ) values ($1, $2, $3, 'seller', 26999, 5, 10, 'pending', false)`,
+              [sellerId, roundingPack.productId, roundingPack.packId]
+            )
+          )
+        )
+      ).toMatch(/DISCOUNT_EXCEEDS_MAX_LIMIT/);
+
       // Restore defaults for clean state
       await as(db, superAdminId, (tx: Tx) =>
         tx.query(`update public.wholesale_pricing_rules set default_min_order_qty = 1, max_discount_percent = 25.00 where id = 1`)
@@ -512,6 +549,27 @@ describe('Phase 3 — Super Admin Business Control, RLS, Triggers & Rollback (Po
           )
         )
       ).toMatch(/MEMBERSHIP_PROGRAM_DISABLED/);
+
+      // Even an unexpired paid record yields 0% effective discounts while program_enabled = false / plan inactive
+      await as(db, 'service', (tx: Tx) =>
+        tx.query(
+          `insert into public.retailer_memberships (
+             retailer_id, plan_id, tier, status, starts_at, expires_at, notes
+           ) values (
+             $1, 'silver', 'silver', 'active', now() - interval '1 day', now() + interval '30 days', 'Disabled-program guard check'
+           )`,
+          [retailer2Id]
+        )
+      );
+      const disabledProgramOverview = await as(db, retailer2Id, (tx: Tx) =>
+        tx.query<{ overview: { current: { benefits_active: boolean; effective_product_discount_percent: number; effective_order_discount_percent: number } } }>(
+          `select public.get_retailer_membership_overview($1) as overview`,
+          [retailer2Id]
+        )
+      );
+      expect(disabledProgramOverview.rows[0]!.overview.current.benefits_active).toBe(false);
+      expect(disabledProgramOverview.rows[0]!.overview.current.effective_product_discount_percent).toBe(0);
+      expect(disabledProgramOverview.rows[0]!.overview.current.effective_order_discount_percent).toBe(0);
     });
   });
 
@@ -524,6 +582,41 @@ describe('Phase 3 — Super Admin Business Control, RLS, Triggers & Rollback (Po
         await expectFail(
           as(db, 'service', (tx: Tx) =>
             tx.query(`update public.ad_program_settings set live_payment_collection_enabled = true where id = 1`)
+          )
+        )
+      ).toMatch(/check constraint/i);
+
+      // Seller cannot inject unauthorized external phishing links, protocol-relative URLs, or HTML markup
+      for (const badDest of ['https://phishing.evil/login', '//phishing.evil/login', '/admin/dashboard', '/retailer/../admin']) {
+        expect(
+          await expectFail(
+            as(db, sellerOwnerId, (tx: Tx) =>
+              tx.query(
+                `insert into public.seller_ad_campaigns (
+                   seller_id, title, artwork_url, destination_url, placement, starts_at, ends_at
+                 ) values (
+                   $1, 'Phish Ad', 'https://cdn.example.com/ad.png', $2, 'homepage_strip',
+                   now() + interval '1 day', now() + interval '5 days'
+                 )`,
+                [sellerId, badDest]
+              )
+            )
+          )
+        ).toMatch(/check constraint/i);
+      }
+
+      expect(
+        await expectFail(
+          as(db, sellerOwnerId, (tx: Tx) =>
+            tx.query(
+              `insert into public.seller_ad_campaigns (
+                 seller_id, title, artwork_url, destination_url, placement, starts_at, ends_at
+               ) values (
+                 $1, '<script>alert(1)</script>', 'https://cdn.example.com/ad.png', '/retailer/catalog', 'homepage_strip',
+                 now() + interval '1 day', now() + interval '5 days'
+               )`,
+              [sellerId]
+            )
           )
         )
       ).toMatch(/check constraint/i);
@@ -724,6 +817,100 @@ describe('Phase 3 — Super Admin Business Control, RLS, Triggers & Rollback (Po
           )
         )
       ).toMatch(/append-only/i);
+    });
+
+    it('hardens can_current_staff_read_profile against anon/retailer/seller UUID probing, enforces DB-level submit_supplier_application rate limiting, and revokes EXECUTE on all 13 Phase 3 trigger functions', async () => {
+      // 1. can_current_staff_read_profile(uuid) must return FALSE to anon, retailer, and seller even for real super_admin/admin/staff UUIDs
+      for (const caller of ['anon', retailer1Id, sellerOwnerId]) {
+        for (const target of [superAdminId, adminId, staffId]) {
+          const res = await as(db, caller, (tx: Tx) =>
+            tx.query<{ can_read: boolean }>(
+              `select public.can_current_staff_read_profile($1) as can_read`,
+              [target]
+            )
+          );
+          expect(res.rows[0]?.can_read).toBe(false);
+        }
+      }
+      // Legitimate staff still receives TRUE for staff/admin profiles
+      const staffCheck = await as(db, staffId, (tx: Tx) =>
+        tx.query<{ can_read: boolean }>(
+          `select public.can_current_staff_read_profile($1) as can_read`,
+          [adminId]
+        )
+      );
+      expect(staffCheck.rows[0]?.can_read).toBe(true);
+
+      // 2. Direct PostgREST anon calls to submit_supplier_application hit DB-level per-phone rate limit on 6th attempt
+      const abusePhone = '9876501234';
+      for (let i = 0; i < 5; i += 1) {
+        const subId = await as(db, 'anon', async (tx: Tx) => {
+          const { rows } = await tx.query<{ id: string }>(
+            `select public.submit_supplier_application($1,null,$2,$3,null,null,null,null,null,null,'Cosmetics') as id`,
+            [`Burst Supplier ${i}`, 'Owner', abusePhone]
+          );
+          return rows[0]!.id;
+        });
+        await as(db, adminId, (tx: Tx) =>
+          tx.query(
+            `update public.suppliers
+                set status = 'rejected', rejection_reason = 'Rate limit test cycle', reviewed_by = $1, reviewed_at = now()
+              where id = $2`,
+            [adminId, subId]
+          )
+        );
+      }
+      // 6th submission within 10 minutes from anon must be blocked inside DB RPC
+      expect(
+        await expectFail(
+          as(db, 'anon', (tx: Tx) =>
+            tx.query(
+              `select public.submit_supplier_application('Burst Supplier 6',null,'Owner',$1,null,null,null,null,null,null,'Cosmetics')`,
+              [abusePhone]
+            )
+          )
+        )
+      ).toMatch(/SUPPLIER_RATE_LIMITED/);
+
+      // 3. All 13 internal 0109 trigger functions must have zero PUBLIC/anon/authenticated EXECUTE privileges
+      const phase3TriggerFns = [
+        'stamp_product_moderation_actor',
+        'prevent_append_only_audit_mutation',
+        'log_phase3_governance_audit',
+        'log_seller_offer_moderation_event',
+        'stamp_wholesale_rule_editor',
+        'enforce_seller_offer_wholesale_limits',
+        'enforce_seller_tier_wholesale_limits',
+        'enforce_product_tier_wholesale_limits',
+        'guard_membership_plan_changes',
+        'enforce_membership_upgrade_request',
+        'enforce_seller_ad_campaign_rules',
+        'log_seller_ad_campaign_audit',
+        'guard_super_admin_audit_insert',
+      ];
+      const { rows: grants } = await db.query<{
+        proname: string;
+        anon_exec: boolean;
+        auth_exec: boolean;
+        acl: string | null;
+      }>(
+        `select p.proname,
+                has_function_privilege('anon', p.oid, 'EXECUTE') as anon_exec,
+                has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth_exec,
+                p.proacl::text as acl
+           from pg_proc p
+           join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and p.proname = any($1::text[])
+          order by p.proname`,
+        [phase3TriggerFns]
+      );
+      expect(grants).toHaveLength(phase3TriggerFns.length);
+      for (const row of grants) {
+        expect(row.anon_exec, row.proname).toBe(false);
+        expect(row.auth_exec, row.proname).toBe(false);
+        expect(row.acl ?? '', row.proname).not.toMatch(/(^|[,{])=X\//);
+      }
     });
   });
 

@@ -40,6 +40,17 @@
 --      - `super_admin_audit_logs` made append-only (no UPDATE/DELETE) and
 --        `actor_id` pinned to `auth.uid()` for API callers.
 --      - `banners` attached to `log_audit()`.
+--   6. Function-by-Function Security Hardening (Audited & Individually Justified):
+--      - `can_current_staff_read_profile(uuid)`: adds caller-role check
+--        (`public.is_staff_or_above()`) + `pg_catalog, public, pg_temp`
+--        `search_path`, closing anonymous/non-staff UUID role probing while
+--        preserving `profiles_self_select` RLS evaluation.
+--      - `submit_supplier_application(...)`: adds durable DB-level anti-abuse
+--        rate limiting (per-phone SHA-256 hash + anonymous burst ceiling via
+--        `0060`'s `supplier_application_rate_limits`), closing direct-PostgREST
+--        rate-limit bypass while preserving public submission and signature.
+--      - Explicitly revokes `EXECUTE` from `public, anon, authenticated` on
+--        all 13 new `0109` trigger functions.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -56,16 +67,21 @@ begin
      or to_regclass('public.membership_plans') is null
      or to_regclass('public.retailer_memberships') is null
      or to_regclass('public.banners') is null
+     or to_regclass('public.suppliers') is null
+     or to_regclass('public.supplier_application_rate_limits') is null
      or to_regclass('public.super_admin_audit_logs') is null then
-    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires base catalog, seller, membership, banner and control-center tables (0001–0108).'
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires base catalog, seller, supplier, membership, banner and control-center tables (0001–0108).'
       using errcode = 'undefined_table';
   end if;
 
   if to_regprocedure('public.is_admin_or_above()') is null
+     or to_regprocedure('public.is_staff_or_above()') is null
      or to_regprocedure('public.current_user_role()') is null
+     or to_regprocedure('public.is_retailer_area_assigned_to_current_staff(uuid)') is null
      or to_regprocedure('public.is_active_seller_member(uuid)') is null
+     or to_regprocedure('public.consume_supplier_application_rate_limit(text,text,integer,integer)') is null
      or to_regprocedure('public.log_audit()') is null then
-    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires helper functions from 0001 and 0072.'
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 requires helper functions from 0001, 0037, 0060, and 0072.'
       using errcode = 'undefined_function';
   end if;
 end;
@@ -433,14 +449,16 @@ begin
       using errcode = '23514';
   end if;
 
-  -- Check base discount relative to pack base price when a discount cap applies.
+  -- Check base discount relative to pack base price using exact rational comparison
+  -- so sub-basis-point rounding never allows off-by-one paise bypasses.
   select round(base_price * 100)::bigint into v_pack_base_paise
     from public.product_packs
    where id = new.pack_id;
 
   if v_pack_base_paise is not null and v_pack_base_paise > 0 and new.unit_price_paise < v_pack_base_paise then
-    v_discount_pct := round(((v_pack_base_paise - new.unit_price_paise)::numeric * 100.0) / v_pack_base_paise::numeric, 2);
-    if v_discount_pct > v_effective_max_discount then
+    if ((v_pack_base_paise - new.unit_price_paise)::numeric * 100.0)
+       > (v_pack_base_paise::numeric * v_effective_max_discount) then
+      v_discount_pct := round(((v_pack_base_paise - new.unit_price_paise)::numeric * 100.0) / v_pack_base_paise::numeric, 2);
       raise exception 'DISCOUNT_EXCEEDS_MAX_LIMIT: offer discount (% %%) exceeds Super Admin limit (% %%).',
         v_discount_pct, v_effective_max_discount
         using errcode = '23514';
@@ -453,7 +471,7 @@ $$;
 
 drop trigger if exists trg_enforce_seller_offer_wholesale_limits on public.seller_offers;
 create trigger trg_enforce_seller_offer_wholesale_limits
-  after insert or update of unit_price_paise, moq on public.seller_offers
+  after insert or update of unit_price_paise, moq, pack_id on public.seller_offers
   for each row execute function public.enforce_seller_offer_wholesale_limits();
 
 create or replace function public.enforce_seller_tier_wholesale_limits()
@@ -470,6 +488,7 @@ declare
   v_allow_slabs boolean := true;
   v_effective_max_discount numeric(5, 2) := 25.00;
   v_effective_min_moq integer := 1;
+  v_pack_base_paise bigint;
   v_discount_pct numeric(7, 2);
 begin
   select * into v_offer from public.seller_offers where id = new.seller_offer_id;
@@ -515,10 +534,28 @@ begin
       using errcode = '23514';
   end if;
 
+  -- Check slab discount relative to the seller offer base price (exact comparison)
   if v_offer.unit_price_paise > 0 and new.unit_price_paise < v_offer.unit_price_paise then
-    v_discount_pct := round(((v_offer.unit_price_paise - new.unit_price_paise)::numeric * 100.0) / v_offer.unit_price_paise::numeric, 2);
-    if v_discount_pct > v_effective_max_discount then
+    if ((v_offer.unit_price_paise - new.unit_price_paise)::numeric * 100.0)
+       > (v_offer.unit_price_paise::numeric * v_effective_max_discount) then
+      v_discount_pct := round(((v_offer.unit_price_paise - new.unit_price_paise)::numeric * 100.0) / v_offer.unit_price_paise::numeric, 2);
       raise exception 'DISCOUNT_EXCEEDS_MAX_LIMIT: slab discount (% %%) exceeds Super Admin limit (% %%).',
+        v_discount_pct, v_effective_max_discount
+        using errcode = '23514';
+    end if;
+  end if;
+
+  -- Also enforce total effective discount relative to pack base price to block
+  -- compounded discount stacking (offer discount + slab discount exceeding cap).
+  select round(base_price * 100)::bigint into v_pack_base_paise
+    from public.product_packs
+   where id = v_offer.pack_id;
+
+  if v_pack_base_paise is not null and v_pack_base_paise > 0 and new.unit_price_paise < v_pack_base_paise then
+    if ((v_pack_base_paise - new.unit_price_paise)::numeric * 100.0)
+       > (v_pack_base_paise::numeric * v_effective_max_discount) then
+      v_discount_pct := round(((v_pack_base_paise - new.unit_price_paise)::numeric * 100.0) / v_pack_base_paise::numeric, 2);
+      raise exception 'DISCOUNT_EXCEEDS_MAX_LIMIT: combined offer and slab discount (% %%) relative to pack base price exceeds Super Admin limit (% %%).',
         v_discount_pct, v_effective_max_discount
         using errcode = '23514';
     end if;
@@ -566,8 +603,8 @@ begin
   end if;
 
   if v_pack_base is not null and v_pack_base > 0 and new.price_per_piece < v_pack_base then
-    v_discount_pct := round(((v_pack_base - new.price_per_piece) * 100.0) / v_pack_base, 2);
-    if v_discount_pct > v_effective_max_discount then
+    if ((v_pack_base - new.price_per_piece) * 100.0) > (v_pack_base * v_effective_max_discount) then
+      v_discount_pct := round(((v_pack_base - new.price_per_piece) * 100.0) / v_pack_base, 2);
       raise exception 'DISCOUNT_EXCEEDS_MAX_LIMIT: slab discount (% %%) exceeds Super Admin limit (% %%).',
         v_discount_pct, v_effective_max_discount
         using errcode = '23514';
@@ -875,6 +912,7 @@ begin
     rm.starts_at,
     rm.expires_at,
     mp.name as plan_name,
+    mp.is_active as plan_is_active,
     mp.features,
     mp.product_discount_percent,
     mp.order_value_discount_percent,
@@ -912,6 +950,8 @@ begin
   else
     -- Immediate stop on expiry: if expires_at <= now() or status <> 'active',
     -- ALL paid benefits cease immediately (0% discounts, remaining_seconds = 0).
+    -- Paid tier discounts also remain 0% whenever the membership program is
+    -- disabled or the underlying plan is inactive.
     v_is_expired := (v_latest.status = 'expired')
       or (v_latest.expires_at is not null and v_latest.expires_at <= now());
 
@@ -933,12 +973,31 @@ begin
       'expires_at', v_latest.expires_at,
       'is_expired', v_is_expired,
       'remaining_seconds', v_remaining_seconds,
-      'benefits_active', (v_latest.status = 'active' and not v_is_expired),
-      'effective_product_discount_percent', case when v_latest.status = 'active' and not v_is_expired then v_latest.product_discount_percent else 0 end,
-      'effective_order_discount_percent', case when v_latest.status = 'active' and not v_is_expired then v_latest.order_value_discount_percent else 0 end,
+      'benefits_active', (
+        v_latest.status = 'active'
+        and not v_is_expired
+        and (v_latest.tier = 'free' or (coalesce(v_program_enabled, false) and coalesce(v_latest.plan_is_active, false)))
+      ),
+      'effective_product_discount_percent', case
+        when v_latest.status = 'active'
+             and not v_is_expired
+             and coalesce(v_program_enabled, false)
+             and coalesce(v_latest.plan_is_active, false)
+        then v_latest.product_discount_percent else 0 end,
+      'effective_order_discount_percent', case
+        when v_latest.status = 'active'
+             and not v_is_expired
+             and coalesce(v_program_enabled, false)
+             and coalesce(v_latest.plan_is_active, false)
+        then v_latest.order_value_discount_percent else 0 end,
       'expiry_behavior', v_latest.expiry_behavior,
       'renewal_mode', v_latest.renewal_mode,
-      'features', case when v_latest.status = 'active' and not v_is_expired then v_latest.features else coalesce((select features from public.membership_plans where id = 'free'), '[]'::jsonb) end
+      'features', case
+        when v_latest.status = 'active'
+             and not v_is_expired
+             and (v_latest.tier = 'free' or (coalesce(v_program_enabled, false) and coalesce(v_latest.plan_is_active, false)))
+        then v_latest.features
+        else coalesce((select features from public.membership_plans where id = 'free'), '[]'::jsonb) end
     );
   end if;
 
@@ -1008,6 +1067,9 @@ as $$
 declare
   v_program public.membership_program_settings%rowtype;
   v_plan public.membership_plans%rowtype;
+  v_retailer record;
+  v_require_approved boolean := true;
+  v_allowed_categories text[];
   v_membership_id uuid;
   v_expires_at timestamptz;
 begin
@@ -1023,6 +1085,34 @@ begin
   select * into v_plan from public.membership_plans where id = p_plan_id and is_active = true;
   if not found then
     raise exception 'Active membership plan % not found.', p_plan_id using errcode = '22023';
+  end if;
+
+  select r.id, r.status, r.retailer_category::text as retailer_category
+    into v_retailer
+    from public.retailers r
+   where r.id = p_retailer_id;
+  if not found then
+    raise exception 'Retailer account % not found.', p_retailer_id using errcode = '22023';
+  end if;
+
+  if v_plan.tier <> 'free' then
+    v_require_approved := coalesce((v_plan.eligibility_rules->>'requireApprovedRetailer')::boolean, true);
+    if v_require_approved and v_retailer.status <> 'active' then
+      raise exception 'MEMBERSHIP_ELIGIBILITY_FAILED: Retailer must be approved and active for plan %.', p_plan_id
+        using errcode = '23514';
+    end if;
+
+    if jsonb_typeof(v_plan.eligibility_rules->'allowedCategories') = 'array' then
+      select array_agg(elem) into v_allowed_categories
+        from jsonb_array_elements_text(v_plan.eligibility_rules->'allowedCategories') elem;
+      if v_allowed_categories is not null
+         and array_length(v_allowed_categories, 1) > 0
+         and not (v_retailer.retailer_category = any(v_allowed_categories)) then
+        raise exception 'MEMBERSHIP_ELIGIBILITY_FAILED: Retailer category "%" is not eligible for plan %.',
+          v_retailer.retailer_category, p_plan_id
+          using errcode = '23514';
+      end if;
+    end if;
   end if;
 
   if v_plan.tier = 'free' then
@@ -1089,15 +1179,21 @@ on conflict (id) do nothing;
 create table if not exists public.seller_ad_campaigns (
   id uuid primary key default uuid_generate_v4(),
   seller_id uuid not null references public.sellers(id) on delete restrict,
-  title text not null check (char_length(btrim(title)) between 2 and 140),
-  headline text check (headline is null or char_length(btrim(headline)) <= 240),
+  title text not null check (char_length(btrim(title)) between 2 and 140 and title !~ '[<>]'),
+  headline text check (headline is null or (char_length(btrim(headline)) <= 240 and headline !~ '[<>]')),
   artwork_url text not null check (
     char_length(btrim(artwork_url)) between 5 and 1000
-    and (artwork_url like 'https://%' or artwork_url like '/%')
+    and artwork_url not like '//%'
+    and artwork_url !~ '(\.\.|\\|[[:cntrl:][:space:]<>"])'
+    and (artwork_url ~ '^https://[A-Za-z0-9.-]+/' or artwork_url ~ '^/[A-Za-z0-9._-]+/')
   ),
   destination_url text check (
     destination_url is null
-    or (char_length(btrim(destination_url)) between 1 and 500 and (destination_url like 'https://%' or destination_url like '/%'))
+    or (
+      char_length(btrim(destination_url)) between 9 and 500
+      and destination_url ~ '^/retailer($|/|\?)'
+      and destination_url !~ '(//|\.\.|\\|[[:cntrl:][:space:]<>"])'
+    )
   ),
   placement text not null check (placement in ('homepage_hero', 'homepage_strip', 'category_banner', 'catalog_spotlight')),
   starts_at timestamptz not null,
@@ -1118,6 +1214,33 @@ create table if not exists public.seller_ad_campaigns (
   constraint seller_ad_campaigns_window_check check (ends_at > starts_at),
   constraint seller_ad_campaigns_active_requires_approved check (not is_active or approval_status = 'approved')
 );
+
+-- Named URL & copy safety constraints (idempotent across replays)
+alter table public.seller_ad_campaigns
+  drop constraint if exists seller_ad_campaigns_artwork_url_safe_check,
+  add constraint seller_ad_campaigns_artwork_url_safe_check check (
+    char_length(btrim(artwork_url)) between 5 and 1000
+    and artwork_url not like '//%'
+    and artwork_url !~ '(\.\.|\\|[[:cntrl:][:space:]<>"])'
+    and (artwork_url ~ '^https://[A-Za-z0-9.-]+/' or artwork_url ~ '^/[A-Za-z0-9._-]+/')
+  );
+
+alter table public.seller_ad_campaigns
+  drop constraint if exists seller_ad_campaigns_destination_internal_check,
+  add constraint seller_ad_campaigns_destination_internal_check check (
+    destination_url is null
+    or (
+      char_length(btrim(destination_url)) between 9 and 500
+      and destination_url ~ '^/retailer($|/|\?)'
+      and destination_url !~ '(//|\.\.|\\|[[:cntrl:][:space:]<>"])'
+    )
+  );
+
+alter table public.seller_ad_campaigns
+  drop constraint if exists seller_ad_campaigns_copy_no_html_check,
+  add constraint seller_ad_campaigns_copy_no_html_check check (
+    title !~ '[<>]' and (headline is null or headline !~ '[<>]')
+  );
 
 create index if not exists idx_sac_seller on public.seller_ad_campaigns (seller_id, approval_status);
 create index if not exists idx_sac_placement_active on public.seller_ad_campaigns (placement, approval_status, is_active);
@@ -1405,6 +1528,136 @@ drop trigger if exists trg_audit_banners on public.banners;
 create trigger trg_audit_banners
   after insert or update or delete on public.banners
   for each row execute function public.log_audit();
+
+-- ---------------------------------------------------------------------------
+-- 6. Function-by-Function Security Hardening (Audited & Individually Justified)
+-- ---------------------------------------------------------------------------
+
+-- 6.1 Revoke unnecessary PUBLIC / anon / authenticated EXECUTE on all 13
+--     internal trigger functions introduced by migration 0109. Triggers invoke
+--     their handler directly regardless of caller EXECUTE privilege.
+revoke all on function public.stamp_product_moderation_actor() from public, anon, authenticated;
+revoke all on function public.prevent_append_only_audit_mutation() from public, anon, authenticated;
+revoke all on function public.log_phase3_governance_audit() from public, anon, authenticated;
+revoke all on function public.log_seller_offer_moderation_event() from public, anon, authenticated;
+revoke all on function public.stamp_wholesale_rule_editor() from public, anon, authenticated;
+revoke all on function public.enforce_seller_offer_wholesale_limits() from public, anon, authenticated;
+revoke all on function public.enforce_seller_tier_wholesale_limits() from public, anon, authenticated;
+revoke all on function public.enforce_product_tier_wholesale_limits() from public, anon, authenticated;
+revoke all on function public.guard_membership_plan_changes() from public, anon, authenticated;
+revoke all on function public.enforce_membership_upgrade_request() from public, anon, authenticated;
+revoke all on function public.enforce_seller_ad_campaign_rules() from public, anon, authenticated;
+revoke all on function public.log_seller_ad_campaign_audit() from public, anon, authenticated;
+revoke all on function public.guard_super_admin_audit_insert() from public, anon, authenticated;
+
+-- 6.2 Harden can_current_staff_read_profile(uuid) (0037) with a caller-role
+--     guard so anon / retailer / seller / salesman callers can NEVER probe
+--     whether an arbitrary UUID belongs to super_admin / admin / staff / salesman
+--     via direct PostgREST RPC. Keeps EXECUTE compatible with PUBLIC RLS policy
+--     evaluation on `profiles` (returns FALSE cleanly instead of 42501).
+create or replace function public.can_current_staff_read_profile(p_profile_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, pg_temp
+as $$
+  select p_profile_id is not null
+    and public.is_staff_or_above()
+    and exists (
+      select 1
+        from public.profiles p
+       where p.id = p_profile_id
+         and (
+           p.role in ('super_admin', 'admin', 'staff', 'salesman')
+           or public.is_retailer_area_assigned_to_current_staff(p.id)
+         )
+    );
+$$;
+
+-- 6.3 Harden submit_supplier_application(...) (0059) with durable DB-level
+--     rate limiting backed by 0060's `supplier_application_rate_limits` so
+--     direct PostgREST calls cannot bypass the Next.js server action limiter
+--     and flood `public.suppliers`. Keeps the exact 11-parameter signature,
+--     `search_path = public, pg_temp`, and anon/authenticated EXECUTE contract
+--     (no PUBLIC execute).
+create or replace function public.submit_supplier_application(
+  p_business_name text,
+  p_legal_name text,
+  p_contact_name text,
+  p_phone text,
+  p_email text,
+  p_address_line text,
+  p_city text,
+  p_state text,
+  p_pincode text,
+  p_gstin text,
+  p_product_categories text
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_id uuid;
+  v_phone text := btrim(coalesce(p_phone, ''));
+  v_phone_hash text;
+  v_burst_hash text;
+  v_phone_limit jsonb;
+  v_burst_limit jsonb;
+begin
+  -- Enforce DB-level anti-abuse rate limits for direct API callers (anon /
+  -- authenticated) using SHA-256 hashes (never storing raw phone numbers).
+  if current_setting('role', true) in ('anon', 'authenticated') then
+    v_phone_hash := encode(pg_catalog.sha256(convert_to('supplier-rpc-phone:' || v_phone, 'UTF8')), 'hex');
+    v_phone_limit := public.consume_supplier_application_rate_limit(
+      v_phone_hash,
+      'supplier-rpc-phone',
+      5,
+      600
+    );
+    if not coalesce((v_phone_limit->>'allowed')::boolean, false) then
+      raise exception 'SUPPLIER_RATE_LIMITED: Too many applications submitted for this phone number. Please try again later.'
+        using errcode = 'P0001';
+    end if;
+
+    v_burst_hash := encode(pg_catalog.sha256(convert_to('supplier-rpc-burst:global', 'UTF8')), 'hex');
+    v_burst_limit := public.consume_supplier_application_rate_limit(
+      v_burst_hash,
+      'supplier-rpc-burst',
+      30,
+      600
+    );
+    if not coalesce((v_burst_limit->>'allowed')::boolean, false) then
+      raise exception 'SUPPLIER_RATE_LIMITED: Supplier application submission rate limit reached. Please try again shortly.'
+        using errcode = 'P0001';
+    end if;
+  end if;
+
+  insert into public.suppliers (
+    business_name, legal_name, contact_name, phone, email,
+    address_line, city, state, pincode, gstin, product_categories, status
+  ) values (
+    btrim(p_business_name),
+    nullif(btrim(coalesce(p_legal_name, '')), ''),
+    btrim(p_contact_name),
+    v_phone,
+    nullif(lower(btrim(coalesce(p_email, ''))), ''),
+    nullif(btrim(coalesce(p_address_line, '')), ''),
+    nullif(btrim(coalesce(p_city, '')), ''),
+    nullif(btrim(coalesce(p_state, '')), ''),
+    nullif(btrim(coalesce(p_pincode, '')), ''),
+    nullif(upper(btrim(coalesce(p_gstin, ''))), ''),
+    nullif(btrim(coalesce(p_product_categories, '')), ''),
+    'pending'
+  )
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+revoke execute on function public.submit_supplier_application(text, text, text, text, text, text, text, text, text, text, text) from public;
+grant execute on function public.submit_supplier_application(text, text, text, text, text, text, text, text, text, text, text) to anon, authenticated;
 
 -- ============================================================================
 -- END OF MIGRATION 0109

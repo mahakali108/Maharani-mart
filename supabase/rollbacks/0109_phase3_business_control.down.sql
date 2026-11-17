@@ -71,17 +71,19 @@
 --     trg_stamp_seller_pricing_permissions, trg_stamp_wholesale_pricing_rules,
 --     trg_log_seller_offer_moderation_event, trg_prevent_pmh_mutation,
 --     trg_stamp_product_moderation_actor
---   Functions dropped (15, no CASCADE):
---     guard_super_admin_audit_insert(), log_seller_ad_campaign_audit(),
---     enforce_seller_ad_campaign_rules(),
---     super_admin_assign_membership(uuid, text, text, text),
---     get_retailer_membership_overview(uuid),
---     enforce_membership_upgrade_request(), guard_membership_plan_changes(),
---     enforce_product_tier_wholesale_limits(),
---     enforce_seller_tier_wholesale_limits(),
---     enforce_seller_offer_wholesale_limits(), stamp_wholesale_rule_editor(),
---     log_seller_offer_moderation_event(), stamp_product_moderation_actor(),
---     log_phase3_governance_audit(), prevent_append_only_audit_mutation()
+--   Functions dropped (15, no CASCADE) & restored (2):
+--     Dropped: guard_super_admin_audit_insert(), log_seller_ad_campaign_audit(),
+--       enforce_seller_ad_campaign_rules(),
+--       super_admin_assign_membership(uuid, text, text, text),
+--       get_retailer_membership_overview(uuid),
+--       enforce_membership_upgrade_request(), guard_membership_plan_changes(),
+--       enforce_product_tier_wholesale_limits(),
+--       enforce_seller_tier_wholesale_limits(),
+--       enforce_seller_offer_wholesale_limits(), stamp_wholesale_rule_editor(),
+--       log_seller_offer_moderation_event(), stamp_product_moderation_actor(),
+--       log_phase3_governance_audit(), prevent_append_only_audit_mutation()
+--     Restored: can_current_staff_read_profile(uuid) (0037),
+--       submit_supplier_application(text x 11) (0059)
 -- ============================================================================
 
 do $rollback_0109$
@@ -350,6 +352,79 @@ begin
         array_length(v_findings, 1),
         v_report;
     end if;
+  end if;
+
+  -- -------------------------------------------------------------------------
+  -- 6. Restore pre-0109 definitions of hardened existing functions (0037 / 0059)
+  -- -------------------------------------------------------------------------
+  if to_regprocedure('public.can_current_staff_read_profile(uuid)') is not null then
+    execute $fn$
+      create or replace function public.can_current_staff_read_profile(p_profile_id uuid)
+      returns boolean
+      language sql
+      stable
+      security definer
+      set search_path = public, pg_temp
+      as $body$
+        select p_profile_id is not null
+          and exists (
+            select 1 from public.profiles p
+             where p.id = p_profile_id
+               and (
+                 p.role in ('super_admin', 'admin', 'staff', 'salesman')
+                 or public.is_retailer_area_assigned_to_current_staff(p.id)
+               )
+          );
+      $body$;
+    $fn$;
+  end if;
+
+  if to_regprocedure('public.submit_supplier_application(text,text,text,text,text,text,text,text,text,text,text)') is not null then
+    execute $fn$
+      create or replace function public.submit_supplier_application(
+        p_business_name text,
+        p_legal_name text,
+        p_contact_name text,
+        p_phone text,
+        p_email text,
+        p_address_line text,
+        p_city text,
+        p_state text,
+        p_pincode text,
+        p_gstin text,
+        p_product_categories text
+      ) returns uuid
+      language plpgsql
+      security definer
+      set search_path = public, pg_temp
+      as $body$
+      declare
+        v_id uuid;
+      begin
+        insert into public.suppliers (
+          business_name, legal_name, contact_name, phone, email,
+          address_line, city, state, pincode, gstin, product_categories, status
+        ) values (
+          btrim(p_business_name),
+          nullif(btrim(coalesce(p_legal_name, '')), ''),
+          btrim(p_contact_name),
+          btrim(p_phone),
+          nullif(lower(btrim(coalesce(p_email, ''))), ''),
+          nullif(btrim(coalesce(p_address_line, '')), ''),
+          nullif(btrim(coalesce(p_city, '')), ''),
+          nullif(btrim(coalesce(p_state, '')), ''),
+          nullif(btrim(coalesce(p_pincode, '')), ''),
+          nullif(upper(btrim(coalesce(p_gstin, ''))), ''),
+          nullif(btrim(coalesce(p_product_categories, '')), ''),
+          'pending'
+        )
+        returning id into v_id;
+        return v_id;
+      end;
+      $body$;
+    $fn$;
+    revoke execute on function public.submit_supplier_application(text, text, text, text, text, text, text, text, text, text, text) from public;
+    grant execute on function public.submit_supplier_application(text, text, text, text, text, text, text, text, text, text, text) to anon, authenticated;
   end if;
 
   -- -------------------------------------------------------------------------

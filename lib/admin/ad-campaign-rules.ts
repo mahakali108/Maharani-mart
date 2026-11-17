@@ -69,15 +69,30 @@ export interface SellerAdCampaignRow {
 export function isSafeCampaignUrl(raw: string): boolean {
   const trimmed = raw.trim();
   if (trimmed.length === 0 || trimmed.length > 1000) return false;
+  if (/[\u0000-\u001f\u007f\s\\<>"]/.test(trimmed) || trimmed.includes('..')) return false;
   if (trimmed.startsWith('/')) {
-    return !trimmed.startsWith('//');
+    return /^\/[A-Za-z0-9._-]+\//.test(trimmed) || /^\/[A-Za-z0-9._-]+$/.test(trimmed);
   }
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'https:';
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && parsed.pathname.length > 1;
   } catch {
     return false;
   }
+}
+
+/**
+ * Seller advertisement click destinations are restricted strictly to internal
+ * Maharani Traders retailer storefront routes (/retailer...) so sellers cannot
+ * inject unauthorized external domains, phishing links, protocol-relative open
+ * redirects (//evil.com), or internal admin/API paths.
+ */
+export function isSafeCampaignDestinationUrl(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (trimmed.length < 9 || trimmed.length > 500) return false;
+  if (/[\u0000-\u001f\u007f\s\\<>"]/.test(trimmed)) return false;
+  if (trimmed.includes('//') || trimmed.includes('..')) return false;
+  return /^\/retailer($|\/|\?)/.test(trimmed);
 }
 
 export function validateAdCampaignProposalInput(input: {
@@ -108,14 +123,23 @@ export function validateAdCampaignProposalInput(input: {
   if (title.length < 2 || title.length > 140) {
     return { ok: false, error: 'Campaign title must be between 2 and 140 characters.' };
   }
+  if (/[<>]/.test(title)) {
+    return { ok: false, error: 'Campaign title cannot contain HTML markup or angle brackets.' };
+  }
   const headline = (input.headline ?? '').trim().slice(0, 240) || null;
+  if (headline && /[<>]/.test(headline)) {
+    return { ok: false, error: 'Promo headline cannot contain HTML markup or angle brackets.' };
+  }
   const artworkUrl = input.artworkUrl.trim();
   if (!isSafeCampaignUrl(artworkUrl) || artworkUrl.length < 5) {
-    return { ok: false, error: 'Artwork URL must be a valid https:// URL or relative site path.' };
+    return { ok: false, error: 'Artwork URL must be a valid https:// image URL or relative site path.' };
   }
   const destRaw = (input.destinationUrl ?? '').trim();
-  if (destRaw && !isSafeCampaignUrl(destRaw)) {
-    return { ok: false, error: 'Destination link must be a valid https:// URL or relative site path.' };
+  if (destRaw && !isSafeCampaignDestinationUrl(destRaw)) {
+    return {
+      ok: false,
+      error: 'Destination link must be an internal retailer catalog path (e.g. /retailer/catalog). External links are not permitted.',
+    };
   }
   if (!AD_PLACEMENTS.includes(input.placement as AdPlacement)) {
     return { ok: false, error: 'Select a valid advertisement placement.' };
