@@ -28,6 +28,25 @@
 # It does NOT deploy, does NOT touch Supabase, does NOT read a secret, and
 # does NOT probe production. Open a workflow run's log to see why a check
 # failed; nothing here writes to the repository.
+#
+# MIGRATION VALIDATION — READ THIS BEFORE TRUSTING ANY "Supabase Preview" CHECK
+# -----------------------------------------------------------------------------
+# The `Supabase Preview` check that appears on pull requests comes from the
+# hosted Supabase GitHub integration, not from this workflow. On this Free-plan
+# project it is SKIPPED (preview branches are a paid feature), and the branch
+# additionally reports MIGRATIONS_FAILED because production migration history
+# contains version `20261115155706` (0103 applied out-of-band) which has no
+# matching file in `supabase/migrations/` — see
+# docs/repair/PRODUCTION_MIGRATION_HISTORY_REPAIR_RUNBOOK.md.
+#
+# A SKIPPED or absent "Supabase Preview" check is therefore NOT evidence that
+# migrations were tested. The real, zero-cost migration gate is the explicit
+# "Migration chain, rollback & security gate (PGlite)" step below: it applies
+# EVERY file in `supabase/migrations` in order to a real PostgreSQL 16
+# (PGlite, in-process — no service, no credentials), then exercises Phase 3
+# behaviour, the guarded 0109 rollback, and the security-advisor/privilege
+# hardening invariants. `tests/ci-migration-gate.test.ts` fails if that step
+# or any of its suites is removed or renamed.
 name: Web CI
 
 on:
@@ -89,8 +108,33 @@ jobs:
           sudo apt-get install -y --no-install-recommends imagemagick
           convert -version
 
+      # Full suite via the repo script — exactly what a developer runs locally.
+      # The nine migration/security DB suites additionally run in the dedicated
+      # gate step below; re-running ~32s of PGlite suites is a deliberate,
+      # negligible cost so that migration validation shows up as its own
+      # named, unskippable CI signal instead of being folded into one big step
+      # (and NEVER inferred from the skipped "Supabase Preview" check).
       - name: Unit and integration tests
         run: corepack pnpm test
+
+      # THE migration gate. PGlite (in-process PostgreSQL 16) needs no service
+      # container, no Supabase project and no credentials, so this step can
+      # never be silently "skipped" the way the hosted Supabase Preview check
+      # is on the Free plan. Each suite applies the full migration chain in
+      # order (tests/helpers/pg-harness.ts); the Phase 3 suites additionally
+      # verify 0109 idempotent re-application and the guarded rollback.
+      - name: Migration chain, rollback & security gate (PGlite)
+        run: >-
+          corepack pnpm exec vitest run
+          tests/migration-reservations.test.ts
+          tests/migration-catalog-invariants.test.ts
+          tests/security-advisor-remediation-db.test.ts
+          tests/security-definer-hardening-db.test.ts
+          tests/privilege-hardening-db.test.ts
+          tests/publishing-integrity-0108-db.test.ts
+          tests/super-admin-bootstrap-db.test.ts
+          tests/phase3-business-control-db.test.ts
+          tests/phase3-rollback-protection-db.test.ts
 
       # Same invocation the previous in-repo workflow used. It needs no
       # Supabase credentials: every page that reads the database is dynamic and
