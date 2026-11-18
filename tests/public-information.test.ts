@@ -78,10 +78,11 @@ describe('public information pages come from managed content', () => {
     for (const href of policyPaths) expect(component, `policy-links hardcodes ${href}`).not.toContain(href);
 
     // Layouts load the managed links server-side; shells only render them.
+    // The seller portal layout is intentionally absent: that workspace was
+    // removed with the marketplace, so only the live layouts are checked.
     for (const path of [
       'app/admin/layout.tsx',
       'app/retailer/layout.tsx',
-      'app/seller/layout.tsx',
       'app/staff/layout.tsx',
       'app/salesman/layout.tsx',
     ]) {
@@ -96,7 +97,6 @@ describe('public information pages come from managed content', () => {
       expect(read(path), path).toContain('footerLinks: FooterLink[]');
       expect(read(path), path).toContain('<PolicyLinks');
     }
-    expect(read('app/seller/layout.tsx')).toContain('PolicyLinks links={footerLinks}');
     expect(read('components/auth/auth-frame.tsx')).toContain('loadFooterLinks');
     expect(read('components/auth/auth-frame.tsx')).toContain('aria-label="Public information"');
     expect(read('components/legal/public-info-shell.tsx')).toContain('FALLBACK_FOOTER_LINKS');

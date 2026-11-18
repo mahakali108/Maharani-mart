@@ -23,8 +23,9 @@ const AUTHENTICATED_MAY_CALL = [
   'publish_legal_document_version',     // Super Admin (0098)
   'record_legal_acceptance',            // records the caller's own acceptance of the current version (0095/0098)
   'record_loyalty_points',              // Admin only; refuses ORDER_EARN (0094)
-  'record_marketplace_launch_approval', // Super Admin; both approvals required (0098)
-  'seller_offer_gate_status',           // Admin or member of that seller (0098)
+  // `record_marketplace_launch_approval` and `seller_offer_gate_status` were
+  // REMOVED from this list by 0110: the marketplace is discontinued, so a
+  // signed-in session may no longer call either. 0110 revokes both.
   'set_sub_order_status',               // existing RPC; closing states are atomic (0097)
 ];
 const TABLES = ['delivery_completion_requests', 'legal_document_acceptances', 'legal_document_current_versions', 'marketplace_launch_approvals', 'order_item_legacy_stock_returns', 'return_request_events'];

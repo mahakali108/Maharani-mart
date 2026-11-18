@@ -37,17 +37,22 @@ describe('public page continuity (PostgreSQL 16)', () => {
     return { published: Number(row.published), missing: Number(row.missing), withoutSnapshot: Number(row.published_without_snapshot), total: Number(row.expected_total), missingRows: rows.filter((r) => r.check.startsWith('MISSING')).map((r) => r.check) };
   };
 
-  it('reports every page as missing before any publication', async () => {
+  it('reports every publishable page as missing before any publication', async () => {
     const s = await summary();
-    expect(s).toMatchObject({ published: 0, missing: 19, total: 19 });
-    expect(s.missingRows).toHaveLength(19);
+    // 19 pages are seeded; 18 are in the publication plan. `seller-agreement` is
+    // excluded from that plan because the marketplace it governed was
+    // discontinued (0110) — it is never published, so it is not "missing".
+    expect(s).toMatchObject({ published: 0, missing: 18, total: 18 });
+    expect(s.missingRows).toHaveLength(18);
   });
 
-  it('after stage 1 exactly ten live pages are missing — the deploy gap, made visible', async () => {
+  it('after stage 1 exactly nine live pages are missing — the deploy gap, made visible', async () => {
     await db.exec(stage1);
     const s = await summary();
-    expect(s).toMatchObject({ published: 9, missing: 10, withoutSnapshot: 0 });
-    expect(s.missingRows).toEqual(expect.arrayContaining(['MISSING: cookies (stage 2)', 'MISSING: seller-agreement (stage 2)']));
+    expect(s).toMatchObject({ published: 9, missing: 9, withoutSnapshot: 0 });
+    expect(s.missingRows).toEqual(expect.arrayContaining(['MISSING: cookies (stage 2)', 'MISSING: retailer-terms (stage 2)']));
+    // The retirement is visible here too: the seller agreement is never in the plan.
+    expect(s.missingRows).not.toContain('MISSING: seller-agreement (stage 2)');
 
     // The four legacy redirect targets (/terms, /privacy, /returns, /shipping)
     // are published, so those redirects never land on an unavailable page.
@@ -60,19 +65,25 @@ describe('public page continuity (PostgreSQL 16)', () => {
     expect(legacy.rows.map((r) => r.slug)).toEqual(['privacy', 'returns', 'shipping', 'terms']);
   });
 
-  it('stage 2 restores all nineteen and is idempotent', async () => {
+  it('stage 2 restores eighteen and is idempotent, holding back the retired seller agreement', async () => {
     await db.exec(stage2);
     const s = await summary();
-    expect(s).toMatchObject({ published: 19, missing: 0, withoutSnapshot: 0, total: 19 });
+    // 19 seeded pages, of which 18 are published: `seller-agreement` is held back
+    // because the marketplace it governed was discontinued (migration 0110). It is
+    // still present as a seeded page — `total` is unchanged — it is simply never
+    // made public.
+    expect(s).toMatchObject({ published: 18, missing: 0, withoutSnapshot: 0, total: 18 });
 
     // every URL answers an anonymous caller, and the footer/app index is complete
     const states = await db.query<{ slug: string; state: string }>(
       `select slug, (public.published_page(slug) ->> 'state') as state from public.site_pages order by slug`,
     );
     expect(states.rows).toHaveLength(19);
-    expect(states.rows.every((r) => r.state === 'published')).toBe(true);
+    const live = states.rows.filter((r) => r.state === 'published');
+    expect(live).toHaveLength(18);
+    expect(live.map((r) => r.slug)).not.toContain('seller-agreement');
     const index = await db.query<{ n: number }>(`select jsonb_array_length(public.published_pages())::int as n`);
-    expect(index.rows[0]!.n).toBe(19);
+    expect(index.rows[0]!.n).toBe(18);
 
     // A second run changes nothing: the script skips pages that are already live
     // (their timestamp and snapshot are preserved).
@@ -86,7 +97,7 @@ describe('public page continuity (PostgreSQL 16)', () => {
     const { rows } = await db.query<{ slug: string }>(
       `select slug from public.site_pages where published_snapshot -> 'sections' is not null order by slug`,
     );
-    expect(rows).toHaveLength(19);
+    expect(rows).toHaveLength(18);
     const stageOne = await db.query<{ slug: string }>(
       `select slug from public.site_pages where slug = any($1::text[]) order by slug`,
       [NINE],

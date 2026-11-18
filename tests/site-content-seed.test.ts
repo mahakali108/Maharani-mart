@@ -145,19 +145,24 @@ describe('the staged publication scripts', () => {
     return [...block.matchAll(/'([a-z][a-z0-9-]*)'/g)].map((match) => match[1]!);
   };
 
-  it('publishes the seeded pages in two stages that exactly cover the seed', () => {
+  it('publishes the seeded pages in two stages, holding back the retired seller agreement', () => {
     const stageOne = slugsOf(stage1);
     const stageTwo = slugsOf(stage2);
     const seeded = seed.pages.map((page) => page.slug);
     expect(new Set([...stageOne, ...stageTwo]).size).toBe(stageOne.length + stageTwo.length);
-    expect([...stageOne, ...stageTwo].sort()).toEqual([...seeded].sort());
+    // `seller-agreement` is the ONE seeded page neither stage publishes. The
+    // marketplace it governed was discontinued (migration 0110), so publishing it
+    // would put a live contract for a seller class that no longer exists in front
+    // of customers. The page itself is preserved, unpublished.
+    expect([...stageOne, ...stageTwo].sort()).toEqual([...seeded].filter((slug) => slug !== 'seller-agreement').sort());
+    expect([...stageOne, ...stageTwo]).not.toContain('seller-agreement');
     // Stage 1 carries only wording that was already public before the module.
     for (const slug of stageOne) expect(stageOne.length, slug).toBeGreaterThan(0);
     expect(stageOne).toHaveLength(9);
-    expect(stageTwo).toHaveLength(10);
+    expect(stageTwo).toHaveLength(9);
   });
 
-  it('publishes both stages before the deploy (deferring stage 2 would darken ten live URLs)', () => {
+  it('publishes both stages before the deploy (deferring stage 2 would darken nine live URLs)', () => {
     // All nineteen pages are served by the deployed app today, so a deploy that
     // lands after stage 1 only takes ten live URLs offline until stage 2 runs.
     // This pins the corrected order and the fact it depends on.
@@ -169,7 +174,10 @@ describe('the staged publication scripts', () => {
     expect(stageTwo).toBeLessThan(deploy);
     expect(order).toMatch(/must both happen before step 8/i);
     expect(readme).not.toMatch(/Step 7 is deliberately not urgent/);
-    expect(readme).toMatch(/seller-agreement[\s\S]*acceptance is already enforced/);
+    // The seller agreement is deliberately NOT published by any stage, and the
+    // README must say so rather than claiming its acceptance gate still matters.
+    expect(readme).toMatch(/seller-agreement[\s\S]*NOT published by either/);
+    expect(readme).not.toMatch(/acceptance is already enforced/);
     for (const slug of slugsOf(stage2)) expect(readme, slug).toContain(`/legal/${slug}`);
   });
 

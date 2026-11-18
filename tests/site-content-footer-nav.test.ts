@@ -74,7 +74,9 @@ describe('footer navigation comes from managed content', () => {
 });
 
 describe('content.manage permission', () => {
-  const roles: UserRole[] = ['super_admin', 'admin', 'staff', 'salesman', 'retailer', 'seller'];
+  // `seller` is deliberately absent: the role was retired with the marketplace
+  // and is no longer part of UserRole.
+  const roles: UserRole[] = ['super_admin', 'admin', 'staff', 'salesman', 'retailer'];
 
   it('is held by the Super Admin and by nobody else', () => {
     expect(can('super_admin', 'content.manage')).toBe(true);

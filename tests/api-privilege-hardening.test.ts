@@ -176,14 +176,20 @@ describe('H7 anon EXECUTE withdrawn from inventory and cost RPCs', () => {
 // The deliberate exceptions must survive the hardening
 // ---------------------------------------------------------------------------
 describe('public endpoints and RLS predicates still work for anonymous callers', () => {
-  it('keeps the public registration and supplier-form endpoints', async () => {
+  it('keeps the public registration endpoint but closes the supplier form', async () => {
+    // Public retail sign-up still needs a phone check before submit.
     expect(await canExecute('anon', 'public.is_phone_registered(text)')).toBe(true);
+
+    // The supplier programme was discontinued, so 0110 withdrew the anonymous
+    // EXECUTE grant. The FUNCTION still exists so historical applications remain
+    // attributable — only the ability to file a new one is gone.
     const { rows } = await db.query<{ signature: string }>(`
       select p.oid::regprocedure::text as signature
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'submit_supplier_application'`);
     expect(rows).toHaveLength(1);
-    expect(await canExecute('anon', rows[0]!.signature)).toBe(true);
+    expect(await canExecute('anon', rows[0]!.signature)).toBe(false);
+    expect(await canExecute('authenticated', rows[0]!.signature)).toBe(false);
   });
 
   it('keeps every predicate a `public` RLS policy evaluates', async () => {
