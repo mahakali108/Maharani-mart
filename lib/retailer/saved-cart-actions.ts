@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 import { validatePackForCart } from '@/lib/retailer/cart-service';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import {
   isSaveForLaterCartName,
   MAX_LINES_PER_SAVED_CART,
@@ -15,16 +14,9 @@ import {
 
 export type SavedCartActionResult = { error?: string } | { success: true; savedCartId?: string };
 
-type SourceType = 'maharani' | 'seller';
 interface SavedSourceLine {
   pack_id: string;
-  seller_offer_id: string | null;
-  source_type: SourceType;
   quantity: number;
-}
-
-function sourceKey(line: Pick<SavedSourceLine, 'pack_id' | 'seller_offer_id'>): string {
-  return `${line.pack_id}|${line.seller_offer_id ?? 'maharani'}`;
 }
 
 function sanitizeName(raw: string): string {
@@ -58,12 +50,10 @@ export async function saveCurrentCartAction(rawName: string): Promise<SavedCartA
 
   const { data: cartItems } = await supabase
     .from('cart_items')
-    .select('pack_id, seller_offer_id, source_type, quantity, product_id')
+    .select('pack_id, quantity, product_id')
     .eq('retailer_id', user.id);
   const items = (cartItems ?? []) as unknown as {
     pack_id: string;
-    seller_offer_id: string | null;
-    source_type: 'maharani' | 'seller';
     quantity: number;
     product_id: string;
   }[];
@@ -99,23 +89,21 @@ export async function saveCurrentCartAction(rawName: string): Promise<SavedCartA
   // appended. Item counts stay bounded.
   const { data: existingItems } = await supabase
     .from('retailer_saved_cart_items')
-    .select('id, pack_id, seller_offer_id, source_type, quantity')
+    .select('id, pack_id, quantity')
     .eq('saved_cart_id', savedCartId)
     .eq('retailer_id', user.id);
   const typedExistingItems = (existingItems ?? []) as unknown as (SavedSourceLine & { id: string })[];
-  const existingBySource = new Map(typedExistingItems.map((item) => [sourceKey(item), item]));
+  const existingByPack = new Map(typedExistingItems.map((item) => [item.pack_id, item]));
 
   const rowsToInsert: {
     saved_cart_id: string;
     retailer_id: string;
     product_id: string;
     pack_id: string;
-    seller_offer_id: string | null;
-    source_type: SourceType;
     quantity: number;
   }[] = [];
   for (const item of items) {
-    const existingItem = existingBySource.get(sourceKey(item));
+    const existingItem = existingByPack.get(item.pack_id);
     if (existingItem) {
       if (item.quantity > existingItem.quantity) {
         const { error } = await supabase
@@ -131,8 +119,6 @@ export async function saveCurrentCartAction(rawName: string): Promise<SavedCartA
         retailer_id: user.id,
         product_id: item.product_id,
         pack_id: item.pack_id,
-        seller_offer_id: item.seller_offer_id,
-        source_type: item.source_type,
         quantity: item.quantity,
       });
     }
@@ -159,15 +145,13 @@ export async function saveCartItemForLaterAction(cartItemId: string): Promise<Sa
 
   const { data: item } = await supabase
     .from('cart_items')
-    .select('id, pack_id, product_id, seller_offer_id, source_type, quantity')
+    .select('id, pack_id, product_id, quantity')
     .eq('id', cartItemId)
     .eq('retailer_id', user.id)
     .maybeSingle<{
       id: string;
       pack_id: string;
       product_id: string;
-      seller_offer_id: string | null;
-      source_type: SourceType;
       quantity: number;
     } | never>();
   if (!item) return { error: 'Cart item not found.' };
@@ -191,16 +175,13 @@ export async function saveCartItemForLaterAction(cartItemId: string): Promise<Sa
     savedCartId = created.id;
   }
 
-  let existingItemQuery = supabase
+  const { data: existingItem } = await supabase
     .from('retailer_saved_cart_items')
     .select('id, quantity')
     .eq('saved_cart_id', savedCartId)
     .eq('pack_id', item.pack_id)
-    .eq('retailer_id', user.id);
-  existingItemQuery = item.seller_offer_id
-    ? existingItemQuery.eq('seller_offer_id' as never, item.seller_offer_id)
-    : existingItemQuery.is('seller_offer_id' as never, null);
-  const { data: existingItem } = await existingItemQuery.maybeSingle<{ id: string; quantity: number }>();
+    .eq('retailer_id', user.id)
+    .maybeSingle<{ id: string; quantity: number }>();
 
   if (existingItem) {
     const { error } = await supabase
@@ -215,8 +196,6 @@ export async function saveCartItemForLaterAction(cartItemId: string): Promise<Sa
       retailer_id: user.id,
       product_id: item.product_id,
       pack_id: item.pack_id,
-      seller_offer_id: item.seller_offer_id,
-      source_type: item.source_type,
       quantity: item.quantity,
     } as unknown as never);
     if (error) return { error: 'The item could not be saved for later.' };
@@ -254,7 +233,7 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
 
   const { data: savedItems } = await supabase
     .from('retailer_saved_cart_items')
-    .select('pack_id, seller_offer_id, source_type, quantity')
+    .select('pack_id, quantity')
     .eq('saved_cart_id', savedCartId)
     .eq('retailer_id', user.id);
   const typedSavedItems = (savedItems ?? []) as unknown as SavedSourceLine[];
@@ -271,44 +250,22 @@ export async function restoreSavedCartAction(savedCartId: string): Promise<Saved
     .select('id, moq, is_active, products ( is_active )')
     .in('id', [...new Set(typedSavedItems.map((item) => item.pack_id))]);
   const packById = new Map(((packRows ?? []) as unknown as PackForRestore[]).map((pack) => [pack.id, pack]));
-  const marketplace = await loadMarketplaceOfferQuotes(
-    supabase,
-    typedSavedItems.map((item) => item.seller_offer_id).filter((id): id is string => Boolean(id))
-  );
-  const offerById = new Map(marketplace.offers.map((offer) => [offer.offerId, offer]));
-
-  const validLines: { packId: string; sellerOfferId: string | null; quantity: number }[] = [];
+  const validLines: { packId: string; quantity: number }[] = [];
   let skippedCount = 0;
   for (const item of typedSavedItems) {
     const pack = packById.get(item.pack_id);
-    // Re-price by the preserved source identity. Seller lines never fall back
-    // to Maharani pack pricing when an offer disappears.
-    if (!item.seller_offer_id) {
-      if (!pack || !pack.is_active || !pack.products?.is_active || item.quantity < pack.moq) {
-        skippedCount += 1;
-        continue;
-      }
-      const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
-      if (validationError) {
-        skippedCount += 1;
-        continue;
-      }
-    } else {
-      const offer = offerById.get(item.seller_offer_id);
-      if (!pack || !pack.is_active || !pack.products?.is_active
-          || marketplace.error || !offer || offer.packId !== item.pack_id
-          || item.quantity < offer.moq
-          || !offer.inStock
-          || (offer.stockQuantity ?? 0) < item.quantity) {
-        skippedCount += 1;
-        continue;
-      }
+    if (!pack || !pack.is_active || !pack.products?.is_active || item.quantity < pack.moq) {
+      skippedCount += 1;
+      continue;
     }
-    validLines.push({
-      packId: item.pack_id,
-      sellerOfferId: item.seller_offer_id,
-      quantity: item.quantity,
-    });
+    // Re-validate against CURRENT catalogue state — a saved cart never carries
+    // a historical price forward.
+    const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
+    if (validationError) {
+      skippedCount += 1;
+      continue;
+    }
+    validLines.push({ packId: item.pack_id, quantity: item.quantity });
   }
   if (validLines.length === 0) {
     return { error: 'None of these items are currently orderable — availability and minimums may have changed.' };
@@ -330,7 +287,7 @@ export async function restoreSavedCartItemAction(itemId: string): Promise<SavedC
   const supabase = (await createClient());
   const { data: item } = await supabase
     .from('retailer_saved_cart_items')
-    .select('pack_id, seller_offer_id, source_type, quantity')
+    .select('pack_id, quantity')
     .eq('id', itemId)
     .eq('retailer_id', user.id)
     .maybeSingle<SavedSourceLine | never>();
@@ -344,23 +301,12 @@ export async function restoreSavedCartItemAction(itemId: string): Promise<SavedC
   if (!pack || !pack.is_active || !pack.products?.is_active) {
     return { error: 'This item is not currently orderable.' };
   }
-  if (item.seller_offer_id) {
-    const marketplace = await loadMarketplaceOfferQuotes(supabase, [item.seller_offer_id]);
-    const offer = marketplace.offers[0];
-    if (marketplace.error || !offer || offer.packId !== item.pack_id
-        || item.quantity < offer.moq || !offer.inStock
-        || (offer.stockQuantity ?? 0) < item.quantity) {
-      return { error: 'This seller offer is not currently orderable.' };
-    }
-  } else {
-    if (item.quantity < pack.moq) return { error: 'This item is not currently orderable.' };
-    const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
-    if (validationError) return { error: validationError };
-  }
+  if (item.quantity < pack.moq) return { error: 'This item is not currently orderable.' };
+  const validationError = await validatePackForCart(supabase, user.id, item.pack_id, item.quantity);
+  if (validationError) return { error: validationError };
 
   await mergeLinesIntoCart(supabase, user.id, [{
     packId: item.pack_id,
-    sellerOfferId: item.seller_offer_id,
     quantity: item.quantity,
   }]);
   revalidatePath('/retailer/cart');

@@ -8,7 +8,7 @@ action that a human runs deliberately, one stage at a time, against
 | Stage | File | What it publishes | Approval needed before running |
 | --- | --- | --- | --- |
 | 1 | `stage1_publish_live_text.sql` | The **9 pages whose wording is already live today**, unchanged: `about`, `contact`, `terms`, `privacy`, `returns`, `shipping`, `grievance`, `business-disclosure`, `product-safety` | Owner. No new text goes public — this stage only preserves what customers can already read, so the deploy that replaces the static pages does not leave a 404. |
-| 2 | `stage2_publish_reviewed_additions.sql` | The **10 pages that did not exist as public pages before**: `damaged-goods`, `seller-agreement`, `retailer-terms`, `marketplace-disclaimer`, `gst-pricing-invoice`, `prohibited-products`, `ip-complaints`, `suspension-termination`, `cookies`, `coins-loyalty` | Owner **and** legal/CA review of each page's text. These are new public statements about refunds, GST, suspension, cookies and the marketplace. |
+| 2 | `stage2_publish_reviewed_additions.sql` | The **9 pages that did not exist as public pages before**: `damaged-goods`, `retailer-terms`, `marketplace-disclaimer`, `gst-pricing-invoice`, `prohibited-products`, `ip-complaints`, `suspension-termination`, `cookies`, `coins-loyalty`. **`seller-agreement` was removed from this stage** when the marketplace was discontinued (migration 0110) — it is a historical contract with a seller class that no longer exists and must not be published. | Owner **and** legal/CA review of each page's text. These are new public statements about refunds, GST, suspension, cookies and the discontinued marketplace. |
 | — | `verify_publication.sql` | Read-only checks: what is published, what is still a draft, and what an anonymous caller can see | None — it changes nothing. |
 
 ## Why publication is not part of 0105
@@ -52,7 +52,7 @@ published before", and that deferring stage 2 kept the public surface unchanged.
 That is **wrong**, and following it would have taken ten live URLs off the air:
 
 ```
-/legal/damaged-goods     /legal/seller-agreement   /legal/retailer-terms
+/legal/damaged-goods     /legal/retailer-terms
 /legal/marketplace-disclaimer   /legal/gst-pricing-invoice
 /legal/prohibited-products      /legal/ip-complaints
 /legal/suspension-termination   /legal/cookies     /legal/coins-loyalty
@@ -72,10 +72,15 @@ database — and doing it in the same window as stage 1 removes the dark-page ri
 instead of creating it.
 
 Deferring stage 2 is only acceptable if the owner explicitly accepts that these
-ten URLs will answer "This page is not available right now." until stage 2 runs.
-`seller-agreement` makes that worse than cosmetic: acceptance is already enforced
-at `1.0` by `legal_document_current_versions`, so a seller invitation issued in
-that window would ask for acceptance of a page that cannot be read.
+nine URLs will answer "This page is not available right now." until stage 2 runs.
+
+`/legal/seller-agreement` is a separate case and is NOT published by either
+stage. Since migration 0110 discontinued the marketplace there is no seller to
+bind by it: no seller invitations can be issued (0110 closes `handle_new_user`
+and revokes the invitation RPCs) and every seller-role profile is deactivated,
+so nothing can trigger an acceptance requirement. The page, its wording and its
+`legal_document_current_versions` row are all preserved — see the
+seller/supplier removal implementation report for the decision record.
 
 ## What a stage does, mechanically
 

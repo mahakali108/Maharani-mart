@@ -17,19 +17,6 @@ export async function addToCartAction(packId: string, quantity: number): Promise
   return { success: true };
 }
 
-export async function addSellerOfferToCartAction(
-  packId: string,
-  quantity: number,
-  sellerOfferId: string
-): Promise<CartActionResult> {
-  const user = await requirePermission('orders.create');
-  const result = await addCartLines((await createClient()), user.id, [{ packId, quantity, sellerOfferId }]);
-  if ('error' in result) return result;
-  revalidatePath('/retailer/cart');
-  revalidatePath('/retailer', 'layout');
-  return { success: true };
-}
-
 export async function buyNowAction(packId: string, quantity: number): Promise<CartActionResult> {
   const result = await addToCartAction(packId, quantity);
   if ('error' in result) return result;

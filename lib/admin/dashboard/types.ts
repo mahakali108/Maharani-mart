@@ -314,18 +314,22 @@ export interface SuperAdminActivityRow {
   createdAt: string;
 }
 
+/**
+ * Super Admin business-control snapshot shown on the dashboard.
+ *
+ * The seller/marketplace counters (total sellers, pending seller approvals,
+ * seller-offer reviews, paid seller ads) were REMOVED with the marketplace.
+ * What remains describes the centrally-run business: retailer accounts,
+ * catalogue compliance, memberships, banners and orders.
+ */
 export interface SuperAdminBusinessOperations {
   status: SectionStatus;
-  totalSellers: number;
-  activeSellers: number;
-  pendingSellerApprovals: number;
-  pendingOfferReviews: number;
+  totalRetailers: number;
   pendingProductComplianceReviews: number;
   activeMembershipPlans: number;
   activeRetailerMemberships: number;
   activePublishedBanners: number;
-  activeSellerAds: number;
-  pendingSellerAds: number;
+  totalOrders: number;
   recentSuperAdminActivity: SuperAdminActivityRow[];
 }
 

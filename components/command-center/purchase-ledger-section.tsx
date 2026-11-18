@@ -5,16 +5,22 @@ import { Card } from '@/components/ui/card';
 import { DataTable, dateOnly, inr, inrExact, LinkPill, pct, Section, SectionEmptyState, Td } from './shared';
 
 /**
- * Supplier & Purchase Intelligence — built on the EXISTING GRN module
- * (grns + grn_items). No supplier master table exists in the schema, so
- * "suppliers" are the free-text supplier references recorded on GRNs; that
- * limitation is stated in the UI instead of inventing a master.
+ * Purchase & GRN Intelligence — built on the EXISTING GRN module
+ * (grns + grn_items).
+ *
+ * NOT a supplier marketplace. Maharani Traders has no supplier accounts, no
+ * supplier portal and no supplier ordering: purchasing is an internal
+ * warehouse workflow, and the vendor name on a goods-received note is
+ * historical purchase provenance (`grns.supplier_reference`). There is no
+ * supplier master table in the schema, so the names shown here are exactly the
+ * free-text references recorded on GRNs — no identity, GSTIN, payable or
+ * settlement is invented.
  */
-export function SupplierSection({ intel }: { intel: SupplierIntel }) {
+export function PurchaseLedgerSection({ intel }: { intel: SupplierIntel }) {
   return (
     <Section
-      title="Supplier & purchase intelligence"
-      subtitle="Existing GRN workflows — 90-day window. Supplier cost changes compare successive confirmed receipts per product."
+      title="Purchase & GRN intelligence"
+      subtitle="Internal goods-receipt workflow — 90-day window. Cost changes compare successive confirmed receipts per product."
       icon={Factory}
       status={intel.status}
       actions={
@@ -27,7 +33,7 @@ export function SupplierSection({ intel }: { intel: SupplierIntel }) {
       {!intel.hasGrnData ? (
         <SectionEmptyState
           title="No purchase activity yet"
-          body="Purchase intelligence activates when GRNs (goods receipt notes) are created through the existing inventory workflow. Suppliers, purchase value and cost changes will appear here."
+          body="Purchase intelligence activates when GRNs (goods receipt notes) are created through the existing inventory workflow. Vendor references, purchase value and cost changes will appear here."
         />
       ) : (
         <div className="space-y-4">
@@ -43,12 +49,12 @@ export function SupplierSection({ intel }: { intel: SupplierIntel }) {
               <p className="text-[10px] text-ink-400">{intel.confirmed30dCount} GRN(s)</p>
             </Card>
             <Card className="p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Suppliers (90d)</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Vendors on GRNs (90d)</p>
               <p className="mt-1.5 text-lg font-bold text-ink-950">{intel.suppliers.length}</p>
-              <p className="text-[10px] text-ink-400">distinct GRN supplier references</p>
+              <p className="text-[10px] text-ink-400">distinct GRN vendor references</p>
             </Card>
             <Card className="p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Supplier cost changes</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Purchase cost changes</p>
               <p className="mt-1.5 text-lg font-bold text-ink-950">{intel.costChanges.length}</p>
               <p className="text-[10px] text-ink-400">≥0.5% shift between receipts</p>
             </Card>
@@ -60,7 +66,7 @@ export function SupplierSection({ intel }: { intel: SupplierIntel }) {
               {intel.pendingGrns.length === 0 ? (
                 <p className="py-4 text-center text-xs text-ink-400">No draft GRNs pending confirmation.</p>
               ) : (
-                <DataTable headers={['GRN', 'Supplier', 'Warehouse', 'Created', 'Value']} caption="Pending GRNs">
+                <DataTable headers={['GRN', 'Vendor ref', 'Warehouse', 'Created', 'Value']} caption="Pending GRNs">
                   {intel.pendingGrns.map((grn) => (
                     <tr key={grn.id}>
                       <Td className="font-medium text-ink-900">{grn.number}</Td>
@@ -73,16 +79,16 @@ export function SupplierSection({ intel }: { intel: SupplierIntel }) {
                 </DataTable>
               )}
               <p className="mt-2 text-[10px] text-ink-400">
-                Delayed-supplier tracking is not shown — the platform has no purchase-order due dates yet.
+                Delayed-delivery tracking is not shown — the platform has no purchase-order due dates yet.
               </p>
             </Card>
 
             <Card className="p-4">
-              <p className="mb-2 text-xs font-semibold text-ink-700">Supplier-wise purchasing (90d)</p>
+              <p className="mb-2 text-xs font-semibold text-ink-700">Vendor-wise purchasing (90d)</p>
               {intel.suppliers.length === 0 ? (
-                <p className="py-4 text-center text-xs text-ink-400">No supplier activity.</p>
+                <p className="py-4 text-center text-xs text-ink-400">No purchase activity.</p>
               ) : (
-                <DataTable headers={['Supplier', 'GRNs', 'Value']} caption="Supplier summary">
+                <DataTable headers={['Vendor ref', 'GRNs', 'Value']} caption="Vendor summary">
                   {intel.suppliers.map((s) => (
                     <tr key={s.name}>
                       <Td className="font-medium text-ink-900">{s.name}</Td>
@@ -95,11 +101,11 @@ export function SupplierSection({ intel }: { intel: SupplierIntel }) {
             </Card>
 
             <Card className="p-4">
-              <p className="mb-2 text-xs font-semibold text-ink-700">Supplier price changes (per product, confirmed receipts)</p>
+              <p className="mb-2 text-xs font-semibold text-ink-700">Purchase cost changes (per product, confirmed receipts)</p>
               {intel.costChanges.length === 0 ? (
                 <p className="py-4 text-center text-xs text-ink-400">No material cost changes between recorded receipts yet.</p>
               ) : (
-                <DataTable headers={['Product', 'Previous cost', 'Latest cost', 'Change']} caption="Supplier cost changes">
+                <DataTable headers={['Product', 'Previous cost', 'Latest cost', 'Change']} caption="Purchase cost changes">
                   {intel.costChanges.map((c) => (
                     <tr key={c.productId}>
                       <Td className="font-medium text-ink-900">{c.productName}</Td>

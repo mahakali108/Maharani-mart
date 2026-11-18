@@ -17,7 +17,16 @@ import { z } from 'zod';
 export type FooterLink = { href: string; label: string };
 
 export type SitePageKind = 'page' | 'legal';
+/**
+ * Who a published page is aimed at. `sellers` is RETIRED: the third-party
+ * seller marketplace was removed, so no new page may be published to that
+ * audience. The value is still accepted when READING historical rows (a
+ * published seller-audience page must remain parseable and removable), but it
+ * is no longer offered in the editor and no longer listed publicly.
+ */
 export type SitePageAudience = 'everyone' | 'buyers' | 'sellers';
+/** Audiences an editor may still choose for NEW or updated content. */
+export type EditableSitePageAudience = Exclude<SitePageAudience, 'sellers'>;
 export type SitePageStatus = 'draft' | 'published';
 export type SiteSectionTone = 'standard' | 'highlight';
 export type SitePageReviewStatus = 'owner_review_pending' | 'owner_approved' | 'legal_reviewed' | 'not_required';
@@ -192,7 +201,7 @@ export const pageSettingsSchema = z.object({
   meta_description: z.string().trim().max(320, 'Keep the search description under 320 characters.').optional(),
   hero_image_url: z.string().trim().max(2048).optional(),
   kind: z.enum(['page', 'legal']),
-  audience: z.enum(['everyone', 'buyers', 'sellers']),
+  audience: z.enum(['everyone', 'buyers']),
   version: z.string().trim().regex(/^\d+\.\d+$/, 'Use a version such as 1.0 or 2.1.'),
   effective_date: dateOnly,
   sort_order: z.coerce.number().int().min(0).max(10000),
@@ -210,7 +219,7 @@ export const newPageSchema = z.object({
   nav_label: z.string().trim().min(1, 'Enter the menu label.').max(60),
   title: z.string().trim().min(2, 'Enter a page title.').max(160),
   kind: z.enum(['page', 'legal']),
-  audience: z.enum(['everyone', 'buyers', 'sellers']),
+  audience: z.enum(['everyone', 'buyers']),
 });
 
 export const sectionSchema = z
@@ -265,5 +274,6 @@ export const REVIEW_STATUS_LABEL: Record<SitePageReviewStatus, string> = {
 export const AUDIENCE_LABEL: Record<SitePageAudience, string> = {
   everyone: 'Everyone',
   buyers: 'Retailers and wholesale buyers',
-  sellers: 'Sellers',
+  /** Historical only — no new content can be published to this audience. */
+  sellers: 'Sellers (retired)',
 };

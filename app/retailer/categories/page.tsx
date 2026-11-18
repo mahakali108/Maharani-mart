@@ -117,7 +117,7 @@ export default async function CategoriesPage() {
             <LayoutGrid className="h-8 w-8 text-slate-300" aria-hidden="true" />
             <p className="mt-3 text-sm font-semibold text-slate-700">No categories yet</p>
             <p className="mt-1 text-xs text-slate-500">
-              Categories will appear as the marketplace catalog is updated.
+              Categories will appear as the catalogue is updated.
             </p>
           </section>
         )}
@@ -137,7 +137,7 @@ export default async function CategoriesPage() {
           <section className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 text-center">
             <BadgeCheck className="h-8 w-8 text-slate-300" aria-hidden="true" />
             <p className="mt-3 text-sm font-semibold text-slate-700">No brands yet</p>
-            <p className="mt-1 text-xs text-slate-500">Brands will appear as products are added to the marketplace.</p>
+            <p className="mt-1 text-xs text-slate-500">Brands will appear as products are added to the catalogue.</p>
           </section>
         )}
       </section>

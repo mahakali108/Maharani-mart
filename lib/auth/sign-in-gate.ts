@@ -19,7 +19,7 @@
  * keyed by the auth user id returned by Supabase.
  */
 
-import type { homeForRole, UserRole } from '@/lib/auth/roles';
+import { isRetiredRole, isSupportedRole, type homeForRole, type UserRole } from '@/lib/auth/roles';
 
 /** Minimal structural view of the RLS-scoped Supabase client we need. */
 export interface SessionSupabaseLike {
@@ -40,7 +40,8 @@ export interface SessionSupabaseLike {
 }
 
 interface ProfileGateRow {
-  role: UserRole;
+  /** Plain string: a historical row may still hold the retired `seller` role. */
+  role: string;
   is_active: boolean;
 }
 
@@ -50,7 +51,7 @@ interface RetailerGateRow {
 
 export type SignInDecision =
   | { allowed: true; role: UserRole; destination: string }
-  | { allowed: false; error: string; code: 'account_inactive' | 'account_suspended' };
+  | { allowed: false; error: string; code: 'account_inactive' | 'account_suspended' | 'role_retired' };
 
 /**
  * Reads role + approval status and decides whether this session may proceed.
@@ -87,6 +88,27 @@ export async function assertSignInAllowed(
     };
   }
 
+  // Seller/Supplier removal: a retired role may not sign in at all. Both the
+  // password and the email-OTP path reach this function, so neither credential
+  // route can mint a usable session for a former seller. The freshly created
+  // session is destroyed, exactly like a deactivated account.
+  if (isRetiredRole(profile.role)) {
+    await supabase.auth.signOut();
+    return {
+      allowed: false,
+      code: 'role_retired',
+      error: 'Seller accounts are no longer supported on Maharani Traders. Contact support if you also hold a retailer account.',
+    };
+  }
+  if (!isSupportedRole(profile.role)) {
+    await supabase.auth.signOut();
+    return {
+      allowed: false,
+      code: 'account_inactive',
+      error: 'Your account is not set up for sign-in. Contact your distributor.',
+    };
+  }
+
   if (profile.role === 'retailer') {
     const { data: retailer } = await supabase
       .from('retailers')
@@ -106,9 +128,10 @@ export async function assertSignInAllowed(
     if (retailer?.status !== 'active') {
       // Pending (or pre-approval) retailers keep a valid session — the
       // pending-approval screen depends on it — but never reach a workspace.
-      return { allowed: true, role: profile.role, destination: '/pending-approval' };
+      return { allowed: true, role: profile.role as UserRole, destination: '/pending-approval' };
     }
   }
 
-  return { allowed: true, role: profile.role, destination: safeRedirect ?? buildHome(profile.role) };
+  const role = profile.role as UserRole;
+  return { allowed: true, role, destination: safeRedirect ?? buildHome(role) };
 }

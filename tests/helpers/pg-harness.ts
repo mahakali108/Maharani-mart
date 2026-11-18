@@ -387,9 +387,21 @@ export async function approveAndActivateSeller(db: Db, sellerId: string, reviewe
  * Admin and through the real function, that both approvals exist — with
  * references that are plainly test data.
  */
+/**
+ * Opens the marketplace gate for a fixture.
+ *
+ * Migration 0110 revoked EXECUTE on record_marketplace_launch_approval from
+ * every API role, because the marketplace is discontinued. Historical fixture
+ * tests still need the gate OPEN so the 0087/0098 enforcement rules can be
+ * exercised, so this runs the function as the database owner while still
+ * carrying the reviewer's auth.uid() — the same pattern used for every other
+ * deliberately-closed function. The refusal for API roles is asserted in
+ * tests/migration-0110-seller-supplier-retirement.test.ts and in
+ * tests/pr126-migration-review-db.test.ts.
+ */
 export async function openMarketplaceForTest(db: Db): Promise<void> {
   const reviewer = await fixtureSuperAdmin(db);
-  await as(db, reviewer, (tx) => tx.query(
+  await asOwnerOnBehalfOf(db, reviewer, (tx) => tx.query(
     `select public.record_marketplace_launch_approval(true, 'TEST-FIXTURE-OWNER-APPROVAL', 'TEST-FIXTURE-CA-APPROVAL', 'test fixture')`));
 }
 

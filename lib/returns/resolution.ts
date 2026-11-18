@@ -102,7 +102,11 @@ export function mapReturnApprovalError(message: string | null | undefined): stri
     case 'RECONCILE':
       return `This return covers goods that were short or damaged at delivery and were already settled in Coins. It cannot be approved here; it needs manual reconciliation. ${NOTHING_CHANGED}`;
     case 'SELLER_RETURN':
-      return `This return includes goods fulfilled by a seller. They can be returned only after they are recorded as received back, and that step is not available yet. ${NOTHING_CHANGED}`;
+      // Historical only. Some orders placed before the marketplace was
+      // discontinued contain seller-fulfilled lines, and the database still
+      // refuses to approve those automatically (0101). The wording says the
+      // programme has ended rather than promising a step that will never arrive.
+      return `This return includes goods that were fulfilled by a third-party seller under the marketplace that we no longer operate. It cannot be approved automatically; record the goods back through the purchase ledger, or reject it with a note. ${NOTHING_CHANGED}`;
     case 'ALREADY_RESTORED':
       return `The stock for this return is already back in inventory. ${NOTHING_CHANGED} Reject the request with a note if it is a duplicate.`;
     case 'QUANTITY':

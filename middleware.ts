@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
-import { homeForRole, isRoleAllowedForPath, type UserRole } from '@/lib/auth/roles';
+import { homeForRole, isRetiredPath, isRetiredRole, isRoleAllowedForPath, isSupportedRole, type UserRole } from '@/lib/auth/roles';
 import type { RetailerStatusEnum } from '@/types/database.types';
 
 interface ProfileRoleActiveRow {
-  role: UserRole;
+  // Read as a plain string: the stored value may still be the retired
+  // `seller` role, which is no longer part of `UserRole`.
+  role: string;
   is_active: boolean;
 }
 
@@ -17,7 +19,10 @@ interface AccessPeriodRow {
   expires_at: string | null;
 }
 
-const PROTECTED_PREFIXES = ['/admin', '/staff', '/salesman', '/retailer', '/seller', '/pending-approval'];
+// `/seller` and the seller/supplier registration routes are intentionally NOT
+// listed: those paths no longer exist, so an unauthenticated visit must 404
+// rather than be bounced to a login page that implies the module still exists.
+const PROTECTED_PREFIXES = ['/admin', '/staff', '/salesman', '/retailer', '/pending-approval'];
 
 function isProtectedPath(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -62,6 +67,13 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const { response, supabase, user } = await updateSession(request);
 
+  // Retired seller/supplier paths no longer exist. Let them fall through to
+  // Next's 404 instead of redirecting (a redirect would either loop through
+  // /login or imply the module is still available).
+  if (isRetiredPath(pathname)) {
+    return response;
+  }
+
   // Not logged in and hitting a protected route -> send to login.
   if (!user && isProtectedPath(pathname)) {
     const redirectUrl = new URL('/login', request.url);
@@ -85,7 +97,7 @@ export async function middleware(request: NextRequest) {
       return redirectWithCookies(redirectUrl, response);
     }
 
-    const role = profile.role;
+    const role = profile.role as UserRole;
 
     // Check access period (7-day expiry system).
     // Super Admin is NEVER blocked.
@@ -114,31 +126,30 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Middleware is convenience only: every seller page/action/RLS policy
-    // independently enforces active tenant membership, including stale JWTs.
-    if (role === 'seller' && (pathname === '/seller' || pathname.startsWith('/seller/'))) {
-      const { data: membership } = await supabase
-        .from('seller_members' as never)
-        .select('seller_id')
-        .eq('profile_id', user.id)
-        .maybeSingle<{ seller_id: string }>();
-      if (!membership) return redirectWithCookies(new URL('/unauthorized', request.url), response);
-      const { data: seller } = await supabase
-        .from('sellers' as never)
-        .select('status')
-        .eq('id', membership.seller_id)
-        .maybeSingle<{ status: string }>();
-      if (!seller) return redirectWithCookies(new URL('/unauthorized', request.url), response);
-      if (seller.status !== 'active' && pathname !== '/seller/status') {
-        return redirectWithCookies(new URL('/seller/status', request.url), response);
-      }
-      if (seller.status === 'active' && pathname === '/seller/status') {
-        return redirectWithCookies(new URL('/seller/dashboard', request.url), response);
-      }
+    // RETIRED ROLE REFUSAL. `seller` is no longer a supported role, but the
+    // value still exists in the PostgreSQL enum and may remain on historical
+    // profiles rows. Such an account must never reach any workspace: its
+    // session is destroyed here and it is returned to /login. This is a hard
+    // refusal, not a redirect into a page, so a stale JWT cannot land anywhere.
+    // The same rule is enforced independently in requireUser() and in
+    // assertSignInAllowed(); migration 0110 revokes the database capabilities.
+    if (isRetiredRole(profile.role)) {
+      await supabase.auth.signOut();
+      const redirectUrl = new URL('/login', request.url);
+      redirectUrl.searchParams.set('error', 'role_retired');
+      return redirectWithCookies(redirectUrl, response);
+    }
+
+    // Any other unknown role value is a data-integrity fault: fail closed.
+    if (!isSupportedRole(profile.role)) {
+      await supabase.auth.signOut();
+      const redirectUrl = new URL('/login', request.url);
+      redirectUrl.searchParams.set('error', 'account_inactive');
+      return redirectWithCookies(redirectUrl, response);
     }
 
     // Already logged in, don't let them sit on login/register screens.
-    if (pathname === '/login' || pathname === '/register-retailer' || pathname === '/register-seller') {
+    if (pathname === '/login' || pathname === '/register-retailer') {
       return redirectWithCookies(new URL(homeForRole(role), request.url), response);
     }
 

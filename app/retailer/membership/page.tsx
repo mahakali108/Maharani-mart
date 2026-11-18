@@ -105,7 +105,7 @@ export default async function RetailerCategoryPage() {
             If your business details or volumes change, contact support and an administrator can review your category;
             every change is recorded with a reason.
           </li>
-          <li>Your category price applies to Maharani own-stock items; third-party seller offers keep their own approved price.</li>
+          <li>Your category price applies to every item on this website. All goods are Maharani Traders own stock, so no separate seller price applies.</li>
           <li>Loyalty points are a record of past activity. They are not cash and are never converted to money automatically.</li>
         </ul>
         <div className="mt-3">

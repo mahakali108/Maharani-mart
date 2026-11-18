@@ -56,7 +56,7 @@ export default async function AreasPage({ searchParams: searchParamsPromise }: {
               Only active, explicitly verified district/state/PIN combinations can be ordered to online. No PIN is enabled by default; Gaya does not imply district-wide coverage. Changes are checked again in the order transaction. Existing orders are not rewritten.
             </p>
             <p className="mt-2 text-xs font-medium text-amber-800">
-              A non-zero delivery fee intentionally blocks online checkout for that PIN until fee accounting across seller sub-orders is implemented; it will never be silently omitted from a bill.
+              A non-zero delivery fee intentionally blocks online checkout for that PIN until delivery-fee accounting is implemented; it will never be silently omitted from a bill.
             </p>
           </div>
           <DeliveryPinForm />

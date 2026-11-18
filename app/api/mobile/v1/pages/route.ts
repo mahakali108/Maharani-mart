@@ -45,7 +45,10 @@ export async function GET(request: Request): Promise<Response> {
           return {
             slug: typeof row.slug === 'string' ? row.slug : '',
             kind: row.kind === 'legal' ? 'legal' : 'page',
-            audience: row.audience === 'buyers' || row.audience === 'sellers' ? row.audience : 'everyone',
+            // The `sellers` audience is retired: a historical page published to
+            // sellers is served as `everyone` rather than advertising an
+            // audience no account can hold. The page text itself is unchanged.
+            audience: row.audience === 'buyers' ? 'buyers' : 'everyone',
             navLabel: typeof row.nav_label === 'string' ? row.nav_label : '',
             shortLabel: typeof row.short_label === 'string' ? row.short_label : null,
             title: typeof row.title === 'string' ? row.title : '',

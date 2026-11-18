@@ -114,7 +114,7 @@ export default async function RetailerAlertsPage() {
           <p className="shop-eyebrow">Stay informed</p>
             <h1 className="shop-heading mt-1 font-semibold tracking-tight text-slate-950">Updates &amp; alerts</h1>
             <p className="mt-1 text-xs leading-5 text-slate-600 sm:text-sm">
-              Order activity, account messages and marketplace news.
+              Order activity, account messages and store announcements.
             </p>
             {unread > 0 ? (
               <span className="mt-3 inline-flex rounded-full bg-primary-50 px-3 py-1.5 text-[10px] font-bold text-primary-700">

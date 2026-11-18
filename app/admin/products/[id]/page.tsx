@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { throwIfReadFailed } from '@/lib/supabase/read-guard';
@@ -251,10 +250,11 @@ export default async function EditProductPage({ params: paramsPromise }: { param
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* The "/admin/offers" link was removed with the marketplace: products
+                are added only by the Super Admin, so there are no seller offers to
+                review. The history below is kept — it is the audit trail of past
+                moderation decisions on this product. */}
             <CardTitle>Moderation &amp; availability history</CardTitle>
-            <Link href="/admin/offers" className="text-xs font-medium text-primary-700 hover:underline">
-              Review seller offers →
-            </Link>
           </div>
         </CardHeader>
         {(() => {

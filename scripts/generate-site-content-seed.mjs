@@ -142,6 +142,84 @@ const PREVIOUS = existsSync(path.join(root, 'content/site-pages.seed.json'))
   : [];
 const previousBySlug = new Map(PREVIOUS.map((page) => [page.slug, page]));
 
+/**
+ * Marketplace retirement (Phase 4 of the seller/supplier removal).
+ *
+ * Ten pages carried wording written when a third-party seller marketplace was
+ * still a possibility ("the application includes marketplace and seller
+ * features, subject to configuration"). That programme has been discontinued, so
+ * the text now states the single-seller position. The replacements below are
+ * keyed on the EXACT superseded sentence and are applied to the JSON seed as a
+ * final pass, so:
+ *   - the reviewed wording lives in one place (this file) and re-running the
+ *     generator reproduces the seed byte-for-byte;
+ *   - only a sentence that is still present is replaced; a page the owner has
+ *     since rewritten in Super Admin -> Website content is left alone;
+ *   - nothing is invented: each replacement asserts only facts already true in
+ *     the repository (own stock only, no marketplace, no seller sign-up).
+ *
+ * The legal pages that had no structured source (terms, privacy, about, contact,
+ * business-disclosure) are read back from the JSON, and this pass is what keeps
+ * them honest.
+ */
+const RETIRED_MARKETPLACE_COPY = [
+  // terms — Acceptance and business model
+  ['The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded.',
+   'Maharani Traders sells only goods from its own stock. There is no marketplace: all products are bought, stored, priced and sold by Maharani Traders, and we are the seller of record for every order. The third-party seller programme that earlier versions of these terms mentioned has been discontinued. Any order placed before that change is unaffected, and any rights you already hold are not excluded.'],
+  // privacy — How information is used and shared
+  ['Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. The application also supports third-party seller fulfilment: if used, the relevant seller may receive order and delivery information, including the recipient address and phone where provided. Marketplace data flows and disclosures require verification before any third-party operation. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication.',
+   'Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. Because every order is fulfilled by Maharani Traders from its own stock, order and delivery information is not disclosed to any independent seller or marketplace participant; that programme has been discontinued. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication.'],
+  // business-disclosure — Tax and policy scope
+  ['The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.',
+   'Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded.'],
+  // about — How ordering works
+  ['The application includes marketplace and seller features, subject to configuration. The own-stock sales policies do not provide complete terms for third-party transactions; any launch or ongoing operation requires separate review. Food products are excluded from the stated current scope.',
+   'Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued. Food products are excluded from the current scope.'],
+  // contact — Seller and account access
+  ['Seller accounts are created by Super Admin invitation. If you have an invitation, use the emailed link; verification and approval are required before trading. The current own-stock sales policies do not provide complete terms for third-party seller transactions, which require separate review. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support.',
+   'There is no seller or supplier sign-up. Retail shop accounts are created by registering on this site and are activated after approval by Maharani Traders. If you already held a seller account under the earlier marketplace programme, that programme has been discontinued; contact us using the details below and we will explain what is available to you. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support.'],
+];
+
+/** Sentence-level replacements inside the structured POLICY_CONTENT pages. */
+const RETIRED_MARKETPLACE_SENTENCES = [
+  // damaged-goods
+  ['After checking the complaint we will offer the remedy that fits the problem: replacement, collection of the goods with a refund, or a price adjustment. For goods sold by an independent seller, we pass the complaint to that seller and follow it up; see the Marketplace Disclaimer.',
+   'After checking the complaint we will offer the remedy that fits the problem: replacement, collection of the goods with a refund, or a price adjustment. Every order on this website is sold and fulfilled by Maharani Traders from its own stock, so we handle the whole complaint ourselves and there is no third party to pass it to. See the [Marketplace Disclaimer](/legal/marketplace-disclaimer) for the record of the discontinued marketplace programme.'],
+  // gst-pricing-invoice
+  ['An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.',
+   'An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party.'],
+  // prohibited-products
+  ['Every product category carries a compliance classification set by the Super Admin. Only categories classified as cosmetics or non-food FMCG can hold products for sale; the database rejects a product or seller offer placed in any other category.',
+   'Every product category carries a compliance classification set by the Super Admin. Only categories classified as cosmetics or non-food FMCG can hold products for sale; the database rejects a product placed in any other category.'],
+  ['Seller offers are reviewed before they go live, and each decision is recorded with the reviewer and the reason.',
+   'Every product goes through a compliance review before it can be published, and each decision is recorded with the reviewer and the reason. Only Maharani Traders adds products to this website, so there is no third-party listing channel to police.'],
+  // ip-complaints
+  ['We acknowledge the complaint, check it, and where it appears valid we remove or disable the listing. For a seller offer we inform the seller, who may reply with evidence such as purchase invoices or a brand authorisation.',
+   'We acknowledge the complaint, check it, and where it appears valid we remove or disable the listing while we investigate. Because we are the seller of every product on this website, there is no third-party seller to notify: we answer the complaint ourselves with the purchase invoices and brand authorisations we hold.'],
+  ['If the seller\u2019s reply shows the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. Repeated or serious infringement leads to suspension of the seller.',
+   'If our own records show the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. A listing that cannot be substantiated stays withdrawn.'],
+  // suspension-termination
+  ['For sellers: unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints.',
+   'For retailer accounts: attempted resale of unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints about an order.'],
+];
+
+/**
+ * Applies the retirement copy to a page's sections. Matching is on the whole
+ * sentence so an unrelated edit elsewhere on the page cannot be clobbered, and a
+ * sentence that no longer exists is simply skipped.
+ */
+function retireMarketplaceCopy(sections) {
+  const map = new Map([
+    ...RETIRED_MARKETPLACE_COPY.map((pair) => pair),
+    ...RETIRED_MARKETPLACE_SENTENCES,
+  ]);
+  return sections.map((section) => ({
+    ...section,
+    body: (section.body ?? []).map((line) => map.get(line) ?? line),
+    bullets: (section.bullets ?? []).map((line) => map.get(line) ?? line),
+  }));
+}
+
 function readPage(relative) {
   const source = readFileSync(path.join(root, relative), 'utf8');
   return {
@@ -203,6 +281,7 @@ for (const doc of LEGAL_DOCUMENTS) {
   }
 
   if (!sections.length) throw new Error(`No sections extracted for legal page "${doc.key}"`);
+  sections = retireMarketplaceCopy(sections);
 
   pages.push({
     slug: doc.key,
@@ -253,7 +332,7 @@ pages.push({
   show_contact_details: true,
   related_slugs: ['terms', 'shipping'],
   is_system: true,
-  sections: aboutSource.sections,
+  sections: retireMarketplaceCopy(aboutSource.sections),
   owner_decisions: aboutSource.owner_decisions ?? [],
   internal_notes:
     'Business identity and contact details must be confirmed by the owner before launch. The text was carried over from the pre-CMS page unchanged.',
@@ -278,7 +357,7 @@ pages.push({
   show_contact_details: true,
   related_slugs: ['grievance', 'privacy'],
   is_system: true,
-  sections: contactSource.sections,
+  sections: retireMarketplaceCopy(contactSource.sections),
   owner_decisions: contactSource.owner_decisions ?? [],
   internal_notes:
     'Contact details are owner-provided. Until the storefront contact block is marked verified in Super Admin → Business & contact details, launch readiness treats them as unconfirmed.',

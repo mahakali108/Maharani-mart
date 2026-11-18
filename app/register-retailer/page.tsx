@@ -33,10 +33,6 @@ export default async function RegisterRetailerPage() {
           <Link href="/login" className="font-medium text-primary-600 hover:text-primary-700">
             Your account is created by an admin — sign in here.
           </Link>
-          {' · '}
-          <Link href="/register-seller" className="font-medium text-primary-600 hover:text-primary-700">
-            Seller access by invitation
-          </Link>
         </p>
     </AuthFrame>
   );

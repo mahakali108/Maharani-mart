@@ -4,17 +4,21 @@ import { InfoCard, PublicInfoShell } from '@/components/legal/public-info-shell'
 import { informationNav } from '@/components/legal/managed-page';
 import { loadPublishedPages } from '@/lib/site-content/queries';
 import { NOT_APPLICABLE_DOCUMENTS } from '@/lib/legal/documents';
-import { AUDIENCE_LABEL, type SitePageAudience } from '@/lib/site-content/types';
+import { AUDIENCE_LABEL, type EditableSitePageAudience } from '@/lib/site-content/types';
 import { formatPolicyDate } from '@/lib/site-content/render';
 
 export const metadata: Metadata = { title: 'Legal and Policies — Maharani Traders' };
 export const dynamic = 'force-dynamic';
 
-const ORDER: SitePageAudience[] = ['everyone', 'buyers', 'sellers'];
-const NOTE: Record<SitePageAudience, string> = {
+// Only audiences that still exist. A page the Super Admin published to the
+// retired `sellers` audience is deliberately NOT listed here: there is no seller
+// account to bind it to. It is never deleted — /admin/content still shows it,
+// with the label "Sellers (retired)", and the owner can republish it to
+// `everyone` or `buyers` if any of its text should still apply.
+const ORDER: EditableSitePageAudience[] = ['everyone', 'buyers'];
+const NOTE: Record<EditableSitePageAudience, string> = {
   everyone: 'These apply to every visitor and account.',
   buyers: 'Ordering, delivery, returns, Coins and points.',
-  sellers: 'For independent sellers invited to list on the marketplace.',
 };
 
 /**

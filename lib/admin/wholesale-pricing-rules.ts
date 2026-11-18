@@ -103,75 +103,6 @@ export function exceedsDiscountCap(
   return (basePricePaise - offeredPricePaise) * 10_000 > basePricePaise * maxPctBasisPoints;
 }
 
-export function validateSellerOfferAgainstLimits(
-  offer: { basePricePaise: number; unitPricePaise: number; moq: number },
-  limits: EffectiveWholesaleLimits
-): { ok: true } | { ok: false; code: string; error: string } {
-  if (!Number.isInteger(offer.moq) || offer.moq < limits.minMoq) {
-    return {
-      ok: false,
-      code: 'MOQ_BELOW_SUPER_ADMIN_MINIMUM',
-      error: `Minimum order quantity must be at least ${limits.minMoq} pieces under Super Admin wholesale rules.`,
-    };
-  }
-  if (exceedsDiscountCap(offer.basePricePaise, offer.unitPricePaise, limits.maxDiscountPercent)) {
-    const discountPct = calculateDiscountPercent(offer.basePricePaise, offer.unitPricePaise);
-    return {
-      ok: false,
-      code: 'DISCOUNT_EXCEEDS_MAX_LIMIT',
-      error: `Offer discount (${discountPct}%) exceeds the Super Admin maximum discount limit (${limits.maxDiscountPercent}%).`,
-    };
-  }
-  return { ok: true };
-}
-
-export function validateSellerSlabAgainstLimits(
-  slab: {
-    offerUnitPricePaise: number;
-    offerMoq: number;
-    slabMinQuantity: number;
-    slabUnitPricePaise: number;
-    packBasePricePaise?: number;
-  },
-  limits: EffectiveWholesaleLimits
-): { ok: true } | { ok: false; code: string; error: string } {
-  if (!limits.allowSellerCustomSlabs) {
-    return {
-      ok: false,
-      code: 'SELLER_CUSTOM_SLABS_NOT_ALLOWED',
-      error: 'Custom wholesale quantity slabs are disabled for this seller or pack by Super Admin.',
-    };
-  }
-  const minQty = Math.max(slab.offerMoq, limits.minMoq);
-  if (!Number.isInteger(slab.slabMinQuantity) || slab.slabMinQuantity < minQty) {
-    return {
-      ok: false,
-      code: 'MOQ_BELOW_SUPER_ADMIN_MINIMUM',
-      error: `Slab minimum quantity must be at least ${minQty} pieces.`,
-    };
-  }
-  if (exceedsDiscountCap(slab.offerUnitPricePaise, slab.slabUnitPricePaise, limits.maxDiscountPercent)) {
-    const discountPct = calculateDiscountPercent(slab.offerUnitPricePaise, slab.slabUnitPricePaise);
-    return {
-      ok: false,
-      code: 'DISCOUNT_EXCEEDS_MAX_LIMIT',
-      error: `Slab discount (${discountPct}%) exceeds the Super Admin maximum discount limit (${limits.maxDiscountPercent}%).`,
-    };
-  }
-  if (
-    slab.packBasePricePaise != null &&
-    exceedsDiscountCap(slab.packBasePricePaise, slab.slabUnitPricePaise, limits.maxDiscountPercent)
-  ) {
-    const combinedPct = calculateDiscountPercent(slab.packBasePricePaise, slab.slabUnitPricePaise);
-    return {
-      ok: false,
-      code: 'DISCOUNT_EXCEEDS_MAX_LIMIT',
-      error: `Combined offer and slab discount (${combinedPct}%) relative to pack base price exceeds the Super Admin maximum discount limit (${limits.maxDiscountPercent}%).`,
-    };
-  }
-  return { ok: true };
-}
-
 export function validateGlobalWholesaleInput(input: {
   defaultMinOrderQty: number;
   maxDiscountPercent: number;
@@ -201,45 +132,6 @@ export function validateGlobalWholesaleInput(input: {
       allow_seller_price_override: Boolean(input.allowSellerPriceOverride),
       enforce_pack_floor: Boolean(input.enforcePackFloor),
       notes,
-    },
-  };
-}
-
-export function validateSellerPermissionInput(
-  input: {
-    sellerId: string;
-    canSetCustomSlabs: boolean;
-    canApplyDiscounts: boolean;
-    maxDiscountPercent: number;
-    minMoqOverride: number | null;
-    notes?: string | null;
-  },
-  globalMaxDiscountPercent: number
-): { ok: true; value: SellerPricingPermission } | { ok: false; error: string } {
-  if (!Number.isFinite(input.maxDiscountPercent) || input.maxDiscountPercent < 0 || input.maxDiscountPercent > 80) {
-    return { ok: false, error: 'Seller max discount must be between 0% and 80%.' };
-  }
-  if (input.maxDiscountPercent > globalMaxDiscountPercent) {
-    return {
-      ok: false,
-      error: `Seller max discount (${input.maxDiscountPercent}%) cannot exceed the global Super Admin cap (${globalMaxDiscountPercent}%).`,
-    };
-  }
-  if (
-    input.minMoqOverride !== null &&
-    (!Number.isInteger(input.minMoqOverride) || input.minMoqOverride < 1 || input.minMoqOverride > 100_000)
-  ) {
-    return { ok: false, error: 'Seller MOQ override must be empty or a whole number between 1 and 100,000.' };
-  }
-  return {
-    ok: true,
-    value: {
-      seller_id: input.sellerId,
-      can_set_custom_slabs: Boolean(input.canSetCustomSlabs),
-      can_apply_discounts: Boolean(input.canApplyDiscounts),
-      max_discount_percent: Number(input.maxDiscountPercent.toFixed(2)),
-      min_moq_override: input.minMoqOverride,
-      notes: (input.notes ?? '').trim().slice(0, 500) || null,
     },
   };
 }

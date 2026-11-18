@@ -214,7 +214,6 @@ export default async function AdminContentPage({
               <select name="audience" className="mt-1 w-full rounded-xl border border-ink-200 px-3 py-2 text-sm">
                 <option value="everyone">Everyone</option>
                 <option value="buyers">Retailers and wholesale buyers</option>
-                <option value="sellers">Sellers</option>
               </select>
             </label>
           </div>

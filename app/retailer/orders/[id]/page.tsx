@@ -153,6 +153,10 @@ export default async function OrderDetailPage({
 
   if (!order) notFound();
 
+  // HISTORICAL ONLY. Orders placed while the marketplace existed can still have
+  // sub-order children; newer orders have none because checkout writes a single
+  // centrally-owned order. The projection is read here so a retailer can still
+  // track an old shipment; no seller identity or contact detail is displayed.
   const { data: subOrderRows } = await supabase.rpc(
     'retailer_order_sub_orders' as never,
     { p_order_id: params.id } as never
@@ -240,7 +244,7 @@ export default async function OrderDetailPage({
             <div>
               <h2 className="text-sm font-bold text-slate-900">Fulfilment &amp; Sub-Orders ({subOrders.length})</h2>
               <p className="mt-0.5 text-[10px] text-slate-500">
-                Track each merchant shipment and COD / Coins settlement share
+                Shipment and settlement breakdown for a historically split order
               </p>
             </div>
             <Truck className="h-4 w-4 text-primary-600" />
@@ -250,12 +254,11 @@ export default async function OrderDetailPage({
               <div key={sub.sub_order_id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
                 <div className="space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-slate-900">{sub.seller_business_name}</span>
-                    {sub.seller_gstin ? (
-                      <span className="font-mono text-[10px] text-slate-500">GSTIN {sub.seller_gstin}</span>
-                    ) : null}
+                    <span className="font-bold text-slate-900">
+                      {sub.fulfilment_type === 'seller' ? 'Third-party fulfilment (historical)' : 'Maharani dispatch'}
+                    </span>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                      {sub.fulfilment_type === 'seller' ? 'Seller dispatch' : 'Maharani dispatch'}
+                      {sub.status}
                     </span>
                   </div>
                   {sub.courier || sub.awb ? (

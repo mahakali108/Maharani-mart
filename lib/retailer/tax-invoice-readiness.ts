@@ -5,9 +5,12 @@ import { isValidGstin, normalizeGstin } from '@/lib/retailer/invoice-tax';
  * configured and the invoice model is known. This is deliberately a technical
  * publication guard, not GST registration validation or a CA conclusion.
  *
- * Marketplace seller lines are fail-closed: this repository does not yet have
- * a CA-approved seller-of-record / issuer model or per-seller tax-invoice
- * renderer. Rendering them under Ajay General's details would be misleading.
+ * HISTORICAL third-party lines stay fail-closed. Maharani Traders no longer
+ * sells any third-party goods (the seller marketplace was removed), but orders
+ * placed while it existed still contain `source_type = 'seller'` lines. There is
+ * no CA-approved seller-of-record / issuer model for those lines, so rendering
+ * them under Ajay General's details would misstate who supplied the goods.
+ * Refusing the invoice is the honest outcome; the order history remains readable.
  */
 export type TaxInvoiceReadiness =
   | {
@@ -21,7 +24,10 @@ export type TaxInvoiceReadiness =
     };
 
 export interface TaxInvoiceReadinessInput {
-  /** Any seller-source line requires an approved marketplace invoice model. */
+  /**
+   * True when the order contains any HISTORICAL third-party (`source_type =
+   * 'seller'`) line. Such an order cannot be invoiced under our own identity.
+   */
   hasMarketplaceSellerLine: boolean;
   /** Injectable for tests; callers use the server environment by default. */
   environment?: NodeJS.ProcessEnv;
@@ -44,7 +50,12 @@ export function getTaxInvoiceReadiness({
     return {
       ready: false,
       reason: 'marketplace_issuer_model_pending',
-      message: 'Tax-invoice issuance for marketplace seller items is pending the owner and CA-approved seller-of-record and invoice-issuer model.',
+      // Historical-only path. A few orders placed before the marketplace was
+      // discontinued contain third-party-supplied lines, and issuing an invoice
+      // in Maharani Traders' name for goods it did not sell would be wrong. The
+      // wording therefore says the programme has ended rather than implying the
+      // model is still being prepared.
+      message: 'This order contains an item that was supplied by a third-party seller under the marketplace that we no longer operate. Because Maharani Traders was not the seller of that item, an invoice cannot be issued for it here; contact us and we will identify the seller of record for that line.',
     };
   }
 

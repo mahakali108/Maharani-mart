@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/admin/status-badge';
 export interface SubOrderSummaryRow {
   sub_order_id: string;
   seller_id: string | null;
+  /** Historical counterparty name from the order snapshot (may be Maharani). */
   seller_business_name: string;
   seller_gstin: string | null;
   fulfilment_type: 'seller' | 'maharani';
@@ -99,7 +100,7 @@ export function AdminSubOrderPanel({
                   <span className="font-mono text-[11px] text-slate-500">GSTIN {sub.seller_gstin}</span>
                 ) : null}
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
-                  {sub.fulfilment_type === 'seller' ? 'Seller-fulfilled' : 'Maharani-fulfilled'}
+                  {sub.fulfilment_type === 'seller' ? 'Historical third-party line' : 'Maharani-fulfilled'}
                 </span>
                 <StatusBadge status={sub.status} />
               </div>

@@ -71,7 +71,9 @@ export async function GET(
       {
         slug: typeof record.slug === 'string' ? record.slug : slug,
         kind: record.kind === 'legal' ? 'legal' : 'page',
-        audience: record.audience === 'buyers' || record.audience === 'sellers' ? record.audience : 'everyone',
+        // See the collection route: `sellers` is a retired audience and is
+        // never surfaced to a client.
+        audience: record.audience === 'buyers' ? 'buyers' : 'everyone',
         navLabel: typeof record.nav_label === 'string' ? record.nav_label : '',
         title: typeof document.title === 'string' ? document.title : '',
         eyebrow: typeof document.eyebrow === 'string' ? document.eyebrow : null,

@@ -163,12 +163,12 @@ export const COMPLIANCE_CHECKLIST: readonly ComplianceItem[] = [
     id: 'seller-funded-discounts',
     area: 'Discounts & settlement',
     requirement:
-      'Marketplace discounts must be transparent; a seller-funded discount must be supported by the seller agreement and reflected in settlement.',
+      'Discounts on third-party-sold goods must be transparent and reconciled against the counterparty. Maharani Traders no longer sells third-party goods, so this requirement is recorded as satisfied-by-removal.',
     platformState:
-      'Seller-funded discounts are DISABLED by default (marketplace_compliance.sellerFundedDiscountsAllowed = false). Category pricing applies to own-stock lines only and never reduces a seller offer price or settlement.',
-    status: 'ca_review_required',
+      'Third-party sellers were removed from the platform, so there is no seller-funded discount or seller settlement to reconcile. Category pricing applies to centrally-owned own-stock lines only.',
+    status: 'not_applicable',
     sources: [SOURCES.gst],
-    ownerInput: 'CA reference for discount characterisation, seller agreement terms',
+    ownerInput: 'None — the third-party marketplace was removed; retain only for historical orders.',
   },
   {
     id: 'membership-retirement',

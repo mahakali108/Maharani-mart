@@ -105,7 +105,7 @@ export default async function RetailerBrandsPage({
           <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
             {selectedCategory
               ? 'Products with a listed brand appear here. Browse the category directly to see everything available.'
-              : 'Brands will appear as products are added to the marketplace.'}
+              : 'Brands will appear as products are added to the catalogue.'}
           </p>
           {selectedCategory ? (
             <Link
