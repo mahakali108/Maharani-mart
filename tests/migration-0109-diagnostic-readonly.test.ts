@@ -19,11 +19,24 @@
  * during the investigation — see docs/repair/MIGRATION_0109_DEPENDENCY_REPORT.md.
  */
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { createMigratedDb } from './helpers/pg-harness';
 
 const SCRIPT = 'supabase/audits/0109_dependency_diagnostic_readonly.sql';
+
+const MIGRATIONS_DIR = 'supabase/migrations';
+const readMigration = (file: string) => readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
+
+/** The chain that puts 0107 (and the rest of the 0109 prerequisites) in force. */
+const ORDERED_CHAIN = [
+  '0104_site_content_management.sql',
+  '0105_seed_site_content.sql',
+  '0106_first_super_admin_bootstrap.sql',
+  '0107_restore_cost_price_column_lockdown.sql',
+  '0108_publishing_integrity.sql',
+] as const;
 
 /** Ledger stub, so the migration-history blocks have something to read. */
 const LEDGER_STUB = `
@@ -135,11 +148,83 @@ describe('0109 dependency diagnostic (read-only, owner-run)', () => {
     expect(summary[0]!.conclusion).toContain('GUARD SHOULD PASS');
 
     // Block 6 — 0107 not in force on production today (must not raise 42703 even
-    // though products.description does not exist yet).
+    // though products.description does not exist yet). On the live baseline
+    // `anon` is locked down by 0025 but `authenticated` is not, and the verdict
+    // must name ONLY the role that is actually exposed.
     const ordering = results[5] as Array<Record<string, unknown>>;
     expect(ordering[0]!.description_column_exists).toBe(false);
     expect(ordering[0]!.authenticated_can_read_cost_price).toBe(true);
+    expect(ordering[0]!.anon_can_read_cost_price).toBe(false);
+    expect(ordering[0]!.cost_price_readable_by).toBe('authenticated');
     expect(String(ordering[0]!.verdict)).toContain('0107 NOT IN FORCE');
+    expect(String(ordering[0]!.verdict)).toContain('authenticated can still SELECT');
+  }, 180_000);
+
+  it('block 6 fails when ONLY anon can read cost_price, and passes when neither can', async () => {
+    const sql = readFileSync(SCRIPT, 'utf8');
+    const stmts = statements(sql);
+    const runBlocks = async (db: PGlite) =>
+      db.transaction(async (tx) => {
+        await tx.exec('set transaction read only');
+        const rows: unknown[] = [];
+        for (const stmt of stmts) rows.push((await tx.query(stmt)).rows);
+        return rows[5] as Array<Record<string, unknown>>;
+      });
+
+    // (a) 0107 applied, then `anon` alone re-opened: a single-role verdict
+    //     looking only at `authenticated` would wrongly report "IN FORCE".
+    const anonOnly = await createMigratedDb({ lastMigration: '0103_security_advisor_remediation.sql' });
+    openDbs.push(anonOnly);
+    await withLedger(anonOnly, REPO_VERSIONS);
+    for (const file of ORDERED_CHAIN) await anonOnly.exec(readMigration(file));
+    await anonOnly.exec('revoke select on public.products from anon');
+    await anonOnly.exec('grant select (cost_price) on public.products to anon');
+
+    const anonRow = (await runBlocks(anonOnly))[0]!;
+    expect(anonRow.anon_can_read_cost_price).toBe(true);
+    expect(anonRow.authenticated_can_read_cost_price).toBe(false);
+    expect(anonRow.cost_price_readable_by).toBe('anon');
+    expect(String(anonRow.verdict)).toContain('0107 NOT IN FORCE');
+    expect(String(anonRow.verdict)).toContain('anon can still SELECT');
+    expect(String(anonRow.verdict)).not.toContain('authenticated can still SELECT');
+
+    // (b) Full ordered chain: both roles locked, verdict flips to IN FORCE.
+    const locked = await createMigratedDb({ lastMigration: '0103_security_advisor_remediation.sql' });
+    openDbs.push(locked);
+    await withLedger(locked, REPO_VERSIONS);
+    for (const file of ORDERED_CHAIN) await locked.exec(readMigration(file));
+
+    const lockedRow = (await runBlocks(locked))[0]!;
+    expect(lockedRow.anon_can_read_cost_price).toBe(false);
+    expect(lockedRow.authenticated_can_read_cost_price).toBe(false);
+    expect(lockedRow.cost_price_readable_by).toBeNull();
+    expect(String(lockedRow.verdict)).toContain('0107 IN FORCE');
+  }, 240_000);
+
+  it('block 6 stays read-only and non-throwing when cost_price is missing entirely', async () => {
+    // Both the earlier boolean-AND version and the guard it mirrors must survive
+    // a genuinely absent column: no 42703 from has_column_privilege().
+    const db = await createMigratedDb({ lastMigration: '0103_security_advisor_remediation.sql' });
+    openDbs.push(db);
+    await withLedger(db, REPO_VERSIONS);
+    await db.exec('drop view public.inventory_product_totals');
+    await db.exec('alter table public.products drop column cost_price');
+
+    const sql = readFileSync(SCRIPT, 'utf8');
+    const stmts = statements(sql);
+    const results = await db.transaction(async (tx) => {
+      await tx.exec('set transaction read only');
+      const rows: unknown[] = [];
+      for (const stmt of stmts) rows.push((await tx.query(stmt)).rows);
+      return rows;
+    });
+
+    const row = (results[5] as Array<Record<string, unknown>>)[0]!;
+    expect(row.has_products).toBe(true);
+    expect(row.has_cost_price).toBe(false);
+    expect(row.authenticated_can_read_cost_price).toBeNull();
+    expect(row.anon_can_read_cost_price).toBeNull();
+    expect(String(row.verdict)).toContain('products.cost_price MISSING');
   }, 180_000);
 
   it('reports a genuinely missing dependency as MISSING instead of crashing', async () => {

@@ -103,10 +103,26 @@
 -- when 0107 has actually run, so a database still at the pre-0107 shape (live
 -- production: `authenticated` can still SELECT `products.cost_price`) is
 -- reported as a migration-order problem instead of silently staying exposed.
+--
+-- That 0107 check is BOTH-ROLES and SEQUENTIAL:
+--   step 1  public.products exists            (else 42P01, actionable)
+--   step 2  products.cost_price exists, via pg_catalog metadata ONLY
+--                                            (else 42703, actionable — no
+--                                             privilege function is called
+--                                             while the column is unknown)
+--   step 3  has_column_privilege('anon', …) and
+--           has_column_privilege('authenticated', …) must BOTH be false
+--                                            (else 42501, naming the role(s))
+-- The three checks are separate statements on purpose: a single boolean
+-- expression would leave the 42703 protection depending on AND short-circuit
+-- evaluation order instead of being a guarantee.
 -- ---------------------------------------------------------------------------
 do $$
 declare
-  v_missing text;
+  v_missing              text;
+  v_products_exists      boolean;
+  v_cost_price_exists    boolean;
+  v_cost_price_readable  text[];
 begin
   -- Required relations: object -> creating migration.
   with required(obj, migration) as (
@@ -155,19 +171,56 @@ begin
       using errcode = 'undefined_function';
   end if;
 
-  -- 0107 dependency: the cost_price lockdown must already be in force.
-  -- `has_column_privilege()` raises 42703 when the column does not exist, so the
-  -- probe is guarded by an explicit column-exists test.
-  if exists (
-       select 1
-         from pg_catalog.pg_attribute a
-        where a.attrelid = to_regclass('public.products')
-          and a.attname = 'cost_price'
-          and a.attnum > 0
-          and not a.attisdropped
-     )
-     and has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') then
-    raise exception 'MIGRATION ORDER VIOLATION: 0109 must run AFTER 0107_restore_cost_price_column_lockdown. In this database the API role "authenticated" can still SELECT public.products.cost_price, which means the 0107 column-privilege lockdown is not in force. Apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 first (0107 writes the column grants 0109 §1 extends), then re-run 0109.'
+  -- ---------------------------------------------------------------------------
+  -- 0107 dependency: the cost_price lockdown must already be in force for EVERY
+  -- API role, not just `authenticated`.
+  --
+  -- 0107 revokes table-level SELECT on public.products from PUBLIC, anon and
+  -- authenticated, then re-grants column-level SELECT to anon AND authenticated
+  -- for every column except cost_price. Checking only `authenticated` would miss
+  -- a database where `anon` alone can still read purchase cost.
+  --
+  -- These steps are deliberately SEQUENTIAL PL/pgSQL statements, not one boolean
+  -- expression: `has_column_privilege()` raises 42703 (undefined_column) when the
+  -- column is absent, and relying on AND short-circuit evaluation order would
+  -- make that protection an implementation accident rather than a guarantee.
+  -- ---------------------------------------------------------------------------
+
+  -- Step 1: the relation must exist.
+  v_products_exists := to_regclass('public.products') is not null;
+
+  if not v_products_exists then
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 cannot verify the 0107_restore_cost_price_column_lockdown dependency because public.products does not exist. Apply 0001_init (and 0004, 0022, 0025) before 0109.'
+      using errcode = 'undefined_table';
+  end if;
+
+  -- Step 2: the column must exist, read from pg_catalog metadata only.
+  -- No privilege function is called while this is still unknown.
+  select exists (
+           select 1
+             from pg_catalog.pg_attribute a
+            where a.attrelid = 'public.products'::regclass
+              and a.attname = 'cost_price'
+              and a.attnum > 0
+              and not a.attisdropped
+         )
+    into v_cost_price_exists;
+
+  if not v_cost_price_exists then
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 cannot verify the 0107_restore_cost_price_column_lockdown dependency because public.products.cost_price is missing. A catalog migration that should have created it has not been applied, or it was dropped after 0001_init/0025. Restore the column (0001_init -> 0025_cost_price_column_lockdown) before 0109; do not add cost_price back by hand outside a migration.'
+      using errcode = 'undefined_column';
+  end if;
+
+  -- Step 3: only now is it safe to ask about effective privileges, and we ask
+  -- about BOTH API roles.
+  select array_agg(role_name order by role_name)
+    into v_cost_price_readable
+    from unnest(array['anon', 'authenticated']) as role_name
+   where has_column_privilege(role_name, 'public.products', 'cost_price', 'SELECT');
+
+  if v_cost_price_readable is not null then
+    raise exception 'MIGRATION ORDER VIOLATION: 0109 must run AFTER 0107_restore_cost_price_column_lockdown. In this database the API role(s) % can still SELECT public.products.cost_price, which means the 0107 column-privilege lockdown is not in force. Apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 first (0107 revokes table-level SELECT on products from PUBLIC, anon and authenticated, then grants every column except cost_price), then re-run 0109.',
+      array_to_string(v_cost_price_readable, ' and ')
       using errcode = 'insufficient_privilege';
   end if;
 end;

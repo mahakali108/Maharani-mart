@@ -325,12 +325,17 @@ select e.migration,
 -- 6. THE 0107 ORDERING DEPENDENCY.
 --    0109 §1 grants column-level SELECT on the new `products.description`
 --    column and relies on 0107 having re-granted every other `products`
---    column. If `authenticated` can still read cost_price, 0107 has not run
---    and 0109 must not be applied yet.
+--    column. 0107 revokes table-level SELECT from PUBLIC, anon AND
+--    authenticated, so if EITHER API role can still read cost_price, 0107 has
+--    not run and 0109 must not be applied yet.
 -- ---------------------------------------------------------------------------
 -- NOTE: `has_column_privilege()` raises 42703 when the TABLE exists but the
--- COLUMN does not, so each probe is guarded by an explicit column-exists test
--- (a bare call would make this read-only script fail on a pre-0109 database).
+-- COLUMN does not, so each probe is reached only through a `left join lateral`
+-- over `pg_catalog.pg_attribute` rows for `products.cost_price`. With no such
+-- attribute there is no input row, so the projection that calls the privilege
+-- function never runs and this read-only script cannot fail on a pre-0109
+-- database. This is deliberately NOT `has_column and has_column_privilege(…)`:
+-- boolean AND short-circuit order is an evaluation detail, not a guarantee.
 with cols as (
   select
     exists (select 1 from information_schema.columns
@@ -338,25 +343,53 @@ with cols as (
     exists (select 1 from information_schema.columns
              where table_schema = 'public' and table_name = 'products' and column_name = 'description')   as has_description,
     to_regclass('public.products') is not null                                                        as has_products
+),
+probe as (
+  select c.has_products,
+         c.has_cost_price,
+         c.has_description,
+         cost.authenticated_can_read_cost_price,
+         cost.anon_can_read_cost_price,
+         descr.authenticated_can_read_description,
+         nullif(array_to_string(array_remove(array[
+           case when cost.anon_can_read_cost_price            then 'anon' end,
+           case when cost.authenticated_can_read_cost_price then 'authenticated' end
+         ], null), ' and '), '')                                                            as cost_price_readable_by
+    from cols c
+    left join lateral (
+      select has_column_privilege('authenticated', a.attrelid, 'cost_price', 'SELECT') as authenticated_can_read_cost_price,
+             has_column_privilege('anon',          a.attrelid, 'cost_price', 'SELECT') as anon_can_read_cost_price
+        from pg_catalog.pg_attribute a
+       where a.attrelid = to_regclass('public.products')
+         and a.attname  = 'cost_price'
+         and a.attnum   > 0
+         and not a.attisdropped
+    ) cost on true
+    left join lateral (
+      select has_column_privilege('authenticated', a.attrelid, 'description', 'SELECT') as authenticated_can_read_description
+        from pg_catalog.pg_attribute a
+       where a.attrelid = to_regclass('public.products')
+         and a.attname  = 'description'
+         and a.attnum   > 0
+         and not a.attisdropped
+    ) descr on true
 )
 select has_products,
        has_cost_price,
-       has_description                                                                       as description_column_exists,
-       case when has_products and has_cost_price
-            then has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') end
-                                                                                              as authenticated_can_read_cost_price,
-       case when has_products and has_cost_price
-            then has_column_privilege('anon', 'public.products', 'cost_price', 'SELECT') end  as anon_can_read_cost_price,
-       case when has_products and has_description
-            then has_column_privilege('authenticated', 'public.products', 'description', 'SELECT') end
-                                                                                              as authenticated_can_read_description,
+       has_description                                                          as description_column_exists,
+       authenticated_can_read_cost_price,
+       anon_can_read_cost_price,
+       authenticated_can_read_description,
+       cost_price_readable_by,
        case
-         when not has_products then 'products TABLE MISSING — 0001_init never applied here'
-         when has_cost_price and has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT')
-           then '0107 NOT IN FORCE — apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 before 0109'
+         when not has_products  then 'products TABLE MISSING — 0001_init never applied here'
+         when not has_cost_price then 'products.cost_price MISSING — 0001_init/0025 never applied here; 0109 pre-flight raises before any DDL'
+         when cost_price_readable_by is not null
+           then '0107 NOT IN FORCE — ' || cost_price_readable_by
+                || ' can still SELECT products.cost_price; apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 before 0109'
          else '0107 IN FORCE — ordering satisfied for 0109'
-       end                                                                                 as verdict
-  from cols;
+       end                                                                      as verdict
+  from probe;
 
 
 -- ---------------------------------------------------------------------------

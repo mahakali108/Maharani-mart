@@ -18,8 +18,11 @@ no `supabase migration repair`, no `db push`, no deployment, no merge.
 >
 > Consequences that are still live in production right now:
 > * **`0107` is not applied**, so `authenticated` can still `SELECT`
->   `products.cost_price` (block 6: `0107 NOT IN FORCE`). The wholesale cost-price
->   lockdown exists in the repository only.
+>   `products.cost_price` (block 6: `0107 NOT IN FORCE`, `authenticated` exposed, `anon`
+>   already locked by `0025`). The wholesale cost-price lockdown exists in the repository
+>   only. Note the round-2 scope correction: `0107` revokes table-level `SELECT` from
+>   **`anon` and `authenticated`**, so the pre-flight check now verifies **both**; on this
+>   database only `authenticated` is the exposed role.
 > * **`0109` is not applied**, so none of the Phase 3 control plane exists: no
 >   `wholesale_pricing_rules`, `seller_pricing_permissions`, `product_wholesale_limits`,
 >   `product_moderation_history`, `membership_program_settings`,
@@ -189,6 +192,72 @@ Nothing here connects to Supabase.
 | only the `0060` function signature changed | `42883` naming `public.consume_supplier_application_rate_limit(text,text,integer,integer) (from 0060_supplier_application_rate_limit)` — **not** reported as a table problem |
 | `0104`…`0109` correct order | applies; second replay of `0109` applies again; singleton rows stay **1/1/1** (idempotent) |
 
+### 6.2 Round-2 security review — both API roles, and a deterministic column check
+
+Two review findings were raised against the first revision of this guard. Both were real;
+both are now fixed and re-proved on the same disposable **PostgreSQL 17.11** cluster
+(10 guard scenarios + 6 diagnostic scenarios, **16/16 pass**).
+
+**Finding 1 — the pre-flight only asked about `authenticated`.**
+`0107_restore_cost_price_column_lockdown.sql` revokes table-level `SELECT` on
+`public.products` from `PUBLIC`, `anon` **and** `authenticated`, then grants column-level
+`SELECT` for every column except `cost_price` to **both** API roles. The original probe
+asked only `has_column_privilege('authenticated', …)`, so a database where **only `anon`**
+had lost its lockdown would have been accepted. The check now builds the set of exposed
+roles and names them:
+
+```sql
+select array_agg(role_name order by role_name)
+  into v_cost_price_readable
+  from unnest(array['anon', 'authenticated']) as role_name
+ where has_column_privilege(role_name, 'public.products', 'cost_price', 'SELECT');
+```
+
+**Finding 2 — missing-column protection relied on boolean evaluation order.**
+`has_column_privilege()` raises `42703 column "cost_price" … does not exist` when the column
+is absent (measured, not assumed — see the table below). The old form was
+`where <column-exists> and has_column_privilege(…)`, i.e. a single boolean expression whose
+safety depends on `AND` short-circuiting. That is an evaluation detail, not a contract. The
+guard is now three **sequential statements**: (1) `public.products` exists → else `42P01`
+naming `0001_init`; (2) `cost_price` exists, read from `pg_catalog.pg_attribute` only →
+else `42703` with an actionable message pointing at `0001_init -> 0025_cost_price_column_lockdown`;
+(3) only then are the two `has_column_privilege()` calls made. No privilege function is
+reachable while the column is unknown.
+
+| Run (PostgreSQL 17.11) | Posture | Result |
+|---|---|---|
+| **C0** | production baseline `0001`–`0103` | `anon=false`, `authenticated=true` — recorded |
+| **C1** | `authenticated` exposed only (live production shape) | `42501` **MIGRATION ORDER VIOLATION: … must run AFTER 0107…**; names `authenticated`; **0** Phase 3 tables created |
+| **C2** | `anon` exposed, `authenticated` locked (new finding-1 case) | `42501`; names **`anon` only**; does **not** mention `authenticated` can still read |
+| **C3** | `0104`…`0108` applied, both roles locked | `0109` applies; afterwards `cost_price` is `false/false`, `description` is `true` |
+| **C4** | `products.cost_price` dropped (view `inventory_product_totals` dropped first) | actionable `42703 **MIGRATION ORDER VIOLATION: 0109 cannot verify the 0107…** because public.products.cost_price is missing … 0001_init -> 0025_cost_price_column_lockdown` — **not** the bare catalog error |
+| **C5** | `public.products` dropped entirely | `42P01` from the relation block, which still fires first |
+| **C6** | full ordered chain, then replay | applies, replay idempotent, singletons stay **1/1/1** |
+
+How the drop was made real, and why the previous revision could not do it: on native 17.11
+`alter table public.products drop column cost_price` fails `2BP01`, and the blocking
+dependent is the **`public.inventory_product_totals`** view (a `pg_rewrite` rule referencing
+`cost_price`) — dropping `admin_product_cost(uuid)` alone does **not** unblock it. After
+`drop view public.inventory_product_totals` the column drop succeeds, and then an unguarded
+`has_column_privilege(…)` raises exactly `42703 column "cost_price" of relation "products"
+does not exist`. That measured sequence is what C4 pins.
+
+**Diagnostic block 6** was updated to match, and now reports the exposed role set rather than
+one boolean. Its verdict has four outcomes: `products TABLE MISSING`, `products.cost_price
+MISSING`, `0107 NOT IN FORCE — <roles> can still SELECT …`, `0107 IN FORCE`. It also no longer
+uses a boolean-`AND` guard: the privilege functions are reached through a
+`left join lateral` over `pg_catalog.pg_attribute`, so with no such column there is no input
+row and the projection never runs. Native 17.11 verification of the finished script:
+
+| Run | Posture | Verdict |
+|---|---|---|
+| P1 | production baseline | `0107 NOT IN FORCE — authenticated can still SELECT …`, `cost_price_readable_by = authenticated` |
+| P2 | `anon` only re-opened | `0107 NOT IN FORCE — anon can still SELECT …`, and **not** `authenticated` |
+| P3 | both re-opened | `cost_price_readable_by = anon and authenticated` |
+| P4 | `0104`…`0108` applied | `0107 IN FORCE — ordering satisfied for 0109`, `cost_price_readable_by = null` |
+| P5 | `cost_price` missing | no raise; `products.cost_price MISSING — 0001_init/0025 never applied here` |
+| S0 | static | 10 top-level statements, all `SELECT`/`WITH`; every block ran inside `begin read only` … `rollback` |
+
 ## 7. Repository changes made
 
 1. **`supabase/migrations/0109_phase3_business_control.sql`** — §0 pre-flight guard
@@ -196,12 +265,19 @@ Nothing here connects to Supabase.
    functions with the same exact signatures are still required and still abort the
    migration before any DDL.
    * Every unmet object is now named together with the migration that creates it.
-   * A 0107 ordering contract was **added** (`has_column_privilege('authenticated',
-     'public.products','cost_price','SELECT')` must be `false`), so 0109 can no longer
-     run before the lockdown it depends on.
-   * Both probes are guarded so a pre-`0001` database or a missing `products.cost_price`
-     column yields the actionable `MIGRATION ORDER VIOLATION` instead of a raw
-     `42703`/undefined-column error.
+   * A 0107 ordering contract was **added** (`has_column_privilege(…)` must be `false`),
+     so 0109 can no longer run before the lockdown it depends on.
+   * **Round 2, finding 1:** that contract now checks **both** API roles — `anon` **and**
+     `authenticated` — because `0107` revokes table-level `SELECT` from both and re-grants
+     every column except `cost_price` to both. The exception message names the role(s) that
+     are actually exposed, so a partial 0107 is diagnosable from the error alone.
+   * **Round 2, finding 2:** the column-exists check no longer shares a boolean expression
+     with `has_column_privilege()`. Three sequential statements (products exists →
+     `cost_price` exists via `pg_catalog` → per-role privilege probe) make the `42703`
+     protection a guarantee rather than a short-circuit side effect. A missing column now
+     produces an actionable `MIGRATION ORDER VIOLATION` pointing at
+     `0001_init -> 0025_cost_price_column_lockdown`, never the bare catalog error.
+   * Both failure modes are proved on native PostgreSQL 17.11, not only by unit tests (§6.2).
    * The file header now documents the full object → migration matrix and the required
      order.
 2. **`supabase/audits/0109_dependency_diagnostic_readonly.sql`** *(new)* — the read-only
@@ -216,7 +292,7 @@ Nothing here connects to Supabase.
      | 3 | verbatim; re-run with a `where r.version >= '0100'` display filter, then re-run wrapped in an aggregate over **all 106** repository rows | 99 `APPLIED` + 1 `0103` = `APPLIED (CLI-recorded … KNOWN)` + 6 `ABSENT` (`0104`–`0109`) = 106 |
      | 4 | verbatim | exactly 1 row: `20261115155706` / `KNOWN: CLI-recorded 0103` |
      | 5 | verbatim | 10 `PRESENT`, 6 `MISSING (migration not applied)` |
-     | 6 | verbatim | `0107 NOT IN FORCE — apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 before 0109` |
+     | 6 | **the pre-round-2 text verbatim** (it returned `0107 NOT IN FORCE — apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 before 0109`, derived from the `authenticated` probe). The round-2 revision, which also returns `anon_can_read_cost_price` / `cost_price_readable_by` and names the exposed role(s), was **not** run against production — it is verified on the disposable PostgreSQL 17.11 cluster only (runs P1–P5, §6.2). The owner re-runs block 6 in Step 2 below, which is where the new text is exercised on the real database. |
      | 7 | verbatim | 13 tables, all `rls_enabled = true` |
      | 8 | verbatim | 15 `PRESENT` + `products.description` `MISSING (expected — 0109 adds it)` |
      | 9 | verbatim | 9 rows (`get_retailer_membership_overview` / `super_admin_assign_membership` correctly absent pre-0109) |
@@ -229,18 +305,33 @@ Nothing here connects to Supabase.
      production.
    * Additionally, all 10 blocks were executed on a disposable **PostgreSQL 17.11**
      cluster at the exact production baseline **inside a single `set transaction read only`
-     transaction** — no block raised.
+     transaction** — no block raised. The round-2 revision was re-run the same way (inside
+     `begin read only` … `rollback`) and additionally under five further postures — P1–P5
+     in §6.2 — with no block raising in any of them.
    * Its embedded repository list is checked against `supabase/migrations` (106/106
      versions, zero name mismatches) — see the test in item 4.
-3. **`tests/migration-0109-dependency-guard.test.ts`** *(new)* — 11 regression tests
+3. **`tests/migration-0109-dependency-guard.test.ts`** *(new)* — **13** regression tests
    (dependency matrix vs. repository, named-relation reporting, wrong-signature
-   reporting, zero-partial-object failure, 0107 ordering both failing and succeeding,
-   `42703` hardening, idempotent replay, owner gates closed after a full rollout).
-4. **`tests/migration-0109-diagnostic-readonly.test.ts`** *(new)* — 3 tests: no write
-   statement anywhere in the diagnostic; all blocks run unchanged on the live
-   production baseline (`0001..0103`) and report `GUARD SHOULD PASS` / `0107 NOT IN
-   FORCE`; a genuinely missing dependency is reported as `MISSING (from 0060…)`
-   instead of crashing.
+   reporting, zero-partial-object failure, idempotent replay, owner gates closed after a
+   full rollout) plus the round-2 ordering block:
+   * `authenticated` can read `cost_price` ⇒ reject;
+   * **only `anon`** can read it while `authenticated` cannot ⇒ reject, and the message
+     names `anon` and not `authenticated`;
+   * neither role can read it ⇒ ordering check passes and 0109 applies;
+   * `cost_price` genuinely absent ⇒ actionable `MIGRATION ORDER VIOLATION`, and the test
+     first proves the raw call raises `42703` so the guard's value is demonstrated, not
+     assumed.
+   The earlier `42703` test **early-returned** on PGlite because it tried to drop the
+   column without dropping the dependent `inventory_product_totals` view. That was not
+   proof of anything. It has been replaced by the real scenario: drop the view, then the
+   column — constructible in PGlite too, so the case is now genuinely executed.
+4. **`tests/migration-0109-diagnostic-readonly.test.ts`** *(new)* — **5** tests: no write
+   statement anywhere in the diagnostic; all blocks run unchanged on the live production
+   baseline (`0001..0103`) and report `GUARD SHOULD PASS` / `0107 NOT IN FORCE` naming only
+   `authenticated`; block 6 fails when **only `anon`** is exposed and flips to
+   `0107 IN FORCE` when neither role is; block 6 stays read-only and non-throwing when
+   `cost_price` is missing entirely; a genuinely missing dependency is reported as
+   `MISSING (from 0060…)` instead of crashing.
 5. **`docs/repair/MIGRATION_0109_DEPENDENCY_REPORT.md`** *(this file)*.
 
 Nothing else was touched: no new migration number, no edit to `0104`–`0108`, no rollback
@@ -334,7 +425,8 @@ select * from public.membership_plans;                 -- expect every is_active
 | `can_current_staff_read_profile(uuid)` caller-role guard | 0109 §6.2 | unchanged, still `SECURITY DEFINER`, `search_path = pg_catalog, public, pg_temp`, `is_staff_or_above()` check |
 | DB-level supplier-application rate limiting | 0109 §6.3 + `0060` | unchanged; wrong signature now reported explicitly |
 | 13 internal trigger functions revoked from `public, anon, authenticated` | 0109 §6.1 | unchanged |
-| `products.cost_price` lockdown | 0107 + 0109 §1 | **strengthened** — guard now refuses to run before 0107 |
+| `products.cost_price` lockdown | 0107 + 0109 §1 | **strengthened** — guard refuses to run before 0107, and (round 2) it now checks **both** API roles `anon` and `authenticated`, matching what 0107 actually revokes and re-grants |
+| Column-existence failure mode | 0109 §0 step 2 | **strengthened** — a missing `products.cost_price` is read from `pg_catalog` metadata *before* any privilege function is called, so the `42703` protection is sequential, not boolean-short-circuit dependent |
 | `products.description` column grant | 0109 §1 | unchanged; still column-level only |
 | Seller governance / approval, MOQ & discount ceilings | 0062–0072, 0109 §2 | unchanged |
 | Membership expiry & discount restrictions | 0109 §3 | unchanged; `immediate_stop`, `grace_period_days = 0`, 0 % after expiry |
@@ -348,23 +440,27 @@ select * from public.membership_plans;                 -- expect every is_active
 | Suite | Result |
 |---|---|
 | Full repository suite, before changes | **237 files / 3626 tests passed**, 0 failed, 0 skipped |
-| New `tests/migration-0109-dependency-guard.test.ts` | **11 tests passed** (PGlite PostgreSQL 16) |
-| New `tests/migration-0109-diagnostic-readonly.test.ts` | **3 tests passed** (PGlite PostgreSQL 16) |
-| Full repository suite, after changes | **239 files / 3640 tests passed**, **0 failed, 0 skipped** |
+| Full repository suite, after round 1 | **239 files / 3640 tests passed**, 0 failed, 0 skipped |
+| **Full repository suite, after round 2** | **239 files / 3644 tests passed**, **0 failed, 0 skipped** |
+| `tests/migration-0109-dependency-guard.test.ts` | **13 tests passed** (PGlite PostgreSQL 16) |
+| `tests/migration-0109-diagnostic-readonly.test.ts` | **5 tests passed** (PGlite PostgreSQL 16) |
+| Targeted run of only the two 0109 suites | **18 / 18 passed** |
+| `pnpm typecheck` (`tsc --noEmit`) | exit 0 |
+| `pnpm lint` (`eslint .`) | exit 0 |
+| `pnpm build` | exit 0 |
 | `tests/migration-validation-0103-to-0109-db.test.ts` | passes (baseline → 0104–0109, parity, idempotency, fail-fast) |
 | `tests/phase3-business-control-db.test.ts`, `tests/phase3-rollback-protection-db.test.ts` | pass |
-| Real PostgreSQL 17.11 runs T0–T4, L1–L4, V1, P1, and the six fixed-guard scenarios | as tabulated in §6 |
+| Real PostgreSQL 17.11 runs T0–T4, L1–L4, V1, P1, C0–C6, and diagnostic P1–P5/S0 | as tabulated in §6 and §6.2 |
+| Non-weakening diff check | executable SQL **outside §0 byte-identical** to `9754725` (1576 lines); 12 relations + 7 exact-signature functions retained; both errcodes retained |
 
-One caveat on the count above: the `42703` regression test **passes by early return** on the
-PGlite schema, because `alter table public.products drop column cost_price` is refused there
-(dependent objects). It therefore does not exercise the column probe in PGlite; that probe is
-covered by the disposable **PostgreSQL 17.11** run and by the read-only diagnostic's block 6,
-which was executed against production. Vitest reports it as passed, not skipped, so the raw
-count alone overstates its coverage — this note is the correction.
-
-Honest limits: PGlite is PostgreSQL 16 (WASM) with stubbed `auth`/`storage`; the
-PostgreSQL 17.11 evidence in §6 comes from a separate disposable native cluster and is
-not part of `pnpm test`. Neither proves hosted-Supabase role-graph behaviour.
+**Coverage honesty for round 2.** The previous revision's `42703` test passed by **early
+return**, so it proved nothing; that has been removed, not re-labelled. The replacement drops
+`public.inventory_product_totals` and then the column, which is constructible in PGlite as
+well as native PostgreSQL, so the case is now executed rather than skipped. No test in either
+0109 suite returns early or is marked skipped. The native PostgreSQL 17.11 evidence remains
+**separate** from `pnpm test`, because PGlite is PostgreSQL 16 (WASM) with stubbed
+`auth`/`storage`; the 17.11 runs come from a disposable native cluster and are tabulated
+above so the two are not conflated. Neither proves hosted-Supabase role-graph behaviour.
 
 ## 11. Confirmation
 
@@ -372,3 +468,9 @@ No production write of any kind was performed during this investigation: no DDL,
 no `GRANT`/`REVOKE`, no migration execution, no `migration repair`, no `db push`, no
 deployment, no PR merge, no Auth or SMTP change, no paid resource. The legacy project was
 read at catalog level only and was not modified.
+
+The same holds for round 2. Every privilege and missing-column scenario in §6.2 was built
+and measured on a **disposable native PostgreSQL 17.11 cluster** created for this purpose
+and destroyed afterwards; it does not connect to Supabase at all. `0104`–`0109` remain
+**unapplied** in production, and this pull request remains **open and review-only**: it is
+not a deployment authorisation and does not make production ready.

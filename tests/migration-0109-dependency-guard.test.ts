@@ -259,8 +259,16 @@ describe('0109 pre-flight — the 0107 ordering contract', () => {
     for (const db of openDbs) await db.close();
   });
 
-  it('refuses to run before 0107 has locked down products.cost_price', async () => {
-    // Exact live production baseline: 0001..0103 only.
+  /**
+   * The pre-flight 0107 check must look at BOTH API roles. 0107 revokes
+   * table-level SELECT on `public.products` from PUBLIC, `anon` AND
+   * `authenticated`, then re-grants every column except `cost_price` to both.
+   * A probe that only asks about `authenticated` would accept a database where
+   * `anon` alone can still read purchase cost.
+   */
+  it('refuses to run when authenticated can still SELECT products.cost_price', async () => {
+    // Exact live production baseline: 0001..0103 only. 0107 has not run, so
+    // `authenticated` still holds the table-level SELECT grant.
     const db = await createMigratedDb({ lastMigration: '0103_security_advisor_remediation.sql' });
     openDbs.push(db);
 
@@ -272,37 +280,82 @@ describe('0109 pre-flight — the 0107 ordering contract', () => {
     const message = await expectFail(db.exec(readMigration(MIGRATION_0109)));
     expect(message).toMatch(/MIGRATION ORDER VIOLATION: 0109 must run AFTER 0107_restore_cost_price_column_lockdown/);
     expect(message).toContain('0104 -> 0105 -> 0106 -> 0107 -> 0108');
+    expect(message).toMatch(/API role\(s\) authenticated can still SELECT/);
   }, 120_000);
 
-  it('survives a products table without a cost_price column (42703 from has_column_privilege)', async () => {
-    // `has_column_privilege()` raises 42703 when the column is absent, which
-    // would replace the actionable MIGRATION ORDER VIOLATION with a raw error.
-    const db = await createMigratedDb({ lastMigration: '0059_supplier_applications.sql' });
+  it('refuses to run when ONLY anon can SELECT products.cost_price', async () => {
+    // 0107 in force, then deliberately re-open `anon` alone: the exact shape a
+    // single-role (`authenticated`-only) pre-flight would wave through.
+    const db = await createMigratedDb({ lastMigration: '0103_security_advisor_remediation.sql' });
     openDbs.push(db);
+    for (const file of ORDERED_CHAIN) await db.exec(readMigration(file));
 
-    // Drop the column WITHOUT cascading: any dependent object (a reporting view,
-    // a generated column) makes PostgreSQL refuse. In that case the scenario is
-    // not constructible on this schema and the guard's column probe is exercised
-    // by the read-only diagnostic instead, so skip rather than fake it.
-    let dropped = false;
-    try {
-      await db.exec('alter table public.products drop column cost_price');
-      dropped = true;
-    } catch {
-      dropped = false;
-    }
-    if (!dropped) {
-      // Confirm the raw failure mode that motivated the guard, so the reason for
-      // the skip is recorded rather than assumed.
-      await expect(
-        db.query(`select has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT')`),
-      ).resolves.toBeDefined();
-      return;
-    }
+    await db.exec('revoke select on public.products from anon');
+    await db.exec('grant select (cost_price) on public.products to anon');
+
+    const posture = await db.query<{ anon_cost: boolean; auth_cost: boolean }>(`select
+        has_column_privilege('anon', 'public.products', 'cost_price', 'SELECT') as anon_cost,
+        has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') as auth_cost`);
+    expect(posture.rows[0]).toEqual({ anon_cost: true, auth_cost: false });
 
     const message = await expectFail(db.exec(readMigration(MIGRATION_0109)));
-    expect(message).toMatch(/MIGRATION ORDER VIOLATION: 0109 requires base catalog/);
-    expect(message).not.toMatch(/42703|column "cost_price" does not exist/);
+    expect(message).toMatch(/MIGRATION ORDER VIOLATION: 0109 must run AFTER 0107_restore_cost_price_column_lockdown/);
+    expect(message).toMatch(/API role\(s\) anon can still SELECT/);
+    // It must name the role that is actually exposed, not a generic warning.
+    expect(message).not.toMatch(/API role\(s\) authenticated/);
+  }, 180_000);
+
+  it('passes the ordering check when NEITHER API role can SELECT products.cost_price', async () => {
+    const db = await createMigratedDb({ lastMigration: '0103_security_advisor_remediation.sql' });
+    openDbs.push(db);
+    for (const file of ORDERED_CHAIN) await db.exec(readMigration(file));
+
+    const posture = await db.query<{ anon_cost: boolean; auth_cost: boolean }>(`select
+        has_column_privilege('anon', 'public.products', 'cost_price', 'SELECT') as anon_cost,
+        has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') as auth_cost`);
+    expect(posture.rows[0]).toEqual({ anon_cost: false, auth_cost: false });
+
+    await expect(db.exec(readMigration(MIGRATION_0109))).resolves.toBeDefined();
+  }, 180_000);
+
+  /**
+   * Deterministic missing-column protection (round-2 finding 2).
+   *
+   * `has_column_privilege()` raises raw `42703` when the column is gone, so the
+   * pre-flight reads `pg_catalog.pg_attribute` FIRST and only calls the
+   * privilege function once the column is known to exist. The three checks are
+   * separate statements, so this cannot regress into "works because boolean AND
+   * happens to short-circuit".
+   *
+   * The column is genuinely droppable only after `public.inventory_product_totals`
+   * (the view whose pg_rewrite rule references `cost_price`) is dropped; verified
+   * on native PostgreSQL 17.11 — see docs/repair/MIGRATION_0109_DEPENDENCY_REPORT.md.
+   */
+  it('reports an actionable MIGRATION ORDER VIOLATION (not raw 42703) when cost_price is missing', async () => {
+    const db = await createMigratedDb({ lastMigration: '0103_security_advisor_remediation.sql' });
+    openDbs.push(db);
+
+    await db.exec('drop view public.inventory_product_totals');
+    await db.exec('alter table public.products drop column cost_price');
+
+    const gone = await db.query<{ products_exists: boolean; cost_price_exists: boolean }>(`select
+        to_regclass('public.products') is not null as products_exists,
+        exists (select 1 from pg_attribute where attrelid = 'public.products'::regclass
+                  and attname = 'cost_price' and attnum > 0 and not attisdropped) as cost_price_exists`);
+    expect(gone.rows[0]).toEqual({ products_exists: true, cost_price_exists: false });
+
+    // The raw failure mode this guard replaces: an unguarded call raises 42703.
+    const raw = await expectFail(
+      db.query(`select has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT')`),
+    );
+    expect(raw).toMatch(/column "cost_price" of relation "products" does not exist/);
+
+    const message = await expectFail(db.exec(readMigration(MIGRATION_0109)));
+    expect(message).toMatch(/MIGRATION ORDER VIOLATION: 0109 cannot verify the 0107_restore_cost_price_column_lockdown/);
+    expect(message).toMatch(/public\.products\.cost_price is missing/);
+    expect(message).toContain('0001_init -> 0025_cost_price_column_lockdown');
+    // Actionable, and never the bare catalog error on its own.
+    expect(message).not.toMatch(/^column "cost_price" of relation "products" does not exist$/);
   }, 120_000);
 
   it('applies cleanly, and keeps cost_price locked, when 0104..0108 run first', async () => {
