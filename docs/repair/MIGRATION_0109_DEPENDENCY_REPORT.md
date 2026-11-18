@@ -8,6 +8,33 @@
 project during this investigation was a `SELECT`. No DDL, no DML, no `GRANT`/`REVOKE`,
 no `supabase migration repair`, no `db push`, no deployment, no merge.
 
+> ## ⚠ PRODUCTION MIGRATIONS 0104–0109 HAVE **NOT** BEEN APPLIED
+>
+> The official project `fhrmsrumsraprvutrpeo` is still at the **`0001`–`0103` baseline**.
+> Its ledger holds 100 entries: `0001`–`0102` plus `0103` recorded as `20261115155706`.
+> **`0104`, `0105`, `0106`, `0107`, `0108` and `0109` are absent** — verified read-only in
+> block 3 of the diagnostic (99 `APPLIED` + 1 CLI-recorded `0103` + **6 `ABSENT`
+> (`0104`–`0109`)** = 106 repository migrations).
+>
+> Consequences that are still live in production right now:
+> * **`0107` is not applied**, so `authenticated` can still `SELECT`
+>   `products.cost_price` (block 6: `0107 NOT IN FORCE`). The wholesale cost-price
+>   lockdown exists in the repository only.
+> * **`0109` is not applied**, so none of the Phase 3 control plane exists: no
+>   `wholesale_pricing_rules`, `seller_pricing_permissions`, `product_wholesale_limits`,
+>   `product_moderation_history`, `membership_program_settings`,
+>   `membership_upgrade_requests`, `ad_program_settings`, `seller_ad_campaigns`,
+>   `seller_ad_campaign_audit`.
+> * **`0104`/`0106` are not applied**, so there is no managed site content
+>   (`site_pages`) and no Super Admin bootstrap allowlist.
+> * Because `0109` is not applied, the hardening it carries is **also not live**:
+>   `can_current_staff_read_profile(uuid)` still lacks its caller-role guard and is
+>   `EXECUTE`-able by `anon` (block 9), and `submit_supplier_application(...)` still has
+>   no database-level rate limiter.
+>
+> **This change is review-only. It does not, and must not, make production
+> ready. Nothing in this PR is production-ready deployment authorisation.**
+
 ---
 
 ## 1. The reported error, verbatim
@@ -178,15 +205,31 @@ Nothing here connects to Supabase.
    * The file header now documents the full object → migration matrix and the required
      order.
 2. **`supabase/audits/0109_dependency_diagnostic_readonly.sql`** *(new)* — the read-only
-   diagnostic in §8. Ten `SELECT`/`WITH`-only blocks. Validated three ways:
-   * AST check: 10 top-level statements, **0 non-`SELECT`**;
-   * all 10 blocks executed against `fhrmsrumsraprvutrpeo` (PostgreSQL 17.11) — blocks
-     1, 2, 5, 6, 7, 8, 9, 10 returned the values tabulated in §8 step 3, block 3
-     classified `0103` as `APPLIED (CLI-recorded as 20261115155706 — KNOWN, content
-     identical)`, block 4 returned exactly one row (`20261115155706`, `KNOWN`);
-   * all 10 blocks executed on a disposable **PostgreSQL 17.11** cluster at the exact
-     production baseline **inside a single `set transaction read only` transaction** —
-     no block raised.
+   diagnostic in §8. Ten `SELECT`/`WITH`-only blocks. Validation, stated exactly:
+   * AST check: 10 top-level statements, **0 non-`SELECT`**.
+   * **All 10 blocks were executed against `fhrmsrumsraprvutrpeo` (PostgreSQL 17.11,
+     `ledger_entries = 100`).** Provenance, per block, so the claim is auditable:
+     | Block | Executed against production as | Result on production |
+     |---|---|---|
+     | 1 | the block text verbatim | 19 rows, all `PRESENT` |
+     | 2 | verbatim | `19 / 19 / 0` → `GUARD SHOULD PASS …` |
+     | 3 | verbatim; re-run with a `where r.version >= '0100'` display filter, then re-run wrapped in an aggregate over **all 106** repository rows | 99 `APPLIED` + 1 `0103` = `APPLIED (CLI-recorded … KNOWN)` + 6 `ABSENT` (`0104`–`0109`) = 106 |
+     | 4 | verbatim | exactly 1 row: `20261115155706` / `KNOWN: CLI-recorded 0103` |
+     | 5 | verbatim | 10 `PRESENT`, 6 `MISSING (migration not applied)` |
+     | 6 | verbatim | `0107 NOT IN FORCE — apply 0104 -> 0105 -> 0106 -> 0107 -> 0108 before 0109` |
+     | 7 | verbatim | 13 tables, all `rls_enabled = true` |
+     | 8 | verbatim | 15 `PRESENT` + `products.description` `MISSING (expected — 0109 adds it)` |
+     | 9 | verbatim | 9 rows (`get_retailer_membership_overview` / `super_admin_assign_membership` correctly absent pre-0109) |
+     | 10 | verbatim | `postgres` / `17.11` / `ledger_entries 100` / highest ledger version `20261115155706` |
+   * **Correction to an earlier draft of this section.** It said "blocks 1, 2, 5, 6, 7, 8,
+     9, 10" were executed against production, implying blocks 3 and 4 had not been. That
+     was wrong in both directions: block 4 *had* been executed, and blocks 3 and 5–9 had
+     at that point only been executed as equivalent rewrites, not as the literal file
+     text. The table above is the corrected record; every block has now been run against
+     production.
+   * Additionally, all 10 blocks were executed on a disposable **PostgreSQL 17.11**
+     cluster at the exact production baseline **inside a single `set transaction read only`
+     transaction** — no block raised.
    * Its embedded repository list is checked against `supabase/migrations` (106/106
      versions, zero name mismatches) — see the test in item 4.
 3. **`tests/migration-0109-dependency-guard.test.ts`** *(new)* — 11 regression tests
