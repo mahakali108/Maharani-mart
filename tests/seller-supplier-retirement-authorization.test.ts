@@ -141,11 +141,19 @@ describe('retired role is refused in the session helpers', () => {
   });
 
   it('the database refuses a retired role too — enforcement is not only in the UI', () => {
-    // Migration 0110 replaces handle_new_user() and deactivates every seller
-    // profile, so the code refusal is backed by a database refusal.
+    // Migration 0110 replaces handle_new_user(), so the code refusal is backed by
+    // a database refusal.
     const migration = readFileSync('supabase/migrations/0110_retire_seller_supplier_marketplace.sql', 'utf8');
     expect(migration).toContain('create or replace function public.handle_new_user()');
-    expect(migration).toMatch(/set is_active = false\s+where role::text = 'seller'/);
     expect(migration).toContain("if v_staff_role = 'seller' then");
+  });
+
+  it('our legal copy makes no unverified seller-of-record claim', () => {
+    // The correction sweep removed every "Maharani Traders is the seller of
+    // record" style assertion; see tests/business-identity-claims.test.ts for the
+    // full guard.
+    const seed = readFileSync('content/site-pages.seed.json', 'utf8');
+    expect(seed).not.toMatch(/\bis the seller of record\b/i);
+    expect(seed).not.toMatch(/\bwe are the seller of record\b/i);
   });
 });

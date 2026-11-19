@@ -6,6 +6,13 @@
 **Audit date:** 2026-11-18
 **Mode:** Read-only. No file, migration or database object was modified to produce this document.
 
+> **Status update (owner-review corrections).** Phases 2–8 are implemented on the branch and open as
+> PR #140. Two findings in this audit were re-opened and corrected during owner review, both recorded
+> in place below: §6.2 (dual-role accounts were being deactivated along with seller-only ones) and
+> §6.4 (the corrected legal copy introduced a new unverified seller-of-record claim). The remaining
+> open item is §6.4: *which* business identity is the legal seller / invoice issuer / GST registrant is
+> still an owner decision, and is therefore still not asserted anywhere.
+
 ---
 
 ## 0. Baseline measurements (before any change)
@@ -231,7 +238,13 @@ Full object inventory (all created by already-applied migrations — **nothing h
 
 1. **Legal pages that promise a marketplace.** 5–8 published pages currently tell the public that independent sellers may sell here. Removing the module makes those statements untrue. Options: (a) unpublish those pages, (b) mark them "under review" and leave them live, (c) rewrite them. Rewriting published legal text is an owner/legal decision, not a code decision.
 2. **`seller` rows in `profiles` for real people.** Revoking the role locks out those accounts entirely (by design, per the brief). Confirm no former seller is also a legitimate retailer under the same login.
+
+   **Resolved during owner review — the answer is yes, and the first implementation got it wrong.** §2 of this audit records that `public.retailers` is a separate table keyed on the same profile id, so a `role='seller'` profile *can* own an approved `retailers` row. The initial block 7 ignored that and deactivated the whole population in one statement, destroying the retailer half of those accounts. It now splits the population on evidence already in the database: seller-only → deactivated and never converted; dual-role with `retailers.status='active'` → re-roled to `retailer` and kept active (their effective permissions are unchanged, because `is_active_account()` already required that status); dual-role not approved → deactivated, role untouched. Block 8 now raises if any profile with an active `retailers` row is not an active `retailer`. See `docs/repair/SELLER_SUPPLIER_REMOVAL_DATABASE_SAFETY.md` §4.1.
 3. **`supplier_reference` on GRN.** I intend to keep it (purchase provenance, not a supplier module). Say if you want it removed too.
+
+   **Resolved: kept.** A test pins it (`keeps grns.supplier_reference — purchase provenance is historical data`), and the admin surface shows it as "Purchases & GRN".
+
+4. **Which business identity is the legal seller / invoice issuer / GST registrant.** Not answered by the owner, so **not asserted** anywhere. The corrected copy states only that the identity appears on the invoice and on the Contact and Legal Information page. `tests/business-identity-claims.test.ts` fails the build if any affirmative claim returns. This remains the one open legal decision.
 
 ---
 

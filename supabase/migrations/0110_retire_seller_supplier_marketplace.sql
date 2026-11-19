@@ -505,15 +505,49 @@ $invite_policies$;
 --   * nothing is deleted: profiles, auth users, membership rows and every order
 --     they ever placed remain in place for audit.
 --
--- A former seller who ALSO holds legitimate retailer access is a dual-role
--- situation this schema cannot express (one profile, one role). Per the removal
--- brief such an account must not be silently converted into a retailer, so it is
--- deactivated here and must be re-created/re-approved deliberately by the owner.
--- The count is emitted as a NOTICE so the operator sees the exact impact.
+-- A former seller who ALSO holds a legitimate, already-approved retailer record
+-- is a DUAL-ROLE account. The schema has always supported this: `public.retailers`
+-- is a separate table keyed on the same profile id, so a profile can hold a
+-- retailer row while its single `profiles.role` column says something else. The
+-- SELLER half of that account is retired; the RETAILER half was never part of the
+-- marketplace and must not be destroyed by a marketplace removal.
+--
+-- So this block separates the three cases explicitly:
+--
+--   SELLER-ONLY  (no `retailers` row)
+--     -> deactivated. Nothing deleted; profile, auth user, seller membership,
+--        orders and audit rows all survive. NEVER converted to a retailer.
+--
+--   DUAL-ROLE, retailer ALREADY APPROVED  (`retailers.status = 'active'`)
+--     -> re-roled to `retailer` and kept active. This is NOT a new grant: the
+--        status was set by the retailer approval workflow, and `is_active_account()`
+--        (0052) already requires exactly `retailers.status = 'active'` for a
+--        retailer-role profile, so the account's effective permission set is
+--        unchanged. Only the seller capability is lost -- and that is enforced by
+--        the revocations above, not by the profile row.
+--
+--   DUAL-ROLE, retailer NOT APPROVED  (`pending_approval` / `suspended`)
+--     -> deactivated, role left as `seller`. The retailer side never passed
+--        approval (or was revoked), so there is nothing legitimate to preserve.
+--        If the owner later approves the application through
+--        admin_review_retailer_application (0081), that function sets
+--        retailers.status = 'active' but does NOT re-role the profile, so block 9
+--        below provides a re-role path for exactly that case.
+--
+-- A seller-only account is NEVER promoted: the split above requires a pre-existing
+-- `retailers` row, which only the retail registration or approval workflow creates.
+--
+-- Every decision is written to `public.audit_logs` with before/after state, so the
+-- owner can review and reverse each one. Counts are emitted as NOTICEs.
 do $retired_profiles$
 declare
   v_seller_profiles integer;
+  v_seller_only integer;
+  v_dual_active integer;
+  v_dual_unapproved integer;
   v_deactivated integer;
+  v_promoted integer;
+  v_row record;
 begin
   -- Guard: the enum value may not exist on a database predating 0062.
   if not exists (
@@ -521,20 +555,109 @@ begin
       join pg_type t on t.oid = e.enumtypid
      where t.typname = 'user_role' and e.enumlabel = 'seller'
   ) then
-    raise notice '0110: user_role has no seller value — nothing to deactivate.';
+    raise notice '0110: user_role has no seller value - nothing to deactivate.';
     return;
   end if;
 
   select count(*) into v_seller_profiles
     from public.profiles where role::text = 'seller';
 
-  update public.profiles
-     set is_active = false
-   where role::text = 'seller'
-     and is_active = true;
-  get diagnostics v_deactivated = row_count;
+  -- The three populations, counted up front so the operator sees the whole
+  -- picture even when every bucket is empty.
+  select count(*) into v_seller_only
+    from public.profiles p
+   where p.role::text = 'seller'
+     and not exists (select 1 from public.retailers r where r.id = p.id);
 
-  raise notice '0110: retired seller profiles=%, newly deactivated=%', v_seller_profiles, v_deactivated;
+  select count(*) into v_dual_active
+    from public.profiles p
+    join public.retailers r on r.id = p.id
+   where p.role::text = 'seller'
+     and r.status = 'active';
+
+  select count(*) into v_dual_unapproved
+    from public.profiles p
+    join public.retailers r on r.id = p.id
+   where p.role::text = 'seller'
+     and r.status <> 'active';
+
+  -- ---- 1. DUAL-ROLE, retailer ALREADY APPROVED: preserve retailer access ----
+  for v_row in
+    select p.id, p.role::text as old_role, p.is_active as old_active
+      from public.profiles p
+      join public.retailers rt on rt.id = p.id
+     where p.role::text = 'seller'
+       and rt.status = 'active'
+  loop
+    update public.profiles
+       set role = 'retailer',
+           is_active = true
+     where id = v_row.id;
+
+    insert into public.audit_logs (table_name, record_id, action, changed_by, old_data, new_data)
+    values (
+      'profiles', v_row.id, 'update', null,
+      jsonb_build_object('role', v_row.old_role, 'is_active', v_row.old_active, 'source', 'migration 0110'),
+      jsonb_build_object(
+        'role', 'retailer',
+        'is_active', true,
+        'source', 'migration 0110',
+        'reason', 'dual-role seller profile with an already-approved retailers.status=active row: seller capability retired, legitimate retailer access preserved'
+      )
+    );
+    v_promoted := v_promoted + 1;
+  end loop;
+
+  -- ---- 2. DUAL-ROLE, retailer NOT approved: deactivate, keep the role --------
+  for v_row in
+    select p.id, p.role::text as old_role, p.is_active as old_active, rt.status::text as retailer_status
+      from public.profiles p
+      join public.retailers rt on rt.id = p.id
+     where p.role::text = 'seller'
+       and rt.status <> 'active'
+  loop
+    update public.profiles set is_active = false where id = v_row.id;
+
+    insert into public.audit_logs (table_name, record_id, action, changed_by, old_data, new_data)
+    values (
+      'profiles', v_row.id, 'update', null,
+      jsonb_build_object('role', v_row.old_role, 'is_active', v_row.old_active, 'source', 'migration 0110'),
+      jsonb_build_object(
+        'role', v_row.old_role,
+        'is_active', false,
+        'source', 'migration 0110',
+        'reason', format('dual-role seller profile whose retailers.status is "%s" (not approved): deactivated, not promoted', v_row.retailer_status)
+      )
+    );
+  end loop;
+
+  -- ---- 3. SELLER-ONLY: deactivate, never convert -----------------------------
+  for v_row in
+    select p.id, p.role::text as old_role, p.is_active as old_active
+      from public.profiles p
+     where p.role::text = 'seller'
+       and not exists (select 1 from public.retailers rt where rt.id = p.id)
+  loop
+    update public.profiles set is_active = false where id = v_row.id;
+
+    insert into public.audit_logs (table_name, record_id, action, changed_by, old_data, new_data)
+    values (
+      'profiles', v_row.id, 'update', null,
+      jsonb_build_object('role', v_row.old_role, 'is_active', v_row.old_active, 'source', 'migration 0110'),
+      jsonb_build_object(
+        'role', v_row.old_role,
+        'is_active', false,
+        'source', 'migration 0110',
+        'reason', 'seller-only account: seller programme discontinued, deactivated. Not converted to a retailer.'
+      )
+    );
+  end loop;
+
+  select count(*) into v_deactivated
+    from public.profiles where role::text = 'seller' and is_active = false;
+
+  raise notice '0110: seller profiles=% (seller-only=%, dual-role approved=%, dual-role unapproved=%) - promoted to retailer=%, now inactive=%',
+    v_seller_profiles, v_seller_only, v_dual_active, v_dual_unapproved, v_promoted, v_deactivated;
 end;
 $retired_profiles$;
 
@@ -561,18 +684,22 @@ $retired_profiles$;
 do $site_copy$
 declare
   v_replacements jsonb := $json$[
-    {"from": "The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders sells only goods from its own stock. There is no marketplace: all products are bought, stored, priced and sold by Maharani Traders, and we are the seller of record for every order. The third-party seller programme that earlier versions of these terms mentioned has been discontinued. Any order placed before that change is unaffected, and any rights you already hold are not excluded."},
+    {"from": "The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page. Applicable rights are not excluded."},
     {"from": "The application also supports third-party seller fulfilment: if used, the relevant seller may receive order and delivery information, including the recipient address and phone where provided. Marketplace data flows and disclosures require verification before any third-party operation.", "to": "Because every order is fulfilled by Maharani Traders from its own stock, order and delivery information is not disclosed to any independent seller or marketplace participant; that programme has been discontinued."},
-    {"from": "The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded."},
+    {"from": "The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page. Applicable rights are not excluded."},
     {"from": "The application includes marketplace and seller features, subject to configuration. The own-stock sales policies do not provide complete terms for third-party transactions; any launch or ongoing operation requires separate review.", "to": "Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued."},
     {"from": "Seller accounts are created by Super Admin invitation. If you have an invitation, use the emailed link; verification and approval are required before trading. The current own-stock sales policies do not provide complete terms for third-party seller transactions, which require separate review.", "to": "There is no seller or supplier sign-up. Retail shop accounts are created by registering on this site and are activated after approval by Maharani Traders. If you already held a seller account under the earlier marketplace programme, that programme has been discontinued; contact us using the details below and we will explain what is available to you."},
     {"from": "For goods sold by an independent seller, we pass the complaint to that seller and follow it up; see the Marketplace Disclaimer.", "to": "Every order on this website is sold and fulfilled by Maharani Traders from its own stock, so we handle the whole complaint ourselves and there is no third party to pass it to. See the Marketplace Disclaimer for the record of the discontinued marketplace programme."},
-    {"from": "An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.", "to": "An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party."},
+    {"from": "An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.", "to": "An invoice or bill is issued for every delivered order. The business identity printed on it as the seller and as the GST registrant is the one recorded for that transaction; this website does not assume a legal seller role for any brand or business name it uses, and the invoice for the transaction is the authoritative record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party."},
     {"from": "the database rejects a product or seller offer placed in any other category.", "to": "the database rejects a product placed in any other category."},
     {"from": "Seller offers are reviewed before they go live, and each decision is recorded with the reviewer and the reason.", "to": "Every product goes through a compliance review before it can be published, and each decision is recorded with the reviewer and the reason. Only Maharani Traders adds products to this website, so there is no third-party listing channel to police."},
     {"from": "For a seller offer we inform the seller, who may reply with evidence such as purchase invoices or a brand authorisation.", "to": "Because we are the seller of every product on this website, there is no third-party seller to notify: we answer the complaint ourselves with the purchase invoices and brand authorisations we hold."},
     {"from": "If the seller\u2019s reply shows the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. Repeated or serious infringement leads to suspension of the seller.", "to": "If our own records show the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. A listing that cannot be substantiated stays withdrawn."},
-    {"from": "For sellers: unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints.", "to": "For retailer accounts: attempted resale of unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints about an order."}
+    {"from": "For sellers: unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints.", "to": "For retailer accounts: attempted resale of unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints about an order."},
+
+    {"from": "Maharani Traders sells only goods from its own stock. There is no marketplace: all products are bought, stored, priced and sold by Maharani Traders, and we are the seller of record for every order. The third-party seller programme that earlier versions of these terms mentioned has been discontinued. Any order placed before that change is unaffected, and any rights you already hold are not excluded.", "to": "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page. Applicable rights are not excluded."},
+    {"from": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page. Applicable rights are not excluded."},
+    {"from": "An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party.", "to": "An invoice or bill is issued for every delivered order. The business identity printed on it as the seller and as the GST registrant is the one recorded for that transaction; this website does not assume a legal seller role for any brand or business name it uses, and the invoice for the transaction is the authoritative record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party."}
   ]$json$::jsonb;
   v_pair jsonb;
   v_page record;
@@ -677,9 +804,23 @@ begin
     raise exception '0110 VERIFY FAILED: anonymous callers can still submit supplier applications.';
   end if;
 
-  -- No seller-role profile may still be active.
+  -- No ACTIVE seller-role profile may remain. A dual-role account that kept its
+  -- legitimate retailer access is now role='retailer', so this still holds; a
+  -- seller-role profile that is inactive is an intentional historical record.
   if exists (select 1 from public.profiles where role::text = 'seller' and is_active = true) then
     raise exception '0110 VERIFY FAILED: an active seller-role profile remains.';
+  end if;
+
+  -- Retailer access must not have been collateral damage. A dual-role account
+  -- whose retailer side was already approved must still be a live retailer.
+  if exists (
+    select 1
+      from public.profiles p
+      join public.retailers r on r.id = p.id
+     where r.status = 'active'
+       and (p.role::text <> 'retailer' or p.is_active = false)
+  ) then
+    raise exception '0110 VERIFY FAILED: an approved retailer lost retailer access.';
   end if;
 
   -- The historical data this migration promised to preserve must still be there.
@@ -699,6 +840,74 @@ begin
   raise notice '0110: seller/supplier capability revoked; all historical tables and rows preserved.';
 end;
 $verify$;
+
+-- ---------------------------------------------------------------------------
+-- 9. RE-ROLE PATH for a dual-role account approved AFTER this migration
+-- ---------------------------------------------------------------------------
+-- If the owner later approves a pending retailer application through
+-- admin_review_retailer_application (0081) for a profile that this migration
+-- deactivated, that function sets `retailers.status = 'active'` but does not
+-- touch `profiles.role`. This helper performs the missing step deliberately and
+-- idempotently, so the owner does not have to hand-write an UPDATE.
+--
+-- It is service_role-only: it changes an account's role, which no API caller may
+-- do (0052's guard_profile_privileged_columns already enforces that).
+create or replace function public.retire_promote_dual_role_seller(p_profile_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_role text;
+  v_active boolean;
+  v_retailer_status text;
+begin
+  if p_profile_id is null then
+    return jsonb_build_object('ok', false, 'reason', 'profile_id_required');
+  end if;
+
+  select p.role::text, p.is_active into v_role, v_active
+    from public.profiles p where p.id = p_profile_id;
+  if v_role is null then
+    return jsonb_build_object('ok', false, 'reason', 'profile_not_found');
+  end if;
+
+  select r.status::text into v_retailer_status
+    from public.retailers r where r.id = p_profile_id;
+
+  if v_retailer_status is null then
+    -- Seller-only. Refuse: this helper must never convert one into a retailer.
+    return jsonb_build_object('ok', false, 'reason', 'seller_only_never_converted', 'role', v_role);
+  end if;
+
+  if v_retailer_status <> 'active' then
+    return jsonb_build_object('ok', false, 'reason', 'retailer_not_approved', 'retailer_status', v_retailer_status, 'role', v_role);
+  end if;
+
+  if v_role = 'retailer' and v_active then
+    return jsonb_build_object('ok', true, 'changed', false, 'reason', 'already_retailer', 'retailer_status', v_retailer_status);
+  end if;
+
+  update public.profiles set role = 'retailer', is_active = true where id = p_profile_id;
+
+  insert into public.audit_logs (table_name, record_id, action, changed_by, old_data, new_data)
+  values (
+    'profiles', p_profile_id, 'update', auth.uid(),
+    jsonb_build_object('role', v_role, 'is_active', v_active, 'source', 'retire_promote_dual_role_seller'),
+    jsonb_build_object('role', 'retailer', 'is_active', true, 'source', 'retire_promote_dual_role_seller',
+                       'reason', 'retailer application approved after migration 0110: retailer access restored')
+  );
+
+  return jsonb_build_object('ok', true, 'changed', true, 'previous_role', v_role, 'role', 'retailer', 'retailer_status', v_retailer_status);
+end;
+$$;
+revoke all on function public.retire_promote_dual_role_seller(uuid) from public, anon, authenticated;
+grant execute on function public.retire_promote_dual_role_seller(uuid) to service_role;
+
+comment on function public.retire_promote_dual_role_seller(uuid) is
+  'Service-role only. Restores retailer access for a dual-role account whose retailer application was approved AFTER migration 0110. Refuses seller-only accounts (never converts one into a retailer). Writes an audit_logs row.';
+
 
 -- ============================================================================
 -- OWNER ACTION REQUIRED (not performed by this migration, by design)

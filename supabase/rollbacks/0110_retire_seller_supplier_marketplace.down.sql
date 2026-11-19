@@ -360,21 +360,58 @@ create policy "order_items_seller_select" on public.order_items
   );
 
 -- ---------------------------------------------------------------------------
--- 7. Re-activate retired seller profiles — EXPLICIT OPT-IN ONLY
+-- 7. Undo the role changes 0110 made to profiles — EXPLICIT OPT-IN ONLY
 -- ---------------------------------------------------------------------------
--- Gated so a rollback cannot silently hand a retired role a working login.
+-- 0110 did two different things to `profiles`, and the rollback must not confuse
+-- them:
+--
+--   (a) it DEACTIVATED seller-only and dual-role-unapproved accounts, and
+--   (b) it RE-ROLED dual-role accounts that already had an approved retailer row
+--       from 'seller' to 'retailer', keeping them active.
+--
+-- Undoing (b) unconditionally would hand back the seller capability that the
+-- application no longer exposes, so both are gated behind the same opt-in.
+--
 -- Set `set local maharani.reactivate_seller_profiles = 'true'` in the SAME
--- transaction to approve it.
+-- transaction to approve. The reverse-re-role is additionally restricted to
+-- profiles that this migration marked in audit_logs, so a genuine retailer is
+-- never demoted to 'seller' by a rollback.
 do $reactivate$
+declare
+  v_reactivated integer := 0;
+  v_unpromoted integer := 0;
+  r record;
 begin
   if coalesce(current_setting('maharani.reactivate_seller_profiles', true), '') <> 'true' then
-    raise notice '0110 rollback: seller profiles left INACTIVE. To re-activate them, set maharani.reactivate_seller_profiles = ''true'' and re-run that block.';
+    raise notice '0110 rollback: profile role changes left in place. To reverse them, set maharani.reactivate_seller_profiles = ''true'' and re-run that block.';
     return;
   end if;
+
+  -- (b) first: put the promoted dual-role accounts back to 'seller', but only the
+  -- ones 0110 itself promoted (identified by its own audit marker).
+  for r in
+    select distinct a.record_id
+      from public.audit_logs a
+     where a.table_name = 'profiles'
+       and a.new_data ->> 'source' = 'migration 0110'
+       and a.new_data ->> 'role' = 'retailer'
+       and a.old_data ->> 'role' = 'seller'
+  loop
+    update public.profiles set role = 'seller' where id = r.record_id and role = 'retailer';
+    v_unpromoted := v_unpromoted + 1;
+  end loop;
+
+  -- (a) then: reactivate the seller-role accounts.
   update public.profiles set is_active = true
    where role::text = 'seller' and is_active = false;
-  raise notice '0110 rollback: re-activated % seller-role profile(s).', (select count(*) from public.profiles where role::text = 'seller');
+  get diagnostics v_reactivated = row_count;
+
+  raise notice '0110 rollback: re-roled back to seller=%, re-activated seller-role profile(s)=%.',
+    v_unpromoted, v_reactivated;
 end;
 $reactivate$;
+
+-- The re-role helper added by 0110 only exists while 0110 is applied.
+drop function if exists public.retire_promote_dual_role_seller(uuid);
 
 commit;

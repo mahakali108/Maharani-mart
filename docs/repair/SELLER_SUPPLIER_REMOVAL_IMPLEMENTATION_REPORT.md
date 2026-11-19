@@ -242,6 +242,35 @@ Both halves were changed in lockstep so they cannot drift:
   text ("has not been independently verified", "should be verified") is marked for professional
   review, not silently strengthened or deleted.
 
+### 8.1 Identity correction (owner review)
+
+The first correction pass fixed the false marketplace claim but introduced a **new unverified one**:
+"Maharani Traders ... is the seller of record for every order", "an invoice ... is issued ... by
+Maharani Traders", "it is the seller of record". None has been verified by the owner.
+
+The rule now applied, mechanically:
+
+| Name | Treatment |
+| --- | --- |
+| **Maha Bazar by Maharani** | the customer-facing brand. Brand only. |
+| **Ajay General** | a separate business identity, stated (as the owner supplied it) as the registered trade name of the proprietorship — never asserted as a seller per order. |
+| **Maa Kali Enterprises** | a separate business identity. It appears only in repository architecture comments, never in customer-facing copy. |
+| **Maharani** | a brand — **not** an assumed legal entity, seller, invoice issuer, GST registrant or website owner. |
+
+Replacement text says only what is knowable — single-seller own-stock, no marketplace — and points to
+the **invoice** and the **Contact and Legal Information** page for whichever business identity is the
+seller, the invoice issuer or the GST registrant for that transaction. `terms`,
+`gst-pricing-invoice` and `returns-refunds` were all corrected, in the generator, the seed, `0105`
+and `0110`'s rewrite table at once.
+
+`tests/business-identity-claims.test.ts` enforces it: it fails on any affirmative
+seller-of-record / legal-seller / invoice-issuer / GST-registrant claim reaching a customer, on any
+GSTIN-shaped string, on any phone or email other than the owner-supplied ones, on a changed grievance
+officer, on `Maharani` described as a company/entity, and on the removal of the required disclosing
+sentence. It also asserts that the historical `marketplace-disclaimer` and `seller-agreement` pages and
+the full A–R document registry still exist. It scans only the text that can reach a customer — the
+`from` side of a replacement table must contain the old sentences verbatim, or it could never match.
+
 ---
 
 ## 9. Test and verification results
@@ -249,13 +278,15 @@ Both halves were changed in lockstep so they cannot drift:
 See `SELLER_SUPPLIER_REMOVAL_TEST_REPORT.md` for the full breakdown.
 
 Baseline before any change: **239 files / 3644 tests**, typecheck ✅, lint ✅.
-After the post-retirement edits, **final:** **230 files / 3433 tests, all passing, EXIT=0**;
+After the owner-review corrections, **final:** **232 files / 3463 tests, all passing, EXIT=0**;
 typecheck ✅, lint ✅ (0 errors, 0 warnings), `next build` ✅.
 
-The file/test count fell because 11 seller/supplier suites were deleted with the modules they
-covered. Two new suites were added:
-`tests/migration-0110-seller-supplier-retirement.test.ts` (10 tests) and
-`tests/seller-supplier-retirement-authorization.test.ts` (10 tests).
+The file/test count fell from the 239/3644 baseline because 11 seller/supplier suites were deleted
+with the modules they covered. Four new suites were added:
+`tests/migration-0110-seller-supplier-retirement.test.ts` (10 tests),
+`tests/seller-supplier-retirement-authorization.test.ts` (11 tests),
+`tests/migration-0110-retailer-preservation.test.ts` (18 tests) and
+`tests/business-identity-claims.test.ts` (11 tests).
 
 ---
 

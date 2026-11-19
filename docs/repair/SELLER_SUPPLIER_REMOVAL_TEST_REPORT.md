@@ -10,26 +10,26 @@
 
 | Check | Baseline (before any change) | Final | Verdict |
 | --- | --- | --- | --- |
-| Test suites | 239 passed | **230 passed, 230 total** | ✅ EXIT=0 |
-| Tests | 3644 passed | **3433 passed, 3433 total** | ✅ EXIT=0 |
+| Test suites | 239 passed | **232 passed, 232 total** | ✅ EXIT=0 |
+| Tests | 3644 passed | **3463 passed, 3463 total** | ✅ EXIT=0 |
 | `tsc --noEmit` | 0 errors | **0 errors** | ✅ EXIT=0 |
 | `eslint .` | 0 problems | **0 errors, 0 warnings** | ✅ EXIT=0 |
 | `next build` | not run at baseline | **compiles, all routes emitted** | ✅ |
 
 **No test was weakened to make it pass, and no failure was relabelled as a pass.** The count fell
 because **11 seller/supplier test suites were deleted in the same commit as the modules they covered**
-(deleting a module without its tests fails `typecheck` on `@/…` imports). Two new suites were added
-(+20 tests). Full accounting is in §5.
+(deleting a module without its tests fails `typecheck` on `@/…` imports). Four new suites were added
+(+57 tests) during the owner-review corrections. Full accounting is in §5.
 
 ---
 
 ## 2. Exact final run
 
 ```
-$ pnpm exec vitest run
- Test Files  230 passed (230)
-      Tests  3433 passed (3433)
-   Duration  ~6m
+$ corepack pnpm exec vitest run
+ Test Files  232 passed (232)
+      Tests  3463 passed (3463)
+   Duration  389.81s
    EXIT=0
 ```
 
@@ -174,6 +174,11 @@ Recorded because each was a real defect that review alone missed.
 | 6 | `body`/`bullets` are `text[]`, not `jsonb` — first content-rewrite block was wrong | `migration-0110-*` content test | Rewritten with `unnest(... ) with ordinality` over `text[]` |
 | 7 | Website seed drifted from its generator after a hand-edit | `site-content-seed` "generator drift" | Replacement table moved into `generate-site-content-seed.mjs`; regeneration verified byte-identical |
 | 8 | Two dead internal links to `/admin/offers` | Manual grep during verification | Removed |
+| 9 | **Block 7 deactivated approved retailers.** One bulk `update ... where role::text='seller'` also matched dual-role profiles that legitimately owned an approved `retailers` row | Owner-review re-read of the migration against `0001_init.sql`; new `migration-0110-retailer-preservation` suite | Three-population split; block-8 assertion that no approved retailer may lose access |
+| 10 | A `do $tag$ begin` block would not parse: a named block needs `declare` (or `as`). Finding this took a statement-level bisect, since the error (`syntax error at or near "is"`) named the wrong token entirely | `migration-0110-*` setup | Body opened with `declare`; diagnosed by executing each top-level block separately |
+| 11 | The loop variable `r` was shadowed by the table alias `r` inside the same `for r in select ... join retailers r` → `record "r" is not assigned yet` at run time | `migration-0110-retailer-preservation` | Loop variable renamed `v_row`; aliases untouched |
+| 12 | A regex used to rename that variable also rewrote `join public.retailers r on r.id = p.id` in two **count** queries, corrupting them | Same suite, immediately after | Repaired by hand and re-read the whole block; the lesson is to re-read a mechanical patch, not just trust the diff |
+| 13 | The corrected legal copy introduced a *new* unverified claim ("we are the seller of record") | New `business-identity-claims` suite | Claim removed; suite now fails the build if it returns |
 
 ---
 
@@ -183,16 +188,37 @@ Recorded because each was a real defect that review alone missed.
 pnpm install --frozen-lockfile
 pnpm run typecheck                 # EXIT=0
 pnpm run lint                      # EXIT=0
-pnpm exec vitest run               # 230 files / 3433 tests, EXIT=0
+pnpm exec vitest run               # 232 files / 3463 tests, EXIT=0
 pnpm run build                     # EXIT=0
 ```
 
 Focused:
 
 ```bash
-pnpm exec vitest run tests/migration-0110-seller-supplier-retirement.test.ts
-pnpm exec vitest run tests/seller-supplier-retirement-authorization.test.ts
+pnpm exec vitest run tests/migration-0110-seller-supplier-retirement.test.ts   # 10 tests
+pnpm exec vitest run tests/migration-0110-retailer-preservation.test.ts        # 18 tests
+pnpm exec vitest run tests/seller-supplier-retirement-authorization.test.ts    # 11 tests
+pnpm exec vitest run tests/business-identity-claims.test.ts                    # 11 tests
 ```
+
+### The retailer-preservation suite, case by case
+
+| Case | Assertion |
+| --- | --- |
+| Seller-only profile | deactivated, `role` still `seller`, never gains a `retailers` row |
+| Seller-only profile, history | profile row, orders, payments, refunds, memberships and audit rows all survive |
+| Dual-role, retailer `active` | re-roled to `retailer`, stays active |
+| Dual-role, retailer `active` | the preserved retailer can still use retailer-scoped access afterwards |
+| Dual-role, retailer `pending_approval` | deactivated, role untouched — access is **not** preserved |
+| Dual-role, retailer `suspended` | deactivated, role untouched — access is **not** preserved |
+| Ordinary retailer | byte-identical before/after |
+| `super_admin` / `admin` / `staff` | untouched |
+| Every population | seller RPCs stay revoked regardless of who kept retailer access |
+| Preserved dual-role retailer | calling a seller RPC still raises |
+| Rollback, no opt-in | profile row left alone; grants restored separately |
+| Rollback, `maharani.reactivate_seller_profiles='true'` | re-role reversed via the audit marker; a genuine retailer is never demoted; block-9 helper dropped |
+| Rollback, history | `audit_logs` only appended to, never truncated |
+| Block 9 | promotes only an approved dual-role account; idempotent; refuses seller-only and unapproved; not executable by any API role |
 
 The migration suite boots a real PostgreSQL 16 (PGlite) and applies **every** migration in the
 repository, including `0110`, then exercises revoke / preserve / idempotency / rollback and the

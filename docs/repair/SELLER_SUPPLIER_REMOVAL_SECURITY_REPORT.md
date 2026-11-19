@@ -165,7 +165,51 @@ features". The `marketplace-disclaimer` and `seller-agreement` pages are preserv
 or registration number was added. `AJAY GENERAL` / `MAHARANI TRADERS` and the existing "has not been
 independently verified" hedges are untouched.
 
-### 3.8 INFO — historical third-party order lines still block invoice issuance
+### 3.8 HIGH — the removal destroyed legitimate retailer access on dual-role accounts
+
+**Found (self-review of this PR, before owner review).** The first version of `0110` block 7 ran a
+single bulk statement — `update profiles set is_active = false where role::text = 'seller'` — and the
+same block in the rollback re-activated the same population. `public.retailers` is a **separate table
+keyed on the same profile id**, so a profile can legitimately be `role='seller'` *and* own an
+approved `retailers` row (the schema has always allowed this; `handle_new_user()` creates the retailer
+row on the retail signup branch). That bulk statement silently deactivated a real, approved retailer,
+locking them out of a business relationship they had already been granted. Deleting the marketplace
+must not delete a retailer.
+
+**Fix.** Block 7 now decides each account on evidence already in the database: seller-only is
+deactivated and never converted, an approved dual-role account is re-roled to `retailer` and stays
+active, an unapproved dual-role account is deactivated with its role untouched. All three decisions
+write an `audit_logs` row with `source='migration 0110'` and a reason. Block 8 raises if any profile
+with an active `retailers` row is not an active `retailer` — the removal can no longer half-succeed.
+See `SELLER_SUPPLIER_REMOVAL_DATABASE_SAFETY.md` §4.1.
+
+**Why this is not a privilege grant.** `is_active_account()` (0052) already gates retailer-role
+profiles on `retailers.status = 'active'`, and (0081) is the only thing that sets that status. The
+re-roled account's effective permission set is identical to what it had a moment earlier; it loses
+only the seller capability, which blocks 2–6 revoke independently of the profile row.
+
+**Post-approval path.** `admin_review_retailer_application` flips status but never re-roles the
+profile, so an approval arriving after `0110` needs `public.retire_promote_dual_role_seller(uuid)` —
+`SECURITY DEFINER`, `service_role` only, idempotent, audited, and refusing for a seller-only account
+or a retailer that is not approved.
+
+### 3.9 INFO — the corrected copy still asserted an unverified legal role
+
+**Found.** The first correction pass replaced the false marketplace claim with a *new* unverified
+claim: "Maharani Traders ... is the seller of record for every order", plus "an invoice ... is issued
+... by Maharani Traders" and "it is the seller of record" on the GST page. None of these has been
+verified by the owner, and the directive treats Maharani as a **brand**, not an assumed legal entity.
+
+**Fix.** Every such sentence is gone. The replacement states what is actually known — single-seller
+own stock, no marketplace — and points to the invoice and the Contact and Legal Information page for
+*which* business identity is the seller, the invoice issuer or the GST registrant for a given
+transaction. `tests/business-identity-claims.test.ts` fails the build if any affirmative
+seller-of-record / legal-seller / invoice-issuer / GST-registrant claim returns, if a GSTIN is
+invented, if a phone or email other than the owner-supplied one appears, if the grievance officer
+changes, or if `Maharani` is described as a company/entity. Negated disclaimers are explicitly allowed
+and one is required, so "remove the claim" can never degrade into "say nothing".
+
+### 3.10 INFO — historical third-party order lines still block invoice issuance
 
 Historical orders may contain `order_items.source_type = 'seller'`. Issuing an invoice in Maharani
 Traders' name for goods it did not sell would misstate the seller of record, so
@@ -179,6 +223,7 @@ ended and asks the customer to contact us, instead of implying a model is still 
 | Capability | Why it is kept | New exposure |
 | --- | --- | --- |
 | `is_member_of_seller(uuid)`, `is_active_seller_member(uuid)` | Live RLS policies from 0062/0063/0086/0109 **call** them; a revoked function makes those policies raise. 0109's preflight also needs the latter. | None — every seller-role profile is inactive, so both return `false` for all callers. |
+| `retire_promote_dual_role_seller(uuid)` (new in block 9) | An approval granted *after* `0110` must still be able to restore retailer access without re-opening the seller programme. | `service_role` only; never granted to `anon`/`authenticated`; refuses a seller-only profile and a retailer that is not `active`; writes an audit row. |
 | `retailer_order_sub_orders`, `close_sub_order_atomic`, `set_sub_order_status` | Historical orders can still contain sub-orders; a Super Admin must be able to settle and close them. | Unchanged; all permission-checked server-side (`orders.return.manage`). |
 | `seller_agreement_is_current(uuid)` | Already `service_role`-only since 0098. | None. |
 | `sellers` / `seller_offers` etc. tables + admin read | Audit, reconciliation and dispute handling require them. | Admin-only RLS. No API role can write. |
