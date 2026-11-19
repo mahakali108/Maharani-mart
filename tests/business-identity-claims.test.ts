@@ -72,6 +72,13 @@ const UNVERIFIED_ROLE_ASSERTIONS = [
   /\b(is|are) the (sole|legal) (invoice issuer|seller|GST registrant)\b/i,
   /\boperated by Maharani\b(?! Traders)/i,
   /\bowned by Maharani\b(?! Traders)/i,
+  // An invoice-issuer role asserted for the brand rather than for the
+  // proprietorship the owner named. Easy to write by accident ("every order is
+  // fulfilled and invoiced by Maharani Traders") and it was in the copy once.
+  // "sold by Maharani Traders" is NOT flagged: the owner confirmed the
+  // proprietorship trades under that brand, so selling under it is accurate. What
+  // is not accurate is naming the BRAND as the invoice issuer.
+  /\b(invoiced|billed) by Maharani\b/i,
 ];
 
 describe('no unverified seller-of-record / invoice-issuer / GST claims', () => {
@@ -88,10 +95,10 @@ describe('no unverified seller-of-record / invoice-issuer / GST claims', () => {
     // Removing a false claim is not enough: the reader must be told where to find
     // the real answer, otherwise the page is merely silent about who sells.
     const seed = read('content/site-pages.seed.json');
-    expect(seed).toMatch(/business identity/i);
-    expect(seed).toMatch(/invoice/i);
-    // And it must be the Contact / legal-information page that is named.
-    expect(seed).toMatch(/Contact and Legal Information/i);
+    // The reader must be told who sells, or told where to find out. The owner has
+    // now named the entity, so the stronger form applies: it is stated outright.
+    expect(seed).toMatch(/AJAY GENERAL proprietorship/);
+    expect(seed).toMatch(/printed on the invoice/);
   });
 
   it('never re-introduces the marketplace framing it replaced', () => {
@@ -107,6 +114,19 @@ describe('no unverified seller-of-record / invoice-issuer / GST claims', () => {
 });
 
 describe('brand and business identities stay separate', () => {
+  it('states the owner-approved seller identity, attributed to the proprietorship', () => {
+    // The owner answered the open question: the AJAY GENERAL proprietorship is
+    // the seller and invoice issuer, trading under the brand MAHARANI TRADERS.
+    // Assert that fact is STATED (not merely deferred) and that it is attributed
+    // to the proprietorship rather than to the brand.
+    const seed = read('content/site-pages.seed.json');
+    const claims = [...seed.matchAll(/The seller[^"]{0,40}? is the AJAY GENERAL proprietorship[^"]*?registered for that business\./g)];
+    expect(claims.length, 'the approved seller-identity sentence must be present').toBeGreaterThan(0);
+    // It never claims a GST NUMBER or address: the registered values are printed
+    // on the invoice and have not been supplied yet.
+    for (const claim of claims) expect(claim[0]).toMatch(/printed on the invoice/);
+  });
+
   it('treats Maharani as a brand, never as an incorporated legal entity', () => {
     const seed = read('content/site-pages.seed.json');
     // The one identity statement the owner has actually provided.

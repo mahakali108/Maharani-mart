@@ -165,16 +165,16 @@ const previousBySlug = new Map(PREVIOUS.map((page) => [page.slug, page]));
 const RETIRED_MARKETPLACE_COPY = [
   // terms — Acceptance and business model
   ['The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded.',
-   'Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page. Applicable rights are not excluded.'],
+   'Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
   // privacy — How information is used and shared
   ['Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. The application also supports third-party seller fulfilment: if used, the relevant seller may receive order and delivery information, including the recipient address and phone where provided. Marketplace data flows and disclosures require verification before any third-party operation. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication.',
    'Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. Because every order is fulfilled by Maharani Traders from its own stock, order and delivery information is not disclosed to any independent seller or marketplace participant; that programme has been discontinued. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication.'],
   // business-disclosure — Tax and policy scope
   ['The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.',
-   'Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page. Applicable rights are not excluded.'],
+   'Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
   // about — How ordering works
   ['The application includes marketplace and seller features, subject to configuration. The own-stock sales policies do not provide complete terms for third-party transactions; any launch or ongoing operation requires separate review. Food products are excluded from the stated current scope.',
-   'Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued. Food products are excluded from the current scope.'],
+   'Maharani Traders sells only from its own stock. The third-party marketplace described in earlier versions of this page has been discontinued. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Food products are excluded from the current scope.'],
   // contact — Seller and account access
   ['Seller accounts are created by Super Admin invitation. If you have an invitation, use the emailed link; verification and approval are required before trading. The current own-stock sales policies do not provide complete terms for third-party seller transactions, which require separate review. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support.',
    'There is no seller or supplier sign-up. Retail shop accounts are created by registering on this site and are activated after approval by Maharani Traders. If you already held a seller account under the earlier marketplace programme, that programme has been discontinued; contact us using the details below and we will explain what is available to you. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support.'],
@@ -187,7 +187,7 @@ const RETIRED_MARKETPLACE_SENTENCES = [
    'After checking the complaint we will offer the remedy that fits the problem: replacement, collection of the goods with a refund, or a price adjustment. Every order on this website is sold and fulfilled by Maharani Traders from its own stock, so we handle the whole complaint ourselves and there is no third party to pass it to. See the [Marketplace Disclaimer](/legal/marketplace-disclaimer) for the record of the discontinued marketplace programme.'],
   // gst-pricing-invoice
   ['An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.',
-   'An invoice or bill is issued for every delivered order. The business identity printed on it as the seller and as the GST registrant is the one recorded for that transaction; this website does not assume a legal seller role for any brand or business name it uses, and the invoice for the transaction is the authoritative record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.'],
+   'An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.'],
   // prohibited-products
   ['Every product category carries a compliance classification set by the Super Admin. Only categories classified as cosmetics or non-food FMCG can hold products for sale; the database rejects a product or seller offer placed in any other category.',
    'Every product category carries a compliance classification set by the Super Admin. Only categories classified as cosmetics or non-food FMCG can hold products for sale; the database rejects a product placed in any other category.'],
@@ -210,11 +210,33 @@ const RETIRED_MARKETPLACE_SENTENCES = [
   // which revision a database was seeded from. Each entry only fires if the text
   // is actually present, so re-running is safe.
   ['Maharani Traders sells only goods from its own stock. There is no marketplace: all products are bought, stored, priced and sold by Maharani Traders, and we are the seller of record for every order. The third-party seller programme that earlier versions of these terms mentioned has been discontinued. Any order placed before that change is unaffected, and any rights you already hold are not excluded.',
-   'Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page. Applicable rights are not excluded.'],
+   'Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
   ['Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded.',
-   'Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page. Applicable rights are not excluded.'],
+   'Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
   ['An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party.',
-   'An invoice or bill is issued for every delivered order. The business identity printed on it as the seller and as the GST registrant is the one recorded for that transaction; this website does not assume a legal seller role for any brand or business name it uses, and the invoice for the transaction is the authoritative record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.'],
+   'An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.'],
+  // ---- Third hop: the owner's answer to "who is the seller?" -----------------
+  // The two hops above had to leave the seller identity OPEN, because it was an
+  // unanswered legal question and guessing it was not mine to do. The owner has
+  // now answered it: the AJAY GENERAL proprietorship is the seller and invoice
+  // issuer, trading under the brand MAHARANI TRADERS. That is stated plainly
+  // instead of deferred to the invoice.
+  //
+  // Still invented: nothing. The GSTIN and registered address are NOT written
+  // here — the copy points at the invoice, which is where the registered values
+  // are printed. They are supplied separately and go in when the owner provides
+  // them, not before.
+  ['The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page.',
+   'The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business.'],
+  ['Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page.',
+   'The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business.'],
+  // ---- Final hop: an earlier revision's about-page wording --------------------
+  // The about page is read back out of the JSON, so its stored text can be any
+  // link in this chain. This entry exists because that page previously said
+  // orders are "invoiced by Maharani Traders", which asserts an invoice-issuer
+  // role for a BRAND rather than for the proprietorship the owner named.
+  ['Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued. Food products are excluded from the current scope.',
+   'Maharani Traders sells only from its own stock. The third-party marketplace described in earlier versions of this page has been discontinued. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Food products are excluded from the current scope.'],
 ];
 
 /**
@@ -227,10 +249,51 @@ function retireMarketplaceCopy(sections) {
     ...RETIRED_MARKETPLACE_COPY.map((pair) => pair),
     ...RETIRED_MARKETPLACE_SENTENCES,
   ]);
+
+  /**
+   * Apply the table until it stops changing anything.
+   *
+   * A single pass is not enough: the table is a CHAIN of corrections, and a
+   * later entry's `from` is an earlier entry's `to` (the marketplace sentence
+   * becomes neutral copy, and the neutral copy then becomes the owner-approved
+   * seller identity). With one pass, a source whose text sits at an intermediate
+   * link would never reach the final wording. Iterating makes the table
+   * convergent: the output is the fixpoint no matter which link the stored text
+   * happens to be at. The bound is a loop guard, not an expected count.
+   */
+  const applyHops = (text) => {
+    let current = text;
+    for (let hop = 0; hop < 8; hop += 1) {
+      const next = map.get(current);
+      if (next === undefined) break;
+      current = next;
+    }
+    return current;
+  };
+
+  /**
+   * Rewrite a paragraph sentence by sentence, then the paragraph as a whole.
+   *
+   * Some table entries are a single sentence and some are a whole paragraph.
+   * Splitting on the sentence terminator lets a one-sentence correction fire
+   * inside a paragraph that also carries sentences the table has nothing to say
+   * about; the whole-paragraph pass afterwards still lets a paragraph-level entry
+   * win. Splitting is lossless (the separators are kept), so an untouched
+   * paragraph is returned byte-identical.
+   */
+  const rewrite = (line) => {
+    const whole = applyHops(line);
+    if (whole !== line) return whole;
+    return line
+      .split(/(?<=[.!?])\s+/)
+      .map(applyHops)
+      .join(' ');
+  };
+
   return sections.map((section) => ({
     ...section,
-    body: (section.body ?? []).map((line) => map.get(line) ?? line),
-    bullets: (section.bullets ?? []).map((line) => map.get(line) ?? line),
+    body: (section.body ?? []).map(rewrite),
+    bullets: (section.bullets ?? []).map(rewrite),
   }));
 }
 

@@ -214,6 +214,14 @@ describe('migration 0110 — seller/supplier capability retirement', () => {
     // ...neighbouring text and bullets are byte-identical...
     expect(after[0]!.body[1]).toBe(unrelated);
     expect(after[0]!.bullets).toEqual(['An untouched bullet']);
+
+    // ...and it lands on the FINAL wording, not on an intermediate link of the
+    // replacement chain. The chain is: marketplace sentence -> neutral
+    // single-seller copy -> owner-approved seller identity. A single pass per
+    // pair would stop at the middle link, leaving the page saying less than the
+    // owner has since confirmed.
+    expect(after[0]!.body[0]).toContain('AJAY GENERAL proprietorship');
+    expect(after[0]!.body[0]).not.toContain('stated on the invoice and in the Contact and Legal Information page');
     // ...and the page's lifecycle fields were not touched.
     const { rows: lifecycle } = await db.query<{ status: string }>(
       'select status from public.site_pages where id = $1',

@@ -19,7 +19,11 @@ export type TaxInvoiceReadiness =
     }
   | {
       ready: false;
-      reason: 'issuer_details_missing' | 'issuer_gstin_invalid' | 'marketplace_issuer_model_pending';
+      reason:
+        | 'issuer_details_missing'
+        | 'issuer_gstin_invalid'
+        | 'issuer_identity_unapproved'
+        | 'marketplace_issuer_model_pending';
       message: string;
     };
 
@@ -31,6 +35,18 @@ export interface TaxInvoiceReadinessInput {
   hasMarketplaceSellerLine: boolean;
   /** Injectable for tests; callers use the server environment by default. */
   environment?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The issuer must be the proprietorship, not the brand.
+ *
+ * "Ajay General" (optionally with a legal suffix such as "Proprietor") is the
+ * approved issuer. A bare brand name such as "Maharani Traders" or "Maha Bazar by
+ * Maharani" is a trading style, not an entity, so it is refused on its own — it
+ * may appear alongside the approved name but never instead of it.
+ */
+function isApprovedIssuerName(value: string): boolean {
+  return /\bajay\s+general\b/i.test(value);
 }
 
 function text(environment: NodeJS.ProcessEnv, key: 'COMPANY_NAME' | 'COMPANY_GSTIN' | 'COMPANY_ADDRESS' | 'COMPANY_PHONE'): string | null {
@@ -68,6 +84,18 @@ export function getTaxInvoiceReadiness({
       ready: false,
       reason: 'issuer_details_missing',
       message: 'Tax-invoice issuance is unavailable until the owner and CA confirm the issuer name, GSTIN, address and support phone.',
+    };
+  }
+  // The owner has confirmed WHICH identity is the invoice issuer: the AJAY
+  // GENERAL proprietorship, trading under the brand MAHARANI TRADERS. The brand
+  // is not a legal entity, so an issuer name that names only the brand would put
+  // a non-entity on a tax document. Fail closed instead of printing it.
+  if (!isApprovedIssuerName(name)) {
+    return {
+      ready: false,
+      reason: 'issuer_identity_unapproved',
+      message:
+        'Tax-invoice issuance is unavailable because the configured issuer name does not identify the approved business identity (AJAY GENERAL, the proprietorship trading as MAHARANI TRADERS). The brand name alone is not a legal entity and cannot appear as the issuer on its own.',
     };
   }
   if (!isValidGstin(gstin)) {

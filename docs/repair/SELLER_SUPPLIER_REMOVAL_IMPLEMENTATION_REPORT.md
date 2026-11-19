@@ -257,11 +257,42 @@ The rule now applied, mechanically:
 | **Maa Kali Enterprises** | a separate business identity. It appears only in repository architecture comments, never in customer-facing copy. |
 | **Maharani** | a brand — **not** an assumed legal entity, seller, invoice issuer, GST registrant or website owner. |
 
-Replacement text says only what is knowable — single-seller own-stock, no marketplace — and points to
-the **invoice** and the **Contact and Legal Information** page for whichever business identity is the
-seller, the invoice issuer or the GST registrant for that transaction. `terms`,
-`gst-pricing-invoice` and `returns-refunds` were all corrected, in the generator, the seed, `0105`
-and `0110`'s rewrite table at once.
+### 8.2 The owner answered the identity question
+
+The identity was left open in review — correctly, because it is a legal question. The owner has now
+answered it: **the AJAY GENERAL proprietorship is the seller and invoice issuer, trading under the
+brand MAHARANI TRADERS.** That is now *stated*, not deferred:
+
+> The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand
+> MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered
+> for that business.
+
+Applied to `terms`, `business-disclosure`, `gst-pricing-invoice` and `about`, in the generator, the
+seed, `0105` and `0110`'s rewrite table at once. Two consequences worth stating:
+
+* **No GSTIN or address is printed yet.** The owner will supply the verified values; until then the
+  copy points at the invoice, which is where the registered values appear. Writing a plausible-looking
+  GSTIN would have been the single worst thing this change could do.
+* **`lib/retailer/tax-invoice-readiness.ts` now refuses an issuer name that is only the brand.** The
+  brand is not a legal entity, so `COMPANY_NAME='Maharani Traders'` fails closed with
+  `issuer_identity_unapproved` rather than printing a non-entity on a tax document; `Ajay General`
+  (optionally with the brand alongside) passes. This is a technical publication guard, not a CA
+  conclusion, and it does not validate GST registration.
+
+### 8.3 The replacement table is a chain, so it must converge
+
+The corrections arrived in layers, and each layer's `to` is the next layer's `from` (marketplace
+sentence → neutral single-seller copy → owner-approved identity). Two implementations were wrong
+before this was understood, and both are fixed:
+
+* the generator used a `Map`, so one pass could never follow a chain, and it matched whole paragraphs
+  while several entries are single sentences inside a paragraph;
+* `0110`'s `site_copy` block applied each pair exactly once, so a database seeded at an intermediate
+  revision would stop on a superseded sentence.
+
+Both now iterate to a fixpoint (sentences first, then the paragraph). A test plants the *original*
+marketplace sentence and asserts the migration lands on the final AJAY GENERAL wording — not on the
+middle link — so this cannot regress silently.
 
 `tests/business-identity-claims.test.ts` enforces it: it fails on any affirmative
 seller-of-record / legal-seller / invoice-issuer / GST-registrant claim reaching a customer, on any
@@ -278,7 +309,7 @@ the full A–R document registry still exist. It scans only the text that can re
 See `SELLER_SUPPLIER_REMOVAL_TEST_REPORT.md` for the full breakdown.
 
 Baseline before any change: **239 files / 3644 tests**, typecheck ✅, lint ✅.
-After the owner-review corrections, **final:** **232 files / 3463 tests, all passing, EXIT=0**;
+After the owner-review corrections, **final:** **232 files / 3467 tests, all passing, EXIT=0**;
 typecheck ✅, lint ✅ (0 errors, 0 warnings), `next build` ✅.
 
 The file/test count fell from the 239/3644 baseline because 11 seller/supplier suites were deleted

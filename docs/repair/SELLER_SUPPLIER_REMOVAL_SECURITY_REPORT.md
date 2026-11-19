@@ -201,13 +201,19 @@ claim: "Maharani Traders ... is the seller of record for every order", plus "an 
 verified by the owner, and the directive treats Maharani as a **brand**, not an assumed legal entity.
 
 **Fix.** Every such sentence is gone. The replacement states what is actually known — single-seller
-own stock, no marketplace — and points to the invoice and the Contact and Legal Information page for
-*which* business identity is the seller, the invoice issuer or the GST registrant for a given
-transaction. `tests/business-identity-claims.test.ts` fails the build if any affirmative
+own stock, no marketplace — and, once the owner answered the open question, names the approved
+identity: the **AJAY GENERAL proprietorship**, trading under the brand MAHARANI TRADERS, with the
+GSTIN and registered address printed on the invoice. No GST number or address is written in the copy
+until the owner supplies the verified values. `tests/business-identity-claims.test.ts` fails the build if any affirmative
 seller-of-record / legal-seller / invoice-issuer / GST-registrant claim returns, if a GSTIN is
 invented, if a phone or email other than the owner-supplied one appears, if the grievance officer
 changes, or if `Maharani` is described as a company/entity. Negated disclaimers are explicitly allowed
 and one is required, so "remove the claim" can never degrade into "say nothing".
+
+**Enforced in code as well as copy.** `getTaxInvoiceReadiness()` now fails closed with
+`issuer_identity_unapproved` if `COMPANY_NAME` identifies only the brand. A trading style is not a
+legal entity, and printing one as the issuer on a tax document would be a misstatement even though
+the copy is correct.
 
 ### 3.10 INFO — historical third-party order lines still block invoice issuance
 

@@ -128,7 +128,11 @@ function apiRequest(path: string) {
 beforeEach(() => {
   resetRateLimits();
   install();
-  process.env.COMPANY_NAME = 'Maharani Traders';
+  // The owner confirmed the seller/invoice issuer is the AJAY GENERAL
+  // proprietorship, trading under the brand MAHARANI TRADERS. The brand alone is
+  // a trading style, not a legal entity, so the invoice issuer must be the
+  // proprietorship. See lib/retailer/tax-invoice-readiness.ts.
+  process.env.COMPANY_NAME = 'Ajay General (Proprietor)';
   process.env.COMPANY_GSTIN = '10ZYXWV9876A1Z2';
   process.env.COMPANY_ADDRESS = 'Khagaria, Bihar';
   process.env.COMPANY_PHONE = '9000000000';
@@ -161,7 +165,7 @@ describe('GET /api/mobile/v1/orders/{id}/invoice', () => {
     expect(payload.data.orderNumber).toBe('MT-1001');
     // Both GSTINs are Bihar (state code 10) → CGST + SGST, never IGST.
     expect(payload.data.taxMode).toBe('intra');
-    expect(payload.data.biller.name).toBe('Maharani Traders');
+    expect(payload.data.biller.name).toBe('Ajay General (Proprietor)');
     expect(payload.data.billedTo.shopName).toBe('Shop');
     expect(payload.data.billedTo.areaName).toBe('Khagaria');
 

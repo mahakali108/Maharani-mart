@@ -25,7 +25,7 @@
           "body": [
             "By using the website, creating an account, placing an order or purchasing products, you agree to these terms and the applicable website policies. If you do not agree, please do not use the website.",
             "Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity. These policies cover own-stock cosmetics, personal-care products and non-food FMCG. Food products are excluded.",
-            "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page. Applicable rights are not excluded."
+            "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded."
           ],
           "bullets": []
         },
@@ -629,7 +629,7 @@
           "heading": "Tax and policy scope",
           "body": [
             "The owner reports that the business is registered for GST as an active regular taxpayer. The GST certificate, GSTIN, registration status and invoice configuration have not been independently verified. Any applicable GST details should be provided on invoices and other statutory documents as required by law.",
-            "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page. Applicable rights are not excluded.",
+            "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.",
             "Food is excluded from the stated current product scope. If online payment gateways, wider delivery areas, food products or other services are introduced later, the relevant policies and disclosures must be reviewed and updated before launch."
           ],
           "bullets": []
@@ -682,7 +682,7 @@
         {
           "heading": "Invoices",
           "body": [
-            "An invoice or bill is issued for every delivered order. The business identity printed on it as the seller and as the GST registrant is the one recorded for that transaction; this website does not assume a legal seller role for any brand or business name it uses, and the invoice for the transaction is the authoritative record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.",
+            "An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.",
             "The app shows a tax invoice only when the registration and tax details needed for a valid tax invoice are complete. Until then the document is marked as an order summary and is not a tax invoice.",
             "For returns and price corrections, a credit note or revised document is issued as the GST law requires."
           ],
@@ -1065,7 +1065,7 @@
           "heading": "How ordering works",
           "body": [
             "Approved retailer accounts can maintain a cart and choose a saved delivery address. The order service rechecks product availability, pricing, GST, applicable offers, available Coins and the address at checkout. A pending order is not a delivery guarantee.",
-            "Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued. Food products are excluded from the current scope."
+            "Maharani Traders sells only from its own stock. The third-party marketplace described in earlier versions of this page has been discontinued. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Food products are excluded from the current scope."
           ],
           "bullets": []
         },

@@ -684,69 +684,87 @@ $retired_profiles$;
 do $site_copy$
 declare
   v_replacements jsonb := $json$[
-    {"from": "The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page. Applicable rights are not excluded."},
+    {"from": "The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded."},
     {"from": "The application also supports third-party seller fulfilment: if used, the relevant seller may receive order and delivery information, including the recipient address and phone where provided. Marketplace data flows and disclosures require verification before any third-party operation.", "to": "Because every order is fulfilled by Maharani Traders from its own stock, order and delivery information is not disclosed to any independent seller or marketplace participant; that programme has been discontinued."},
-    {"from": "The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page. Applicable rights are not excluded."},
-    {"from": "The application includes marketplace and seller features, subject to configuration. The own-stock sales policies do not provide complete terms for third-party transactions; any launch or ongoing operation requires separate review.", "to": "Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued."},
+    {"from": "The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded."},
+    {"from": "The application includes marketplace and seller features, subject to configuration. The own-stock sales policies do not provide complete terms for third-party transactions; any launch or ongoing operation requires separate review.", "to": "Maharani Traders sells only from its own stock. The third-party marketplace described in earlier versions of this page has been discontinued. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business."},
     {"from": "Seller accounts are created by Super Admin invitation. If you have an invitation, use the emailed link; verification and approval are required before trading. The current own-stock sales policies do not provide complete terms for third-party seller transactions, which require separate review.", "to": "There is no seller or supplier sign-up. Retail shop accounts are created by registering on this site and are activated after approval by Maharani Traders. If you already held a seller account under the earlier marketplace programme, that programme has been discontinued; contact us using the details below and we will explain what is available to you."},
     {"from": "For goods sold by an independent seller, we pass the complaint to that seller and follow it up; see the Marketplace Disclaimer.", "to": "Every order on this website is sold and fulfilled by Maharani Traders from its own stock, so we handle the whole complaint ourselves and there is no third party to pass it to. See the Marketplace Disclaimer for the record of the discontinued marketplace programme."},
-    {"from": "An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.", "to": "An invoice or bill is issued for every delivered order. The business identity printed on it as the seller and as the GST registrant is the one recorded for that transaction; this website does not assume a legal seller role for any brand or business name it uses, and the invoice for the transaction is the authoritative record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party."},
+    {"from": "An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.", "to": "An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party."},
     {"from": "the database rejects a product or seller offer placed in any other category.", "to": "the database rejects a product placed in any other category."},
     {"from": "Seller offers are reviewed before they go live, and each decision is recorded with the reviewer and the reason.", "to": "Every product goes through a compliance review before it can be published, and each decision is recorded with the reviewer and the reason. Only Maharani Traders adds products to this website, so there is no third-party listing channel to police."},
     {"from": "For a seller offer we inform the seller, who may reply with evidence such as purchase invoices or a brand authorisation.", "to": "Because we are the seller of every product on this website, there is no third-party seller to notify: we answer the complaint ourselves with the purchase invoices and brand authorisations we hold."},
     {"from": "If the seller\u2019s reply shows the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. Repeated or serious infringement leads to suspension of the seller.", "to": "If our own records show the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. A listing that cannot be substantiated stays withdrawn."},
     {"from": "For sellers: unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints.", "to": "For retailer accounts: attempted resale of unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints about an order."},
 
-    {"from": "Maharani Traders sells only goods from its own stock. There is no marketplace: all products are bought, stored, priced and sold by Maharani Traders, and we are the seller of record for every order. The third-party seller programme that earlier versions of these terms mentioned has been discontinued. Any order placed before that change is unaffected, and any rights you already hold are not excluded.", "to": "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page. Applicable rights are not excluded."},
-    {"from": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page. Applicable rights are not excluded."},
-    {"from": "An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party.", "to": "An invoice or bill is issued for every delivered order. The business identity printed on it as the seller and as the GST registrant is the one recorded for that transaction; this website does not assume a legal seller role for any brand or business name it uses, and the invoice for the transaction is the authoritative record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party."}
+    {"from": "Maharani Traders sells only goods from its own stock. There is no marketplace: all products are bought, stored, priced and sold by Maharani Traders, and we are the seller of record for every order. The third-party seller programme that earlier versions of these terms mentioned has been discontinued. Any order placed before that change is unaffected, and any rights you already hold are not excluded.", "to": "Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded."},
+    {"from": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded."},
+    {"from": "An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party.", "to": "An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party."}
   ]$json$::jsonb;
   v_pair jsonb;
   v_page record;
   v_before text[];
   v_changed_sections integer := 0;
   v_changed_pages integer := 0;
+  v_pass_changed integer;
+  v_pass_rows integer;
+  v_pass integer;
 begin
   if to_regclass('public.site_page_sections') is null then
     raise notice '0110: site content module (0104) is not installed — nothing to rewrite.';
     return;
   end if;
 
+  -- The table is a CHAIN, not a flat list: an earlier entry's `to` is a later
+  -- entry's `from` (the marketplace sentence becomes neutral copy, and the
+  -- neutral copy then becomes the owner-approved seller identity). One pass per
+  -- pair would leave a database seeded at an intermediate revision stuck on a
+  -- superseded sentence, so the pairs are applied repeatedly until nothing
+  -- changes. The bound is a loop guard, not an expected count: fewer than 10
+  -- pairs exist and at most one can fire per line per pass.
   for v_page in select p.id, p.slug from public.site_pages p loop
-    for v_pair in select * from jsonb_array_elements(v_replacements) loop
-      -- body and bullets are text[] (0104); replace each element that contains
-      -- the superseded sentence and leave every other element byte-identical.
-      update public.site_page_sections s
-         set body = (
-               select coalesce(array_agg(
-                        case when line like '%' || (v_pair->>'from') || '%'
-                             then replace(line, v_pair->>'from', v_pair->>'to')
-                             else line end order by ord), '{}'::text[])
-                 from unnest(s.body) with ordinality as t(line, ord)
-             ),
-             bullets = (
-               select coalesce(array_agg(
-                        case when line like '%' || (v_pair->>'from') || '%'
-                             then replace(line, v_pair->>'from', v_pair->>'to')
-                             else line end order by ord), '{}'::text[])
-                 from unnest(s.bullets) with ordinality as t(line, ord)
-             )
-       where s.page_id = v_page.id
-         and (
-           exists (select 1 from unnest(s.body) as line where line like '%' || (v_pair->>'from') || '%')
-           or exists (select 1 from unnest(s.bullets) as line where line like '%' || (v_pair->>'from') || '%')
-         );
-      v_changed_sections := v_changed_sections + coalesce((select count(*) from public.site_page_sections s
-                                                            where s.page_id = v_page.id
-                                                              and (exists (select 1 from unnest(s.body) as l
-                                                                            where l like '%' || (v_pair->>'to') || '%')
-                                                                or exists (select 1 from unnest(s.bullets) as l
-                                                                            where l like '%' || (v_pair->>'to') || '%'))), 0);
+    for v_pass in 1..10 loop
+      v_pass_changed := 0;
+      for v_pair in select * from jsonb_array_elements(v_replacements) loop
+        -- body and bullets are text[] (0104); replace each element that contains
+        -- the superseded sentence and leave every other element byte-identical.
+        update public.site_page_sections s
+           set body = (
+                 select coalesce(array_agg(
+                          case when line like '%' || (v_pair->>'from') || '%'
+                               then replace(line, v_pair->>'from', v_pair->>'to')
+                               else line end order by ord), '{}'::text[])
+                   from unnest(s.body) with ordinality as t(line, ord)
+               ),
+               bullets = (
+                 select coalesce(array_agg(
+                          case when line like '%' || (v_pair->>'from') || '%'
+                               then replace(line, v_pair->>'from', v_pair->>'to')
+                               else line end order by ord), '{}'::text[])
+                   from unnest(s.bullets) with ordinality as t(line, ord)
+               )
+         where s.page_id = v_page.id
+           and (
+             exists (select 1 from unnest(s.body) as line where line like '%' || (v_pair->>'from') || '%')
+             or exists (select 1 from unnest(s.bullets) as line where line like '%' || (v_pair->>'from') || '%')
+           );
+        get diagnostics v_pass_rows = row_count;
+        v_pass_changed := v_pass_changed + v_pass_rows;
+      end loop;
+      exit when v_pass_changed = 0;
     end loop;
     v_changed_pages := v_changed_pages + 1;
   end loop;
 
-  raise notice '0110: marketplace wording retired across % seeded page(s); % sentence(s) corrected.',
+  select count(*) into v_changed_sections
+    from public.site_page_sections s
+   where exists (
+           select 1 from jsonb_array_elements(v_replacements) as pair
+            where exists (select 1 from unnest(s.body) as l where l like '%' || (pair->>'to') || '%')
+               or exists (select 1 from unnest(s.bullets) as l where l like '%' || (pair->>'to') || '%')
+         );
+
+  raise notice '0110: marketplace wording retired across % seeded page(s); % section(s) now carry corrected wording.',
     v_changed_pages, v_changed_sections;
 
   -- No seeded page may still advertise the discontinued programme. The

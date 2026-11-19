@@ -11,7 +11,7 @@
 | Check | Baseline (before any change) | Final | Verdict |
 | --- | --- | --- | --- |
 | Test suites | 239 passed | **232 passed, 232 total** | ✅ EXIT=0 |
-| Tests | 3644 passed | **3463 passed, 3463 total** | ✅ EXIT=0 |
+| Tests | 3644 passed | **3467 passed, 3467 total** | ✅ EXIT=0 |
 | `tsc --noEmit` | 0 errors | **0 errors** | ✅ EXIT=0 |
 | `eslint .` | 0 problems | **0 errors, 0 warnings** | ✅ EXIT=0 |
 | `next build` | not run at baseline | **compiles, all routes emitted** | ✅ |
@@ -19,7 +19,7 @@
 **No test was weakened to make it pass, and no failure was relabelled as a pass.** The count fell
 because **11 seller/supplier test suites were deleted in the same commit as the modules they covered**
 (deleting a module without its tests fails `typecheck` on `@/…` imports). Four new suites were added
-(+57 tests) during the owner-review corrections. Full accounting is in §5.
+(+61 tests) during the owner-review corrections. Full accounting is in §5.
 
 ---
 
@@ -28,7 +28,7 @@ because **11 seller/supplier test suites were deleted in the same commit as the 
 ```
 $ corepack pnpm exec vitest run
  Test Files  232 passed (232)
-      Tests  3463 passed (3463)
+      Tests  3467 passed (3467)
    Duration  389.81s
    EXIT=0
 ```
@@ -179,6 +179,9 @@ Recorded because each was a real defect that review alone missed.
 | 11 | The loop variable `r` was shadowed by the table alias `r` inside the same `for r in select ... join retailers r` → `record "r" is not assigned yet` at run time | `migration-0110-retailer-preservation` | Loop variable renamed `v_row`; aliases untouched |
 | 12 | A regex used to rename that variable also rewrote `join public.retailers r on r.id = p.id` in two **count** queries, corrupting them | Same suite, immediately after | Repaired by hand and re-read the whole block; the lesson is to re-read a mechanical patch, not just trust the diff |
 | 13 | The corrected legal copy introduced a *new* unverified claim ("we are the seller of record") | New `business-identity-claims` suite | Claim removed; suite now fails the build if it returns |
+| 14 | **The replacement table was applied once per pair, so it never followed its own chain.** The marketplace sentence → neutral copy → owner-approved identity is a chain; a database seeded at an intermediate revision stopped on the middle link | New convergence assertion in `migration-0110-seller-supplier-retirement` | Generator and `0110` both iterate to a fixpoint; test plants the *original* sentence and asserts the final wording |
+| 15 | The generator's table used a whole-paragraph `Map` key, so a sentence-level entry could not fire inside a paragraph | Same suite, plus `site-content-seed` | Rewrite tries the paragraph, then each sentence |
+| 16 | A `to` value still said orders are "invoiced by Maharani Traders" — an invoice-issuer role asserted for the *brand* | Manual read of the rendered about page; now also `business-identity-claims` | Corrected to the AJAY GENERAL proprietorship, and the guard flags `invoiced/billed by Maharani` |
 
 ---
 
@@ -188,7 +191,7 @@ Recorded because each was a real defect that review alone missed.
 pnpm install --frozen-lockfile
 pnpm run typecheck                 # EXIT=0
 pnpm run lint                      # EXIT=0
-pnpm exec vitest run               # 232 files / 3463 tests, EXIT=0
+pnpm exec vitest run               # 232 files / 3467 tests, EXIT=0
 pnpm run build                     # EXIT=0
 ```
 

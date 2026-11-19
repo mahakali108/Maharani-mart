@@ -9,9 +9,10 @@
 > **Status update (owner-review corrections).** Phases 2–8 are implemented on the branch and open as
 > PR #140. Two findings in this audit were re-opened and corrected during owner review, both recorded
 > in place below: §6.2 (dual-role accounts were being deactivated along with seller-only ones) and
-> §6.4 (the corrected legal copy introduced a new unverified seller-of-record claim). The remaining
-> open item is §6.4: *which* business identity is the legal seller / invoice issuer / GST registrant is
-> still an owner decision, and is therefore still not asserted anywhere.
+> §6.4 (the corrected legal copy introduced a new unverified seller-of-record claim). §6.4 has since
+> been answered by the owner — the AJAY GENERAL proprietorship is the seller and invoice issuer,
+> trading under the brand MAHARANI TRADERS — and the copy now states that. The remaining open input is
+> the verified GSTIN and registered address, which are deliberately not invented.
 
 ---
 
@@ -244,7 +245,7 @@ Full object inventory (all created by already-applied migrations — **nothing h
 
    **Resolved: kept.** A test pins it (`keeps grns.supplier_reference — purchase provenance is historical data`), and the admin surface shows it as "Purchases & GRN".
 
-4. **Which business identity is the legal seller / invoice issuer / GST registrant.** Not answered by the owner, so **not asserted** anywhere. The corrected copy states only that the identity appears on the invoice and on the Contact and Legal Information page. `tests/business-identity-claims.test.ts` fails the build if any affirmative claim returns. This remains the one open legal decision.
+4. **Which business identity is the legal seller / invoice issuer / GST registrant.** **Answered by the owner during review: the AJAY GENERAL proprietorship, trading under the brand MAHARANI TRADERS.** The copy now states that outright instead of deferring to the invoice, and `getTaxInvoiceReadiness()` refuses an issuer name that is only the brand, because a trading style is not a legal entity. The **GSTIN and registered address are still outstanding** — the copy points at the invoice and nothing is invented in the meantime. That is the one open input, not an open decision.
 
 ---
 
