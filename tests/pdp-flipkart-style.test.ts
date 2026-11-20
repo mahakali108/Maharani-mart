@@ -64,8 +64,8 @@ describe('back / exit navigation', () => {
 describe('sticky mobile header', () => {
   it('is sticky above content with a brand wordmark', () => {
     expect(shell).toContain('sticky top-0 z-40');
-    expect(shell).toContain('Maharani Traders');
-    expect(shell).toContain('aria-label="Maharani Traders home"');
+    expect(shell).toContain('{BRAND.name}');
+    expect(shell).toContain('aria-label={`${BRAND.name} home`}');
   });
 
   it('has a functional search icon that toggles + focuses the search field', () => {

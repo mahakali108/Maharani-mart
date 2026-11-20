@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
+import { BRAND } from '@/lib/brand';
 
 export interface NavItem {
   label: string;
@@ -49,7 +50,7 @@ export function Sidebar({
             MT
           </div>
           <div>
-            <p className="text-sm font-semibold leading-tight">Maharani Traders</p>
+            <p className="text-sm font-semibold leading-tight">{BRAND.name}</p>
             <p className="text-xs leading-tight text-ink-400">{brandLabel}</p>
           </div>
         </div>

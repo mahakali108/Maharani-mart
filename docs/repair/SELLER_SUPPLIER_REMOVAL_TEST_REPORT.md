@@ -10,8 +10,8 @@
 
 | Check | Baseline (before any change) | Final | Verdict |
 | --- | --- | --- | --- |
-| Test suites | 239 passed | **232 passed, 232 total** | ✅ EXIT=0 |
-| Tests | 3644 passed | **3467 passed, 3467 total** | ✅ EXIT=0 |
+| Test suites | 239 passed | **234 passed, 234 total** | ✅ EXIT=0 |
+| Tests | 3644 passed | **3520 passed, 3520 total** | ✅ EXIT=0 |
 | `tsc --noEmit` | 0 errors | **0 errors** | ✅ EXIT=0 |
 | `eslint .` | 0 problems | **0 errors, 0 warnings** | ✅ EXIT=0 |
 | `next build` | not run at baseline | **compiles, all routes emitted** | ✅ |
@@ -27,9 +27,9 @@ because **11 seller/supplier test suites were deleted in the same commit as the 
 
 ```
 $ corepack pnpm exec vitest run
- Test Files  232 passed (232)
-      Tests  3467 passed (3467)
-   Duration  389.81s
+ Test Files  234 passed (234)
+      Tests  3520 passed (3520)
+   Duration  ~515s
    EXIT=0
 ```
 
@@ -199,10 +199,59 @@ Focused:
 
 ```bash
 pnpm exec vitest run tests/migration-0110-seller-supplier-retirement.test.ts   # 10 tests
-pnpm exec vitest run tests/migration-0110-retailer-preservation.test.ts        # 18 tests
+pnpm exec vitest run tests/migration-0110-retailer-preservation.test.ts        # 37 tests
 pnpm exec vitest run tests/seller-supplier-retirement-authorization.test.ts    # 11 tests
 pnpm exec vitest run tests/business-identity-claims.test.ts                    # 11 tests
 ```
+
+### Account-state matrix — before → after → rollback
+
+Every row is a test in `tests/migration-0110-retailer-preservation.test.ts` (37 tests, native
+PostgreSQL 16 via PGlite). "Rollback" is the opt-in path
+(`set local maharani.reactivate_seller_profiles = 'true'`).
+
+| # | Before | After 0110 | `is_active` touched? | Rollback restores |
+| --- | --- | --- | --- | --- |
+| 1 | `seller`, **active**, approved `retailers` | `retailer`, active | no | `seller`, active |
+| 2 | `seller`, **inactive**, approved `retailers` | `retailer`, **inactive** | **no** | `seller`, inactive |
+| 3 | `seller`, **active**, seller-only | `seller`, inactive | active → inactive | `seller`, active |
+| 4 | `seller`, **inactive**, seller-only | **unchanged**, no audit row | no | unchanged |
+| 5 | `seller`, active, `retailers` = pending | `seller`, inactive | active → inactive | `seller`, active |
+| 6 | `seller`, active, `retailers` = suspended | `seller`, inactive | active → inactive | `seller`, active |
+| 7 | `retailer`, active (never a seller) | unchanged | no | unchanged |
+| 8 | `super_admin` / `admin` / `staff` | unchanged | no | unchanged |
+
+Additional rollback evidence:
+
+* restored `role` **and** `is_active` match the recorded before-state for every case (deep equality on
+  the whole profile state, not just one column);
+* a plain rollback with **no** opt-in changes nothing;
+* running the opt-in rollback **twice** is stable;
+* a profile the owner changed *after* the migration is **skipped**, not overwritten;
+* `audit_logs` is only ever appended to;
+* 0081's original approval function is restored, and a subsequent approval no longer promotes;
+* the block-9 helper no longer exists.
+
+### Retailer approval after the migration — through the real path
+
+| Case | Result |
+| --- | --- |
+| `admin_review_retailer_application(approved)` on a deactivated dual-role profile | role → `retailer`, `retailers.status='active'`, audited, `profile_role_promoted: true` |
+| same, on an account the owner had suspended | role → `retailer`, **`is_active` stays false** |
+| `rejected` | nothing promoted, access gate stays `pending_approval` |
+| reason shorter than 3 characters | raises (0081 rule preserved) |
+| Gold without an explicit request | raises (0081 rule preserved) |
+| caller who is not an admin | raises `administrator authorization required` |
+
+### Checkout is pack-only at the database
+
+`tests/mobile-checkout-atomic-db.test.ts` (18 tests):
+
+| Case | Result |
+| --- | --- |
+| new order whose line carries a `seller_offer_id` | raises `SELLER_OFFERS_RETIRED`, writes no order, does not clear the cart |
+| ordinary own-stock pack line in the same fixture | succeeds |
+| replay of an existing request key | returns the original order (`replayed: true`), proving the replay path precedes the guard |
 
 ### The retailer-preservation suite, case by case
 

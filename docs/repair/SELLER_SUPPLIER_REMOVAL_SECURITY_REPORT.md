@@ -215,7 +215,52 @@ and one is required, so "remove the claim" can never degrade into "say nothing".
 legal entity, and printing one as the issuer on a tax document would be a misstatement even though
 the copy is correct.
 
-### 3.10 INFO — historical third-party order lines still block invoice issuance
+### 3.10 HIGH — checkout was pack-only by convention, not by definition
+
+**Found (this pass).** The application stopped sending `seller_offer_id` when the seller UI was
+deleted, and `lib/orders/create-order.ts` always calls `create_order_atomic` v1. But the v1 RPC still
+*accepts* the field — it has to, because historical orders replay through it. So a stale cart, a
+retried request, or a hand-written RPC call could still have created a third-party order. "The app no
+longer sends it" is not a security boundary.
+
+**Fix.** Migration 0110 block 11 replaces `create_order_atomic` with 0082's body **verbatim plus one
+guard** at the top of the body: any requested line carrying a `seller_offer_id` raises
+`SELLER_OFFERS_RETIRED` (SQLSTATE 42501). Every other statement, error code, lock, reconciliation
+check and return shape is byte-identical, and the grant is restated as `service_role`-only.
+
+**Ordering matters and is tested.** The guard sits *after* the request-key replay path and *before* the
+seller-offer lookup. A replayed historical request therefore still resolves to its existing order
+instead of failing, while a *new* third-party line is refused with a message that says the marketplace
+is gone rather than that an offer is missing — a distinction the test asserts explicitly.
+
+### 3.11 HIGH — an approval could succeed and grant nothing
+
+**Found (this pass).** `admin_review_retailer_application` (0081) sets `retailers.status = 'active'`
+and writes an approval event, but never touches `profiles.role`. For a formerly dual-role account that
+block 7 had deactivated at `role='seller'`, a Super Admin approving the application produced a
+"successful" approval that left the retailer with no retailer access — a silent no-op on the exact path
+the business depends on.
+
+**Fix.** Block 10 replaces that function with 0081's body plus one step: on `approved`, a profile still
+carrying `role='seller'` is promoted to `retailer`, audited with `source='admin_review_retailer_application'`.
+Preserved unchanged: the `is_admin_or_above()` gate and 42501; decision validation; the 3-character
+reason rule; the `for update` locks; the Gold-must-be-explicit rule; rejection leaving the access gate
+at `pending_approval`; the `retailer_approval_events` insert; the jsonb return shape (one additive key).
+`is_active` is still untouched. The rollback restores 0081's original function, so a rollback cannot
+keep promoting accounts.
+
+**Tested through the real path**, not the helper in isolation: approval → role promoted, rejection →
+nothing promoted, short reason → raises, Gold without request → raises, non-admin caller → raises.
+
+### 3.12 INFO — a dead `revalidatePath` survived the route deletion
+
+**Found (this pass).** `lib/legal/acceptance.ts` still called `revalidatePath('/seller/profile')` after
+recording a legal acceptance. The route is deleted, so this was a no-op against a path that can no
+longer render. Removed. Not a security defect on its own, but it is exactly the kind of leftover that
+makes a "removed" surface look partially alive; a repo-wide test now fails if any
+`href` / `router.push` / `redirect` / `revalidatePath` points at a retired prefix.
+
+### 3.13 INFO — historical third-party order lines still block invoice issuance
 
 Historical orders may contain `order_items.source_type = 'seller'`. Issuing an invoice in Maharani
 Traders' name for goods it did not sell would misstate the seller of record, so

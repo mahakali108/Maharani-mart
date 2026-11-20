@@ -6,8 +6,9 @@ import { loadPublishedPages } from '@/lib/site-content/queries';
 import { NOT_APPLICABLE_DOCUMENTS } from '@/lib/legal/documents';
 import { AUDIENCE_LABEL, type EditableSitePageAudience } from '@/lib/site-content/types';
 import { formatPolicyDate } from '@/lib/site-content/render';
+import { BRAND } from '@/lib/brand';
 
-export const metadata: Metadata = { title: 'Legal and Policies — Maharani Traders' };
+export const metadata: Metadata = { title: `Legal and Policies — ${BRAND.name}` };
 export const dynamic = 'force-dynamic';
 
 // Only audiences that still exist. A page the Super Admin published to the

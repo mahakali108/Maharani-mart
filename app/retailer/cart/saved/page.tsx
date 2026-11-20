@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, ShoppingBasket } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { SavedCartList, type SavedCartView } from '@/components/retailer/saved-cart-list';
+import { BRAND } from '@/lib/brand';
 
 interface SavedCartRow {
   id: string;
@@ -22,7 +23,7 @@ interface SavedCartItemRow {
   product_packs: { pack_name: string } | null;
 }
 
-export const metadata = { title: 'Saved carts — Maharani Traders' };
+export const metadata = { title: `Saved carts — ${BRAND.name}` };
 
 export default async function SavedCartsPage() {
   const user = await requireUser();

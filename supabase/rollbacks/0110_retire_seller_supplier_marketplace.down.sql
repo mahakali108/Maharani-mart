@@ -360,58 +360,199 @@ create policy "order_items_seller_select" on public.order_items
   );
 
 -- ---------------------------------------------------------------------------
--- 7. Undo the role changes 0110 made to profiles — EXPLICIT OPT-IN ONLY
+-- 7. Restore EXACTLY the profiles 0110 changed — EXPLICIT OPT-IN ONLY
 -- ---------------------------------------------------------------------------
--- 0110 did two different things to `profiles`, and the rollback must not confuse
--- them:
+-- 0110 changed two things, and never anything else:
 --
---   (a) it DEACTIVATED seller-only and dual-role-unapproved accounts, and
+--   (a) it DEACTIVATED seller-only and dual-role-unapproved accounts that were
+--       ACTIVE, and
 --   (b) it RE-ROLED dual-role accounts that already had an approved retailer row
---       from 'seller' to 'retailer', keeping them active.
+--       from 'seller' to 'retailer', WITHOUT touching their is_active.
 --
--- Undoing (b) unconditionally would hand back the seller capability that the
--- application no longer exposes, so both are gated behind the same opt-in.
+-- Every one of those changes wrote an audit_logs row carrying `source =
+-- 'migration 0110'` and the EXACT before-state (`old_data.role`,
+-- `old_data.is_active`). This block replays that before-state instead of guessing
+-- from a role predicate, which is what makes the reversal exact:
+--
+--   * only profiles that 0110 itself marked are touched;
+--   * `role` is restored to old_data.role (never blanket-demoted);
+--   * `is_active` is restored to old_data.is_active (so an account that was
+--     already suspended before the migration goes back to suspended, and an
+--     account that was active goes back to active);
+--   * a profile whose current state no longer matches what 0110 wrote is SKIPPED
+--     and reported, so a change the owner made afterwards is never overwritten;
+--   * a genuine retailer that 0110 never touched has no such audit row and is
+--     therefore never demoted.
 --
 -- Set `set local maharani.reactivate_seller_profiles = 'true'` in the SAME
--- transaction to approve. The reverse-re-role is additionally restricted to
--- profiles that this migration marked in audit_logs, so a genuine retailer is
--- never demoted to 'seller' by a rollback.
-do $reactivate$
+-- transaction to approve. Without it the block does nothing and says so.
+do $restore_profiles$
 declare
-  v_reactivated integer := 0;
-  v_unpromoted integer := 0;
-  r record;
+  v_restored integer := 0;
+  v_skipped integer := 0;
+  v_row record;
 begin
   if coalesce(current_setting('maharani.reactivate_seller_profiles', true), '') <> 'true' then
-    raise notice '0110 rollback: profile role changes left in place. To reverse them, set maharani.reactivate_seller_profiles = ''true'' and re-run that block.';
+    raise notice '0110 rollback: profile role/active changes left in place. To restore the exact before-state, set maharani.reactivate_seller_profiles = ''true'' and re-run that block.';
     return;
   end if;
 
-  -- (b) first: put the promoted dual-role accounts back to 'seller', but only the
-  -- ones 0110 itself promoted (identified by its own audit marker).
-  for r in
-    select distinct a.record_id
+  for v_row in
+    select distinct on (a.record_id)
+           a.record_id,
+           a.old_data ->> 'role' as old_role,
+           a.old_data ->> 'is_active' as old_active,
+           a.new_data ->> 'role' as new_role,
+           a.new_data ->> 'is_active' as new_active
       from public.audit_logs a
      where a.table_name = 'profiles'
-       and a.new_data ->> 'source' = 'migration 0110'
-       and a.new_data ->> 'role' = 'retailer'
-       and a.old_data ->> 'role' = 'seller'
+       and a.new_data ->> 'source' in ('migration 0110', 'retire_promote_dual_role_seller', 'admin_review_retailer_application')
+       and a.old_data ->> 'role' is not null
+       and a.old_data ->> 'is_active' is not null
+     order by a.record_id, a.created_at desc
   loop
-    update public.profiles set role = 'seller' where id = r.record_id and role = 'retailer';
-    v_unpromoted := v_unpromoted + 1;
+    -- Never overwrite a state the owner changed after the migration. If the
+    -- profile no longer looks like 0110 left it, leave it alone and say so.
+    if not exists (
+      select 1 from public.profiles p
+       where p.id = v_row.record_id
+         and p.role::text = coalesce(v_row.new_role, p.role::text)
+         and p.is_active = coalesce(v_row.new_active::boolean, p.is_active)
+    ) then
+      v_skipped := v_skipped + 1;
+      continue;
+    end if;
+
+    update public.profiles
+       set role = v_row.old_role::public.user_role,
+           is_active = v_row.old_active::boolean
+     where id = v_row.record_id;
+
+    v_restored := v_restored + 1;
   end loop;
 
-  -- (a) then: reactivate the seller-role accounts.
-  update public.profiles set is_active = true
-   where role::text = 'seller' and is_active = false;
-  get diagnostics v_reactivated = row_count;
+  raise notice '0110 rollback: restored exact before-state for % profile(s); skipped % whose state had changed since the migration.',
+    v_restored, v_skipped;
 
-  raise notice '0110 rollback: re-roled back to seller=%, re-activated seller-role profile(s)=%.',
-    v_unpromoted, v_reactivated;
+  if v_skipped > 0 then
+    raise notice '0110 rollback: skipped profiles were NOT reverted because they no longer matched the state 0110 wrote. Review audit_logs (source in ''migration 0110'', ''retire_promote_dual_role_seller'', ''admin_review_retailer_application'') before closing this out.';
+  end if;
 end;
-$reactivate$;
+$restore_profiles$;
 
--- The re-role helper added by 0110 only exists while 0110 is applied.
+-- Block 9's helper and block 10's rewiring only exist while 0110 is applied.
 drop function if exists public.retire_promote_dual_role_seller(uuid);
+
+-- Restore 0081's ORIGINAL admin_review_retailer_application, without the
+-- dual-role promotion step 0110 added. Leaving 0110's version in place would
+-- keep re-roling profiles to 'retailer' after the retirement was rolled back.
+do $restore_approval$
+begin
+  if to_regclass('public.retailer_applications') is null
+     or to_regclass('public.retailer_approval_events') is null then
+    raise notice '0110 rollback: 0081 approval tables absent - nothing to restore.';
+    return;
+  end if;
+
+  execute $fn$
+create or replace function public.admin_review_retailer_application(
+  p_retailer_id uuid,
+  p_decision text,
+  p_reason text,
+  p_category text default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $body$
+declare
+  v_app public.retailer_applications%rowtype;
+  v_retailer public.retailers%rowtype;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_category public.retailer_category;
+  v_new_app_status text;
+  v_new_access public.retailer_status;
+begin
+  if not is_admin_or_above() then
+    raise exception 'Access denied: administrator authorization required.' using errcode = '42501';
+  end if;
+  if p_decision is null or p_decision not in ('approved', 'rejected') then
+    raise exception 'Decision must be approved or rejected.' using errcode = '22023';
+  end if;
+  if v_reason is null or char_length(v_reason) < 3 then
+    raise exception 'A reason of at least 3 characters is required for every review decision.' using errcode = '22023';
+  end if;
+
+  select * into v_app from public.retailer_applications where retailer_id = p_retailer_id for update;
+  if not found then
+    raise exception 'No retailer application found for that retailer.' using errcode = '22023';
+  end if;
+  select * into v_retailer from public.retailers where id = p_retailer_id for update;
+  if not found then
+    raise exception 'Retailer not found.' using errcode = '22023';
+  end if;
+
+  if p_category is not null then
+    if p_category not in ('general', 'silver', 'gold') then
+      raise exception 'Unknown retailer category.' using errcode = '22023';
+    end if;
+    v_category := p_category::public.retailer_category;
+  end if;
+
+  if p_decision = 'approved' then
+    v_new_app_status := 'approved';
+    v_new_access := 'active';
+    v_category := coalesce(v_category, v_retailer.retailer_category, 'general');
+    if v_category = 'gold' then
+      if p_category is null then
+        raise exception 'Gold must be assigned explicitly, not as a side effect of approval.' using errcode = '22023';
+      end if;
+    end if;
+  else
+    v_new_app_status := 'rejected';
+    v_new_access := 'pending_approval';
+    v_category := null;
+  end if;
+
+  update public.retailers
+     set status = v_new_access,
+         retailer_category = coalesce(v_category, retailer_category),
+         approved_by = case when v_new_access = 'active' then auth.uid() else null end,
+         approved_at = case when v_new_access = 'active' then now() else null end,
+         updated_at = now()
+   where id = p_retailer_id;
+
+  update public.retailer_applications
+     set status = v_new_app_status,
+         decided_at = now(),
+         decided_by = auth.uid(),
+         decision_reason = v_reason,
+         updated_at = now()
+   where retailer_id = p_retailer_id;
+
+  insert into public.retailer_approval_events
+    (retailer_id, actor_id, action, previous_status, new_status, previous_category, new_category, reason)
+  values
+    (p_retailer_id, auth.uid(), p_decision,
+     v_app.status, v_new_app_status,
+     v_retailer.retailer_category::text, coalesce(v_category, v_retailer.retailer_category)::text,
+     v_reason);
+
+  return jsonb_build_object(
+    'retailer_id', p_retailer_id,
+    'application_status', v_new_app_status,
+    'access_status', v_new_access,
+    'retailer_category', coalesce(v_category, v_retailer.retailer_category)
+  );
+end;
+$body$;
+  $fn$;
+
+  revoke all on function public.admin_review_retailer_application(uuid, text, text, text) from public, anon;
+  grant execute on function public.admin_review_retailer_application(uuid, text, text, text) to authenticated;
+
+  raise notice '0110 rollback: admin_review_retailer_application restored to its 0081 body.';
+end;
+$restore_approval$;
 
 commit;

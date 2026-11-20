@@ -12,6 +12,12 @@ import { isValidGstin, normalizeGstin } from '@/lib/retailer/invoice-tax';
  * them under Ajay General's details would misstate who supplied the goods.
  * Refusing the invoice is the honest outcome; the order history remains readable.
  */
+/**
+ * Just the slice of the environment this guard reads. Structural rather than
+ * `NodeJS.ProcessEnv` so a caller can pass a minimal object.
+ */
+export type EnvLike = Readonly<Record<string, string | undefined>>;
+
 export type TaxInvoiceReadiness =
   | {
       ready: true;
@@ -34,7 +40,7 @@ export interface TaxInvoiceReadinessInput {
    */
   hasMarketplaceSellerLine: boolean;
   /** Injectable for tests; callers use the server environment by default. */
-  environment?: NodeJS.ProcessEnv;
+  environment?: EnvLike;
 }
 
 /**
@@ -49,7 +55,7 @@ function isApprovedIssuerName(value: string): boolean {
   return /\bajay\s+general\b/i.test(value);
 }
 
-function text(environment: NodeJS.ProcessEnv, key: 'COMPANY_NAME' | 'COMPANY_GSTIN' | 'COMPANY_ADDRESS' | 'COMPANY_PHONE'): string | null {
+function text(environment: EnvLike, key: 'COMPANY_NAME' | 'COMPANY_GSTIN' | 'COMPANY_ADDRESS' | 'COMPANY_PHONE'): string | null {
   const value = environment[key]?.trim() ?? '';
   if (!value) return null;
   // Prevent the old human-readable configuration prompt from becoming a legal

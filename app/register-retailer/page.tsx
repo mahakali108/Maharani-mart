@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { RegisterRetailerForm } from '@/components/auth/register-retailer-form';
 import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
+import { BRAND } from '@/lib/brand';
 
-export const metadata: Metadata = { title: 'Register your shop — Maharani Traders' };
+export const metadata: Metadata = { title: `Register your shop — ${BRAND.name}` };
 
 export default async function RegisterRetailerPage() {
   const supabase = (await createClient());

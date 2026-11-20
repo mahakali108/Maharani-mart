@@ -111,5 +111,4 @@ export async function acceptLegalDocumentsAction(formData: FormData): Promise<vo
     }
   }
   revalidatePath('/retailer/account/security');
-  revalidatePath('/seller/profile');
 }

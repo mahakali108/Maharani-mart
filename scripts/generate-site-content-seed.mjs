@@ -237,6 +237,14 @@ const RETIRED_MARKETPLACE_SENTENCES = [
   // role for a BRAND rather than for the proprietorship the owner named.
   ['Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued. Food products are excluded from the current scope.',
    'Maharani Traders sells only from its own stock. The third-party marketplace described in earlier versions of this page has been discontinued. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Food products are excluded from the current scope.'],
+  // ---- Brand hop: the app is now "Maha Bazar by Maharani" --------------------
+  // A rename of the customer-facing app is NOT a change of legal entity. The
+  // entity stays Ajay General (proprietorship), trading as Maharani Traders, and
+  // the sentence now says so explicitly. Maa Kali Enterprises is named only to
+  // state that it is SEPARATE - no ownership, invoicing or identity is claimed
+  // for it anywhere.
+  ['Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity.',
+   'Maha Bazar by Maharani is the customer-facing website and app name for Maharani Traders, a brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL (proprietorship). Maharani Traders is a trading style, not a separate incorporated company or legal entity, and the legal seller and invoice issuer is AJAY GENERAL. Maa Kali Enterprises is a separate business identity and is not connected to this business.'],
 ];
 
 /**

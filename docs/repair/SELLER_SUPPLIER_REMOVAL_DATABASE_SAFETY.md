@@ -85,10 +85,12 @@ remain, and the migration emits a `NOTICE` with the exact number affected.
 | 4. Marketplace RPCs | Same, on 7 functions. | ✅ (0086 verify) |
 | 5. Supplier funnel | `submit_supplier_application` + rate limiter revoked from `anon`/`authenticated`; `supplier-documents` bucket policies dropped. Bucket and objects kept. | ✅ |
 | 6. RLS write policies | Seller **write** policies dropped; admin read/update re-stated. | ✅ |
-| 7. Seller accounts | **Three populations, decided by the `retailers` row** (see §4.1). Seller-only → deactivated, never converted. Dual-role + `retailers.status='active'` → re-roled to `retailer`, kept active. Dual-role + not approved → deactivated. **No delete.** | ⚠️ opt-in only |
+| 7. Seller accounts | **Three populations, decided by the `retailers` row** (see §4.1). Seller-only → deactivated, never converted. Dual-role + `retailers.status='active'` → **role only** re-roled to `retailer`, `is_active` preserved exactly. Dual-role + not approved → deactivated **only if currently active**. Already-inactive accounts are left byte-identical and are not audited. **No delete.** | ⚠️ opt-in only |
 | 7b. Website content | Exact-sentence rewrite of retired marketplace wording in `site_page_sections`. Never touches `status`/`published_at`/snapshot/version. | ⚠️ content only, no version bump |
 | 8. Verification | RAISES if any capability survived, if an approved retailer lost retailer access, or if a preserved table is missing. | n/a |
-| 9. Re-role helper | `retire_promote_dual_role_seller(uuid)`, service_role-only, for approvals granted *after* 0110. Idempotent, audited, refuses to promote a seller-only account. | ✅ dropped |
+| 9. Re-role helper | `retire_promote_dual_role_seller(uuid)`, service_role-only, for approvals granted *after* 0110. Idempotent, audited, refuses to promote a seller-only account, and does **not** flip `is_active`. | ✅ dropped |
+| 10. Approval workflow | `admin_review_retailer_application` (0081) replaced: 0081's body verbatim plus one step — a `seller` profile approved through the real workflow is promoted to `retailer`. `is_active` untouched. Every 0081 error, lock, Gold rule and audit insert preserved. | ✅ 0081 body restored |
+| 11. Checkout guard | `create_order_atomic` (0082) replaced with its own body verbatim plus one guard: any line carrying `seller_offer_id` raises `SELLER_OFFERS_RETIRED`. This makes checkout pack-only at the database, not merely in the application. | ✅ guard not restored (rollback leaves 0082's body) |
 
 ### 4.1 Block 7 must not destroy a legitimate retailer
 
@@ -126,8 +128,43 @@ would sit at `role='seller'`, `is_active=false`. Block 9 exposes
 
 **Every decision leaves evidence.** Each row updated by block 7 gets an `audit_logs` entry carrying
 `source='migration 0110'`, the before/after `role` and `is_active`, and a human-readable reason. The
-rollback reverses the re-role by reading that marker, so it can never demote a genuine retailer. The
-final `NOTICE` reports all three counts plus promoted/deactivated totals.
+rollback replays that recorded before-state, so it can never demote a genuine retailer — see §4.2.
+The final `NOTICE` reports all three counts plus promoted / promoted-but-kept-inactive / deactivated
+totals.
+
+### 4.2 `is_active` is the owner's switch, and the migration never touches it
+
+The first version of block 7 wrote `is_active = true` for a promoted dual-role account. That is wrong
+in two directions, and both are now fixed:
+
+* an account the owner had **suspended** was silently reactivated by a schema migration. Reactivation
+  is an access grant the owner did not make.
+* the audit row recorded an after-state the migration had invented, so a rollback had no way to
+  distinguish "was active" from "was suspended".
+
+The rule now: **block 7 and block 9/10 change `role` only.** `is_active` is preserved exactly, and the
+before-state is written to `audit_logs` so the reversal can restore both columns. Concretely:
+
+| Before | After block 7 | `is_active` change |
+| --- | --- | --- |
+| seller-only, active | `seller`, inactive | active → inactive (the retirement) |
+| seller-only, **inactive** | unchanged, **no audit row** | none |
+| dual-role approved, active | `retailer`, active | none |
+| dual-role approved, **inactive** | `retailer`, **inactive** | **none** — audited with a NOTICE so the owner knows a reactivation is theirs to make |
+| dual-role unapproved, active | `seller`, inactive | active → inactive |
+| dual-role unapproved, **inactive** | unchanged, **no audit row** | none |
+| ordinary retailer / admin / staff | untouched | none |
+
+Verification enforces the shape: no active seller-role profile may remain, every approved `retailers`
+row must carry `role='retailer'`, and every profile audit row written by this migration must contain a
+complete before-state (otherwise the rollback would not be exact, so the migration raises instead of
+committing a half-reversible change).
+
+The rollback restores from that before-state rather than from a role predicate: it touches only
+profiles 0110 itself marked, writes back `old_data.role` **and** `old_data.is_active`, and **skips**
+any profile whose current state no longer matches what 0110 wrote — so a decision the owner made after
+the migration is never overwritten. It also drops the block-9 helper and restores 0081's original
+approval function, which would otherwise keep promoting profiles after the retirement was rolled back.
 
 ### Safety properties
 

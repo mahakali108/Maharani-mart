@@ -279,7 +279,14 @@ seed, `0105` and `0110`'s rewrite table at once. Two consequences worth stating:
   (optionally with the brand alongside) passes. This is a technical publication guard, not a CA
   conclusion, and it does not validate GST registration.
 
-### 8.3 The replacement table is a chain, so it must converge
+### 8.3 Branding: the app is now Maha Bazar by Maharani
+
+The customer-facing app name changed; the **legal entity did not**. `lib/brand.ts` and
+`lib/legal/issuer.ts` are the single source for both, and the invoice renders the entity as issuer with
+the brand shown separately as "Trading as ...". The full surface list, the owner-supplied-fact
+placeholders and the issuer guard are in **`MAHA_BAZAR_BUSINESS_IDENTITY_REPORT.md`**.
+
+### 8.4 The replacement table is a chain, so it must converge
 
 The corrections arrived in layers, and each layer's `to` is the next layer's `from` (marketplace
 sentence → neutral single-seller copy → owner-approved identity). Two implementations were wrong
@@ -309,7 +316,7 @@ the full A–R document registry still exist. It scans only the text that can re
 See `SELLER_SUPPLIER_REMOVAL_TEST_REPORT.md` for the full breakdown.
 
 Baseline before any change: **239 files / 3644 tests**, typecheck ✅, lint ✅.
-After the owner-review corrections, **final:** **232 files / 3467 tests, all passing, EXIT=0**;
+After the owner-review corrections and the completion pass, **final:** **234 files / 3520 tests, all passing, EXIT=0**;
 typecheck ✅, lint ✅ (0 errors, 0 warnings), `next build` ✅.
 
 The file/test count fell from the 239/3644 baseline because 11 seller/supplier suites were deleted

@@ -5,6 +5,7 @@ import { classifyTaxSplit } from '@/lib/retailer/invoice-tax';
 import { toInvoiceDisplayLines, type InvoiceOrderItemRow } from '@/lib/retailer/invoice-display';
 import { buildStandaloneInvoiceHtml } from '@/lib/retailer/invoice-html';
 import { getTaxInvoiceReadiness } from '@/lib/retailer/tax-invoice-readiness';
+import { BRAND } from '@/lib/brand';
 
 interface OrderInvoiceRow {
   id: string;
@@ -83,7 +84,10 @@ export async function GET(request: Request, { params: paramsPromise }: { params:
   const html = buildStandaloneInvoiceHtml({
     orderNumber: order.order_number,
     placedAt: order.placed_at,
+    // The legal issuer (Ajay General) is the company; the brand is shown
+    // alongside it, never instead of it. See lib/brand.ts.
     company: issuance.issuer,
+    brandName: BRAND.name,
     billedTo: {
       shopName: retailer?.shop_name ?? '',
       address: retailer?.address ?? '',

@@ -10,6 +10,7 @@ import {
   Truck,
   WalletCards,
 } from 'lucide-react';
+import { BRAND } from '@/lib/brand';
 
 const FAQ = [
   {
@@ -41,7 +42,7 @@ export default async function HelpPage({
 }) {
   const searchParams = await searchParamsPromise;
   const phone = process.env.COMPANY_PHONE?.trim();
-  const company = process.env.COMPANY_NAME?.trim() || 'Maharani Traders';
+  const company = process.env.COMPANY_NAME?.trim() || BRAND.legalName;
   const topic = searchParams.topic ?? '';
   const orderNumber = searchParams.order ?? '';
 
@@ -57,7 +58,7 @@ export default async function HelpPage({
         <p className="shop-eyebrow">Retailer support</p>
         <h1 className="shop-heading mt-2 font-semibold tracking-tight text-slate-950">Help centre</h1>
         <p className="mt-2 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm">
-          Get help with orders, payments, products and delivery — without leaving Maharani Traders.
+          Get help with orders, payments, products and delivery — without leaving {BRAND.name}.
         </p>
       </section>
 

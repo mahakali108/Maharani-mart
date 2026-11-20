@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { Clock } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
 import { Button } from '@/components/ui/button';
+import { BRAND } from '@/lib/brand';
 
-export const metadata: Metadata = { title: 'Approval pending — Maharani Traders' };
+export const metadata: Metadata = { title: `Approval pending — ${BRAND.name}` };
 
 export default function PendingApprovalPage() {
   return (

@@ -20,8 +20,9 @@ import {
 import { getRetailerWalletSummary, formatPaise } from '@/lib/retailer/wallet';
 import { coinBalancePaise, COIN_SYMBOL } from '@/lib/coins/math';
 import { StatementExportForm } from '@/components/retailer/statement-export-form';
+import { BRAND } from '@/lib/brand';
 
-export const metadata = { title: 'Purchase reports — Maharani Traders' };
+export const metadata = { title: `Purchase reports — ${BRAND.name}` };
 
 function StatCard({
   icon: Icon,
