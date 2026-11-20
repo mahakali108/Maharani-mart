@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "arena/23373e5e-maharani-mart": false
+    }
+  },
   "framework": "nextjs",
   "buildCommand": "next build",
   "installCommand": "npm install",

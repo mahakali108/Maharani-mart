@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {
   ArrowRight, BadgePercent, BarChart3, CalendarDays, Clock3, Headset, LayoutGrid, MapPin,
-  Package, ReceiptText, RotateCcw, ShieldCheck, ShoppingBag, Store, Tag, Truck,
+  Search, Package, ReceiptText, RotateCcw, ShieldCheck, ShoppingBag, Store, Tag, Truck,
 } from 'lucide-react';
 import { formatIndiaDate } from '@/lib/datetime/india';
 import { BrandCard } from '@/components/retailer/brand-card';
@@ -22,6 +22,7 @@ import { CoinsBalanceCard } from '@/components/retailer/coins-balance-card';
 import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
 
 export interface HomeContentProps {
+  branding?: { display_name: string; tagline: string };
   data: RetailerHomeData;
   retailerName?: string | null;
   shopName?: string | null;
@@ -34,7 +35,7 @@ export interface HomeContentProps {
 
 /** Presentational server component. All business records/terms come from the
  * request's live data loader; no fixtures, database SDK or duplicate fetches. */
-export function HomeContent({ data, retailerName, shopName, areaName, address, profileUnavailable, wallet, services }: HomeContentProps) {
+export function HomeContent({ branding, data, retailerName, shopName, areaName, address, profileUnavailable, wallet, services }: HomeContentProps) {
   const name = retailerName?.trim();
   const shop = shopName?.trim();
   const location = areaName?.trim() || address?.trim();
@@ -51,20 +52,25 @@ export function HomeContent({ data, retailerName, shopName, areaName, address, p
         aria-labelledby="home-welcome"
         className="relative overflow-hidden rounded-[1.75rem] border border-marketing-border bg-marketing-surface shadow-card"
       >
-        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-marketing-berry-100/80 blur-2xl sm:h-96 sm:w-96" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 -left-20 h-64 w-64 rounded-full border-[36px] border-marketing-berry-200/40" />
+        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-shopping-100/80 blur-2xl sm:h-96 sm:w-96" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 -left-20 h-64 w-64 rounded-full border-[36px] border-amber-200/60" />
         <div className="relative grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.35fr_1fr] lg:gap-10 lg:p-10">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-marketing-action">
-              <Store className="h-4 w-4" aria-hidden="true" /> The retailer&apos;s everyday store
+              <Store className="h-4 w-4" aria-hidden="true" /> {branding?.display_name ?? 'Maha Bazar by Maharani'}
             </p>
             <h1 id="home-welcome" className="mt-4 max-w-xl text-3xl font-semibold leading-[1.08] tracking-tight text-marketing-heading sm:text-4xl lg:text-[3.25rem]">
               Your next restock,<br /><span className="text-marketing-action">beautifully simple.</span>
             </h1>
             <p className="mt-4 text-sm font-semibold text-marketing-text">{name ? `Welcome, ${name}` : 'Welcome to Maharani Traders'}</p>
             <p className="mt-1 max-w-md text-xs leading-6 text-marketing-text-secondary sm:text-sm">
-              Discover products for your shelves, compare pack sizes and order at your wholesale piece price.
+              {branding?.tagline ?? 'Discover products for your shelves, compare pack sizes and order at your wholesale piece price.'}
             </p>
+            <form action="/retailer/catalog" role="search" aria-label="Search wholesale catalogue" className="mt-5 flex max-w-lg items-center gap-2 rounded-xl border border-shopping-200 bg-white p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-shopping-700">
+              <Search aria-hidden="true" className="ml-2 h-5 w-5 shrink-0 text-shopping-800" />
+              <input name="q" type="search" aria-label="Product search" placeholder="Search products or brands" className="min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-900" />
+              <button className="min-h-11 rounded-lg bg-shopping-800 px-4 text-sm font-semibold text-white hover:bg-shopping-900">Search</button>
+            </form>
             <div className="mt-5 flex flex-wrap gap-2">
               <Link href="/retailer/catalog" className="inline-flex min-h-12 items-center gap-3 rounded-xl bg-marketing-action px-5 text-sm font-semibold text-marketing-on-action transition hover:bg-marketing-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-marketing-action focus-visible:ring-offset-2">
                 Explore catalogue <ArrowRight className="h-4 w-4" aria-hidden="true" />

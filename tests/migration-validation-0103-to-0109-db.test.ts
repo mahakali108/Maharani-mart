@@ -39,6 +39,7 @@ const REQUIRED_ROLLBACKS = [
   '0108_publishing_integrity.down.sql',
   '0109_phase3_business_control.down.sql',
   '0110_retire_seller_supplier_marketplace.down.sql',
+  '0111_storefront_branding.down.sql',
 ] as const;
 
 const PHASE3_TABLES = [
@@ -177,9 +178,9 @@ describe('Migration Validation — Production Baseline (0103) -> Upgrade (0104�
     }
     expect(missing).toEqual([61, 75, 76]);
     // The live production baseline is 0109; 0110 is the seller/supplier
-    // retirement that follows it. Bumping this pin is a deliberate act: it
+    // retirement, followed by storefront branding in 0111. Bumping this pin is a deliberate act: it
     // asserts the highest migration number in the repository.
-    expect(maxNum).toBe(110);
+    expect(maxNum).toBe(111);
 
     // Verify rollback scripts exist for schema/data migrations in 0104–0109
     // (0107 is a pure column-privilege security lockdown and intentionally omits a rollback)

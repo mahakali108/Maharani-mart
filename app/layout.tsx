@@ -39,10 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="font-sans">
+        <ServiceWorkerRegister />
         {children}
         <Analytics />
         {/* PWA: browser-only service worker and optional install prompt. */}
-        <ServiceWorkerRegister />
         <InstallPrompt />
       </body>
     </html>

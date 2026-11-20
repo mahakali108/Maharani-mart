@@ -16,32 +16,44 @@
  *     separate from Capacitor's www/offline.html (Android WebView).
  */
 
-const STATIC_CACHE = 'mt-static-v2';
+if (typeof importScripts === 'function') importScripts('/pwa-release.js');
+const STATIC_CACHE = 'mt-static-v3-' + (self.MAHA_RELEASE || 'local');
 const OFFLINE_URL = '/offline.html';
-const PRECACHE = [OFFLINE_URL];
+// Pin the reviewed static file, not just a marker in potentially personalised HTML.
+const OFFLINE_DIGEST = 'a8ed64c5dd09e876ce2d691a43a31ec044d46e26ef4f309d4239fd8ae6577d28';
 
-self.addEventListener('install', (event) => {
-  // Precache the offline page, but never fail install if the network is down.
-  event.waitUntil(
-    (async () => {
-      const cache = await caches.open(STATIC_CACHE);
-      await Promise.allSettled(PRECACHE.map((url) => cache.add(url)));
-      await self.skipWaiting();
-    })()
-  );
+async function cacheOfflinePage() {
+  const url = new URL(OFFLINE_URL, self.location.origin).href;
+  const response = await fetch(url, { credentials: 'omit', redirect: 'error', cache: 'no-store' });
+  if (!response.ok || response.status !== 200 || response.redirected || response.url !== url ||
+      !/^text\/html(?:;|$)/i.test(response.headers.get('content-type') || '')) throw Error('Invalid offline page');
+  const bytes = await response.arrayBuffer();
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+    n => n.toString(16).padStart(2, '0')).join('');
+  if (digest !== OFFLINE_DIGEST) throw Error('Unexpected offline content');
+  const store = await caches.open(STATIC_CACHE);
+  await store.put(OFFLINE_URL, new Response(bytes, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+}
+self.addEventListener('install', event => event.waitUntil(cacheOfflinePage()));
+
+// A waiting worker does not control the incumbent's clients, so include uncontrolled
+// windows too. The snapshot is advisory ONLY: paths can change immediately afterwards.
+const windows = () => self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+self.addEventListener('message', event => {
+  if (event.data !== 'CHECK_UPDATE_READINESS') return;
+  event.waitUntil((async () => {
+    const clients = await windows();
+    for (const client of clients) client.postMessage({ type: 'UPDATE_PENDING', openWindows: clients.length });
+  })());
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys.filter((key) => key.startsWith('mt-static-') && key !== STATIC_CACHE).map((key) => caches.delete(key))
-      );
-      await self.clients.claim();
-    })()
-  );
-});
+// Never call skipWaiting or claim clients. The browser, not a racy vote or timeout,
+// retires the old worker once its clients unload. An unexpectedly closed tab needs no ACK.
+self.addEventListener('activate', event => event.waitUntil((async () => {
+  if ((await windows()).length) return; // includes uncontrolled/legacy documents
+  const keys = await caches.keys();
+  await Promise.all(keys.filter(key => key.startsWith('mt-static-') && key !== STATIC_CACHE).map(key => caches.delete(key)));
+})()));
 
 function isStaticAsset(url) {
   // A personalized URL can carry private query parameters even for a path
@@ -81,7 +93,8 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() =>
-        caches.match(OFFLINE_URL).then((res) => res || Response.error())
+        caches.open(STATIC_CACHE).then(store => store.match(OFFLINE_URL)).catch(() => null)
+          .then(res => res || new Response('Maha Bazar is offline. Reconnect to continue.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }))
       )
     );
     return;
@@ -90,19 +103,21 @@ self.addEventListener('fetch', (event) => {
   // STATIC ASSETS: cache-first (safe — identical for every user).
   if (isStaticAsset(url)) {
     event.respondWith(
-      caches.open(STATIC_CACHE).then(async (cache) => {
-        const cached = await cache.match(request);
+      caches.open(STATIC_CACHE).catch(() => null).then(async (cache) => {
+        // CacheStorage may be unavailable on a constrained device. It is an
+        // optimisation, not a prerequisite for fetching the live application.
+        const cached = cache ? await cache.match(request).catch(() => null) : null;
         if (cached) return cached;
         try {
           const res = await fetch(request);
           const cacheControl = res?.headers?.get('cache-control') || '';
           const contentType = res?.headers?.get('content-type') || '';
-          if (res && res.ok && res.type === 'basic' && !res.redirected
+          if (cache && res && res.ok && res.type === 'basic' && !res.redirected
               && !/private|no-store/i.test(cacheControl)
               && !/text\/html|application\/json/i.test(contentType)) {
             // A redirect or JSON/HTML behind a static-looking URL is still
             // dynamic content. Never persist it in cross-session CacheStorage.
-            cache.put(request, res.clone());
+            try { await cache.put(request, res.clone()); } catch { /* Still serve the network response. */ }
           }
           return res;
         } catch {

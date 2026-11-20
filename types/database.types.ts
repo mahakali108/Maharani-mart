@@ -35,6 +35,12 @@ export type CouponDiscountTypeEnum = 'percentage' | 'fixed';
 export interface Database {
   public: {
     Tables: {
+      storefront_brand_versions: {
+        Row: { id: number; stage: 'draft' | 'published'; operation: 'draft' | 'publish' | 'restore'; display_name: string; tagline: string; source_id: number | null; actor: string; created_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       profiles: {
         Row: {
           id: string;
@@ -2224,6 +2230,8 @@ export interface Database {
       };
     };
     Functions: {
+      published_storefront_brand: { Args: Record<string, never>; Returns: { display_name: string; tagline: string }[] };
+      record_storefront_brand: { Args: { p_name: string; p_tagline: string; p_source: number | null; p_expected?: number | null }; Returns: undefined };
       // 0035: retailer self-service shop profile update (name + address only).
       // SECURITY DEFINER; validates scope server-side and updates only
       // retailers.shop_name / retailers.address for auth.uid().

@@ -1,3 +1,4 @@
+import { webRelease } from "@/lib/config/web-release";
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -304,6 +305,7 @@ export default async function RetailerAccountPage() {
             </span>
             <ArrowRight className="h-4 w-4 text-primary-700" aria-hidden="true" />
           </Link>
+          <p className="text-xs text-slate-600">Maha Bazar · Web build label: <span className="break-all">{webRelease}</span></p>
           <form action={logoutAction}>
             <button
               type="submit"

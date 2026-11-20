@@ -60,6 +60,7 @@ export default async function AdminContentPage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-ink-950">Website content</h1>
+          <Link href="/admin/branding" className="inline-flex min-h-11 items-center font-semibold text-primary-700">Storefront branding studio →</Link>
           <p className="mt-1 max-w-3xl text-sm text-ink-500">
             About Us, Contact and every policy page. Customers only ever see a published page; your draft, internal
             notes and owner decisions stay here.
