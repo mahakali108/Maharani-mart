@@ -71,7 +71,7 @@ describe('homepage navigation and profile', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Your next restock,beautifully simple.');
     expect(screen.queryByText('Delivery area')).toBeNull();
     expect(screen.queryByText('Shop location')).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Maharani Traders promotions' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Maha Bazar by Maharani promotions' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Shop by brand' })).toBeNull();
     expect(screen.getByText('No categories available yet')).toBeTruthy();
     expect(screen.getByText('Your cart is empty')).toBeTruthy();
@@ -155,7 +155,7 @@ describe('sticky header and bottom navigation', () => {
     render(<RetailerShell fullName="Fixture owner" role="retailer" cartCount={2} unreadCount={3} footerLinks={[]}><p>Content</p></RetailerShell>);
     const header = within(screen.getByRole('banner'));
     expect(screen.getByRole('main').getAttribute('tabindex')).toBe('-1');
-    expect(header.getByRole('link', { name: 'Maharani Traders home' }).getAttribute('href')).toBe('/retailer/home');
+    expect(header.getByRole('link', { name: 'Maha Bazar by Maharani home' }).getAttribute('href')).toBe('/retailer/home');
     expect(header.getByRole('link', { name: 'Notifications (3 unread)' }).getAttribute('href')).toBe('/retailer/notifications');
     expect(header.getByRole('link', { name: 'Cart (2 items)' }).getAttribute('href')).toBe('/retailer/cart');
     expect(header.getAllByRole('link', { name: 'Account' }).every((link) => link.getAttribute('href') === '/retailer/account')).toBe(true);

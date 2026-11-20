@@ -14,8 +14,8 @@ describe('PWA manifest (app/manifest.ts)', () => {
   const m = manifest();
 
   it('has the required installable fields', () => {
-    expect(m.name).toBe('Maharani Traders');
-    expect(m.short_name).toBe('Maharani Traders');
+    expect(m.name).toBe('Maha Bazar by Maharani');
+    expect(m.short_name).toBe('Maha Bazar');
     expect(m.display).toBe('standalone');
     expect(m.start_url).toBe('/');
     expect(m.scope).toBe('/');
@@ -142,7 +142,7 @@ describe('Offline fallback (public/offline.html)', () => {
   it('exists and is an honest connectivity screen (no fake data)', () => {
     const html = read('public/offline.html');
     // Required explicit offline statement.
-    expect(html).toContain('Maharani Traders is offline.');
+    expect(html).toContain('Maha Bazar by Maharani is offline.');
     const lower = html.toLowerCase();
     // It must not pretend to show any business data while offline.
     expect(lower).not.toContain('add to cart');
@@ -166,7 +166,7 @@ describe('Layout metadata wires up the PWA (app/layout.tsx)', () => {
 
   it('adds appleWebApp and applicationName metadata', () => {
     expect(layout).toContain('appleWebApp');
-    expect(layout).toContain("applicationName: 'Maharani Traders'");
+    expect(layout).toContain('applicationName: BRAND.name');
   });
 
   it('references the PWA favicon and apple-touch icon', () => {

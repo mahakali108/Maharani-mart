@@ -31,18 +31,12 @@ import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { coinBalancePaise, computeCoinPayment } from '@/lib/coins/math';
 import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
 import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
-import {
-  loadMarketplaceOfferQuotes,
-  resolveOfferUnitPricePaise,
-} from '@/lib/retailer/marketplace-offers';
 
 interface CartItemDetail {
   id: string;
   quantity: number;
   product_id: string;
   pack_id: string;
-  seller_offer_id: string | null;
-  source_type: 'maharani' | 'seller';
   product_packs: {
     pack_name: string;
     base_price: number;
@@ -93,7 +87,7 @@ export default async function CheckoutPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, product_id, pack_id, seller_offer_id, source_type, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, product_id, pack_id, product_packs ( pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -119,45 +113,30 @@ export default async function CheckoutPage() {
   if (items.length === 0) redirect('/retailer/cart');
 
   const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
-  const sellerOfferIds = items
-    .map((item) => item.seller_offer_id)
-    .filter((id): id is string => Boolean(id));
-  const [overrideByProduct, tierMap, marketplaceResult] = await Promise.all([
+  const [overrideByProduct, tierMap] = await Promise.all([
     getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null),
     loadPackTiers(supabase, items.map((item) => item.pack_id), user.id),
-    loadMarketplaceOfferQuotes(supabase, sellerOfferIds),
   ]);
-  const offerById = new Map(marketplaceResult.offers.map((offer) => [offer.offerId, offer]));
 
   const pricedLines = items.map((item) => {
     const pack = item.product_packs;
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
-    const marketplaceOffer = item.seller_offer_id ? offerById.get(item.seller_offer_id) : null;
-    const marketplaceLine = Boolean(item.seller_offer_id);
-    const moq = marketplaceOffer?.moq ?? (marketplaceLine ? 1 : pack?.moq ?? 1);
-    const marketplaceAvailable = !marketplaceLine || Boolean(
-      marketplaceOffer
-      && marketplaceOffer.inStock
-      && (marketplaceOffer.stockQuantity ?? 0) >= item.quantity
-    );
-    // Seller lines use only the approved offer's integer-paise piece rate.
-    // Maharani lines retain the same tier/override engine as the final quote.
+    const moq = pack?.moq ?? 1;
+    // The same tier/override engine as the authoritative final quote.
     const pricing = calculateRetailerPiecePrice({
       quantity: item.quantity,
       unitsPerCase: pack?.units_per_case ?? 1,
       casePrice: 0,
-      tiers: marketplaceLine ? [] : item.pack_id ? tierMap.get(item.pack_id) ?? [] : [],
+      tiers: item.pack_id ? tierMap.get(item.pack_id) ?? [] : [],
       gstPercent,
       moq,
-      derivedPiecePrice: marketplaceOffer
-        ? resolveOfferUnitPricePaise(marketplaceOffer, item.quantity) / 100
-        : pack
-          ? piecePriceFromCase(
-              resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null),
-              pack.units_per_case
-            )
-          : 0,
+      derivedPiecePrice: pack
+        ? piecePriceFromCase(
+            resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null),
+            pack.units_per_case
+          )
+        : 0,
     });
     // Effective per-piece rate actually charged.
     const unitPrice = pricing.unitPrice;
@@ -181,15 +160,10 @@ export default async function CheckoutPage() {
       piecePrice: pricing.unitPrice,
       unitsPerCase: pack?.units_per_case ?? 1,
       pieces: pricing.quantity,
-      orderable: pricing.orderable && marketplaceAvailable && Boolean(pack?.is_active) && Boolean(product?.is_active),
-      quantityMessage: marketplaceAvailable
-        ? pricing.message
-        : 'This seller offer no longer has enough stock or is no longer available.',
+      orderable: pricing.orderable && Boolean(pack?.is_active) && Boolean(product?.is_active),
+      quantityMessage: pricing.message,
       gstPercent,
       lineTotal: pricing.lineTotal,
-      sellerName: marketplaceOffer?.sellerBusinessName ?? null,
-      sellerGstin: marketplaceOffer?.sellerGstin ?? null,
-      fulfilmentType: marketplaceOffer?.fulfilmentType ?? null,
     };
     // Totals are summed after the map, in line order, rather than by
     // reassigning outer variables from inside the callback.
@@ -372,13 +346,6 @@ export default async function CheckoutPage() {
                       {line.packName} · {line.pieces} pc{line.pieces === 1 ? '' : 's'} × {formatInr(line.piecePrice)}/pc
                     </p>
                     <p className="mt-0.5 text-[10px] text-slate-400">GST {line.gstPercent}% included</p>
-                    {line.sellerName ? (
-                      <p className="mt-1 text-[10px] leading-4 text-slate-500">
-                        Sold by <span className="font-semibold text-slate-700">{line.sellerName}</span>
-                        {line.sellerGstin ? ` · GSTIN ${line.sellerGstin}` : ''}
-                        {' · '}{line.fulfilmentType === 'seller' ? 'Seller fulfilled' : 'Fulfilled by Maharani'}
-                      </p>
-                    ) : null}
                   </div>
                   <p className="shrink-0 text-sm font-bold text-slate-950">{formatInr(line.lineTotal)}</p>
                 </div>

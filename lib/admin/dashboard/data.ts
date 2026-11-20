@@ -266,22 +266,15 @@ export async function gatherDashboardData(
     trySection('business-operations', async (): Promise<SuperAdminBusinessOperations> => {
       const nowIso = new Date().toISOString();
       const [
-        totalSellers,
-        activeSellers,
-        pendingSellerApprovals,
-        pendingOfferReviews,
+        totalRetailers,
         pendingProductComplianceReviews,
         activeMembershipPlans,
         activeRetailerMemberships,
         activePublishedBanners,
-        activeSellerAds,
-        pendingSellerAds,
+        totalOrders,
         saAuditRes,
       ] = await Promise.all([
-        headCount(supabase.from('sellers' as never).select('id', { count: 'exact', head: true })).catch(() => 0),
-        headCount(supabase.from('sellers' as never).select('id', { count: 'exact', head: true }).eq('status', 'active')).catch(() => 0),
-        headCount(supabase.from('sellers' as never).select('id', { count: 'exact', head: true }).eq('status', 'pending')).catch(() => 0),
-        headCount(supabase.from('seller_offers' as never).select('id', { count: 'exact', head: true }).eq('moderation_status', 'pending')).catch(() => 0),
+        headCount(supabase.from('retailers' as never).select('id', { count: 'exact', head: true })).catch(() => 0),
         headCount(supabase.from('product_compliance_reviews' as never).select('id', { count: 'exact', head: true }).in('review_status', ['pending', 'submitted'])).catch(() => 0),
         headCount(supabase.from('membership_plans' as never).select('id', { count: 'exact', head: true }).eq('is_active', true)).catch(() => 0),
         headCount(
@@ -292,8 +285,7 @@ export async function gatherDashboardData(
             .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
         ).catch(() => 0),
         headCount(supabase.from('banners').select('id', { count: 'exact', head: true }).eq('status', 'published').eq('is_active', true)).catch(() => 0),
-        headCount(supabase.from('seller_ad_campaigns' as never).select('id', { count: 'exact', head: true }).eq('approval_status', 'approved').eq('is_active', true)).catch(() => 0),
-        headCount(supabase.from('seller_ad_campaigns' as never).select('id', { count: 'exact', head: true }).eq('approval_status', 'pending_approval')).catch(() => 0),
+        headCount(supabase.from('orders').select('id', { count: 'exact', head: true })).catch(() => 0),
         supabase
           .from('super_admin_audit_logs' as never)
           .select('id, action, reason, created_at')
@@ -319,16 +311,12 @@ export async function gatherDashboardData(
 
       return {
         status: 'ok',
-        totalSellers,
-        activeSellers,
-        pendingSellerApprovals,
-        pendingOfferReviews,
+        totalRetailers,
         pendingProductComplianceReviews,
         activeMembershipPlans,
         activeRetailerMemberships,
         activePublishedBanners,
-        activeSellerAds,
-        pendingSellerAds,
+        totalOrders,
         recentSuperAdminActivity,
       };
     }),
@@ -481,16 +469,12 @@ export async function gatherDashboardData(
       businessOps.status === 'unavailable'
         ? {
             status: 'unavailable',
-            totalSellers: 0,
-            activeSellers: 0,
-            pendingSellerApprovals: 0,
-            pendingOfferReviews: 0,
+            totalRetailers: 0,
             pendingProductComplianceReviews: 0,
             activeMembershipPlans: 0,
             activeRetailerMemberships: 0,
             activePublishedBanners: 0,
-            activeSellerAds: 0,
-            pendingSellerAds: 0,
+            totalOrders: 0,
             recentSuperAdminActivity: [],
           }
         : businessOps.value ?? undefined,

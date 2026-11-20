@@ -4,8 +4,9 @@ import { loadRetailerHome } from '@/lib/retailer/home-data';
 import { homeServices } from '@/lib/retailer/home-services';
 import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { HomeContent } from '@/components/retailer/home-content';
+import { BRAND } from '@/lib/brand';
 
-export const metadata = { title: 'Wholesale shopping | Maharani Traders' };
+export const metadata = { title: `Wholesale shopping | ${BRAND.name}` };
 
 export default async function RetailerHomePage() {
   const { user, retailer, areaName, profileUnavailable } = await getRetailerShoppingContext();

@@ -33,9 +33,9 @@ export default async function AdminWholesalePricingPage() {
           <Link href="/admin/pricing/schemes" className="text-primary-700 hover:underline">
             Trade schemes →
           </Link>
-          <Link href="/admin/offers" className="text-primary-700 hover:underline">
-            Offer price floors →
-          </Link>
+          {/* The "Offer price floors" link went with /admin/offers: floors only
+              bounded third-party seller pricing, which no longer exists. The
+              floor tables and history are preserved for audit. */}
         </div>
       </header>
 

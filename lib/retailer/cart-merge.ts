@@ -2,23 +2,22 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { validatePackForCart } from '@/lib/retailer/cart-validation';
-import { mutateRetailerCartLine, mutateRetailerCartLineEx } from '@/lib/retailer/cart-rpc';
+import { mutateRetailerCartLine } from '@/lib/retailer/cart-rpc';
 
 export interface CartMergeLine {
   packId: string;
   quantity: number;
-  /** Null/omitted is Maharani stock; a UUID preserves a marketplace offer. */
-  sellerOfferId?: string | null;
 }
 
 /**
- * Atomic, source-aware merge for the shared persistent retailer cart.
+ * Atomic merge for the shared persistent retailer cart.
  *
- * 0065 identifies a line by (pack, seller offer), so the same central-catalogue
- * pack can coexist as Maharani stock and as one or more seller offers. The RPC
- * owns activity, MOQ, stock, moderation, floor and compare-and-set checks.
- * Legacy Maharani adds retain their existing price-engine validation before the
- * write; marketplace prices are never inferred from the pack price.
+ * Maharani Traders runs a single, centrally-owned catalogue: a cart line is
+ * identified by its pack alone. Third-party seller offers were removed from the
+ * platform, so the source-aware variant (`mutate_retailer_cart_line_ex`, 0065)
+ * is no longer called here — every line is Maharani stock and goes through the
+ * original 4-argument RPC, which owns activity, MOQ, stock and compare-and-set
+ * checks inside the transaction.
  */
 export async function mergeLinesIntoCart(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -26,19 +25,12 @@ export async function mergeLinesIntoCart(
   lines: CartMergeLine[]
 ): Promise<void> {
   for (const line of lines) {
-    const sellerOfferId = line.sellerOfferId ?? null;
-    let query = supabase
+    const { data: existing, error: readError } = await supabase
       .from('cart_items')
-      .select('id, quantity, seller_offer_id')
+      .select('id, quantity')
       .eq('retailer_id', retailerId)
-      .eq('pack_id', line.packId);
-    if (sellerOfferId) {
-      query = query.eq('seller_offer_id' as never, sellerOfferId);
-    } else if (typeof (query as { is?: unknown }).is === 'function') {
-      query = query.is('seller_offer_id' as never, null);
-    }
-    const { data: existing, error: readError } = await query
-      .maybeSingle<{ id: string; quantity: number; seller_offer_id: string | null }>();
+      .eq('pack_id', line.packId)
+      .maybeSingle<{ id: string; quantity: number }>();
 
     if (readError) throw new Error('The cart could not be read. Please try again.');
     const expectedQuantity = existing?.quantity ?? 0;
@@ -47,25 +39,15 @@ export async function mergeLinesIntoCart(
       throw new Error('The combined quantity is too large. Review your cart.');
     }
 
-    if (!sellerOfferId) {
-      const validationError = await validatePackForCart(supabase, retailerId, line.packId, targetQuantity);
-      if (validationError) throw new Error(validationError);
-    }
+    const validationError = await validatePackForCart(supabase, retailerId, line.packId, targetQuantity);
+    if (validationError) throw new Error(validationError);
 
-    const { error } = sellerOfferId
-      ? await mutateRetailerCartLineEx(supabase, {
-          p_pack_id: line.packId,
-          p_seller_offer_id: sellerOfferId,
-          p_cart_item_id: null,
-          p_expected_quantity: expectedQuantity,
-          p_quantity: targetQuantity,
-        })
-      : await mutateRetailerCartLine(supabase, {
-          p_pack_id: line.packId,
-          p_cart_item_id: null,
-          p_expected_quantity: expectedQuantity,
-          p_quantity: targetQuantity,
-        });
+    const { error } = await mutateRetailerCartLine(supabase, {
+      p_pack_id: line.packId,
+      p_cart_item_id: null,
+      p_expected_quantity: expectedQuantity,
+      p_quantity: targetQuantity,
+    });
     if (error) {
       if (/CART_CHANGED/i.test(error.message)) {
         throw new Error('Your cart changed in another request. Refresh it and try again.');
@@ -73,10 +55,7 @@ export async function mergeLinesIntoCart(
       if (/minimum[ _]order[ _]quantity/i.test(error.message)) throw new Error(error.message);
       if (/INSUFFICIENT_STOCK/i.test(error.message)) {
         const available = error.message.match(/only\s+(\d+)\s+available/i)?.[1];
-        throw new Error(available ? `Only ${available} pieces are available from this seller.` : 'This seller does not have enough stock.');
-      }
-      if (/OFFER_UNAVAILABLE|PRICE_BELOW_FLOOR/i.test(error.message)) {
-        throw new Error('This seller offer is no longer available. Choose another offer.');
+        throw new Error(available ? `Only ${available} pieces are available.` : 'There is not enough stock for that quantity.');
       }
       if (/PACK_UNAVAILABLE/i.test(error.message)) throw new Error('This pack is no longer available.');
       throw new Error('The cart could not be updated. Review your cart and try again.');

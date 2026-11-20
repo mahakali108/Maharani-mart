@@ -6,7 +6,6 @@ import { calculateRetailerPiecePrice } from '@/lib/retailer/retailer-pricing';
 import { loadPackTiers } from '@/lib/retailer/pricing-data';
 import type { PricingTier } from '@/lib/retailer/case-pricing';
 import { roundMoney } from '@/lib/orders/credit';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import type { CouponCartLine } from './types';
 
 export interface CartCouponLinesResult {
@@ -23,7 +22,6 @@ export interface CartCouponLinesResult {
 interface CartRow {
   product_id: string;
   pack_id: string;
-  seller_offer_id: string | null;
   quantity: number;
   product_packs: {
     id: string;
@@ -58,7 +56,7 @@ export async function loadCartCouponLines(
   const { data, error } = await supabase
     .from('cart_items')
     .select(
-      'product_id, pack_id, seller_offer_id, quantity, product_packs ( id, base_price, ptr, case_price, units_per_case, moq, is_active ), products ( id, name, category_id, brand_id, gst_percent, is_active )'
+      'product_id, pack_id, quantity, product_packs ( id, base_price, ptr, case_price, units_per_case, moq, is_active ), products ( id, name, category_id, brand_id, gst_percent, is_active )'
     )
     .eq('retailer_id', retailerId);
   if (error) return { lines: [], subtotal: 0, error: true };
@@ -71,14 +69,7 @@ export async function loadCartCouponLines(
 
   let overrides: Map<string, number | null>;
   let tierMap: Map<string, PricingTier[]>;
-  let offerById = new Map<string, Awaited<ReturnType<typeof loadMarketplaceOfferQuotes>>['offers'][number]>();
   try {
-    const marketplace = await loadMarketplaceOfferQuotes(
-      supabase,
-      rows.map((row) => row.seller_offer_id).filter((id): id is string => Boolean(id))
-    );
-    if (marketplace.error) return { lines: [], subtotal: 0, error: true };
-    offerById = new Map(marketplace.offers.map((offer) => [offer.offerId, offer]));
     [overrides, tierMap] = await Promise.all([
       getProductPriceOverrides(supabase, productIds, retailerId, areaId),
       loadPackTiers(supabase, packIds, retailerId),
@@ -93,22 +84,14 @@ export async function loadCartCouponLines(
     const product = row.products;
     if (!pack?.is_active || !product?.is_active) continue;
 
-    const marketplaceOffer = row.seller_offer_id ? offerById.get(row.seller_offer_id) : null;
-    if (row.seller_offer_id && (
-      !marketplaceOffer
-      || !marketplaceOffer.inStock
-      || (marketplaceOffer.stockQuantity ?? 0) < row.quantity
-    )) continue;
-    const marketplaceLine = Boolean(row.seller_offer_id);
-    const casePrice = marketplaceLine ? 0 : resolvePackPrice(pack, overrides.get(product.id) ?? null);
+    const casePrice = resolvePackPrice(pack, overrides.get(product.id) ?? null);
     const pricing = calculateRetailerPiecePrice({
       quantity: row.quantity,
       unitsPerCase: pack.units_per_case,
       casePrice,
-      tiers: marketplaceLine ? [] : tierMap.get(pack.id) ?? [],
+      tiers: tierMap.get(pack.id) ?? [],
       gstPercent: product.gst_percent,
-      moq: marketplaceOffer?.moq ?? pack.moq,
-      derivedPiecePrice: marketplaceOffer ? marketplaceOffer.unitPricePaise / 100 : undefined,
+      moq: pack.moq,
     });
 
     // Only lines the order engine would actually bill count toward a coupon.

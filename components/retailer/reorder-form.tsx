@@ -15,11 +15,9 @@ import { Input } from '@/components/ui/input';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 
 export interface ReorderLineInput {
-  /** Stable source-aware identity; the same pack may appear from two sellers. */
+  /** Stable line identity for this reorder screen. */
   lineKey: string;
   packId: string;
-  sellerOfferId: string | null;
-  sellerName: string | null;
   productName: string;
   packName: string;
   imageUrl?: string;
@@ -119,7 +117,6 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
         orderId,
         selected.map((line) => ({
           packId: line.packId,
-          sellerOfferId: line.sellerOfferId,
           quantity: Math.max(line.moq, state[line.lineKey]?.quantity ?? line.moq),
         }))
       );
@@ -182,9 +179,6 @@ export function ReorderForm({ orderId, lines }: { orderId: string; lines: Reorde
                   {line.packName} · ₹{pricing.unitPrice.toFixed(2)}/pc ·{' '}
                   {line.gstPercent}% GST included
                 </p>
-                {line.sellerName ? (
-                  <p className="text-[11px] font-semibold text-ink-500">Sold by {line.sellerName}</p>
-                ) : null}
                 <p className="text-xs text-ink-400">
                   Previously {formatQuantitySummary({ ...summarizeQuantityRows([]), pieces: line.previousQuantity })} · MOQ
                   now {line.moq} pcs

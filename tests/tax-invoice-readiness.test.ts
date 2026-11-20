@@ -67,3 +67,38 @@ describe('tax-invoice publication guard', () => {
     }
   });
 });
+
+describe('issuer identity must be the proprietorship, not the brand', () => {
+  it('refuses a tax invoice issued under the brand name alone', () => {
+    // The owner confirmed the AJAY GENERAL proprietorship is the invoice issuer
+    // and MAHARANI TRADERS is the brand it trades under. A brand is not a legal
+    // entity, so it cannot appear on a tax document by itself.
+    for (const brandOnly of ['Maharani Traders', 'Maha Bazar by Maharani', 'MAHARANI']) {
+      const readiness = getTaxInvoiceReadiness({
+        hasMarketplaceSellerLine: false,
+        environment: { ...configuredEnvironment, COMPANY_NAME: brandOnly },
+      });
+      expect(readiness.ready, brandOnly).toBe(false);
+      expect(readiness.ready ? null : readiness.reason, brandOnly).toBe('issuer_identity_unapproved');
+    }
+  });
+
+  it('accepts the proprietorship, with or without the brand alongside it', () => {
+    for (const approved of ['Ajay General', 'AJAY GENERAL (Proprietor)', 'Ajay General, trading as Maharani Traders']) {
+      const readiness = getTaxInvoiceReadiness({
+        hasMarketplaceSellerLine: false,
+        environment: { ...configuredEnvironment, COMPANY_NAME: approved },
+      });
+      expect(readiness.ready, approved).toBe(true);
+    }
+  });
+
+  it('never invents an issuer identity when none is configured', () => {
+    const readiness = getTaxInvoiceReadiness({
+      hasMarketplaceSellerLine: false,
+      environment: { ...configuredEnvironment, COMPANY_NAME: '', COMPANY_GSTIN: '' },
+    });
+    expect(readiness.ready).toBe(false);
+    expect(readiness.ready ? null : readiness.reason).toBe('issuer_details_missing');
+  });
+});

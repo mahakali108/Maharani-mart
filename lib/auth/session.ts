@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import type { UserRole } from '@/lib/auth/roles';
+import { isRetiredRole, isSupportedRole, type UserRole } from '@/lib/auth/roles';
 
 export interface CurrentUser {
   id: string;
@@ -10,7 +10,8 @@ export interface CurrentUser {
 }
 
 interface ProfileRow {
-  role: UserRole;
+  /** Plain string: a historical row may still hold the retired `seller` role. */
+  role: string;
   full_name: string;
   is_active: boolean;
 }
@@ -27,6 +28,7 @@ interface RetailerStatusRow {
  * valid after suspension until it expires), so this check must not depend
  * on middleware having run:
  *
+ *   - retired role (profiles.role = 'seller')       → /login?error=role_retired
  *   - deactivated profile (profiles.is_active = false) → /login?error=account_inactive
  *   - retailer without an approved retailers row:
  *       suspended            → /login?error=account_suspended
@@ -60,6 +62,18 @@ export async function requireUser(): Promise<CurrentUser> {
     redirect('/login?error=account_inactive');
   }
 
+  // Seller/Supplier removal: a retired role is refused here as well, because a
+  // Server Action or route handler can be invoked without middleware running.
+  // `redirect()` throws, so no protected code below executes for such a user.
+  if (isRetiredRole(profile!.role)) {
+    await supabase.auth.signOut();
+    redirect('/login?error=role_retired');
+  }
+  if (!isSupportedRole(profile!.role)) {
+    await supabase.auth.signOut();
+    redirect('/login?error=account_inactive');
+  }
+
   if (profile!.role === 'retailer') {
     const { data: retailer } = await supabase
       .from('retailers')
@@ -79,6 +93,6 @@ export async function requireUser(): Promise<CurrentUser> {
     id: user!.id,
     email: user!.email ?? null,
     fullName: profile!.full_name,
-    role: profile!.role,
+    role: profile!.role as UserRole,
   };
 }

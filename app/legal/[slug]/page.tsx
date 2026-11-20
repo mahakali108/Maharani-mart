@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ManagedPageView, UnavailablePage, UnreadablePage, informationNav } from '@/components/legal/managed-page';
 import { loadPublishedPage, loadPublishedPages } from '@/lib/site-content/queries';
+import { BRAND } from '@/lib/brand';
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -22,10 +23,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const page = await loadPublishedPage(slug);
   if (page.state !== 'published') {
-    return { title: 'Policy — Maharani Traders', robots: { index: false, follow: false } };
+    return { title: `Policy — ${BRAND.name}`, robots: { index: false, follow: false } };
   }
   return {
-    title: `${page.page.title} — Maharani Traders`,
+    title: `${page.page.title} — ${BRAND.name}`,
     description: page.page.meta_description ?? page.page.intro,
   };
 }

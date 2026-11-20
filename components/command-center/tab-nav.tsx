@@ -11,7 +11,7 @@ const TABS: { id: CommandCenterTab; label: string }[] = [
   { id: 'credit', label: 'Credit & Risk' },
   { id: 'retailers', label: 'Retailers' },
   { id: 'salesmen', label: 'Salesmen' },
-  { id: 'suppliers', label: 'Suppliers' },
+  { id: 'suppliers', label: 'Purchases & GRN' },
   { id: 'security', label: 'Security & Audit' },
   { id: 'copilot', label: 'AI Copilot' },
 ];

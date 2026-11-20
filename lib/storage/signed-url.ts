@@ -16,7 +16,6 @@ import { createClient } from '@/lib/supabase/server';
  */
 export type PrivateBucket =
   | 'retailer-documents'
-  | 'supplier-documents'
   | 'delivery-proofs'
   | 'payment-proofs'
   | 'banner-drafts';

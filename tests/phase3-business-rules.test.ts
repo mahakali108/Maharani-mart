@@ -1,34 +1,21 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  DEFAULT_GLOBAL_WHOLESALE_RULES,
   calculateDiscountPercent,
-  computeEffectiveWholesaleLimits,
   exceedsDiscountCap,
   mapWholesalePricingDbError,
   validateGlobalWholesaleInput,
   validateProductLimitInput,
-  validateSellerOfferAgainstLimits,
-  validateSellerPermissionInput,
-  validateSellerSlabAgainstLimits,
 } from '@/lib/admin/wholesale-pricing-rules';
 import {
   computeMembershipOrderDiscountPaise,
   evaluateMembershipBenefits,
   validateMembershipPlanConfigInput,
 } from '@/lib/membership/rules';
-import {
-  isSafeCampaignDestinationUrl,
-  isSafeCampaignUrl,
-  mapAdCampaignDbError,
-  validateAdCampaignProposalInput,
-  validateAdProgramRulesInput,
-} from '@/lib/admin/ad-campaign-rules';
 
 const mocks = vi.hoisted(() => ({
   requireSuperAdmin: vi.fn(),
   requirePermission: vi.fn(),
-  requireActiveSeller: vi.fn(),
   createClient: vi.fn(),
   revalidatePath: vi.fn(),
 }));
@@ -42,156 +29,58 @@ vi.mock('@/lib/admin/guard', () => ({
   requirePermission: mocks.requirePermission,
   requirePagePermission: mocks.requirePermission,
 }));
-vi.mock('@/lib/seller/guard', () => ({
-  requireActiveSeller: mocks.requireActiveSeller,
-  requireSeller: mocks.requireActiveSeller,
-}));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: mocks.createClient,
   createServiceRoleClient: vi.fn(),
 }));
 
-import { removeProhibitedOfferAction } from '@/lib/admin/offer-actions';
 import { markPackOutOfStockAction } from '@/lib/admin/products-actions';
-import {
-  updateGlobalWholesaleRulesAction,
-  upsertSellerPricingPermissionAction,
-} from '@/lib/admin/wholesale-pricing-actions';
+import { updateGlobalWholesaleRulesAction } from '@/lib/admin/wholesale-pricing-actions';
 import {
   reviewMembershipUpgradeRequestAction,
   updateMembershipPlanConfigAction,
 } from '@/lib/admin/membership-actions';
-import {
-  moderateSellerAdCampaignAction,
-  submitSellerAdCampaignAction,
-} from '@/lib/admin/ad-campaign-actions';
 
 const UUID_1 = '11111111-1111-4111-8111-111111111111';
 const UUID_2 = '22222222-2222-4222-8222-222222222222';
 const UUID_3 = '33333333-3333-4333-8333-333333333333';
 
-describe('Phase 3 — Wholesale pricing rules engine', () => {
-  it('composes tightest effective limits across global, seller, and pack rules', () => {
-    const limits = computeEffectiveWholesaleLimits(
-      { default_min_order_qty: 2, max_discount_percent: 25, allow_seller_custom_slabs: true },
-      { can_set_custom_slabs: true, can_apply_discounts: true, max_discount_percent: 15, min_moq_override: 6 },
-      { min_order_qty: 10, max_discount_percent: 12, allow_seller_slabs: false }
-    );
-    expect(limits).toEqual({
-      minMoq: 10,
-      maxDiscountPercent: 12,
+describe('Phase 3 — Wholesale pricing rules engine (centrally-owned catalogue)', () => {
+  it('validates global and pack-level rule bounds and maps DB error codes', () => {
+    const validGlobal = validateGlobalWholesaleInput({
+      defaultMinOrderQty: 6,
+      maxDiscountPercent: 20,
       allowSellerCustomSlabs: false,
+      allowSellerPriceOverride: false,
+      enforcePackFloor: true,
+      minOrderValueRupees: 500,
     });
-  });
+    expect(validGlobal.ok).toBe(true);
 
-  it('drops max discount to 0% when seller cannot apply discounts', () => {
-    const limits = computeEffectiveWholesaleLimits(DEFAULT_GLOBAL_WHOLESALE_RULES, {
-      can_set_custom_slabs: true,
-      can_apply_discounts: false,
-      max_discount_percent: 20,
-      min_moq_override: null,
+    const badDiscount = validateGlobalWholesaleInput({
+      defaultMinOrderQty: 6,
+      maxDiscountPercent: 140,
+      allowSellerCustomSlabs: false,
+      allowSellerPriceOverride: false,
+      enforcePackFloor: true,
+      minOrderValueRupees: 500,
     });
-    expect(limits.maxDiscountPercent).toBe(0);
-  });
+    expect(badDiscount.ok).toBe(false);
 
-  it('blocks offers below MOQ or above Super Admin discount cap', () => {
-    const limits = { minMoq: 5, maxDiscountPercent: 15, allowSellerCustomSlabs: true };
-    const lowMoq = validateSellerOfferAgainstLimits(
-      { basePricePaise: 10000, unitPricePaise: 9000, moq: 3 },
-      limits
-    );
-    expect(lowMoq.ok).toBe(false);
-    if (!lowMoq.ok) expect(lowMoq.code).toBe('MOQ_BELOW_SUPER_ADMIN_MINIMUM');
+    const validPackLimit = validateProductLimitInput({
+      packId: '11111111-1111-4111-8111-111111111111',
+      minOrderQty: 10,
+      maxDiscountPercent: 12,
+      allowSellerSlabs: true,
+      notes: 'Festive slab',
+    }, 20);
+    expect(validPackLimit.ok).toBe(true);
 
-    const overDiscount = validateSellerOfferAgainstLimits(
-      { basePricePaise: 10000, unitPricePaise: 7000, moq: 5 },
-      limits
-    );
-    expect(overDiscount.ok).toBe(false);
-    if (!overDiscount.ok) expect(overDiscount.code).toBe('DISCOUNT_EXCEEDS_MAX_LIMIT');
-
-    const okOffer = validateSellerOfferAgainstLimits(
-      { basePricePaise: 10000, unitPricePaise: 8500, moq: 5 },
-      limits
-    );
-    expect(okOffer.ok).toBe(true);
-  });
-
-  it('blocks custom slabs when disabled or exceeding discount limit', () => {
-    const disabled = validateSellerSlabAgainstLimits(
-      { offerUnitPricePaise: 10000, offerMoq: 5, slabMinQuantity: 10, slabUnitPricePaise: 9500 },
-      { minMoq: 5, maxDiscountPercent: 15, allowSellerCustomSlabs: false }
-    );
-    expect(disabled.ok).toBe(false);
-    if (!disabled.ok) expect(disabled.code).toBe('SELLER_CUSTOM_SLABS_NOT_ALLOWED');
-
-    const overCap = validateSellerSlabAgainstLimits(
-      { offerUnitPricePaise: 10000, offerMoq: 5, slabMinQuantity: 20, slabUnitPricePaise: 7500 },
-      { minMoq: 5, maxDiscountPercent: 15, allowSellerCustomSlabs: true }
-    );
-    expect(overCap.ok).toBe(false);
-    if (!overCap.ok) expect(overCap.code).toBe('DISCOUNT_EXCEEDS_MAX_LIMIT');
-
-    // Blocks compounded offer + slab discount exceeding pack base price cap
-    const compounded = validateSellerSlabAgainstLimits(
-      {
-        packBasePricePaise: 10000,
-        offerUnitPricePaise: 8500, // 15% off pack
-        offerMoq: 5,
-        slabMinQuantity: 20,
-        slabUnitPricePaise: 7500, // 11.76% off offer, but 25% off pack (>15%)
-      },
-      { minMoq: 5, maxDiscountPercent: 15, allowSellerCustomSlabs: true }
-    );
-    expect(compounded.ok).toBe(false);
-    if (!compounded.ok) expect(compounded.code).toBe('DISCOUNT_EXCEEDS_MAX_LIMIT');
-
-    // Exact rational ceiling: 10.0033% (26999/30000) must NOT slip past a 10% cap via 2-decimal rounding
-    expect(exceedsDiscountCap(30000, 26999, 10)).toBe(true);
-    expect(exceedsDiscountCap(30000, 27000, 10)).toBe(false);
-    const offByOnePaise = validateSellerOfferAgainstLimits(
-      { basePricePaise: 30000, unitPricePaise: 26999, moq: 5 },
-      { minMoq: 5, maxDiscountPercent: 10, allowSellerCustomSlabs: true }
-    );
-    expect(offByOnePaise.ok).toBe(false);
-  });
-
-  it('validates global, seller, and pack rule bounds and maps DB error codes', () => {
-    expect(calculateDiscountPercent(10000, 8250)).toBe(17.5);
-    expect(
-      validateGlobalWholesaleInput({
-        defaultMinOrderQty: 0,
-        maxDiscountPercent: 10,
-        minOrderValueRupees: 0,
-        allowSellerCustomSlabs: true,
-        allowSellerPriceOverride: false,
-        enforcePackFloor: true,
-      }).ok
-    ).toBe(false);
-
-    expect(
-      validateSellerPermissionInput(
-        {
-          sellerId: UUID_1,
-          canSetCustomSlabs: true,
-          canApplyDiscounts: true,
-          maxDiscountPercent: 30,
-          minMoqOverride: null,
-        },
-        20
-      ).ok
-    ).toBe(false);
-
-    expect(
-      validateProductLimitInput(
-        { packId: UUID_2, minOrderQty: 5, maxDiscountPercent: 25, allowSellerSlabs: true },
-        15
-      ).ok
-    ).toBe(false);
-
-    expect(mapWholesalePricingDbError('DISCOUNT_EXCEEDS_MAX_LIMIT: foo')).toContain('exceeds');
-    expect(mapWholesalePricingDbError('MOQ_BELOW_SUPER_ADMIN_MINIMUM: bar')).toContain('minimum');
-    expect(mapWholesalePricingDbError('SELLER_CUSTOM_SLABS_NOT_ALLOWED: baz')).toContain('disabled');
+    expect(calculateDiscountPercent(10000, 8500)).toBe(15);
+    expect(exceedsDiscountCap(10000, 8000, 10)).toBe(true);
+    expect(exceedsDiscountCap(10000, 9500, 10)).toBe(false);
+    expect(mapWholesalePricingDbError('DISCOUNT_EXCEEDS_GLOBAL_LIMIT')).toContain('Super Admin');
+    expect(mapWholesalePricingDbError('SOMETHING_ELSE')).toBeNull();
   });
 });
 
@@ -312,77 +201,14 @@ describe('Phase 3 — Retailer membership rules & immediate expiry stop', () => 
   });
 });
 
-describe('Phase 3 — Paid seller ad campaign validation', () => {
-  it('rejects unsafe URLs, unauthorized external destination links, HTML copy, and invalid windows', () => {
-    expect(isSafeCampaignUrl('javascript:alert(1)')).toBe(false);
-    expect(isSafeCampaignUrl('data:image/svg+xml,<svg/>')).toBe(false);
-    expect(isSafeCampaignUrl('http://insecure.example/ad.png')).toBe(false);
-    expect(isSafeCampaignUrl('//evil.example/ad.png')).toBe(false);
-    expect(isSafeCampaignUrl('https://user:pass@evil.example/ad.png')).toBe(false);
-    expect(isSafeCampaignUrl('/banners/../secrets.png')).toBe(false);
-    expect(isSafeCampaignUrl('https://cdn.maharani.example/banner.png')).toBe(true);
-    expect(isSafeCampaignUrl('/retailer/catalog')).toBe(true);
-
-    // Destination links must be strictly internal /retailer storefront routes
-    expect(isSafeCampaignDestinationUrl('/retailer')).toBe(true);
-    expect(isSafeCampaignDestinationUrl('/retailer/catalog')).toBe(true);
-    expect(isSafeCampaignDestinationUrl('/retailer/catalog?category=cosmetics')).toBe(true);
-    expect(isSafeCampaignDestinationUrl('https://phishing.evil/login')).toBe(false);
-    expect(isSafeCampaignDestinationUrl('//phishing.evil/login')).toBe(false);
-    expect(isSafeCampaignDestinationUrl('/admin/dashboard')).toBe(false);
-    expect(isSafeCampaignDestinationUrl('/api/orders')).toBe(false);
-    expect(isSafeCampaignDestinationUrl('/retailer/../admin')).toBe(false);
-
-    const externalDest = validateAdCampaignProposalInput({
-      title: 'Diwali Promo',
-      artworkUrl: 'https://cdn.example.com/ad.png',
-      destinationUrl: 'https://phishing.evil/steal',
-      placement: 'homepage_strip',
-      startsAt: '2026-12-01T10:00:00Z',
-      endsAt: '2026-12-09T10:00:00Z',
-      budgetRupees: 5000,
-    });
-    expect(externalDest.ok).toBe(false);
-
-    const htmlTitle = validateAdCampaignProposalInput({
-      title: '<script>alert(1)</script>',
-      artworkUrl: 'https://cdn.example.com/ad.png',
-      destinationUrl: '/retailer/catalog',
-      placement: 'homepage_strip',
-      startsAt: '2026-12-01T10:00:00Z',
-      endsAt: '2026-12-09T10:00:00Z',
-      budgetRupees: 5000,
-    });
-    expect(htmlTitle.ok).toBe(false);
-
-    const badWindow = validateAdCampaignProposalInput({
-      title: 'Diwali Promo',
-      artworkUrl: 'https://cdn.example.com/ad.png',
-      placement: 'homepage_strip',
-      startsAt: '2026-12-10T10:00:00Z',
-      endsAt: '2026-12-09T10:00:00Z',
-      budgetRupees: 5000,
-    });
-    expect(badWindow.ok).toBe(false);
-
-    expect(
-      validateAdProgramRulesInput({ maxActivePerPlacement: 0, allowedPlacements: ['homepage_hero'] }).ok
-    ).toBe(false);
-    expect(mapAdCampaignDbError('SELLER_ADS_DISABLED: blocked')).toContain('owner approval');
-  });
-});
-
 describe('Phase 3 — Server Action authorization & validation boundaries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('rejects non-Super Admin callers on prohibited offer removal, wholesale rules, membership, and ad moderation', async () => {
+  it('rejects non-Super Admin callers on wholesale rules and membership controls', async () => {
     mocks.requireSuperAdmin.mockRejectedValue(new Error('Super Admin authorization required.'));
 
-    await expect(removeProhibitedOfferAction(UUID_1, 'Counterfeit brand claim')).rejects.toThrow(
-      'Super Admin authorization required.'
-    );
     await expect(updateGlobalWholesaleRulesAction(new FormData())).rejects.toThrow(
       'Super Admin authorization required.'
     );
@@ -391,40 +217,6 @@ describe('Phase 3 — Server Action authorization & validation boundaries', () =
     );
     await expect(reviewMembershipUpgradeRequestAction(UUID_1, 'rejected', 'Not eligible')).rejects.toThrow(
       'Super Admin authorization required.'
-    );
-    await expect(moderateSellerAdCampaignAction(UUID_1, 'approved')).rejects.toThrow(
-      'Super Admin authorization required.'
-    );
-  });
-
-  it('enforces mandatory policy reason on removeProhibitedOfferAction and logs Super Admin audit', async () => {
-    mocks.requireSuperAdmin.mockResolvedValue({ id: UUID_3, role: 'super_admin' });
-    const shortRes = await removeProhibitedOfferAction(UUID_1, 'bad');
-    expect(shortRes.ok).toBe(false);
-
-    const auditInsert = vi.fn().mockResolvedValue({ error: null });
-    const selectMock = vi.fn().mockResolvedValue({
-      data: [{ id: UUID_1, seller_id: UUID_2, pack_id: UUID_3 }],
-      error: null,
-    });
-    mocks.createClient.mockResolvedValue({
-      from: (table: string) => {
-        if (table === 'super_admin_audit_logs') return { insert: auditInsert };
-        return {
-          update: () => ({
-            eq: () => ({ select: selectMock }),
-          }),
-        };
-      },
-    });
-
-    const okRes = await removeProhibitedOfferAction(UUID_1, 'Unlicensed medical claim prohibited under policy');
-    expect(okRes.ok).toBe(true);
-    expect(auditInsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actor_id: UUID_3,
-        action: 'OFFER_REMOVED_PROHIBITED',
-      })
     );
   });
 
@@ -458,42 +250,27 @@ describe('Phase 3 — Server Action authorization & validation boundaries', () =
       p_quantity: 0,
     });
   });
-
-  it('rejects seller pricing permission exceeding global cap and rejects inactive sellers submitting ads', async () => {
-    mocks.requireSuperAdmin.mockResolvedValue({ id: UUID_3, role: 'super_admin' });
-    mocks.createClient.mockResolvedValue({
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: { max_discount_percent: 15 } }),
-          }),
-        }),
-      }),
-    });
-
-    const fd = new FormData();
-    fd.set('sellerId', UUID_1);
-    fd.set('maxDiscountPercent', '25');
-    fd.set('canSetCustomSlabs', 'on');
-    fd.set('canApplyDiscounts', 'on');
-    const res = await upsertSellerPricingPermissionAction(fd);
-    expect(res.ok).toBe(false);
-
-    mocks.requireActiveSeller.mockRejectedValue(
-      new Error('Your seller account must be approved and active to perform this action.')
-    );
-    await expect(submitSellerAdCampaignAction(new FormData())).rejects.toThrow('approved and active');
-  });
 });
 
 describe('Phase 3 — Page guard & no-fake-stats contract verification', () => {
-  it('guards every new Super Admin, Admin, and Seller page cleanly', () => {
+  it('guards every surviving Super Admin page cleanly, and the retired seller pages no longer exist', () => {
     expect(readFileSync('app/admin/pricing/wholesale/page.tsx', 'utf8')).toContain('requireSuperAdminPage()');
     expect(readFileSync('app/admin/memberships/page.tsx', 'utf8')).toContain('requireSuperAdminPage()');
-    expect(readFileSync('app/admin/banners/campaigns/page.tsx', 'utf8')).toContain('requireSuperAdminPage()');
     expect(readFileSync('app/admin/pricing/page.tsx', 'utf8')).toContain("requirePagePermission('pricing.manage')");
     expect(readFileSync('app/admin/banners/page.tsx', 'utf8')).toContain("requirePagePermission('banners.manage')");
-    expect(readFileSync('app/seller/campaigns/page.tsx', 'utf8')).toContain('requireSellerPage()');
+    // Seller portal, seller ad campaigns, seller offers and marketplace launch
+    // were removed with the marketplace: there is no page left to guard.
+    for (const retired of [
+      'app/seller',
+      'app/register-seller',
+      'app/register-supplier',
+      'app/admin/sellers',
+      'app/admin/offers',
+      'app/admin/banners/campaigns',
+      'app/admin/marketplace-launch',
+    ]) {
+      expect(existsSync(retired), `${retired} must not exist`).toBe(false);
+    }
   });
 
   it('keeps live payment collection disabled in Phase 3 modules', () => {

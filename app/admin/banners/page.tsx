@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import Image from 'next/image';
 import { Image as ImageIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -50,12 +49,6 @@ export default async function BannersPage() {
             Promotional banners shown at the top of the retailer home screen.
           </p>
         </div>
-        <Link
-          href="/admin/banners/campaigns"
-          className="text-sm font-medium text-primary-700 hover:underline"
-        >
-          Paid Seller Ad Campaigns (Super Admin) →
-        </Link>
       </div>
 
       {bannerError ? (

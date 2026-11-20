@@ -825,3 +825,58 @@ describe('0056 caller-owned cart mutation', () => {
     expect(fetched.rows).toEqual([{ pack_id: pack.packId, quantity: 6 }]);
   });
 });
+
+/**
+ * CHECKOUT IS PACK-ONLY AT THE DATABASE (migration 0110, block 11).
+ *
+ * The retired marketplace leaves `seller_offer_id` columns behind for historical
+ * rows, and the RPC body keeps those branches so old rows still replay. What must
+ * be impossible is a NEW order carrying a third-party line. The application
+ * choosing not to send the field is not a boundary — this refuses it in Postgres.
+ */
+describe('create_order_atomic refuses any retired seller-offer line', () => {
+  it('rejects an order whose line carries a seller_offer_id, even a valid one', async () => {
+    // Any seller-offer id is enough: the point is that the retirement guard runs
+    // BEFORE the offer is looked up, so the caller is told the marketplace is gone
+    // rather than being told an offer is missing. Using an id that cannot exist
+    // makes that ordering explicit.
+    const offerId = randomUUID();
+
+    await setCart(2);
+    const input = orderInput(2);
+    const error = await atomicError({
+      ...input,
+      p_order_items: [{ ...input.p_order_items[0]!, seller_offer_id: offerId } as never],
+    });
+
+    expect(error).toMatch(/SELLER_OFFERS_RETIRED/);
+
+    // Nothing was written for THIS request: no order carries its request key, and
+    // the cart was not cleared. (Earlier tests in this file leave orders behind,
+    // so the assertion is scoped to the request rather than to the retailer.)
+    const { rows: orders } = await db.query<{ n: string }>(
+      `select count(*)::text as n from orders where retailer_id = $1 and request_key = $2`,
+      [retailer.id, input.p_request_key]);
+    expect(orders[0]!.n).toBe('0');
+    expect(await cartQuantity()).toBe(2);
+  });
+
+  it('still accepts an ordinary own-stock pack line in the same setup', async () => {
+    await setCart(2);
+    const { rows } = await callAtomic(orderInput(2));
+    expect(rows[0]!.result.id).toBeTruthy();
+    expect(rows[0]!.result.replayed).toBe(false);
+  });
+
+  it('replays an existing order untouched even though a replay carries its old lines', async () => {
+    // The replay path resolves on the request key BEFORE the pack-only guard, so a
+    // historical request that already produced an order still returns that order
+    // instead of failing. This is what keeps old order history readable.
+    await setCart(2);
+    const input = orderInput(2);
+    const first = await callAtomic(input);
+    const second = await callAtomic(input);
+    expect(second.rows[0]!.result.id).toBe(first.rows[0]!.result.id);
+    expect(second.rows[0]!.result.replayed).toBe(true);
+  });
+});

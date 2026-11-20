@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, ShoppingBasket } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { SavedCartList, type SavedCartView } from '@/components/retailer/saved-cart-list';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
+import { BRAND } from '@/lib/brand';
 
 interface SavedCartRow {
   id: string;
@@ -15,7 +15,6 @@ interface SavedCartItemRow {
   id: string;
   saved_cart_id: string;
   quantity: number;
-  seller_offer_id: string | null;
   products: {
     name: string;
     brands: { name: string } | null;
@@ -24,7 +23,7 @@ interface SavedCartItemRow {
   product_packs: { pack_name: string } | null;
 }
 
-export const metadata = { title: 'Saved carts — Maharani Traders' };
+export const metadata = { title: `Saved carts — ${BRAND.name}` };
 
 export default async function SavedCartsPage() {
   const user = await requireUser();
@@ -38,18 +37,12 @@ export default async function SavedCartsPage() {
       .order('updated_at', { ascending: false }),
     supabase
       .from('retailer_saved_cart_items')
-      .select('id, pack_id, seller_offer_id, source_type, quantity, products ( name, brands ( name ), product_images ( image_url, sort_order ) ), product_packs ( pack_name )')
+      .select('id, pack_id, quantity, products ( name, brands ( name ), product_images ( image_url, sort_order ) ), product_packs ( pack_name )')
       .eq('retailer_id', user.id),
   ]);
 
   const carts = ((cartRows ?? []) as unknown as SavedCartRow[]).filter((row) => row.id);
   const items = ((itemRows ?? []) as unknown as SavedCartItemRow[]).filter((row) => row.id);
-  const marketplace = await loadMarketplaceOfferQuotes(
-    supabase,
-    items.map((item) => item.seller_offer_id).filter((id): id is string => Boolean(id))
-  );
-  const offerById = new Map(marketplace.offers.map((offer) => [offer.offerId, offer]));
-
   const itemsByCart = new Map<string, SavedCartView['items']>();
   for (const item of items) {
     const list = itemsByCart.get(item.saved_cart_id) ?? [];
@@ -60,9 +53,6 @@ export default async function SavedCartsPage() {
       packName: item.product_packs?.pack_name ?? '',
       brandName: item.products?.brands?.name ?? null,
       imageUrl: null,
-      sellerName: item.seller_offer_id
-        ? offerById.get(item.seller_offer_id)?.sellerBusinessName ?? 'Unavailable seller offer'
-        : null,
     });
     itemsByCart.set(item.saved_cart_id, list);
   }

@@ -293,7 +293,7 @@ export default async function CompliancePage() {
         </CardHeader>
         <ul className="list-disc space-y-1 pl-5 text-xs text-ink-600">
           <li>Membership-based checkout discounts: removed (no membership discount is applied at checkout).</li>
-          <li>Seller-funded discounts allowed: {marketplace.sellerFundedDiscountsAllowed ? 'configured true' : 'disabled'}.</li>
+          <li>Third-party (seller-funded) discounts: not applicable — Maharani Traders has no third-party sellers.</li>
           <li>Platform-funded discounts allowed: {marketplace.platformFundedDiscountsAllowed ? 'configured true' : 'disabled'}.</li>
           <li>
             CA reference on file: {marketplace.caApprovalDocumentReference ? 'reference recorded' : 'none recorded'}.

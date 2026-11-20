@@ -15,8 +15,6 @@ type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 export interface RequestedOrderLine {
   packId: string;
   quantity: number;
-  /** Split-order identity (0064): the seller offer for this line, or null/omitted for the legacy Maharani pack line. */
-  sellerOfferId?: string | null;
 }
 
 export interface CreatedOrder {
@@ -374,18 +372,14 @@ export async function createOrderForRetailer({
     if (blocker) return { error: blocker, code: 'delivery_unavailable' };
   }
 
-  // Split orders that touch pack stock keep the warehouse rule; seller-stock
-  // only orders need no warehouse (0065 profile-conditional trigger agrees).
-  const isSplitOrder = quote.lines.some((line) => Boolean(line.sellerOfferId));
-  const needsWarehouse = quote.fulfilmentProfile !== 'all_seller';
-  if (needsWarehouse) {
-    // Preserve the shared resolver's clear failure if zero/multiple warehouses
-    // exist. The 0054 insert trigger independently re-checks this inside the
-    // transaction, so a change after this read still rolls the order back.
-    const warehouse = await resolveActiveWarehouse(supabase);
-    if (!warehouse.ok) {
-      return { error: warehouse.message, code: 'warehouse_configuration_error' };
-    }
+  // Every line is centrally-owned Maharani stock, so every order needs the
+  // Maharani warehouse. Preserve the shared resolver's clear failure if
+  // zero/multiple warehouses exist. The 0054 insert trigger independently
+  // re-checks this inside the transaction, so a change after this read still
+  // rolls the order back.
+  const warehouse = await resolveActiveWarehouse(supabase);
+  if (!warehouse.ok) {
+    return { error: warehouse.message, code: 'warehouse_configuration_error' };
   }
 
   const atomicItems = quote.lines.map((line) => {
@@ -396,21 +390,22 @@ export async function createOrderForRetailer({
       unit_price: item?.unitPrice ?? line.unitPrice,
       gst_percent: line.gstPercent,
       line_total: item?.lineTotal ?? line.lineTotal,
-      ...(isSplitOrder ? { seller_offer_id: line.sellerOfferId ?? null } : {}),
     };
   });
 
   try {
-    // Split checkouts go through the source-aware v2 RPC (0065); offer-less
-    // callers keep the byte-identical v1 entry point and semantics.
-    const rpcName = isSplitOrder ? 'create_order_atomic_v2' : 'create_order_atomic';
+    // One order writer. Third-party seller offers (and therefore split orders)
+    // were removed, so checkout always uses the v1 atomic RPC: the same
+    // entry point that already wrote every Maharani-only order, with identical
+    // semantics. `create_order_atomic_v2` still exists in the database for
+    // historical compatibility but is no longer called by the application.
     const writer = createServiceRoleClient() as unknown as {
-      rpc: (name: 'create_order_atomic' | 'create_order_atomic_v2', args: AtomicOrderRpcArgs) => Promise<{
+      rpc: (name: 'create_order_atomic', args: AtomicOrderRpcArgs) => Promise<{
         data: unknown;
         error: { code?: string; message: string } | null;
       }>;
     };
-    const { data, error } = await writer.rpc(rpcName, {
+    const { data, error } = await writer.rpc('create_order_atomic', {
       p_retailer_id: retailerId,
       p_collected_by: collectedBy,
       p_request_key: effectiveRequestKey,

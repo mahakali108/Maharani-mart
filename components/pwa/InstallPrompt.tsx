@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { BRAND } from '@/lib/brand';
 
 /**
  * Lightweight, non-intrusive install prompt.
@@ -111,7 +112,7 @@ export default function InstallPrompt() {
   return (
     <div
       role="dialog"
-      aria-label="Install Maharani Traders app"
+      aria-label={`Install ${BRAND.name}`}
       style={{
         position: 'fixed',
         left: 0,
@@ -131,7 +132,7 @@ export default function InstallPrompt() {
       }}
     >
       <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>Maharani Traders</div>
+        <div style={{ fontWeight: 700, fontSize: 14 }}>{BRAND.name}</div>
         <div style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
           Install the app for a faster, app-like experience.
         </div>

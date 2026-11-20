@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 describe('InstallPrompt visibility is derived, not set in an effect', () => {
-  const dialog = () => screen.queryByRole('dialog', { name: 'Install Maharani Traders app' });
+  const dialog = () => screen.queryByRole('dialog', { name: 'Install Maha Bazar by Maharani' });
 
   it('stays hidden until the browser says the app is installable, then shows', () => {
     render(<InstallPrompt />);

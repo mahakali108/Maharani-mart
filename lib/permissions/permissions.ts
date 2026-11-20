@@ -68,32 +68,7 @@ export type Permission =
   /** Admin-only data-retention status page (/admin/cleanup). Dry-run only. */
   | 'cleanup.view'
   | 'support.manage'
-  /**
-   * Supplier Directory & Purchase Ledger (/admin/suppliers). Read-only view
-   * over GRN supplier references. Held by admin + super_admin only because
-   * the ledger exposes purchase unit costs. (Supplier applications and
-   * their review are the separate permissions below, migration 0059.)
-   */
-  | 'suppliers.view'
-  /**
-   * Review supplier applications (approve/reject) — Admin + Super Admin
-   * (owner decision, 2026-10-17). Every review writes reviewer + timestamp
-   * and is audit-logged by the suppliers trigger (migration 0059).
-   */
-  | 'suppliers.review'
-  /** Upload staff-managed supplier documents (private bucket, 0059). V1 has no document deletion. */
-  | 'suppliers.documents.manage'
-  /**
-   * Website Content / Pages Management (/admin/content, migration 0104).
-   * Super Admin ONLY: publishing a legal page is a public promise, and the
-   * permission matrix has no wider holder. RLS enforces the same rule
-   * (`site_pages` writes go through publish_site_page()/is_super_admin()).
-   */
-  | 'content.manage'
-  | 'sellers.view'
-  | 'sellers.review'
-  | 'sellers.manage'
-  | 'sellers.offers.manage';
+  | 'content.manage';
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
@@ -105,8 +80,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet', 'coins.manage',
     'team.manage', 'targets.manage', 'commissions.manage', 'notifications.broadcast',
     'reports.view.all', 'banners.manage', 'routes.manage.all',
-    'command_center.view', 'dashboard.view', 'cleanup.view', 'support.manage', 'suppliers.view', 'suppliers.review', 'suppliers.documents.manage',
-    'sellers.view', 'sellers.review', 'sellers.manage', 'sellers.offers.manage',
+    'command_center.view', 'dashboard.view', 'cleanup.view', 'support.manage',
     'content.manage',
   ],
   admin: [
@@ -117,8 +91,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'deliveries.view.all', 'deliveries.view.assigned', 'deliveries.execute', 'deliveries.assign', 'collections.record', 'collections.verify',
     'retailers.view', 'retailers.approve', 'retailers.edit', 'retailers.suspend', 'retailers.assign_salesman', 'retailers.manage_wallet', 'coins.manage',
     'targets.manage', 'commissions.manage', 'notifications.broadcast',
-    'reports.view.all', 'banners.manage', 'routes.manage.all', 'dashboard.view', 'cleanup.view', 'support.manage', 'suppliers.view', 'suppliers.review', 'suppliers.documents.manage',
-    'sellers.offers.manage',
+    'reports.view.all', 'banners.manage', 'routes.manage.all', 'dashboard.view', 'cleanup.view', 'support.manage',
   ],
   staff: [
     // No 'products.create' / 'pricing.manage': creating a product or pack
@@ -143,9 +116,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'orders.view.own', 'orders.create', 'orders.cancel', 'orders.return.request', 'returns.request',
     'reports.view.own',
   ],
-  // Seller portal uses its own tenant/status guards and RLS; generic admin
-  // permissions are intentionally unavailable to seller accounts.
-  seller: [],
 };
 
 /**

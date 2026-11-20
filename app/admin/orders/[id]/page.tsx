@@ -107,7 +107,7 @@ export default async function AdminOrderDetailPage({ params: paramsPromise }: { 
       <AdminSubOrderPanel
         orderId={order.id}
         subOrders={subOrders}
-        canManage={can(user.role, 'sellers.offers.manage')}
+        canManage={can(user.role, 'orders.return.manage')}
       />
 
       {deliveryData ? (

@@ -49,7 +49,6 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }
 import { supabaseFixture } from './helpers/supabase-fixture';
 import AdminCouponsPage from '@/app/admin/coupons/page';
 import AdminReturnsPage from '@/app/admin/returns/page';
-import AdminOffersPage from '@/app/admin/offers/page';
 import AdminWalletsPage from '@/app/admin/wallets/page';
 import AdminTargetsPage from '@/app/admin/targets/page';
 import SalesmanTargetsPage from '@/app/salesman/targets/page';
@@ -100,21 +99,6 @@ describe('admin returns', () => {
     mocks.createClient.mockReturnValue(supabaseFixture({ return_requests: [] }));
     render(await AdminReturnsPage());
     expect(screen.getByText('No return requests yet')).toBeDefined();
-  });
-});
-
-describe('admin seller-offer moderation queue', () => {
-  it('reports the read failure instead of claiming there is nothing to review', async () => {
-    mocks.createClient.mockReturnValue(supabaseFixture({ seller_offers: [] }, { seller_offers: 'timeout' }));
-    render(await AdminOffersPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText('Seller offers could not be loaded.')).toBeDefined();
-    expect(screen.queryByText('No offers to review')).toBeNull();
-  });
-
-  it('keeps the real empty state when the query works', async () => {
-    mocks.createClient.mockReturnValue(supabaseFixture({ seller_offers: [] }));
-    render(await AdminOffersPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText('No offers to review')).toBeDefined();
   });
 });
 

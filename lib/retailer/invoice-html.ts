@@ -29,7 +29,17 @@ const money = (value: number) => `₹${value.toFixed(2)}`;
 export interface StandaloneInvoiceData {
   orderNumber: string;
   placedAt: string;
+  /**
+   * The LEGAL issuer: the entity that issues the tax invoice. This is the
+   * proprietorship ("Ajay General"), never the customer-facing brand - a trading
+   * style is not a legal entity and must not stand alone as the issuer.
+   */
   company: { name: string; gstin: string; address: string; phone: string };
+  /**
+   * The customer-facing brand, shown separately so the document carries both
+   * names without conflating them. Optional: an old caller still renders.
+   */
+  brandName?: string;
   billedTo: { shopName: string; address: string; areaName: string; gstin: string };
   lines: InvoiceLineForDisplay[];
   taxMode: TaxSplitMode;
@@ -116,6 +126,7 @@ export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string 
     <div class="head">
       <div>
         <p class="strong" style="font-size:16px;margin:0 0 4px">${esc(data.company.name)}</p>
+        ${data.brandName ? `<p class="muted" style="margin:0 0 4px">Trading as ${esc(data.brandName)}</p>` : ''}
         <p class="muted" style="margin:0">${esc(data.company.address)}</p>
         <p class="muted" style="margin:2px 0 0">GSTIN: ${esc(data.company.gstin)}</p>
         <p class="muted" style="margin:2px 0 0">${esc(data.company.phone)}</p>
@@ -154,7 +165,7 @@ export function buildStandaloneInvoiceHtml(data: StandaloneInvoiceData): string 
       <div class="row grand"><span>Grand Total</span><span>${money(data.grandTotal)}</span></div>
     </div>
 
-    <p class="note">This is a computer-generated invoice for ${esc(data.company.name)} — ${esc(data.orderNumber)}.</p>
+    <p class="note">This is a computer-generated invoice issued by ${esc(data.company.name)}${data.brandName ? ` (trading as ${esc(data.brandName)})` : ''} — ${esc(data.orderNumber)}.</p>
   </div>
 </body>
 </html>`;

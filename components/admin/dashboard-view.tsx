@@ -737,45 +737,41 @@ export function DashboardView({
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardHeader>
-              <CardTitle>Super Admin Marketplace &amp; Business Control</CardTitle>
+              <CardTitle>Super Admin Business Control</CardTitle>
             </CardHeader>
             <div className="flex flex-wrap gap-3 text-xs font-medium">
-              <Link href="/admin/sellers" className="text-primary-600 hover:underline">
-                Sellers →
-              </Link>
               <Link href="/admin/pricing/wholesale" className="text-primary-600 hover:underline">
                 Wholesale Pricing →
               </Link>
               <Link href="/admin/memberships" className="text-primary-600 hover:underline">
                 Memberships →
               </Link>
-              <Link href="/admin/banners/campaigns" className="text-primary-600 hover:underline">
-                Ad Campaigns →
+              <Link href="/admin/products" className="text-primary-600 hover:underline">
+                Products →
+              </Link>
+              <Link href="/admin/inventory" className="text-primary-600 hover:underline">
+                Inventory →
               </Link>
             </div>
           </div>
 
           <SectionState
             status={data.businessOperations.status}
-            emptyTitle="No marketplace control records yet"
+            emptyTitle="No business control records yet"
             emptyBody="Counts populate automatically from live database tables."
           >
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-              <Link href="/admin/sellers" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
-                <dt className="text-xs text-ink-500">Total Sellers</dt>
-                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.totalSellers}</dd>
-                <p className="text-[11px] text-ink-500">
-                  {data.businessOperations.activeSellers} active · {data.businessOperations.pendingSellerApprovals} pending
-                </p>
+              <Link href="/admin/retailers" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+                <dt className="text-xs text-ink-500">Retailers</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.totalRetailers ?? 0}</dd>
+                <p className="text-[11px] text-ink-500">Active retailer accounts</p>
               </Link>
-              <Link href="/admin/offers?moderation=pending" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+              <Link href="/admin/products" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
                 <dt className="text-xs text-ink-500">Pending Product Reviews</dt>
                 <dd className="mt-1 text-xl font-semibold text-ink-900">
-                  {data.businessOperations.pendingOfferReviews + data.businessOperations.pendingProductComplianceReviews}
+                  {data.businessOperations.pendingProductComplianceReviews}
                 </dd>
-                <p className="text-[11px] text-ink-500">
-                  {data.businessOperations.pendingOfferReviews} seller offers · {data.businessOperations.pendingProductComplianceReviews} compliance
-                </p>
+                <p className="text-[11px] text-ink-500">Catalogue compliance reviews</p>
               </Link>
               <Link href="/admin/memberships" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
                 <dt className="text-xs text-ink-500">Active Membership Plans</dt>
@@ -789,12 +785,10 @@ export function DashboardView({
                 <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.activePublishedBanners}</dd>
                 <p className="text-[11px] text-ink-500">Published homepage banners</p>
               </Link>
-              <Link href="/admin/banners/campaigns" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
-                <dt className="text-xs text-ink-500">Active Paid Ads</dt>
-                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.activeSellerAds}</dd>
-                <p className="text-[11px] text-ink-500">
-                  {data.businessOperations.pendingSellerAds} pending approval
-                </p>
+              <Link href="/admin/orders" className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 hover:border-primary-200">
+                <dt className="text-xs text-ink-500">Orders</dt>
+                <dd className="mt-1 text-xl font-semibold text-ink-900">{data.businessOperations.totalOrders ?? 0}</dd>
+                <p className="text-[11px] text-ink-500">All centrally-fulfilled orders</p>
               </Link>
             </dl>
 

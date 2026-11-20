@@ -6,6 +6,7 @@ import {
   newRequestId,
 } from '@/lib/mobile';
 import { requireRetailerCommerceSession } from '@/lib/mobile/commerce-route';
+import { BRAND } from '@/lib/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,11 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     return jsonOk({
-      companyName: process.env.COMPANY_NAME?.trim() || 'Maharani Traders',
+      // The support screen names the LEGAL entity (Ajay General), because that is
+      // who a retailer is dealing with. The app name is a brand and travels in
+      // `appName` so a client never confuses the two.
+      companyName: process.env.COMPANY_NAME?.trim() || BRAND.legalName,
+      appName: BRAND.name,
       supportPhone: process.env.COMPANY_PHONE?.trim() || null,
     }, { requestId });
   } catch (cause) {

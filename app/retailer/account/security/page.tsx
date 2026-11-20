@@ -9,6 +9,7 @@ import {
   LogoutAllSessionsButton,
 } from '@/components/retailer/security-forms';
 import { PolicyAcceptanceCard } from '@/components/legal/policy-acceptance-card';
+import { BRAND } from '@/lib/brand';
 
 interface RequestRow {
   id: string;
@@ -17,7 +18,7 @@ interface RequestRow {
   created_at: string;
 }
 
-export const metadata = { title: 'Security — Maharani Traders' };
+export const metadata = { title: `Security — ${BRAND.name}` };
 
 const REQUEST_STATUS_LABEL: Record<RequestRow['status'], string> = {
   submitted: 'Submitted',

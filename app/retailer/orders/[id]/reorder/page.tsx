@@ -11,7 +11,6 @@ import { loadCatalogAvailability } from '@/lib/retailer/catalog';
 import { groupOrderLines, type OrderItemUnit} from '@/lib/orders/item-display';
 import { ReorderForm, type ReorderLineInput } from '@/components/retailer/reorder-form';
 import { formatIndiaDateTime } from '@/lib/datetime/india';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 
 interface OrderRow {
   id: string;
@@ -23,8 +22,6 @@ interface ReorderItemRow {
   id: string;
   product_id: string;
   pack_id: string | null;
-  seller_offer_id: string | null;
-  source_type: 'maharani' | 'seller';
   quantity: number;
   /** 'cases' | 'pieces'; null on lines billed before the case/loose split. */
   quantity_unit: OrderItemUnit | null;
@@ -73,17 +70,12 @@ export default async function ReorderPage({ params: paramsPromise }: { params: P
     supabase
       .from('order_items')
       .select(
-        'id, product_id, pack_id, seller_offer_id, source_type, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, line_total, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active )'
+        'id, product_id, pack_id, quantity, quantity_unit, quantity_pieces, units_per_case, unit_price, line_total, products ( id, name, gst_percent, is_active, product_images ( image_url ) ), product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, moq, allow_loose_pieces, is_active )'
       )
       .eq('order_id', order.id),
   ]);
 
   const items = (itemData ?? []) as unknown as ReorderItemRow[];
-  const marketplace = await loadMarketplaceOfferQuotes(
-    supabase,
-    items.map((item) => item.seller_offer_id).filter((id): id is string => Boolean(id))
-  );
-  const offerById = new Map(marketplace.offers.map((offer) => [offer.offerId, offer]));
   /*
    * A mixed line was billed as two rows (cases + loose pieces). Reordering
    * offers ONE line per pack with the TOTAL PIECES from last time, so the
@@ -123,31 +115,20 @@ export default async function ReorderPage({ params: paramsPromise }: { params: P
     .map(({ key, first, quantity, total }) => {
       const pack = first.product_packs!;
       const product = first.products;
-      const offer = first.seller_offer_id ? offerById.get(first.seller_offer_id) : null;
-      const marketplaceLine = Boolean(first.seller_offer_id);
-      const moq = offer?.moq ?? (marketplaceLine ? 1 : pack.moq);
+      const moq = pack.moq;
       // Server-resolved per-piece fallback (never the internal case price).
-      const derivedPiecePrice = offer
-        ? offer.unitPricePaise / 100
-        : piecePriceFromCase(
-            resolvePackPrice(pack, product ? overrideByProduct.get(product.id) ?? null : null),
-            pack.units_per_case
-          );
-      const marketplaceUnavailable = marketplaceLine && (
-        !offer || !offer.inStock || (offer.stockQuantity ?? 0) < Math.max(quantity.pieces, moq)
+      const derivedPiecePrice = piecePriceFromCase(
+        resolvePackPrice(pack, product ? overrideByProduct.get(product.id) ?? null : null),
+        pack.units_per_case
       );
-      const availability = marketplaceLine
-        ? marketplaceUnavailable ? 'out_of_stock' : 'in_stock'
-        : availabilityMap.get(pack.id)?.state ?? 'unknown';
-      const unavailable = !pack.is_active || !product?.is_active || marketplaceUnavailable || availability === 'out_of_stock';
+      const availability = availabilityMap.get(pack.id)?.state ?? 'unknown';
+      const unavailable = !pack.is_active || !product?.is_active || availability === 'out_of_stock';
       // What the piece LAST cost on this order (stored totals only) so a
       // changed price is visible at a glance.
       const previousPiecePrice = quantity.pieces > 0 ? Math.round((total / quantity.pieces) * 100) / 100 : null;
       return {
         lineKey: key,
         packId: first.pack_id ?? key,
-        sellerOfferId: first.seller_offer_id,
-        sellerName: offer?.sellerBusinessName ?? (marketplaceLine ? 'Unavailable seller offer' : null),
         productName: product?.name ?? 'Unknown product',
         packName: pack.pack_name,
         imageUrl: product?.product_images[0]?.image_url,
@@ -157,8 +138,8 @@ export default async function ReorderPage({ params: paramsPromise }: { params: P
         gstPercent: product?.gst_percent ?? 0,
         derivedPiecePrice,
         unitsPerCase: pack.units_per_case,
-        tiers: marketplaceLine ? [] : tierMap.get(pack.id) ?? [],
-        allowLoosePieces: marketplaceLine || pack.allow_loose_pieces !== false,
+        tiers: tierMap.get(pack.id) ?? [],
+        allowLoosePieces: pack.allow_loose_pieces !== false,
         unavailable,
         availability,
         previousPiecePrice,

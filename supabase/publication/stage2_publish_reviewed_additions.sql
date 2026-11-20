@@ -8,7 +8,6 @@
 -- These are new public statements, not carried-over wording. Publishing them
 -- says, to customers and to a regulator, that Maharani Traders stands behind:
 --   damaged-goods          what happens to a damaged delivery
---   seller-agreement       the seller (marketplace) contract
 --   retailer-terms         additional terms for retail buyers
 --   marketplace-disclaimer the boundary between own-stock sales and the marketplace
 --   gst-pricing-invoice    GST, pricing and invoicing statements
@@ -29,9 +28,16 @@
 
 do $$
 declare
+  -- `seller-agreement` is DELIBERATELY ABSENT. The seller / marketplace
+  -- programme was discontinued (migration 0110), so this page is no longer a
+  -- public statement: it is the historical contract with a class of seller that
+  -- no longer exists. Publishing it would put a live legal document in front of
+  -- customers describing a programme we do not operate. The page, its wording
+  -- and its acceptance registry row are all kept — it simply stays unpublished,
+  -- and the owner can archive or repurpose it from Super Admin -> Website
+  -- content. Do not add it back to this list without a new business decision.
   v_slugs text[] := array[
     'damaged-goods',
-    'seller-agreement',
     'retailer-terms',
     'marketplace-disclaimer',
     'gst-pricing-invoice',

@@ -2,8 +2,9 @@ import { AuthFrame } from '@/components/auth/auth-frame';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
 import { ResetPasswordForm } from '@/components/auth/reset-password-form';
+import { BRAND } from '@/lib/brand';
 
-export const metadata: Metadata = { title: 'Set new password — Maharani Traders' };
+export const metadata: Metadata = { title: `Set new password — ${BRAND.name}` };
 
 export default async function ResetPasswordPage({
   searchParams: searchParamsPromise,

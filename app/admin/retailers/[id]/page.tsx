@@ -6,6 +6,9 @@ import { throwIfReadFailed } from '@/lib/supabase/read-guard';
 import { resolveDocumentUrl } from '@/lib/media/document-url';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { RetailerRowActions } from '@/components/admin/retailer-row-actions';
+import { RetailerActivationPanel } from '@/components/admin/retailer-activation-panel';
+import { getRetailerActivationStatus } from '@/lib/admin/retailer-activation-actions';
+import { requireUser } from '@/lib/auth/session';
 import { RetailerAreaReassignForm } from '@/components/admin/retailer-area-reassign-form';
 import { SalesmanAssignmentForm } from '@/components/admin/salesman-assignment-form';
 import { RetailerDocumentsManager, type RetailerDocument } from '@/components/admin/retailer-documents-manager';
@@ -100,6 +103,14 @@ export default async function RetailerDetailPage({ params: paramsPromise }: { pa
     )
   );
 
+  // Activation state is read for every viewer, but the RPC itself is
+  // service-role-only and the helper returns null for anyone below Super Admin.
+  const [viewer, activationStatus] = await Promise.all([
+    requireUser(),
+    getRetailerActivationStatus(params.id),
+  ]);
+  const isSuperAdmin = viewer.role === 'super_admin';
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -116,6 +127,21 @@ export default async function RetailerDetailPage({ params: paramsPromise }: { pa
           <RetailerRowActions retailerId={r.id} status={r.status} />
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sign-in and activation</CardTitle>
+        </CardHeader>
+        <p className="mb-4 text-sm text-ink-500">
+          Approving an application grants the retailer role and access status. It does not
+          automatically restore sign-in for an account that is inactive — that is this step.
+        </p>
+        <RetailerActivationPanel
+          retailerId={r.id}
+          isSuperAdmin={isSuperAdmin}
+          state={activationStatus}
+        />
+      </Card>
 
       <Card>
         <CardHeader>

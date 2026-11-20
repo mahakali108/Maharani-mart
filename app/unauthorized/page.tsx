@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { ShieldAlert } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
 import { Button } from '@/components/ui/button';
+import { BRAND } from '@/lib/brand';
 
-export const metadata: Metadata = { title: 'Not authorized — Maharani Traders' };
+export const metadata: Metadata = { title: `Not authorized — ${BRAND.name}` };
 
 export default function UnauthorizedPage() {
   return (

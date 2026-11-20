@@ -462,9 +462,10 @@ describe('proof viewing uses signed URLs only', () => {
     const buckets = [...declaration![1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]);
 
     // A closed union: every addition (0077's banner-drafts) is deliberate.
+    // `supplier-documents` was REMOVED with the supplier module: no code path
+    // mints signed URLs for supplier paperwork any more.
     expect(buckets).toEqual([
       'retailer-documents',
-      'supplier-documents',
       'delivery-proofs',
       'payment-proofs',
       'banner-drafts',

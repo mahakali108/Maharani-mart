@@ -36,7 +36,6 @@ vi.mock('@/components/admin/banner-form', () => ({ BannerForm: () => null }));
 import { supabaseFixture } from './helpers/supabase-fixture';
 import BannersPage from '@/app/admin/banners/page';
 import AdminOrdersPage from '@/app/admin/orders/page';
-import SellersPage from '@/app/admin/sellers/page';
 import EditBannerPage from '@/app/admin/banners/[id]/page';
 
 const FAILURE = 'column banners.status does not exist';
@@ -83,22 +82,6 @@ describe('admin orders list', () => {
     render(await AdminOrdersPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getByText('No orders yet')).toBeDefined();
     expect(screen.queryByText('Orders could not be loaded')).toBeNull();
-  });
-});
-
-describe('admin sellers directory', () => {
-  it('reports a failed read instead of "No sellers yet"', async () => {
-    mocks.createClient.mockReturnValue(supabaseFixture({ sellers: [] }, { sellers: 'timeout' }));
-    render(await SellersPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText('Sellers could not be loaded')).toBeDefined();
-    expect(screen.queryByText('No sellers yet')).toBeNull();
-  });
-
-  it('keeps the real empty state for a working query', async () => {
-    mocks.createClient.mockReturnValue(supabaseFixture({ sellers: [] }));
-    render(await SellersPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByText('No sellers yet')).toBeDefined();
-    expect(screen.queryByText('Sellers could not be loaded')).toBeNull();
   });
 });
 

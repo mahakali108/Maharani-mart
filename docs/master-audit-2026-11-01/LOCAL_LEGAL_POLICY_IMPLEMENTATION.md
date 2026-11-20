@@ -1,5 +1,15 @@
 # Local legal policy implementation — review report
 
+> **SUPERSEDED — kept as a historical record.** This document describes the site as it stood on the
+> date in its title and quotes statutory facts that were later withdrawn because the owner never
+> verified them (the proprietor's personal name, the trade-name registration status, the registered
+> address, the named grievance officer). Do not copy any identity or contact line out of this file.
+> The current approved statement is: *Maha Bazar by Maharani is the customer-facing website and app
+> name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY
+> GENERAL is the legal seller and invoice issuer. Maharani Traders is a trading style, not a separate
+> incorporated company or legal entity. Maa Kali Enterprises is a separate business identity.*
+> See `docs/repair/MAHA_BAZAR_BUSINESS_IDENTITY_REPORT.md`.
+
 **Date:** 04 November 2026 · **Branch:** `arena/2ab6a8a1-maharani-mart` · **HEAD:** `c1a3e1b52656761c728d1966603f4c8034a40f8e`
 **Status: local implementation for review, not approved for production publication or release.** The policy copy and owner-provided particulars have not been independently verified and are not a legal opinion. Proposed effective date is 04 November 2026; confirm it before publication.
 

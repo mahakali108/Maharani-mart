@@ -1,4 +1,4 @@
-/* Maharani Traders — production-safe service worker.
+/* Maha Bazar by Maharani — production-safe service worker.
  *
  * SECURITY MODEL (do not weaken):
  *   - Only allowlisted STATIC, non-user-specific assets are cached:

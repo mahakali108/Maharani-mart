@@ -3,21 +3,22 @@ import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 import ServiceWorkerRegister from '@/components/pwa/ServiceWorkerRegister';
 import InstallPrompt from '@/components/pwa/InstallPrompt';
+import { BRAND } from '@/lib/brand';
 
 // Poppins is self-hosted via @fontsource (imported in globals.css) and the
 // `--font-sans` variable is defined there too — so this layout no longer
 // needs next/font/google, which requires network access at build time.
 
 export const metadata: Metadata = {
-  title: 'Maharani Traders — wholesale ordering for retailers',
+  title: `${BRAND.name} — ${BRAND.tagline}`,
   description:
-    'Maharani Traders is a wholesale ordering PWA for approved retailers. Browse catalogue offers and place orders at configured serviceable addresses.',
-  applicationName: 'Maharani Traders',
+    `${BRAND.name} is a wholesale ordering PWA for approved retailers, trading as ${BRAND.tradingStyle}. Browse the catalogue and place orders at configured serviceable addresses.`,
+  applicationName: BRAND.name,
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Maharani Traders',
+    title: BRAND.name,
   },
   icons: {
     icon: '/favicon.ico',

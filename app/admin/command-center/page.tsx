@@ -7,10 +7,10 @@ import { CommandCenterTabNav } from '@/components/command-center/tab-nav';
 import { OverviewSection } from '@/components/command-center/overview-section';
 import { SalesSection, type SalesOptions } from '@/components/command-center/sales-section';
 import { InventorySection } from '@/components/command-center/inventory-section';
+import { PurchaseLedgerSection } from '@/components/command-center/purchase-ledger-section';
 import { CreditSection } from '@/components/command-center/credit-section';
 import { RetailerSection } from '@/components/command-center/retailer-section';
 import { SalesmanSection } from '@/components/command-center/salesman-section';
-import { SupplierSection } from '@/components/command-center/supplier-section';
 import { SecuritySection } from '@/components/command-center/security-section';
 import { CopilotTab } from '@/components/command-center/copilot-tab';
 
@@ -81,7 +81,7 @@ export default async function CommandCenterPage({ searchParams: searchParamsProm
       {tab === 'credit' ? <CreditSection credit={data.credit} /> : null}
       {tab === 'retailers' ? <RetailerSection intel={data.retailers} /> : null}
       {tab === 'salesmen' ? <SalesmanSection intel={data.salesmen} /> : null}
-      {tab === 'suppliers' ? <SupplierSection intel={data.suppliers} /> : null}
+      {tab === 'suppliers' ? <PurchaseLedgerSection intel={data.suppliers} /> : null}
       {tab === 'security' ? <SecuritySection security={data.security} /> : null}
       {tab === 'copilot' ? <CopilotTab /> : null}
     </div>

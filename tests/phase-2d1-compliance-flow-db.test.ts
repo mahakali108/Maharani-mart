@@ -111,7 +111,13 @@ async function seedApprovedProductAndSeller(): Promise<void> {
   await acceptSellerAgreementAs(db, sellerOwner);
   await openMarketplaceForTest(db);
 
-  const { rows: offers } = await asSuper((tx) => tx.query<{ id: string }>(
+  // Seeded through the service role, not through an administrator's RLS grant.
+  // 0110 removed the administrator INSERT policy on seller_offers: the
+  // marketplace is discontinued, so no API role may create an offer. The
+  // environment-level rules this suite exercises (0087 activation, 0098 gate)
+  // still need an offer row, so the fixture writes one as the service role —
+  // the same pattern as tests/phase3-business-control-db.test.ts.
+  const { rows: offers } = await as(db, 'service', (tx: Tx) => tx.query<{ id: string }>(
     `insert into seller_offers
        (seller_id, product_id, pack_id, fulfilment_type, unit_price_paise, moq, stock_quantity,
         is_active, moderation_status, moderation_by, moderated_at, created_by)

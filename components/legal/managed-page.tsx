@@ -6,6 +6,7 @@ import { loadPublishedPage, loadPublishedPages, pickRelatedPages } from '@/lib/s
 import { formatPolicyDate, renderRichText } from '@/lib/site-content/render';
 import type { PublishedPageRecord, PublishedPageSummary } from '@/lib/site-content/types';
 import { footerLinksFromPages } from '@/lib/site-content/nav';
+import { BRAND } from '@/lib/brand';
 
 /** Navigation built from the pages the Super Admin has published, in order. */
 export function informationNav(pages: readonly PublishedPageSummary[]): InformationNavLink[] | undefined {
@@ -192,10 +193,10 @@ export async function ManagedPublicPage({ slug }: { slug: string }) {
 export async function managedMetadata(slug: string, fallbackTitle: string): Promise<Metadata> {
   const page = await loadPublishedPage(slug);
   if (page.state !== 'published') {
-    return { title: `${fallbackTitle} — Maharani Traders`, robots: { index: false, follow: false } };
+    return { title: `${fallbackTitle} — ${BRAND.name}`, robots: { index: false, follow: false } };
   }
   return {
-    title: `${page.page.title} — Maharani Traders`,
+    title: `${page.page.title} — ${BRAND.name}`,
     description: page.page.meta_description ?? page.page.intro,
   };
 }

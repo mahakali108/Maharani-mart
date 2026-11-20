@@ -1,5 +1,15 @@
 # PR #134 — final review and safe release preparation (2026-11-15)
 
+> **SUPERSEDED — kept as a historical record.** This document describes the site as it stood on the
+> date in its title and quotes statutory facts that were later withdrawn because the owner never
+> verified them (the proprietor's personal name, the trade-name registration status, the registered
+> address, the named grievance officer). Do not copy any identity or contact line out of this file.
+> The current approved statement is: *Maha Bazar by Maharani is the customer-facing website and app
+> name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY
+> GENERAL is the legal seller and invoice issuer. Maharani Traders is a trading style, not a separate
+> incorporated company or legal entity. Maa Kali Enterprises is a separate business identity.*
+> See `docs/repair/MAHA_BAZAR_BUSINESS_IDENTITY_REPORT.md`.
+
 Branch `arena/1c8f9eed-maharani-mart`, PR [#134](https://github.com/mahakali108/Maharani-mart/pull/134),
 Supabase project `fhrmsrumsraprvutrpeo` (the official project — no other project was
 connected, read or written).

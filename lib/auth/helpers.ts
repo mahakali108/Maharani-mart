@@ -13,7 +13,13 @@ export type AuthErrorCode =
   | 'duplicate_phone'
   | 'recovery_failed'
   | 'account_inactive'
-  | 'account_suspended';
+  | 'account_suspended'
+  /**
+   * The account's role was retired (seller/supplier removal). Distinct from
+   * `account_inactive` so the login page can explain why without implying the
+   * whole account was deactivated by an administrator.
+   */
+  | 'role_retired';
 
 export type FormState = {
   error?: string;

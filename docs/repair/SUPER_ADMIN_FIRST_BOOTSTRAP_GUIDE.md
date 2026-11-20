@@ -1,6 +1,7 @@
 # Super Admin — first account bootstrap guide
 
-**Audience:** the owner of Maharani Traders (AJAY KUMAR / AJAY GENERAL).
+**Audience:** the owner of the AJAY GENERAL proprietorship (trading under the
+MAHARANI TRADERS brand; app name Maha Bazar by Maharani).
 **Project:** `Maharani-mart` — Supabase ref `fhrmsrumsraprvutrpeo`.
 **Never use** the legacy project `maharanimaa` (`gbxhmffsbsfhdrfuwurx`).
 
@@ -174,7 +175,7 @@ insert into public.super_admin_bootstrap_allowlist (id, email, full_name, phone,
 values (
   1,
   lower(btrim('OWNER_EMAIL_HERE')),      -- must equal the auth.users address
-  'AJAY KUMAR',                          -- owner's name, 2-120 chars
+  'Owner Name',                          -- owner's name, 2-120 chars
   '8987023959',                          -- 10 digits, no +91
   'Owner authorisation recorded <date>; see docs/repair/SUPER_ADMIN_FIRST_BOOTSTRAP_GUIDE.md'
 );

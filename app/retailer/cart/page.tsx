@@ -32,18 +32,12 @@ import { getRetailerWalletSummary } from '@/lib/retailer/wallet';
 import { getFrequentlyOrderedCards } from '@/lib/retailer/personalization';
 import { loadCartCouponLines } from '@/lib/coupons/cart-lines';
 import { loadActiveCouponForRetailer, validateCouponForOrder } from '@/lib/coupons/validate';
-import {
-  loadMarketplaceOfferQuotes,
-  resolveOfferUnitPricePaise,
-} from '@/lib/retailer/marketplace-offers';
 
 interface CartItemDetail {
   id: string;
   quantity: number;
   pack_id: string;
   product_id: string;
-  seller_offer_id: string | null;
-  source_type: 'maharani' | 'seller';
   product_packs: {
     id: string;
     pack_name: string;
@@ -91,7 +85,7 @@ export default async function CartPage() {
     supabase
       .from('cart_items')
       .select(
-        'id, quantity, pack_id, product_id, seller_offer_id, source_type, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
+        'id, quantity, pack_id, product_id, product_packs ( id, pack_name, base_price, ptr, case_price, units_per_case, mrp, moq, allow_loose_pieces, image_url, is_active ), products ( name, gst_percent, is_active, brands ( name ), product_images ( image_url, sort_order ) )'
       )
       .eq('retailer_id', user.id)
       .order('updated_at', { ascending: false }),
@@ -142,32 +136,23 @@ export default async function CartPage() {
   }
 
   const distinctProductIds = [...new Set(items.map((item) => item.product_id))];
-  const sellerOfferIds = items
-    .map((item) => item.seller_offer_id)
-    .filter((id): id is string => Boolean(id));
-  const [overrideByProduct, tierMap, marketplaceResult] = await Promise.all([
+  const [overrideByProduct, tierMap] = await Promise.all([
     getProductPriceOverrides(supabase, distinctProductIds, user.id, retailer?.area_id ?? null),
     loadPackTiers(supabase, items.map((item) => item.pack_id), user.id),
-    loadMarketplaceOfferQuotes(supabase, sellerOfferIds),
   ]);
-  const offerById = new Map(marketplaceResult.offers.map((offer) => [offer.offerId, offer]));
 
   const pricedLines = items.map((item) => {
     const pack = item.product_packs;
     const product = item.products;
     const gstPercent = product?.gst_percent ?? 0;
-    const marketplaceOffer = item.seller_offer_id ? offerById.get(item.seller_offer_id) : null;
-    const marketplaceLine = Boolean(item.seller_offer_id);
-    const casePrice = !marketplaceLine && pack
+    const casePrice = pack
       ? resolvePackPrice(pack, overrideByProduct.get(item.product_id) ?? null)
       : 0;
-    const moq = marketplaceOffer?.moq ?? (marketplaceLine ? 1 : pack?.moq ?? 1);
-    const tiers = marketplaceLine ? [] : pack ? tierMap.get(pack.id) ?? [] : [];
-    // Marketplace lines use the approved offer's integer-paise piece price;
-    // Maharani lines retain the canonical case/tier engine.
-    const derivedPiecePrice = marketplaceOffer
-      ? resolveOfferUnitPricePaise(marketplaceOffer, item.quantity) / 100
-      : pack ? piecePriceFromCase(casePrice, pack.units_per_case) : 0;
+    const moq = pack?.moq ?? 1;
+    const tiers = pack ? tierMap.get(pack.id) ?? [] : [];
+    // Every line is centrally-owned Maharani stock, priced by the canonical
+    // case/tier engine.
+    const derivedPiecePrice = pack ? piecePriceFromCase(casePrice, pack.units_per_case) : 0;
     const pricing = calculateRetailerPiecePrice({
       quantity: item.quantity,
       unitsPerCase: pack?.units_per_case ?? 1,
@@ -177,11 +162,6 @@ export default async function CartPage() {
       moq,
       derivedPiecePrice,
     });
-    const marketplaceUnavailable = marketplaceLine && (
-      !marketplaceOffer
-      || !marketplaceOffer.inStock
-      || (marketplaceOffer.stockQuantity ?? 0) < item.quantity
-    );
     const images = [...(product?.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     // The cart line shows the variant's own image when it has one (same rule
     // as the product page size switcher), falling back to the product gallery.
@@ -203,12 +183,9 @@ export default async function CartPage() {
       unitsPerCase: pack?.units_per_case ?? 1,
       derivedPiecePrice,
       tiers,
-      allowLoosePieces: marketplaceLine || pack?.allow_loose_pieces !== false,
-      isUnavailable: !pack?.is_active || !product?.is_active || marketplaceUnavailable,
+      allowLoosePieces: pack?.allow_loose_pieces !== false,
+      isUnavailable: !pack?.is_active || !product?.is_active,
       isFavorite: favoriteIds.has(item.product_id),
-      sellerName: marketplaceOffer?.sellerBusinessName ?? null,
-      sellerGstin: marketplaceOffer?.sellerGstin ?? null,
-      fulfilmentType: marketplaceOffer?.fulfilmentType ?? null,
     };
     // Totals are summed after the map, in line order, rather than by
     // reassigning outer variables from inside the callback.
@@ -263,7 +240,7 @@ export default async function CartPage() {
   // here rather than silently re-priced.
   const blockedLines = lines.filter((line) => !line.isUnavailable && !line.isOrderable);
   const availableCount = lines.filter((line) => !line.isUnavailable && line.isOrderable).length;
-  const checkoutBlocked = hasUnavailable || blockedLines.length > 0 || Boolean(marketplaceResult.error);
+  const checkoutBlocked = hasUnavailable || blockedLines.length > 0;
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
 
   return (
@@ -298,7 +275,7 @@ export default async function CartPage() {
         >
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
-            <span className="font-bold">Heads up.</span> Unavailable items are clearly marked. Remove them or choose an available seller before checkout.
+            <span className="font-bold">Heads up.</span> Unavailable items are clearly marked. Remove them before checkout.
           </p>
         </div>
       ) : null}

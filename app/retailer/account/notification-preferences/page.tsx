@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { NotificationPrefsForm, type NotificationPrefsValues } from '@/components/retailer/notification-prefs-form';
+import { BRAND } from '@/lib/brand';
 
 interface PrefsRow {
   order_updates: boolean;
@@ -11,7 +12,7 @@ interface PrefsRow {
   offer_updates: boolean;
 }
 
-export const metadata = { title: 'Notification settings — Maharani Traders' };
+export const metadata = { title: `Notification settings — ${BRAND.name}` };
 
 export default async function NotificationPreferencesPage() {
   const user = await requireUser();

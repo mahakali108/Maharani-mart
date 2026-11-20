@@ -13,7 +13,7 @@ import { loadFooterLinks } from '@/lib/site-content/nav';
  *   2. this layout — the SAME role-prefix rule, re-evaluated server-side so a
  *      direct server render (a streamed RSC request, a future rewrite, or
  *      middleware being misconfigured) cannot paint an admin page for a
- *      retailer, staff member, salesman or seller. Previously this layout only
+ *      retailer, staff member or salesman. Previously this layout only
  *      called `requireUser()`, which proves "somebody is signed in" but not
  *      "this somebody may see the admin area"; the 35 admin pages that do not
  *      call a page-level guard themselves relied on middleware alone.

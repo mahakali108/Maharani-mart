@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { RegisterRetailerForm } from '@/components/auth/register-retailer-form';
 import { SERVICE_AREA_LABEL } from '@/lib/config/service-area';
+import { BRAND } from '@/lib/brand';
 
-export const metadata: Metadata = { title: 'Register your shop — Maharani Traders' };
+export const metadata: Metadata = { title: `Register your shop — ${BRAND.name}` };
 
 export default async function RegisterRetailerPage() {
   const supabase = (await createClient());
@@ -32,10 +33,6 @@ export default async function RegisterRetailerPage() {
           Distribution staff or salesman?{' '}
           <Link href="/login" className="font-medium text-primary-600 hover:text-primary-700">
             Your account is created by an admin — sign in here.
-          </Link>
-          {' · '}
-          <Link href="/register-seller" className="font-medium text-primary-600 hover:text-primary-700">
-            Seller access by invitation
           </Link>
         </p>
     </AuthFrame>

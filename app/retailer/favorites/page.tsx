@@ -5,8 +5,9 @@ import { requireUser } from '@/lib/auth/session';
 import { ProductCard } from '@/components/retailer/product-card';
 import { loadFavoriteIds, loadProductsByIds, priceCatalogProducts } from '@/lib/retailer/catalog';
 import { StockAlertButton } from '@/components/retailer/product-feedback';
+import { BRAND } from '@/lib/brand';
 
-export const metadata = { title: 'Favourites — Maharani Traders' };
+export const metadata = { title: `Favourites — ${BRAND.name}` };
 
 export default async function FavoritesPage() {
   const user = await requireUser();

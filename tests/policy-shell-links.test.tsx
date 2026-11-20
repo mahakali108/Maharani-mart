@@ -4,13 +4,9 @@ import { AdminShell } from '@/components/layout/admin-shell';
 import { StaffShell } from '@/components/layout/staff-shell';
 import { SalesmanShell } from '@/components/layout/salesman-shell';
 import { RetailerShell } from '@/components/layout/retailer-shell';
-import SellerPortalLayout from '@/app/seller/layout';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/retailer/home', useRouter: () => ({}) }));
 vi.mock('@/lib/auth/actions', () => ({ logoutAction: '/login' }));
-vi.mock('@/lib/seller/guard', () => ({
-  requireSellerPage: vi.fn().mockResolvedValue({ seller: { business_name: 'Fixture seller', status: 'active', gstin: null } }),
-}));
 vi.mock('@/components/layout/sidebar', () => ({ Sidebar: () => null }));
 vi.mock('@/components/layout/topbar', () => ({ Topbar: () => null }));
 vi.mock('@/components/retailer/search-field', () => ({ SearchField: () => null }));
@@ -52,10 +48,11 @@ describe('policy links in role-specific shells', () => {
   it('renders all seven links in the retailer footer', () => {
     expectPolicyFooter(renderToStaticMarkup(<RetailerShell fullName="Fixture" role="retailer" footerLinks={MANAGED_LINKS}>Content</RetailerShell>));
   });
-  it('renders all seven links in the seller footer without removing seller navigation', async () => {
-    const html = renderToStaticMarkup(await SellerPortalLayout({ children: 'Content' }));
-    expectPolicyFooter(html);
-    for (const href of ['/seller/dashboard', '/seller/offers', '/seller/orders', '/seller/profile']) expect(html).toContain(`href="${href}"`);
+  it('has no seller shell left to render (seller portal removed)', async () => {
+    // The seller workspace no longer exists, so there is no seller footer to
+    // check. Assert the retirement instead of silently dropping the case.
+    const { existsSync } = await import('node:fs');
+    expect(existsSync('app/seller/layout.tsx')).toBe(false);
   });
 
   it('renders exactly the managed links, so no shell keeps a private list', () => {

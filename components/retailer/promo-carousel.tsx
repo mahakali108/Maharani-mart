@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { PromoBanner } from '@/components/retailer/promo-banner';
 import { cn } from '@/lib/utils/cn';
+import { BRAND } from '@/lib/brand';
 
 export interface PromoBannerData {
   id: string;
@@ -80,7 +81,7 @@ export function PromoCarousel({ banners }: { banners: PromoBannerData[] }) {
   }
 
   return (
-    <section aria-label="Maharani Traders promotions" aria-roledescription="carousel"
+    <section aria-label={`${BRAND.name} promotions`} aria-roledescription="carousel"
       onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       onFocusCapture={(event) => { if (!(event.target as HTMLElement).closest('[data-rotation-control]')) setPaused(true); }}

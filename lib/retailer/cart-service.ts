@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { mergeLinesIntoCart, type CartMergeLine } from '@/lib/retailer/cart-merge';
-import { mutateRetailerCartLine, mutateRetailerCartLineEx } from '@/lib/retailer/cart-rpc';
+import { mutateRetailerCartLine } from '@/lib/retailer/cart-rpc';
 import { validatePackForCart } from '@/lib/retailer/cart-validation';
 
 export { validatePackForCart } from '@/lib/retailer/cart-validation';
@@ -16,9 +16,9 @@ export async function addCartLines(
   lines: CartMergeLine[]
 ): Promise<CartServiceResult> {
   if (lines.length < 1 || lines.length > 100) return { error: 'Add between 1 and 100 cart lines.' };
-  const identities = lines.map((line) => `${line.packId.toLowerCase()}|${line.sellerOfferId?.toLowerCase() ?? 'maharani'}`);
+  const identities = lines.map((line) => line.packId.toLowerCase());
   if (new Set(identities).size !== lines.length) {
-    return { error: 'The same pack and seller offer cannot be added more than once.' };
+    return { error: 'The same pack cannot be added more than once.' };
   }
   try {
     await mergeLinesIntoCart(supabase, retailerId, lines);
@@ -36,40 +36,28 @@ export async function updateCartLine(
 ): Promise<CartServiceResult> {
   const { data: item, error: readError } = await supabase
     .from('cart_items')
-    .select('pack_id, seller_offer_id, quantity')
+    .select('pack_id, quantity')
     .eq('id', cartItemId)
     .eq('retailer_id', retailerId)
-    .maybeSingle<{ pack_id: string; seller_offer_id: string | null; quantity: number }>();
+    .maybeSingle<{ pack_id: string; quantity: number }>();
   if (readError) return { error: 'The cart item could not be loaded. Please try again.' };
   if (!item) return { error: 'Cart item not found.' };
-  if (!item.seller_offer_id) {
-    const validationError = await validatePackForCart(supabase, retailerId, item.pack_id, quantity);
-    if (validationError) return { error: validationError };
-  }
 
-  const { error } = item.seller_offer_id
-    ? await mutateRetailerCartLineEx(supabase, {
-        p_pack_id: item.pack_id,
-        p_seller_offer_id: item.seller_offer_id,
-        p_cart_item_id: cartItemId,
-        p_expected_quantity: item.quantity,
-        p_quantity: quantity,
-      })
-    : await mutateRetailerCartLine(supabase, {
-        p_pack_id: item.pack_id,
-        p_cart_item_id: cartItemId,
-        p_expected_quantity: item.quantity,
-        p_quantity: quantity,
-      });
+  const validationError = await validatePackForCart(supabase, retailerId, item.pack_id, quantity);
+  if (validationError) return { error: validationError };
+
+  const { error } = await mutateRetailerCartLine(supabase, {
+    p_pack_id: item.pack_id,
+    p_cart_item_id: cartItemId,
+    p_expected_quantity: item.quantity,
+    p_quantity: quantity,
+  });
   if (!error) return { success: true };
   if (/CART_CHANGED/i.test(error.message)) return { error: 'Your cart changed in another request. Refresh it and try again.' };
   if (/minimum[ _]order[ _]quantity/i.test(error.message)) return { error: error.message };
   if (/INSUFFICIENT_STOCK/i.test(error.message)) {
     const available = error.message.match(/only\s+(\d+)\s+available/i)?.[1];
-    return { error: available ? `Only ${available} pieces are available from this seller.` : 'This seller does not have enough stock.' };
-  }
-  if (/OFFER_UNAVAILABLE|PRICE_BELOW_FLOOR/i.test(error.message)) {
-    return { error: 'This seller offer is no longer available. Choose another offer.' };
+    return { error: available ? `Only ${available} pieces are available.` : 'There is not enough stock for that quantity.' };
   }
   if (/PACK_UNAVAILABLE/i.test(error.message)) return { error: 'This pack is no longer available.' };
   return { error: 'The cart could not be updated. Please try again.' };

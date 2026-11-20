@@ -1,8 +1,9 @@
 import { AuthFrame } from '@/components/auth/auth-frame';
 import type { Metadata } from 'next';
 import { ForgotPasswordForm } from '@/components/auth/forgot-password-form';
+import { BRAND } from '@/lib/brand';
 
-export const metadata: Metadata = { title: 'Forgot password — Maharani Traders' };
+export const metadata: Metadata = { title: `Forgot password — ${BRAND.name}` };
 
 export default function ForgotPasswordPage() {
   return (

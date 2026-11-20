@@ -80,14 +80,43 @@ describe('starter content for the website content module', () => {
     for (const page of seed.pages) expect(page.internal_notes.length, page.slug).toBeGreaterThan(20);
   });
 
-  it('preserves the owner-provided contact details as editable page content', () => {
+  it('carries only the owner-approved identity facts and the owner-provided contact details', () => {
     const contact = bySlug.get('contact')!;
     const text = JSON.stringify(contact.sections);
-    for (const value of ['AJAY KUMAR', 'AJAY GENERAL', 'MAHARANI TRADERS', 'Plot No. 231', '804403', '8987023959', 'adinathsahu8987@gmail.com']) {
+    // Approved: Ajay General (proprietorship) is the legal seller and invoice
+    // issuer, trading under the Maharani Traders brand, in an app called Maha
+    // Bazar by Maharani.
+    for (const value of [
+      'Legal seller and invoice issuer: AJAY GENERAL (proprietorship)',
+      'Brand and trading style: MAHARANI TRADERS',
+      'Customer-facing app: Maha Bazar by Maharani',
+      '8987023959',
+      'adinathsahu8987@gmail.com',
+    ]) {
       expect(text, value).toContain(value);
     }
     expect(text).toContain('[8987023959](tel:8987023959)');
     expect(text).toContain('[adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)');
+  });
+
+  it('never publishes an unverified statutory fact, only an owner-supplied placeholder', () => {
+    const text = JSON.stringify(seed.pages);
+    // The proprietor's personal name, the registration status, the named
+    // grievance officer and the registered address were never verified by the
+    // owner. Publishing any of them asserts a statutory fact we do not hold.
+    for (const unverified of ['AJAY KUMAR', 'Plot No. 231', '804403', 'Registered trade name: AJAY GENERAL']) {
+      expect(text, unverified).not.toContain(unverified);
+    }
+    // What replaced them must be visibly a placeholder, not a silent omission:
+    // a customer reading the contact block must see that the fact is missing.
+    for (const placeholder of [
+      'Proprietor name: to be supplied by the owner before publication',
+      'Registered trade name and registration status: to be supplied by the owner before publication',
+      'Grievance officer: to be supplied by the owner before publication',
+      'Registered address: to be supplied by the owner before publication',
+    ]) {
+      expect(text, placeholder).toContain(placeholder);
+    }
   });
 });
 
@@ -145,19 +174,24 @@ describe('the staged publication scripts', () => {
     return [...block.matchAll(/'([a-z][a-z0-9-]*)'/g)].map((match) => match[1]!);
   };
 
-  it('publishes the seeded pages in two stages that exactly cover the seed', () => {
+  it('publishes the seeded pages in two stages, holding back the retired seller agreement', () => {
     const stageOne = slugsOf(stage1);
     const stageTwo = slugsOf(stage2);
     const seeded = seed.pages.map((page) => page.slug);
     expect(new Set([...stageOne, ...stageTwo]).size).toBe(stageOne.length + stageTwo.length);
-    expect([...stageOne, ...stageTwo].sort()).toEqual([...seeded].sort());
+    // `seller-agreement` is the ONE seeded page neither stage publishes. The
+    // marketplace it governed was discontinued (migration 0110), so publishing it
+    // would put a live contract for a seller class that no longer exists in front
+    // of customers. The page itself is preserved, unpublished.
+    expect([...stageOne, ...stageTwo].sort()).toEqual([...seeded].filter((slug) => slug !== 'seller-agreement').sort());
+    expect([...stageOne, ...stageTwo]).not.toContain('seller-agreement');
     // Stage 1 carries only wording that was already public before the module.
     for (const slug of stageOne) expect(stageOne.length, slug).toBeGreaterThan(0);
     expect(stageOne).toHaveLength(9);
-    expect(stageTwo).toHaveLength(10);
+    expect(stageTwo).toHaveLength(9);
   });
 
-  it('publishes both stages before the deploy (deferring stage 2 would darken ten live URLs)', () => {
+  it('publishes both stages before the deploy (deferring stage 2 would darken nine live URLs)', () => {
     // All nineteen pages are served by the deployed app today, so a deploy that
     // lands after stage 1 only takes ten live URLs offline until stage 2 runs.
     // This pins the corrected order and the fact it depends on.
@@ -169,7 +203,10 @@ describe('the staged publication scripts', () => {
     expect(stageTwo).toBeLessThan(deploy);
     expect(order).toMatch(/must both happen before step 8/i);
     expect(readme).not.toMatch(/Step 7 is deliberately not urgent/);
-    expect(readme).toMatch(/seller-agreement[\s\S]*acceptance is already enforced/);
+    // The seller agreement is deliberately NOT published by any stage, and the
+    // README must say so rather than claiming its acceptance gate still matters.
+    expect(readme).toMatch(/seller-agreement[\s\S]*NOT published by either/);
+    expect(readme).not.toMatch(/acceptance is already enforced/);
     for (const slug of slugsOf(stage2)) expect(readme, slug).toContain(`/legal/${slug}`);
   });
 

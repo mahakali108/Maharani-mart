@@ -51,9 +51,6 @@ export function CartItemRow({
   allowLoosePieces = true,
   isUnavailable,
   isFavorite = false,
-  sellerName = null,
-  sellerGstin = null,
-  fulfilmentType = null,
 }: {
   id: string;
   productId?: string;
@@ -72,9 +69,6 @@ export function CartItemRow({
   allowLoosePieces?: boolean;
   isUnavailable: boolean;
   isFavorite?: boolean;
-  sellerName?: string | null;
-  sellerGstin?: string | null;
-  fulfilmentType?: 'seller' | 'maharani' | null;
 }) {
   const router = useRouter();
   const [localQty, setLocalQty] = useState(quantity);
@@ -218,13 +212,6 @@ export function CartItemRow({
             <Boxes className="h-3 w-3 shrink-0 text-slate-600" aria-hidden="true" />
             Sold by piece · min {moq} pc{moq === 1 ? '' : 's'}
           </p>
-          {sellerName ? (
-            <p className="mt-1 text-[10px] leading-4 text-slate-600">
-              Sold by <span className="font-bold text-slate-800">{sellerName}</span>
-              {sellerGstin ? ` · GSTIN ${sellerGstin}` : ''}
-              {' · '}{fulfilmentType === 'seller' ? 'Seller fulfilled' : 'Fulfilled by Maharani'}
-            </p>
-          ) : null}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">

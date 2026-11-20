@@ -190,10 +190,16 @@ describe('0103 security advisor remediation', () => {
       'public.is_area_assigned_to_current_staff(uuid)',
       'public.is_warehouse_assigned_to_current_staff(uuid)',
       'public.is_phone_registered(text)',
-      'public.submit_supplier_application(text,text,text,text,text,text,text,text,text,text,text)',
     ]) {
       expect(await canExecute('anon', signature), signature).toBe(true);
     }
+
+    // 0110 closed the supplier funnel; this is asserted on its own so a future
+    // re-opening is a visible, deliberate edit rather than a quiet addition to
+    // the list above.
+    expect(
+      await canExecute('anon', 'public.submit_supplier_application(text,text,text,text,text,text,text,text,text,text,text)'),
+    ).toBe(false);
   });
 
   it('keeps the five internal service_role-only tables closed with RLS enabled', async () => {

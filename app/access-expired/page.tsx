@@ -2,6 +2,7 @@ import { Clock, Mail, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { formatIndiaDate } from '@/lib/datetime/india';
+import { BRAND } from '@/lib/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +42,7 @@ export default async function AccessExpiredPage() {
         <h1 className="shop-heading">Access Expired</h1>
 
         <p className="mt-2 text-sm text-ink-600">
-          Your access period to Maharani Traders has expired.
+          Your access period to {BRAND.name} has expired.
           {role ? ` Your role: ${role.replace('_', ' ')}.` : ''}
         </p>
 

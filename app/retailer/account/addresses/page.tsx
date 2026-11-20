@@ -4,8 +4,9 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { AddressCardActions, AddressForm, addressLine, type SavedAddress } from '@/components/retailer/address-form';
 import { AddressEditToggle } from '@/components/retailer/address-edit-toggle';
+import { BRAND } from '@/lib/brand';
 
-export const metadata = { title: 'Address book — Maharani Traders' };
+export const metadata = { title: `Address book — ${BRAND.name}` };
 
 export default async function AddressesPage() {
   const user = await requireUser();

@@ -388,7 +388,7 @@ describe('completeDeliveryAction — who may complete', () => {
     const sql = readFileSync('supabase/migrations/0099_atomic_delivery_completion.sql', 'utf8');
     const list = /v_actor_role not in \(([^)]+)\) then\s+raise exception 'DELIVERY_COMPLETE:NO_PERMISSION/.exec(sql);
     const dbRoles = list![1]!.split(',').map((r) => r.trim().replace(/'/g, '')).sort();
-    const appRoles = (['super_admin', 'admin', 'staff', 'salesman', 'retailer', 'seller'] as const)
+    const appRoles = (['super_admin', 'admin', 'staff', 'salesman', 'retailer'] as const)
       .filter((role) => can(role, 'deliveries.execute')).sort();
     expect(dbRoles).toEqual(appRoles);
   });

@@ -3,6 +3,7 @@
 import { Bell, Menu } from 'lucide-react';
 import { logoutAction } from '@/lib/auth/actions';
 import { ROLE_LABELS, type UserRole } from '@/lib/auth/roles';
+import { BRAND } from '@/lib/brand';
 
 export function Topbar({
   fullName,
@@ -35,7 +36,7 @@ export function Topbar({
         {/* Compact brand on phones so the drawer-driven consoles still feel
             like an app; hidden on desktop where the sidebar shows it. */}
         <span className="truncate text-sm font-bold tracking-tight text-ink-900 lg:hidden">
-          Maharani Traders
+          {BRAND.name}
         </span>
       </div>
 

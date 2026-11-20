@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
+import { BRAND } from '@/lib/brand';
 
 /**
- * Web app manifest for Maharani Traders.
+ * Web app manifest for Maha Bazar by Maharani.
  *
  * Served by Next.js at /manifest.webmanifest. This is what makes the site
  * installable as a PWA on Android Chrome / other browsers.
@@ -16,10 +17,11 @@ export default function manifest(): MetadataRoute.Manifest {
     // Stable identity for the installed app (Chromium uses it to match an
     // existing install across updates). Equal to start_url, so no reinstall.
     id: '/',
-    name: 'Maharani Traders',
-    short_name: 'Maharani Traders',
-    description:
-      'Maharani Traders — B2B wholesale ordering, order status and retailer support.',
+    // Customer-facing app name. The legal entity is unchanged: Ajay General
+    // (proprietorship), trading as Maharani Traders. See lib/brand.ts.
+    name: BRAND.name,
+    short_name: BRAND.shortName,
+    description: `${BRAND.name} — B2B wholesale ordering, order status and retailer support.`,
     start_url: '/',
     scope: '/',
     display: 'standalone',

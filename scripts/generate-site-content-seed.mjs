@@ -142,6 +142,224 @@ const PREVIOUS = existsSync(path.join(root, 'content/site-pages.seed.json'))
   : [];
 const previousBySlug = new Map(PREVIOUS.map((page) => [page.slug, page]));
 
+/**
+ * Marketplace retirement (Phase 4 of the seller/supplier removal).
+ *
+ * Ten pages carried wording written when a third-party seller marketplace was
+ * still a possibility ("the application includes marketplace and seller
+ * features, subject to configuration"). That programme has been discontinued, so
+ * the text now states the single-seller position. The replacements below are
+ * keyed on the EXACT superseded sentence and are applied to the JSON seed as a
+ * final pass, so:
+ *   - the reviewed wording lives in one place (this file) and re-running the
+ *     generator reproduces the seed byte-for-byte;
+ *   - only a sentence that is still present is replaced; a page the owner has
+ *     since rewritten in Super Admin -> Website content is left alone;
+ *   - nothing is invented: each replacement asserts only facts already true in
+ *     the repository (own stock only, no marketplace, no seller sign-up).
+ *
+ * The legal pages that had no structured source (terms, privacy, about, contact,
+ * business-disclosure) are read back from the JSON, and this pass is what keeps
+ * them honest.
+ */
+const RETIRED_MARKETPLACE_COPY = [
+  // terms — Acceptance and business model
+  ['The application includes marketplace and seller features, including seller offers and fulfilment; their availability depends on configuration. These own-stock sales terms do not provide a complete set of terms for third-party seller transactions. Any third-party launch or ongoing operation requires separately reviewed customer and seller terms, including the seller of record, invoicing, fulfilment, returns and support responsibilities. Applicable rights are not excluded.',
+   'Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
+  // privacy — How information is used and shared
+  ['Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. The application also supports third-party seller fulfilment: if used, the relevant seller may receive order and delivery information, including the recipient address and phone where provided. Marketplace data flows and disclosures require verification before any third-party operation. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication.',
+   'Where necessary and lawful, information may be shared with delivery providers, technology and security providers, professional advisers or authorities. Because every order is fulfilled by Maharani Traders from its own stock, order and delivery information is not disclosed to any independent seller or marketplace participant; that programme has been discontinued. We do not sell customer personal information as a business practice. The application uses Supabase for authentication and includes Vercel Analytics; actual deployment and provider arrangements should be verified before publication.'],
+  // business-disclosure — Tax and policy scope
+  ['The own-stock sales policies do not provide complete terms for third-party seller transactions. The application includes marketplace features for seller offers and fulfilment, subject to configuration; we have not verified whether those features are operating in production. Any third-party launch or ongoing operation requires separately reviewed seller and customer terms and clear allocation of invoicing, fulfilment, return and support responsibilities. Applicable rights are not excluded.',
+   'Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
+  // about — How ordering works
+  ['The application includes marketplace and seller features, subject to configuration. The own-stock sales policies do not provide complete terms for third-party transactions; any launch or ongoing operation requires separate review. Food products are excluded from the stated current scope.',
+   'Maharani Traders sells only from its own stock. The third-party marketplace described in earlier versions of this page has been discontinued. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Food products are excluded from the current scope.'],
+  // contact — Seller and account access
+  ['Seller accounts are created by Super Admin invitation. If you have an invitation, use the emailed link; verification and approval are required before trading. The current own-stock sales policies do not provide complete terms for third-party seller transactions, which require separate review. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support.',
+   'There is no seller or supplier sign-up. Retail shop accounts are created by registering on this site and are activated after approval by Maharani Traders. If you already held a seller account under the earlier marketplace programme, that programme has been discontinued; contact us using the details below and we will explain what is available to you. For sign-in issues, use [password recovery](/forgot-password). Do not share passwords, OTPs or one-time links with support.'],
+];
+
+/** Sentence-level replacements inside the structured POLICY_CONTENT pages. */
+const RETIRED_MARKETPLACE_SENTENCES = [
+  // damaged-goods
+  ['After checking the complaint we will offer the remedy that fits the problem: replacement, collection of the goods with a refund, or a price adjustment. For goods sold by an independent seller, we pass the complaint to that seller and follow it up; see the Marketplace Disclaimer.',
+   'After checking the complaint we will offer the remedy that fits the problem: replacement, collection of the goods with a refund, or a price adjustment. Every order on this website is sold and fulfilled by Maharani Traders from its own stock, so we handle the whole complaint ourselves and there is no third party to pass it to. See the [Marketplace Disclaimer](/legal/marketplace-disclaimer) for the record of the discontinued marketplace programme.'],
+  // gst-pricing-invoice
+  ['An invoice or bill is issued for every delivered order by the seller of the goods: by us for own-stock goods, and by the independent seller for seller offers. Where one order contains goods from more than one seller, you may receive more than one invoice.',
+   'An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.'],
+  // prohibited-products
+  ['Every product category carries a compliance classification set by the Super Admin. Only categories classified as cosmetics or non-food FMCG can hold products for sale; the database rejects a product or seller offer placed in any other category.',
+   'Every product category carries a compliance classification set by the Super Admin. Only categories classified as cosmetics or non-food FMCG can hold products for sale; the database rejects a product placed in any other category.'],
+  ['Seller offers are reviewed before they go live, and each decision is recorded with the reviewer and the reason.',
+   'Every product goes through a compliance review before it can be published, and each decision is recorded with the reviewer and the reason. Only Maharani Traders adds products to this website, so there is no third-party listing channel to police.'],
+  // ip-complaints
+  ['We acknowledge the complaint, check it, and where it appears valid we remove or disable the listing. For a seller offer we inform the seller, who may reply with evidence such as purchase invoices or a brand authorisation.',
+   'We acknowledge the complaint, check it, and where it appears valid we remove or disable the listing while we investigate. Because we are the seller of every product on this website, there is no third-party seller to notify: we answer the complaint ourselves with the purchase invoices and brand authorisations we hold.'],
+  ['If the seller\u2019s reply shows the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. Repeated or serious infringement leads to suspension of the seller.',
+   'If our own records show the goods are genuine and lawfully sold, the listing may be restored and we will tell you why. A listing that cannot be substantiated stays withdrawn.'],
+  // suspension-termination
+  ['For sellers: unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints.',
+   'For retailer accounts: attempted resale of unsafe, counterfeit, mislabelled or prohibited goods, or failure to respond to complaints about an order.'],
+  // ---- Second hop -------------------------------------------------------------
+  // The first hop above replaced the ORIGINAL marketplace sentence. An earlier
+  // revision of this removal then introduced its own "we are the seller of
+  // record for every order" wording, which asserts a legal role (seller of
+  // record, invoice issuer, GST registrant) that the owner has NOT verified.
+  // Those sentences are corrected here so the table CONVERGES regardless of
+  // which revision a database was seeded from. Each entry only fires if the text
+  // is actually present, so re-running is safe.
+  ['Maharani Traders sells only goods from its own stock. There is no marketplace: all products are bought, stored, priced and sold by Maharani Traders, and we are the seller of record for every order. The third-party seller programme that earlier versions of these terms mentioned has been discontinued. Any order placed before that change is unaffected, and any rights you already hold are not excluded.',
+   'Maharani Traders sells goods held in its own stock; there is no marketplace and no third-party seller offers. The third-party seller programme that earlier versions of these terms mentioned has been discontinued, and any order placed before that change is unaffected. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
+  ['Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded.',
+   'Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded.'],
+  ['An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party.',
+   'An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party.'],
+  // ---- Third hop: the owner's answer to "who is the seller?" -----------------
+  // The two hops above had to leave the seller identity OPEN, because it was an
+  // unanswered legal question and guessing it was not mine to do. The owner has
+  // now answered it: the AJAY GENERAL proprietorship is the seller and invoice
+  // issuer, trading under the brand MAHARANI TRADERS. That is stated plainly
+  // instead of deferred to the invoice.
+  //
+  // Still invented: nothing. The GSTIN and registered address are NOT written
+  // here — the copy points at the invoice, which is where the registered values
+  // are printed. They are supplied separately and go in when the owner provides
+  // them, not before.
+  ['The business identity that appears as the seller, as the invoice issuer and on the GST registration for a given transaction is stated on the invoice and in the Contact and Legal Information page; it is not assumed by this page.',
+   'The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business.'],
+  ['Which business identity is the seller, the invoice issuer or the GST registrant for a transaction is stated on the invoice and in the Contact and Legal Information page, and is not assumed by this page.',
+   'The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business.'],
+  // ---- Final hop: an earlier revision's about-page wording --------------------
+  // The about page is read back out of the JSON, so its stored text can be any
+  // link in this chain. This entry exists because that page previously said
+  // orders are "invoiced by Maharani Traders", which asserts an invoice-issuer
+  // role for a BRAND rather than for the proprietorship the owner named.
+  ['Maharani Traders sells only from its own stock, so every order is fulfilled and invoiced by Maharani Traders. The third-party marketplace described in earlier versions of this page has been discontinued. Food products are excluded from the current scope.',
+   'Maharani Traders sells only from its own stock. The third-party marketplace described in earlier versions of this page has been discontinued. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Food products are excluded from the current scope.'],
+  // ---- Brand hop: the app is now "Maha Bazar by Maharani" --------------------
+  // A rename of the customer-facing app is NOT a change of legal entity. The
+  // entity stays Ajay General (proprietorship), trading as Maharani Traders, and
+  // the sentence now says so explicitly. Maa Kali Enterprises is named only to
+  // state that it is SEPARATE - no ownership, invoicing or identity is claimed
+  // for it anywhere.
+  ['Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity.',
+   'Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer. Maharani Traders is a trading style, not a separate incorporated company or legal entity. Maa Kali Enterprises is a separate business identity.'],
+  // The intermediate wording above replaced this one during earlier review; it
+  // still carried the unverified personal name and the unverified registration
+  // claim, so it is corrected here too. Keeping every link in the chain means a
+  // database seeded at any earlier revision converges to the approved statement.
+  // ---- Unverified statutory facts removed ------------------------------------
+  // Owner-approved facts are only: the app name, the Maharani Traders trading
+  // style, Ajay General (proprietorship) as legal seller and invoice issuer, and
+  // that Maa Kali Enterprises is a separate business identity. Everything below
+  // asserted a fact the owner has NOT verified - a personal name, a REGISTRATION
+  // status, a named grievance officer, a registered address - so it is replaced
+  // with an owner-supplied placeholder rather than a guess.
+  ["Maha Bazar by Maharani is the customer-facing website and app name for Maharani Traders, a brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL (proprietorship). Maharani Traders is a trading style, not a separate incorporated company or legal entity, and the legal seller and invoice issuer is AJAY GENERAL. Maa Kali Enterprises is a separate business identity and is not connected to this business. These policies cover own-stock cosmetics, personal-care products and non-food FMCG. Food products are excluded.",
+   "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer. Maharani Traders is a trading style, not a separate incorporated company or legal entity. Maa Kali Enterprises is a separate business identity. These policies cover own-stock cosmetics, personal-care products and non-food FMCG. Food products are excluded."],
+  ["Maharani Traders is the customer-facing brand of AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL.",
+   "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer."],
+  ["Maharani Traders is the brand of AJAY KUMAR, Proprietor, trading as AJAY GENERAL. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG.",
+   "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG."],
+  ["For questions, corrections or other privacy requests, contact AJAY KUMAR, Proprietor, using the details below. Requests will be reviewed under applicable law. This policy may be updated when practices or requirements change; the latest version will carry its effective date.",
+   "For questions, corrections or other privacy requests, contact the AJAY GENERAL proprietorship using the details below. Requests will be reviewed under applicable law. This policy may be updated when practices or requirements change; the latest version will carry its effective date."],
+  ["Proprietor: AJAY KUMAR",
+   "Proprietor name: to be supplied by the owner before publication"],
+  ["Registered trade name: AJAY GENERAL",
+   "Registered trade name and registration status: to be supplied by the owner before publication"],
+  ["Grievance Officer: AJAY KUMAR, Proprietor",
+   "Grievance officer: to be supplied by the owner before publication"],
+  ["Brand: MAHARANI TRADERS",
+   "Brand and trading style: MAHARANI TRADERS"],
+  // The registered address survived in the previous seed's contact card. It is a
+  // statutory fact the owner has not verified, so it becomes a placeholder too.
+  ["Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar \u2013 804403",
+   "Registered address: to be supplied by the owner before publication"],
+];
+
+/**
+ * Applies the retirement copy to a page's sections. Matching is on the whole
+ * sentence so an unrelated edit elsewhere on the page cannot be clobbered, and a
+ * sentence that no longer exists is simply skipped.
+ */
+/**
+ * Rewrite one paragraph against the correction table until it stops changing.
+ *
+ * The table is a CHAIN: an earlier entry's `to` is a later entry's `from`
+ * (marketplace sentence -> neutral copy -> approved identity). One pass would stop
+ * on an intermediate link, so this iterates to a fixpoint.
+ *
+ * Two granularities are tried, because the table holds both single sentences and
+ * whole paragraphs: first the paragraph as a whole, then sentence by sentence.
+ * Splitting is lossless, so an untouched paragraph is returned byte-identical.
+ */
+function applyCorrectionChain(line, map) {
+  const applyHops = (text) => {
+    let current = text;
+    for (let hop = 0; hop < 10; hop += 1) {
+      const next = map.get(current);
+      if (next === undefined) break;
+      current = next;
+    }
+    return current;
+  };
+
+  const whole = applyHops(line);
+  if (whole !== line) return whole;
+  return line
+    .split(/(?<=[.!?])\s+/)
+    .map(applyHops)
+    .join(' ');
+}
+
+function retireMarketplaceCopy(sections) {
+  const map = new Map([
+    ...RETIRED_MARKETPLACE_COPY.map((pair) => pair),
+    ...RETIRED_MARKETPLACE_SENTENCES,
+  ]);
+
+  return sections.map((section) =>
+    normaliseContactBlock({
+      ...section,
+      body: (section.body ?? []).map((line) => applyCorrectionChain(line, map)),
+      bullets: (section.bullets ?? []).map((line) => applyCorrectionChain(line, map)),
+    }),
+  );
+}
+
+/**
+ * Every page whose contact card came from the previous seed carries a CONTACT
+ * block that is only "the old CONTACT_LINES". CONTACT_LINES has since gained the
+ * owner-approved identity lines (`Legal seller and invoice issuer`,
+ * `Customer-facing app`) and lost the unverified statutory ones, so any block
+ * still using the placeholder set is rebuilt from CONTACT_LINES. The lead-in
+ * sentence a page wrote for itself is preserved.
+ */
+const CONTACT_PLACEHOLDER = 'Proprietor name: to be supplied by the owner before publication';
+
+// Every label CONTACT_LINES owns. A block is rebuilt from CONTACT_LINES by
+// dropping exactly the lines these labels claim, so re-running the generator on
+// its own output changes nothing (the block is regenerated, not appended to).
+const CONTACT_LABEL =
+  /^(?:Legal seller and invoice issuer|Brand and trading style|Customer-facing app|Proprietor name|Registered trade name and registration status|Registered trade name|Grievance [Oo]fficer|Grievance officer|Registered address|Address|Brand|Phone|Email):/;
+
+function normaliseContactBlock(section) {
+  const body = section.body ?? [];
+  if (!body.includes(CONTACT_PLACEHOLDER)) return section;
+  const leadIn = body.filter((line) => !CONTACT_LABEL.test(line));
+  return { ...section, body: [...leadIn, ...CONTACT_LINES] };
+}
+
+function retireMarketplaceIntro(text) {
+  if (typeof text !== 'string' || !text) return text;
+  const map = new Map([
+    ...RETIRED_MARKETPLACE_COPY.map((pair) => pair),
+    ...RETIRED_MARKETPLACE_SENTENCES,
+  ]);
+  return applyCorrectionChain(text, map);
+}
+
 function readPage(relative) {
   const source = readFileSync(path.join(root, relative), 'utf8');
   return {
@@ -161,11 +379,26 @@ function readPage(relative) {
  * afterwards (Super Admin -> Website content).
  */
 const CONTACT_LINES = [
-  'Proprietor: AJAY KUMAR',
-  'Registered trade name: AJAY GENERAL',
-  'Brand: MAHARANI TRADERS',
-  'Grievance Officer: AJAY KUMAR, Proprietor',
-  'Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403',
+  // ONLY the owner-approved identity statement may be asserted here.
+  // Owner-approved: Ajay General (proprietorship) is the legal seller and invoice
+  // issuer, trading under the Maharani Traders brand.
+  //
+  // The following were REMOVED because they are statutory facts the owner has not
+  // verified, and publishing an unverified one is worse than publishing a
+  // placeholder:
+  //   * "Proprietor: AJAY KUMAR"                 - the proprietor's personal name
+  //   * "Registered trade name: AJAY GENERAL"    - the REGISTRATION status
+  //   * "Grievance Officer: AJAY KUMAR, ..."     - the named officer
+  //   * "Address: Plot No. 231, ..."             - the registered address
+  // Setting these requires the owner's verified values; see lib/legal/issuer.ts,
+  // which models each as an owner-supplied fact with a controlled placeholder.
+  'Legal seller and invoice issuer: AJAY GENERAL (proprietorship)',
+  'Brand and trading style: MAHARANI TRADERS',
+  'Customer-facing app: Maha Bazar by Maharani',
+  'Proprietor name: to be supplied by the owner before publication',
+  'Registered trade name and registration status: to be supplied by the owner before publication',
+  'Grievance officer: to be supplied by the owner before publication',
+  'Registered address: to be supplied by the owner before publication',
   'Phone: [8987023959](tel:8987023959)',
   'Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)',
 ];
@@ -203,6 +436,11 @@ for (const doc of LEGAL_DOCUMENTS) {
   }
 
   if (!sections.length) throw new Error(`No sections extracted for legal page "${doc.key}"`);
+  sections = retireMarketplaceCopy(sections);
+  // The intro carries the identity statement on some pages, so it must go through
+  // the same correction table. Skipping it was how an unverified personal name
+  // survived in `about`.
+  intro = retireMarketplaceIntro(intro);
 
   pages.push({
     slug: doc.key,
@@ -243,8 +481,10 @@ pages.push({
   short_label: 'About',
   eyebrow: aboutSource.eyebrow || 'About us',
   title: aboutSource.title,
-  intro: aboutSource.intro,
-  meta_description: aboutSource.meta_description ?? aboutSource.intro.slice(0, 300),
+  intro: retireMarketplaceIntro(aboutSource.intro),
+  meta_description: retireMarketplaceIntro(
+    aboutSource.meta_description ?? aboutSource.intro.slice(0, 300),
+  ),
   version: '1.0',
   effective_date: '2026-11-14',
   sort_order: 1,
@@ -253,7 +493,7 @@ pages.push({
   show_contact_details: true,
   related_slugs: ['terms', 'shipping'],
   is_system: true,
-  sections: aboutSource.sections,
+  sections: retireMarketplaceCopy(aboutSource.sections),
   owner_decisions: aboutSource.owner_decisions ?? [],
   internal_notes:
     'Business identity and contact details must be confirmed by the owner before launch. The text was carried over from the pre-CMS page unchanged.',
@@ -268,8 +508,10 @@ pages.push({
   short_label: 'Contact',
   eyebrow: contactSource.eyebrow || 'Support',
   title: contactSource.title,
-  intro: contactSource.intro,
-  meta_description: contactSource.meta_description ?? contactSource.intro.slice(0, 300),
+  intro: retireMarketplaceIntro(contactSource.intro),
+  meta_description: retireMarketplaceIntro(
+    contactSource.meta_description ?? contactSource.intro.slice(0, 300),
+  ),
   version: '1.0',
   effective_date: '2026-11-14',
   sort_order: 2,
@@ -278,7 +520,7 @@ pages.push({
   show_contact_details: true,
   related_slugs: ['grievance', 'privacy'],
   is_system: true,
-  sections: contactSource.sections,
+  sections: retireMarketplaceCopy(contactSource.sections),
   owner_decisions: contactSource.owner_decisions ?? [],
   internal_notes:
     'Contact details are owner-provided. Until the storefront contact block is marked verified in Super Admin → Business & contact details, launch readiness treats them as unconfirmed.',

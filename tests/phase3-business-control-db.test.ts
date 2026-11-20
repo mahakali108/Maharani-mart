@@ -841,36 +841,59 @@ describe('Phase 3 — Super Admin Business Control, RLS, Triggers & Rollback (Po
       );
       expect(staffCheck.rows[0]?.can_read).toBe(true);
 
-      // 2. Direct PostgREST anon calls to submit_supplier_application hit DB-level per-phone rate limit on 6th attempt
-      const abusePhone = '9876501234';
-      for (let i = 0; i < 5; i += 1) {
-        const subId = await as(db, 'anon', async (tx: Tx) => {
-          const { rows } = await tx.query<{ id: string }>(
-            `select public.submit_supplier_application($1,null,$2,$3,null,null,null,null,null,null,'Cosmetics') as id`,
-            [`Burst Supplier ${i}`, 'Owner', abusePhone]
-          );
-          return rows[0]!.id;
-        });
-        await as(db, adminId, (tx: Tx) =>
-          tx.query(
-            `update public.suppliers
-                set status = 'rejected', rejection_reason = 'Rate limit test cycle', reviewed_by = $1, reviewed_at = now()
-              where id = $2`,
-            [adminId, subId]
-          )
-        );
-      }
-      // 6th submission within 10 minutes from anon must be blocked inside DB RPC
-      expect(
-        await expectFail(
-          as(db, 'anon', (tx: Tx) =>
-            tx.query(
-              `select public.submit_supplier_application('Burst Supplier 6',null,'Owner',$1,null,null,null,null,null,null,'Cosmetics')`,
-              [abusePhone]
+      // 2. The supplier application funnel is CLOSED to every API role (0110),
+      //    and the anti-abuse rate limiter underneath it is still a live
+      //    database control.
+      //
+      //    0109 restricted the limiter to `anon` / `authenticated` callers
+      //    specifically. 0110 revoked EXECUTE on submit_supplier_application
+      //    from both, because the supplier programme is discontinued. So the
+      //    correct assertion changed from "the 6th anon call is rate limited"
+      //    to "no API call reaches the endpoint at all". The limiter itself is
+      //    then exercised directly, so the underlying control is still proven.
+      for (const [caller, phone] of [['anon', '9876500101'], [retailer1Id, '9876500102']] as const) {
+        expect(
+          await expectFail(
+            as(db, caller, (tx: Tx) =>
+              tx.query(
+                `select public.submit_supplier_application('Closed Funnel',null,'Owner',$1,null,null,null,null,null,null,'Cosmetics')`,
+                [phone]
+              )
             )
-          )
-        )
-      ).toMatch(/SUPPLIER_RATE_LIMITED/);
+          ),
+          caller
+        ).toMatch(/permission denied for function submit_supplier_application/);
+      }
+
+      // The limiter still refuses past its own limit. It is closed to API roles
+      // too, so it is driven as the owner — the same "trusted caller only"
+      // pattern as the SECURITY DEFINER functions above.
+      const limitKey = 'ab'.repeat(32);
+      const firstFive: boolean[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        const { rows: hit } = await db.query<{ allowed: string }>(
+          `select public.consume_supplier_application_rate_limit($1, 'supplier-rpc-phone', 5, 600) ->> 'allowed' as allowed`,
+          [limitKey]
+        );
+        firstFive.push(hit[0]!.allowed === 'true');
+      }
+      expect(firstFive).toEqual([true, true, true, true, true]);
+      const { rows: sixth } = await db.query<{ allowed: string }>(
+        `select public.consume_supplier_application_rate_limit($1, 'supplier-rpc-phone', 5, 600) ->> 'allowed' as allowed`,
+        [limitKey]
+      );
+      expect(sixth[0]!.allowed).toBe('false');
+      // ...and no API role can drive the limiter directly either.
+      for (const caller of ['anon', retailer1Id]) {
+        expect(
+          await expectFail(
+            as(db, caller, (tx: Tx) =>
+              tx.query(`select public.consume_supplier_application_rate_limit($1, 'supplier-rpc-phone', 5, 600)`, [limitKey])
+            )
+          ),
+          caller
+        ).toMatch(/permission denied for function/);
+      }
 
       // 3. All 13 internal 0109 trigger functions must have zero PUBLIC/anon/authenticated EXECUTE privileges
       const phase3TriggerFns = [

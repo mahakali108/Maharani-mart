@@ -1,9 +1,30 @@
 'use server';
 
+/**
+ * Super Admin handling of HISTORICAL sub-orders.
+ *
+ * Context: Maharani Traders no longer operates a seller marketplace, so no new
+ * seller sub-order can be created — checkout writes one centrally-owned order
+ * (see lib/orders/create-order.ts). However, orders placed while the marketplace
+ * existed still have `sub_orders` children, and those children carry real money
+ * (gross/GST/coupon/Coins shares) and real shipments.
+ *
+ * This action lets an authorised administrator settle such a child honestly:
+ * confirming, shipping, delivering, cancelling or returning it, using the same
+ * atomic database functions the platform already shipped (0097
+ * `close_sub_order_atomic`, 0069 `set_sub_order_status`). It is NOT a seller
+ * feature — there is no seller session, no seller RLS branch and no seller
+ * permission involved.
+ *
+ * Authorization: `orders.return.manage` (admin + super_admin), the permission
+ * that already governs taking money/stock back on an order. The previous
+ * implementation used a seller-specific permission (`sellers.offers.manage`)
+ * which no longer exists.
+ */
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/admin/guard';
-import { isUuid } from '@/lib/admin/seller-validation';
 
 export type SubOrderActionResult = { ok: true } | { ok: false; error: string };
 
@@ -19,13 +40,19 @@ const ALLOWED_STATUSES = [
 
 export type AdminSubOrderStatus = (typeof ALLOWED_STATUSES)[number];
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
 export async function adminTransitionSubOrderAction(
   orderId: string,
   subOrderId: string,
   nextStatus: AdminSubOrderStatus,
   reason?: string
 ): Promise<SubOrderActionResult> {
-  await requirePermission('sellers.offers.manage');
+  await requirePermission('orders.return.manage');
   if (!isUuid(orderId) || !isUuid(subOrderId)) {
     return { ok: false, error: 'Invalid order or sub-order identifier.' };
   }
@@ -93,6 +120,5 @@ export async function adminTransitionSubOrderAction(
 
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath(`/retailer/orders/${orderId}`);
-  revalidatePath('/seller/orders');
   return { ok: true };
 }

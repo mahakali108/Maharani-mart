@@ -24,6 +24,7 @@ import { PolicyLinks } from '@/components/legal/policy-links';
 import type { FooterLink } from '@/lib/site-content/types';
 import { MobileBottomNav, type NavItem } from '@/components/layout/mobile-bottom-nav';
 import { SearchField } from '@/components/retailer/search-field';
+import { BRAND, BRAND_WITH_TRADING_STYLE } from '@/lib/brand';
 
 const DESKTOP_NAV = [
   { label: 'Home', href: '/retailer/home' },
@@ -136,7 +137,7 @@ export function RetailerShell({
             <Link
               href="/retailer/home"
               className="group flex min-h-11 min-w-0 shrink items-center gap-1.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action-500 lg:gap-2.5"
-              aria-label="Maharani Traders home"
+              aria-label={`${BRAND.name} home`}
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lavender-100 text-sm font-black text-primary-600 shadow-sm lg:h-11 lg:w-11 lg:text-lg">
                 M
@@ -145,7 +146,7 @@ export function RetailerShell({
                 <span className="block truncate text-xs font-bold leading-4 text-slate-900 sm:hidden">Maharani</span>
                 <span className="block truncate text-[10px] font-medium leading-3 text-slate-600 sm:hidden">Traders</span>
                 <span className="hidden truncate text-[14px] font-bold tracking-tight text-slate-900 sm:block lg:text-lg">
-                  Maharani Traders
+                  {BRAND.name}
                 </span>
                 {areaName ? (
                   <span className="mt-0.5 hidden max-w-[240px] items-center gap-1 truncate text-[10px] font-semibold text-slate-500 lg:flex">
@@ -277,7 +278,7 @@ export function RetailerShell({
 
       <main id="retailer-main" tabIndex={-1} className="mx-auto min-w-0 w-full scroll-mt-20 lg:scroll-mt-32 max-w-7xl px-3 py-4 sm:px-5 sm:py-6 lg:py-8">{children}</main>
       <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-5 pb-24 pt-4 text-xs text-slate-500 lg:pb-5">
-        <span>Maharani Traders · Wholesale PWA</span>
+        <span>{BRAND_WITH_TRADING_STYLE} · Wholesale PWA</span>
         <nav aria-label="Support and policies" className="flex flex-wrap items-center gap-x-4">
           <Link href="/retailer/help" className="inline-flex min-h-11 items-center hover:text-primary-600">Help</Link>
           <PolicyLinks links={footerLinks} ariaLabel="Support and policies" className="" linkClassName="inline-flex min-h-11 items-center hover:text-primary-600" />

@@ -6,7 +6,6 @@ import { requirePermission } from '@/lib/admin/guard';
 import { createInAppNotification } from '@/lib/notifications/notify';
 import { mergeLinesIntoCart } from '@/lib/retailer/cart-merge';
 import { validatePackForCart } from '@/lib/retailer/cart-service';
-import { loadMarketplaceOfferQuotes } from '@/lib/retailer/marketplace-offers';
 import { isReturnWindowOpen } from '@/lib/delivery/return-window';
 import type { Database } from '@/types/database.types';
 import { attemptAtomicOrderCancellation, restoreAndVerifyCancellationCoins } from '@/lib/orders/cancellation-coins';
@@ -67,7 +66,6 @@ export async function cancelOrderAction(orderId: string, reason: string): Promis
 
 interface ReorderLine {
   packId: string;
-  sellerOfferId?: string | null;
   quantity: number;
 }
 
@@ -123,24 +121,20 @@ export async function addReorderLinesToCartAction(
   // tampering path.
   const { data: ownedItemData } = await supabase
     .from('order_items')
-    .select('pack_id, seller_offer_id')
+    .select('pack_id')
     .eq('order_id', orderId);
-  const sourceKey = (packId: string, sellerOfferId?: string | null) =>
-    `${packId}|${sellerOfferId ?? 'maharani'}`;
-  const allowedSources = new Set(
-    ((ownedItemData ?? []) as { pack_id: string | null; seller_offer_id: string | null }[])
-      .filter((row): row is { pack_id: string; seller_offer_id: string | null } => Boolean(row.pack_id))
-      .map((row) => sourceKey(row.pack_id, row.seller_offer_id))
+  const allowedPacks = new Set(
+    ((ownedItemData ?? []) as { pack_id: string | null }[])
+      .map((row) => row.pack_id)
+      .filter((id): id is string => Boolean(id))
   );
 
-  const requestedLines = new Map<string, { packId: string; sellerOfferId: string | null; quantity: number }>();
+  const requestedLines = new Map<string, { packId: string; quantity: number }>();
   for (const line of lines) {
-    const sellerOfferId = line.sellerOfferId ?? null;
-    const key = sourceKey(line.packId, sellerOfferId);
-    if (!line.packId || requestedLines.has(key)) continue;
+    if (!line.packId || requestedLines.has(line.packId)) continue;
     if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 100000) continue;
-    if (!allowedSources.has(key)) continue;
-    requestedLines.set(key, { packId: line.packId, sellerOfferId, quantity: line.quantity });
+    if (!allowedPacks.has(line.packId)) continue;
+    requestedLines.set(line.packId, { packId: line.packId, quantity: line.quantity });
   }
   if (requestedLines.size === 0) return { error: 'None of the submitted items belong to this order.' };
 
@@ -149,40 +143,21 @@ export async function addReorderLinesToCartAction(
     .select('id, moq, is_active, products ( is_active )')
     .in('id', [...new Set([...requestedLines.values()].map((line) => line.packId))]);
 
-  const marketplace = await loadMarketplaceOfferQuotes(
-    supabase,
-    [...requestedLines.values()].map((line) => line.sellerOfferId).filter((id): id is string => Boolean(id))
-  );
-  const offerById = new Map(marketplace.offers.map((offer) => [offer.offerId, offer]));
-  const validLines: { packId: string; sellerOfferId: string | null; quantity: number }[] = [];
+  const validLines: { packId: string; quantity: number }[] = [];
   let skippedCount = 0;
   const packById = new Map(((packData ?? []) as unknown as PackForReorder[]).map((pack) => [pack.id, pack]));
 
-  for (const { packId, sellerOfferId, quantity } of requestedLines.values()) {
+  for (const { packId, quantity } of requestedLines.values()) {
     const pack = packById.get(packId);
-    if (!pack || !pack.is_active || !pack.products?.is_active) {
+    if (!pack || !pack.is_active || !pack.products?.is_active || quantity < pack.moq) {
       skippedCount += 1;
       continue;
     }
-    if (sellerOfferId) {
-      const offer = offerById.get(sellerOfferId);
-      if (marketplace.error || !offer || offer.packId !== packId
-          || quantity < offer.moq || !offer.inStock
-          || (offer.stockQuantity ?? 0) < quantity) {
-        skippedCount += 1;
-        continue;
-      }
-    } else {
-      if (quantity < pack.moq) {
-        skippedCount += 1;
-        continue;
-      }
-      // Reuse the full canonical Maharani cart validation, including today's
-      // selling tiers, rather than copying a historical price.
-      const validationError = await validatePackForCart(supabase, user.id, packId, quantity);
-      if (validationError) { skippedCount += 1; continue; }
-    }
-    validLines.push({ packId, sellerOfferId, quantity });
+    // Reuse the full canonical Maharani cart validation, including today's
+    // selling tiers, rather than copying a historical price.
+    const validationError = await validatePackForCart(supabase, user.id, packId, quantity);
+    if (validationError) { skippedCount += 1; continue; }
+    validLines.push({ packId, quantity });
   }
 
   if (validLines.length === 0) {

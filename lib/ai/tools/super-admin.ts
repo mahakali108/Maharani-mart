@@ -784,8 +784,8 @@ async function complianceReadiness(context: AIToolContext) {
       status: contact.isConfigured === true ? 'provided' : 'owner_input_required',
     },
     {
-      item: 'Seller-funded discount policy',
-      status: marketplace.sellerFundedDiscountsAllowed === true ? 'enabled' : 'not_enabled',
+      item: 'Third-party discount / settlement policy',
+      status: 'not_applicable',
     },
     {
       item: 'Written CA reference on file',

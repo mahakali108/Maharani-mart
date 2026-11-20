@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/session';
 import { ContactDetailsForm, ShopProfileForm } from '@/components/retailer/profile-edit-forms';
+import { BRAND } from '@/lib/brand';
 
 interface EditProfileRow {
   shop_name: string;
@@ -13,7 +14,7 @@ interface EditProfileRow {
   areas: { name: string; district: string } | null;
 }
 
-export const metadata = { title: 'Edit profile — Maharani Traders' };
+export const metadata = { title: `Edit profile — ${BRAND.name}` };
 
 export default async function EditProfilePage() {
   const user = await requireUser();
