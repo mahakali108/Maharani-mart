@@ -65,6 +65,8 @@ async function isAccessValid(supabase: ReturnType<typeof updateSession> extends 
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // Public worker bootstrap and byte-pinned fallback must never depend on a session.
+  if (['/offline.html', '/pwa-release.js', '/sw.js'].includes(pathname)) return NextResponse.next();
   const { response, supabase, user } = await updateSession(request);
 
   // Retired seller/supplier paths no longer exist. Let them fall through to

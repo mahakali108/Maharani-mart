@@ -11,9 +11,10 @@ export const metadata = { title: `Wholesale shopping | ${BRAND.name}` };
 export default async function RetailerHomePage() {
   const { user, retailer, areaName, profileUnavailable } = await getRetailerShoppingContext();
   const supabase = (await createClient());
-  const [data, wallet] = await Promise.all([
+  const [data, wallet, branding] = await Promise.all([
     loadRetailerHome(supabase, user.id, retailer?.area_id ?? null, process.env.NEXT_PUBLIC_SITE_URL, !!retailer && !profileUnavailable),
     retailer ? getRetailerWalletSummary(supabase, user.id).catch(() => null) : Promise.resolve(null),
+    supabase.rpc("published_storefront_brand").returns<{ display_name: string; tagline: string }[]>(),
   ]);
   const services = homeServices({
     dispatch: process.env.COMPANY_DISPATCH_NOTE,
@@ -23,7 +24,7 @@ export default async function RetailerHomePage() {
     hasWholesalePrices: data.products.some((product) => product.fromPrice !== null),
   });
 
-  return <HomeContent data={data} retailerName={user.fullName} shopName={retailer?.shop_name}
+  return <HomeContent branding={branding.data?.[0]} data={data} retailerName={user.fullName} shopName={retailer?.shop_name}
     areaName={areaName} address={retailer?.address} profileUnavailable={profileUnavailable}
     wallet={wallet} services={services} />;
 }

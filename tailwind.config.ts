@@ -58,6 +58,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        shopping: { 100: "#dbeafe", 200: "#bfdbfe", 700: "#1d4ed8", 800: "#1e40af", 900: "#1e3a8a", 950: "#172554" },
         // Storefront marketing-only berry. Never use on operational surfaces.
         marketing,
         // Compatibility aliases all resolve to the canonical documented token registry.
