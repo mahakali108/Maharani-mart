@@ -86,8 +86,13 @@ export async function GET(request: Request, { params: paramsPromise }: { params:
     placedAt: order.placed_at,
     // The legal issuer (Ajay General) is the company; the brand is shown
     // alongside it, never instead of it. See lib/brand.ts.
+    //
+    // `brandName` renders as "Trading as ...", so it MUST be the trading style
+    // (Maharani Traders) and never the app name. "Trading as Maha Bazar by
+    // Maharani" would tell a tax authority that an installable product name is
+    // the trade under which the proprietorship operates.
     company: issuance.issuer,
-    brandName: BRAND.name,
+    brandName: BRAND.tradingStyle,
     billedTo: {
       shopName: retailer?.shop_name ?? '',
       address: retailer?.address ?? '',

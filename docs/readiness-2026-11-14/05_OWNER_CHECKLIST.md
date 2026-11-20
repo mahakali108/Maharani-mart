@@ -4,10 +4,14 @@ Nothing below was guessed or filled in. Supply each item with a supporting
 document; an Admin then enters it in Business Settings (not in code).
 
 ## A. Identity and registration
-- [ ] Legal name exactly as on the GST certificate. The brief says "Ajay General"; the site currently shows "AJAY KUMAR, Proprietor" trading as "AJAY GENERAL". **Confirm which is right.**
+- [ ] Legal name exactly as on the GST certificate. The owner approved **Ajay General** as the
+  legal seller and invoice issuer. The personal proprietor name, the trade-name registration status,
+  the registered address and the grievance officer were **removed from the site** because none of
+  them was verified; each now shows an owner-supplied placeholder. **Supply the verified values.**
 - [ ] GSTIN and a copy of the GST registration certificate.
 - [ ] PAN of the proprietor.
-- [ ] Principal place of business exactly as registered. The site shows an address in Belaganj, Gaya – 804403 that is hard-coded; confirm or correct.
+- [ ] Principal place of business exactly as registered. The previously hard-coded Belaganj, Gaya
+  address has been **withdrawn from the site** pending verification; supply the registered address.
 - [ ] Shops & Establishments / trade licence number, if applicable.
 - [ ] Any cosmetics-related licence or written confirmation from the drugs control office that none is needed.
 

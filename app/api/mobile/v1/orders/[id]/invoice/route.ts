@@ -126,8 +126,12 @@ export async function GET(
         // `biller` is the LEGAL issuer and must stay that way: it is what a tax
         // document shows. The app-facing brand travels separately so a client can
         // render "Maha Bazar by Maharani" without ever relabelling the issuer.
+        // `biller` is the tax-document issuer; `tradingStyle` is the name the
+        // proprietorship trades under; `appName` is only the installable app's
+        // display name and must never be rendered as "Trading as".
         biller: issuance.issuer,
-        brand: BRAND.name,
+        tradingStyle: BRAND.tradingStyle,
+        appName: BRAND.name,
         billedTo: {
           shopName: retailer?.shop_name ?? null,
           address: retailer?.address ?? null,

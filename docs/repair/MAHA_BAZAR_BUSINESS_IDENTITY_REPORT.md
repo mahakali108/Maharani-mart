@@ -16,6 +16,7 @@ interpretation the code and the copy now enforce:
 | **Maha Bazar by Maharani** | the customer-facing website / app name | browser title, PWA manifest, install prompt, header wordmark, offline page, page titles | a legal entity, an invoice issuer, a GST registrant |
 | **Maharani Traders** | the brand / trading style | footer, about page, legal copy, product provenance | a legal entity, an invoice issuer |
 | **Ajay General** (proprietorship) | the **legal seller and invoice issuer** the owner approved | tax-invoice issuer block, statutory disclosures, support "company" field | — (this is the entity) |
+| **Maharani Traders** as *Trading as* | the trading style printed on a tax document | invoice `brandName` field only | the legal issuer, a standalone entity, or the app name |
 | **Maa Kali Enterprises** | a **separate** business identity | repository architecture comments only | anything owned, operated, invoiced or legally identical to the other three |
 
 Owner-approved statement, applied verbatim throughout:
@@ -24,8 +25,13 @@ Owner-approved statement, applied verbatim throughout:
 > Maharani Traders brand.**
 
 `Maa Kali Enterprises` appears in exactly one customer-facing sentence, and only to say it is
-**separate**: *"Maa Kali Enterprises is a separate business identity and is not connected to this
-business."* No ownership, invoicing, registration or identity relationship is claimed for it anywhere.
+**separate**: *"Maa Kali Enterprises is a separate business identity."* Nothing further is claimed
+about it. An earlier draft added *"and is not connected to this business"*; that phrase was removed
+because "not connected" is itself a legal conclusion - it would assert that no common ownership,
+control or contractual link exists, which nobody verified. The approved statement is the limit, and
+the code stops there. A test (`business-identity-claims.test.ts`) fails on **any** stronger wording:
+not connected, not related, not associated, owned/operated by someone else, or a separate legal
+entity.
 
 ---
 
@@ -96,13 +102,28 @@ weakened.
 
 ## 3. Legal copy
 
-`terms` now opens its identity sentence with the app name:
+`terms` now opens its identity sentence with the app name, and states only facts the owner approved:
 
-> Maha Bazar by Maharani is the customer-facing website and app name for Maharani Traders, a brand
-> operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL (proprietorship).
-> Maharani Traders is a trading style, not a separate incorporated company or legal entity, and the
-> legal seller and invoice issuer is AJAY GENERAL. Maa Kali Enterprises is a separate business
-> identity and is not connected to this business.
+> Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL
+> proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and
+> invoice issuer. Maharani Traders is a trading style, not a separate incorporated company or legal
+> entity. Maa Kali Enterprises is a separate business identity.
+
+**Correction applied in this revision.** The first draft of this sentence read *"…for Maharani
+Traders, a brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL
+(proprietorship)…"*. That sentence asserted three facts the owner had not verified:
+
+| Asserted | Why it was removed |
+| --- | --- |
+| `AJAY KUMAR, Proprietor` | the proprietor's personal name; the owner approved the business name `Ajay General`, not a person |
+| `registered trade name AJAY GENERAL` | that the trade name is *registered*, and that registration status exists at all |
+| `Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403` | a registered address, on the contact block of seven pages |
+
+Each now appears only as an explicit owner-supplied placeholder. The correction is applied on **every**
+surface that could still hold the old text: the generator's correction chain, the regenerated seed and
+`0105`, the `$site_copy$` chain in `0110`, and the tests that had been written to expect the old
+wording. A database seeded at any earlier revision converges because the replacement table is a chain
+applied to a fixpoint, not a single pass.
 
 `terms`, `business-disclosure`, `gst-pricing-invoice` and `about` all state the approved issuer:
 
@@ -122,7 +143,7 @@ invented.** The registered values remain owner-supplied and are pointed at, not 
 | GSTIN | **not supplied** | `issuer.gstin.value = null`; `statutoryBlock()` renders *"GSTIN to be supplied by the owner before publication"*; `statutoryBlockIsComplete()` is `false` |
 | Registered address | **not supplied** | same |
 | Support phone | **not supplied** | same |
-| Grievance officer | **not supplied** in code (the legal pages carry the owner's earlier stated contact) | same |
+| Grievance officer | **not supplied** anywhere now | same |
 
 The application therefore has a **controlled placeholder** everywhere the owner's value is required,
 and a machine-checkable completeness flag. Setting the `COMPANY_*` environment variables is the only
@@ -154,3 +175,29 @@ step needed once the owner supplies the values; no code change is required.
 
 The brand assertions are not tautological: reverting a sentence or reintroducing an issuer claim makes
 `business-identity-claims` fail (verified by temporarily reverting the copy during development).
+
+---
+
+## 6. Invoice identity — the correction applied in the final review
+
+The first implementation passed `brandName: BRAND.name` to the invoice renderer. That field is
+printed as **"Trading as …"**, so every downloaded tax invoice read:
+
+> **Ajay General**
+> *Trading as Maha Bazar by Maharani*
+
+Three different names exist here and an invoice may only use each one in its own place:
+
+| Name | What it is | Where an invoice may use it |
+| --- | --- | --- |
+| `Ajay General` | the legal seller and invoice issuer | the issuer block, the "issued by" line |
+| `Maharani Traders` | the trading style | the "Trading as" line — never alone as the issuer |
+| `Maha Bazar by Maharani` | the installable app's display name | **nowhere on a tax document** |
+
+The fix is one constant: `brandName: BRAND.tradingStyle`. The mobile payload was separated at the
+same time into `tradingStyle` and `appName` so a client cannot render one as the other. Issuer
+validation remains fail-closed — `isApprovedIssuerName()` requires `ajay general`, so both the trading
+style and the app name are refused as issuers with `issuer_identity_unapproved`.
+
+Five regression tests prove the three names cannot be confused, and the guard was validated by
+reverting the fix and watching it fail.

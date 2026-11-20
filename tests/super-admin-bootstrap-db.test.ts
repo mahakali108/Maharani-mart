@@ -32,7 +32,7 @@ describe('0106 first Super Admin bootstrap (PostgreSQL 16)', () => {
 
   const allow = (email: string) => db.query(
     `insert into public.super_admin_bootstrap_allowlist (email, full_name, phone, note)
-     values ($1, 'AJAY KUMAR', '8987023959', 'test')`,
+     values ($1, 'Operator Name', '8987023959', 'test')`,
     [email],
   );
 
@@ -75,7 +75,7 @@ describe('0106 first Super Admin bootstrap (PostgreSQL 16)', () => {
     const { rows } = await db.query<{ role: string; is_active: boolean; full_name: string }>(
       `select role, is_active, full_name from public.profiles where id = $1`, [id],
     );
-    expect(rows[0]).toEqual({ role: 'super_admin', is_active: true, full_name: 'AJAY KUMAR' });
+    expect(rows[0]).toEqual({ role: 'super_admin', is_active: true, full_name: 'Operator Name' });
 
     const allowRows = await db.query<{ consumed_at: Date | null; consumed_profile_id: string | null }>(
       `select consumed_at, consumed_profile_id from public.super_admin_bootstrap_allowlist where id = 1`,

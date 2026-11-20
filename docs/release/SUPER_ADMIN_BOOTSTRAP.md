@@ -107,7 +107,7 @@ password anywhere else.
 
 ```sql
 insert into public.super_admin_bootstrap_allowlist (email, full_name, phone, note)
-values ('owner@example.com', 'AJAY KUMAR', '8987023959',
+values ('owner@example.com', 'Owner Name', '8987023959',
         'Owner approval dated ____ (email/WhatsApp reference)')
 on conflict (id) do nothing;
 

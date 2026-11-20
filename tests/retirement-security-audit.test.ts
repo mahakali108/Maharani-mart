@@ -109,6 +109,29 @@ describe('the migration cannot leak a retired capability back', () => {
     );
   });
 
+  it('protects the Super Admin activation surface', () => {
+    // Block 12. `authenticated` holds EXECUTE so the function can run in the Super
+    // Admin's own session and record the real actor via auth.uid() - the same
+    // pattern 0081's admin RPCs use. Authorization is the NULL-SAFE
+    // `is distinct from 'super_admin'` check inside the function, which no caller
+    // can influence. `anon` gets nothing at all.
+    expect(migration).toMatch(
+      /revoke all on function public\.admin_activate_retailer\(uuid, text, text\) from public, anon/,
+    );
+    expect(migration).toMatch(
+      /grant execute on function public\.admin_activate_retailer\(uuid, text, text\) to authenticated, service_role/,
+    );
+    // The activation ledger itself is never writable through the API.
+    expect(migration).toMatch(
+      /revoke insert, update, delete on public\.retailer_activation_ledger from anon, authenticated/,
+    );
+    // `<>` on a nullable role is NULL, i.e. not TRUE, i.e. a bypass. Assert the
+    // NULL-safe comparison is what is actually written.
+    const superAdminChecks = migration.match(/public\.current_user_role\(\) is distinct from 'super_admin'/g) ?? [];
+    expect(superAdminChecks.length).toBeGreaterThanOrEqual(2);
+    expect(migration).not.toMatch(/public\.current_user_role\(\) <> 'super_admin'/);
+  });
+
   it('keeps the checkout RPC service_role-only', () => {
     expect(migration).toMatch(
       /revoke all on function public\.create_order_atomic\([^)]*\) from public, anon, authenticated/,

@@ -244,7 +244,38 @@ const RETIRED_MARKETPLACE_SENTENCES = [
   // state that it is SEPARATE - no ownership, invoicing or identity is claimed
   // for it anywhere.
   ['Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity.',
-   'Maha Bazar by Maharani is the customer-facing website and app name for Maharani Traders, a brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL (proprietorship). Maharani Traders is a trading style, not a separate incorporated company or legal entity, and the legal seller and invoice issuer is AJAY GENERAL. Maa Kali Enterprises is a separate business identity and is not connected to this business.'],
+   'Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer. Maharani Traders is a trading style, not a separate incorporated company or legal entity. Maa Kali Enterprises is a separate business identity.'],
+  // The intermediate wording above replaced this one during earlier review; it
+  // still carried the unverified personal name and the unverified registration
+  // claim, so it is corrected here too. Keeping every link in the chain means a
+  // database seeded at any earlier revision converges to the approved statement.
+  // ---- Unverified statutory facts removed ------------------------------------
+  // Owner-approved facts are only: the app name, the Maharani Traders trading
+  // style, Ajay General (proprietorship) as legal seller and invoice issuer, and
+  // that Maa Kali Enterprises is a separate business identity. Everything below
+  // asserted a fact the owner has NOT verified - a personal name, a REGISTRATION
+  // status, a named grievance officer, a registered address - so it is replaced
+  // with an owner-supplied placeholder rather than a guess.
+  ["Maha Bazar by Maharani is the customer-facing website and app name for Maharani Traders, a brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL (proprietorship). Maharani Traders is a trading style, not a separate incorporated company or legal entity, and the legal seller and invoice issuer is AJAY GENERAL. Maa Kali Enterprises is a separate business identity and is not connected to this business. These policies cover own-stock cosmetics, personal-care products and non-food FMCG. Food products are excluded.",
+   "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer. Maharani Traders is a trading style, not a separate incorporated company or legal entity. Maa Kali Enterprises is a separate business identity. These policies cover own-stock cosmetics, personal-care products and non-food FMCG. Food products are excluded."],
+  ["Maharani Traders is the customer-facing brand of AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL.",
+   "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer."],
+  ["Maharani Traders is the brand of AJAY KUMAR, Proprietor, trading as AJAY GENERAL. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG.",
+   "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG."],
+  ["For questions, corrections or other privacy requests, contact AJAY KUMAR, Proprietor, using the details below. Requests will be reviewed under applicable law. This policy may be updated when practices or requirements change; the latest version will carry its effective date.",
+   "For questions, corrections or other privacy requests, contact the AJAY GENERAL proprietorship using the details below. Requests will be reviewed under applicable law. This policy may be updated when practices or requirements change; the latest version will carry its effective date."],
+  ["Proprietor: AJAY KUMAR",
+   "Proprietor name: to be supplied by the owner before publication"],
+  ["Registered trade name: AJAY GENERAL",
+   "Registered trade name and registration status: to be supplied by the owner before publication"],
+  ["Grievance Officer: AJAY KUMAR, Proprietor",
+   "Grievance officer: to be supplied by the owner before publication"],
+  ["Brand: MAHARANI TRADERS",
+   "Brand and trading style: MAHARANI TRADERS"],
+  // The registered address survived in the previous seed's contact card. It is a
+  // statutory fact the owner has not verified, so it becomes a placeholder too.
+  ["Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar \u2013 804403",
+   "Registered address: to be supplied by the owner before publication"],
 ];
 
 /**
@@ -252,26 +283,21 @@ const RETIRED_MARKETPLACE_SENTENCES = [
  * sentence so an unrelated edit elsewhere on the page cannot be clobbered, and a
  * sentence that no longer exists is simply skipped.
  */
-function retireMarketplaceCopy(sections) {
-  const map = new Map([
-    ...RETIRED_MARKETPLACE_COPY.map((pair) => pair),
-    ...RETIRED_MARKETPLACE_SENTENCES,
-  ]);
-
-  /**
-   * Apply the table until it stops changing anything.
-   *
-   * A single pass is not enough: the table is a CHAIN of corrections, and a
-   * later entry's `from` is an earlier entry's `to` (the marketplace sentence
-   * becomes neutral copy, and the neutral copy then becomes the owner-approved
-   * seller identity). With one pass, a source whose text sits at an intermediate
-   * link would never reach the final wording. Iterating makes the table
-   * convergent: the output is the fixpoint no matter which link the stored text
-   * happens to be at. The bound is a loop guard, not an expected count.
-   */
+/**
+ * Rewrite one paragraph against the correction table until it stops changing.
+ *
+ * The table is a CHAIN: an earlier entry's `to` is a later entry's `from`
+ * (marketplace sentence -> neutral copy -> approved identity). One pass would stop
+ * on an intermediate link, so this iterates to a fixpoint.
+ *
+ * Two granularities are tried, because the table holds both single sentences and
+ * whole paragraphs: first the paragraph as a whole, then sentence by sentence.
+ * Splitting is lossless, so an untouched paragraph is returned byte-identical.
+ */
+function applyCorrectionChain(line, map) {
   const applyHops = (text) => {
     let current = text;
-    for (let hop = 0; hop < 8; hop += 1) {
+    for (let hop = 0; hop < 10; hop += 1) {
       const next = map.get(current);
       if (next === undefined) break;
       current = next;
@@ -279,30 +305,59 @@ function retireMarketplaceCopy(sections) {
     return current;
   };
 
-  /**
-   * Rewrite a paragraph sentence by sentence, then the paragraph as a whole.
-   *
-   * Some table entries are a single sentence and some are a whole paragraph.
-   * Splitting on the sentence terminator lets a one-sentence correction fire
-   * inside a paragraph that also carries sentences the table has nothing to say
-   * about; the whole-paragraph pass afterwards still lets a paragraph-level entry
-   * win. Splitting is lossless (the separators are kept), so an untouched
-   * paragraph is returned byte-identical.
-   */
-  const rewrite = (line) => {
-    const whole = applyHops(line);
-    if (whole !== line) return whole;
-    return line
-      .split(/(?<=[.!?])\s+/)
-      .map(applyHops)
-      .join(' ');
-  };
+  const whole = applyHops(line);
+  if (whole !== line) return whole;
+  return line
+    .split(/(?<=[.!?])\s+/)
+    .map(applyHops)
+    .join(' ');
+}
 
-  return sections.map((section) => ({
-    ...section,
-    body: (section.body ?? []).map(rewrite),
-    bullets: (section.bullets ?? []).map(rewrite),
-  }));
+function retireMarketplaceCopy(sections) {
+  const map = new Map([
+    ...RETIRED_MARKETPLACE_COPY.map((pair) => pair),
+    ...RETIRED_MARKETPLACE_SENTENCES,
+  ]);
+
+  return sections.map((section) =>
+    normaliseContactBlock({
+      ...section,
+      body: (section.body ?? []).map((line) => applyCorrectionChain(line, map)),
+      bullets: (section.bullets ?? []).map((line) => applyCorrectionChain(line, map)),
+    }),
+  );
+}
+
+/**
+ * Every page whose contact card came from the previous seed carries a CONTACT
+ * block that is only "the old CONTACT_LINES". CONTACT_LINES has since gained the
+ * owner-approved identity lines (`Legal seller and invoice issuer`,
+ * `Customer-facing app`) and lost the unverified statutory ones, so any block
+ * still using the placeholder set is rebuilt from CONTACT_LINES. The lead-in
+ * sentence a page wrote for itself is preserved.
+ */
+const CONTACT_PLACEHOLDER = 'Proprietor name: to be supplied by the owner before publication';
+
+// Every label CONTACT_LINES owns. A block is rebuilt from CONTACT_LINES by
+// dropping exactly the lines these labels claim, so re-running the generator on
+// its own output changes nothing (the block is regenerated, not appended to).
+const CONTACT_LABEL =
+  /^(?:Legal seller and invoice issuer|Brand and trading style|Customer-facing app|Proprietor name|Registered trade name and registration status|Registered trade name|Grievance [Oo]fficer|Grievance officer|Registered address|Address|Brand|Phone|Email):/;
+
+function normaliseContactBlock(section) {
+  const body = section.body ?? [];
+  if (!body.includes(CONTACT_PLACEHOLDER)) return section;
+  const leadIn = body.filter((line) => !CONTACT_LABEL.test(line));
+  return { ...section, body: [...leadIn, ...CONTACT_LINES] };
+}
+
+function retireMarketplaceIntro(text) {
+  if (typeof text !== 'string' || !text) return text;
+  const map = new Map([
+    ...RETIRED_MARKETPLACE_COPY.map((pair) => pair),
+    ...RETIRED_MARKETPLACE_SENTENCES,
+  ]);
+  return applyCorrectionChain(text, map);
 }
 
 function readPage(relative) {
@@ -324,11 +379,26 @@ function readPage(relative) {
  * afterwards (Super Admin -> Website content).
  */
 const CONTACT_LINES = [
-  'Proprietor: AJAY KUMAR',
-  'Registered trade name: AJAY GENERAL',
-  'Brand: MAHARANI TRADERS',
-  'Grievance Officer: AJAY KUMAR, Proprietor',
-  'Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403',
+  // ONLY the owner-approved identity statement may be asserted here.
+  // Owner-approved: Ajay General (proprietorship) is the legal seller and invoice
+  // issuer, trading under the Maharani Traders brand.
+  //
+  // The following were REMOVED because they are statutory facts the owner has not
+  // verified, and publishing an unverified one is worse than publishing a
+  // placeholder:
+  //   * "Proprietor: AJAY KUMAR"                 - the proprietor's personal name
+  //   * "Registered trade name: AJAY GENERAL"    - the REGISTRATION status
+  //   * "Grievance Officer: AJAY KUMAR, ..."     - the named officer
+  //   * "Address: Plot No. 231, ..."             - the registered address
+  // Setting these requires the owner's verified values; see lib/legal/issuer.ts,
+  // which models each as an owner-supplied fact with a controlled placeholder.
+  'Legal seller and invoice issuer: AJAY GENERAL (proprietorship)',
+  'Brand and trading style: MAHARANI TRADERS',
+  'Customer-facing app: Maha Bazar by Maharani',
+  'Proprietor name: to be supplied by the owner before publication',
+  'Registered trade name and registration status: to be supplied by the owner before publication',
+  'Grievance officer: to be supplied by the owner before publication',
+  'Registered address: to be supplied by the owner before publication',
   'Phone: [8987023959](tel:8987023959)',
   'Email: [adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)',
 ];
@@ -367,6 +437,10 @@ for (const doc of LEGAL_DOCUMENTS) {
 
   if (!sections.length) throw new Error(`No sections extracted for legal page "${doc.key}"`);
   sections = retireMarketplaceCopy(sections);
+  // The intro carries the identity statement on some pages, so it must go through
+  // the same correction table. Skipping it was how an unverified personal name
+  // survived in `about`.
+  intro = retireMarketplaceIntro(intro);
 
   pages.push({
     slug: doc.key,
@@ -407,8 +481,10 @@ pages.push({
   short_label: 'About',
   eyebrow: aboutSource.eyebrow || 'About us',
   title: aboutSource.title,
-  intro: aboutSource.intro,
-  meta_description: aboutSource.meta_description ?? aboutSource.intro.slice(0, 300),
+  intro: retireMarketplaceIntro(aboutSource.intro),
+  meta_description: retireMarketplaceIntro(
+    aboutSource.meta_description ?? aboutSource.intro.slice(0, 300),
+  ),
   version: '1.0',
   effective_date: '2026-11-14',
   sort_order: 1,
@@ -432,8 +508,10 @@ pages.push({
   short_label: 'Contact',
   eyebrow: contactSource.eyebrow || 'Support',
   title: contactSource.title,
-  intro: contactSource.intro,
-  meta_description: contactSource.meta_description ?? contactSource.intro.slice(0, 300),
+  intro: retireMarketplaceIntro(contactSource.intro),
+  meta_description: retireMarketplaceIntro(
+    contactSource.meta_description ?? contactSource.intro.slice(0, 300),
+  ),
   version: '1.0',
   effective_date: '2026-11-14',
   sort_order: 2,

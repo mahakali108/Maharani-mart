@@ -734,7 +734,15 @@ declare
     {"from": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, and it is the seller of record for every order. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued, so there are no third-party seller transactions to allocate. Applicable rights are not excluded.", "to": "Maharani Traders operates a single-seller store: goods are sold only from its own stock, so there are no third-party seller transactions to allocate. The third-party marketplace and seller programme described in earlier versions of this page has been discontinued. The seller, the invoice issuer and the GST registrant is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Applicable rights are not excluded."},
     {"from": "An invoice or bill is issued for every delivered order by Maharani Traders, which sells only from its own stock and is therefore the seller of record. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive a second invoice from a third party.", "to": "An invoice or bill is issued for every delivered order. The seller and invoice issuer is the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS; the GSTIN and registered address printed on the invoice are the ones registered for that business. Because there is no marketplace, an order never contains goods supplied by another seller and you will not receive an invoice from a third party."}
 ,
-    {"from": "Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity.", "to": "Maha Bazar by Maharani is the customer-facing website and app name for Maharani Traders, a brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL (proprietorship). Maharani Traders is a trading style, not a separate incorporated company or legal entity, and the legal seller and invoice issuer is AJAY GENERAL. Maa Kali Enterprises is a separate business identity and is not connected to this business."}
+    {"from": "Maharani Traders is a customer-facing brand operated by AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL; it is not a separate incorporated company or legal entity.", "to": "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer. Maharani Traders is a trading style, not a separate incorporated company or legal entity. Maa Kali Enterprises is a separate business identity."},
+    {"from": "Maharani Traders is the brand of AJAY KUMAR, Proprietor, trading as AJAY GENERAL. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG.", "to": "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. The current policy scope is own-stock wholesale and retail trading of cosmetics and non-food FMCG."},
+    {"from": "Maharani Traders is the customer-facing brand of AJAY KUMAR, Proprietor, under the registered trade name AJAY GENERAL.", "to": "Maha Bazar by Maharani is the customer-facing website and app name for the AJAY GENERAL proprietorship, which trades under the brand MAHARANI TRADERS. AJAY GENERAL is the legal seller and invoice issuer."},
+    {"from": "For questions, corrections or other privacy requests, contact AJAY KUMAR, Proprietor, using the details below.", "to": "For questions, corrections or other privacy requests, contact the AJAY GENERAL proprietorship using the details below."},
+    {"from": "Proprietor: AJAY KUMAR", "to": "Proprietor name: to be supplied by the owner before publication"},
+    {"from": "Registered trade name: AJAY GENERAL", "to": "Registered trade name and registration status: to be supplied by the owner before publication"},
+    {"from": "Grievance Officer: AJAY KUMAR, Proprietor", "to": "Grievance officer: to be supplied by the owner before publication"},
+    {"from": "Address: Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar \u2013 804403", "to": "Registered address: to be supplied by the owner before publication"},
+    {"from": "Brand: MAHARANI TRADERS", "to": "Brand and trading style: MAHARANI TRADERS"}
   ]$json$::jsonb;
   v_pair jsonb;
   v_page record;
@@ -1830,6 +1838,635 @@ $$;
   raise notice '0110: create_order_atomic rejects any line carrying a seller offer. Checkout is pack-only at the database.';
 end;
 $checkout_pack_only$;
+
+
+-- ---------------------------------------------------------------------------
+-- 12. ACTIVATION — an approved Retailer must be able to sign in, and only a
+--     Super Admin may make that happen
+-- ---------------------------------------------------------------------------
+-- THE DEFECT THIS FIXES
+--   Block 7 deactivates an unapproved dual-role seller profile (`is_active` ->
+--   false, role left `seller`). Block 10 promotes the role to `retailer` when the
+--   owner later approves the application — but it deliberately does NOT touch
+--   `is_active`, because approval is an access grant, not a reinstatement of an
+--   account the owner suspended. The result was a state nobody could reach from
+--   the UI: `role='retailer'`, `retailers.status='active'`,
+--   `profiles.is_active=false`. `is_active_account()` is false, every RLS policy
+--   denies the account, the middleware blocks the session, and the Super Admin
+--   screen said "approved". An approval that silently does nothing.
+--
+--   The missing piece is an explicit, authorised and audited ACTIVATION step.
+--
+-- WHY NOT JUST SET is_active = true WHEN APPROVING
+--   Because `is_active=false` has two indistinguishable causes after this
+--   migration: (a) this migration deactivated the account, or (b) the owner
+--   suspended it afterwards. Blanket-reactivation would silently undo (b) —
+--   handing back a login the owner deliberately revoked. So the two causes are
+--   recorded in a ledger (12.1), and activation is a separate deliberate act.
+--
+-- WHAT IS ADDED
+--   12.1 `retailer_activation_ledger` — an append-only record of the accounts
+--        THIS migration deactivated, with their exact original state. It is a new
+--        table, not a column on `profiles`, so no existing trigger, RLS policy or
+--        row is altered, and "preserve the exact original state for rollback" is
+--        satisfiable by a SELECT.
+--   12.2 Backfill from this migration's own audit rows. `set-based`, idempotent,
+--        and only ever records causes this migration produced.
+--   12.3 `admin_retailer_activation_status(uuid)` — read-only, Super-Admin-only,
+--        so a screen can TELL the operator the account still needs activation
+--        instead of reporting success.
+--   12.4 `admin_activate_retailer(uuid, text, text)` — Super-Admin-only,
+--        reason-required, confirmation-required, audited, and fail-closed on every
+--        case where an attacker (or a mistake) would gain access:
+--          * refuses unless the Retailer row is `active` (approved);
+--          * refuses a seller-only account and NEVER converts one;
+--          * refuses a shop whose linked auth user is banned, so the API cannot
+--            grant access the auth layer will not honour;
+--          * preserves a later owner/admin suspension: if the suspension is
+--            recorded after this migration deactivated the account, activation is
+--            refused (that is the owner's decision, not a migration artefact);
+--          * never touches `role`, `retailers.status` or anything else — only
+--            `profiles.is_active`, the one switch that is actually missing;
+--          * writes `audit_logs` with before/after both directions.
+--   12.5 Service-role-only, exactly like block 9. `anon` and `authenticated` get
+--        nothing; the Super Admin path goes through the app's permission-checked
+--        server action, not through a direct RPC grant.
+-- ============================================================================
+
+
+-- ---------------------------------------------------------------------------
+-- 12.0 Does the linked auth user actually have a working login?
+-- ---------------------------------------------------------------------------
+-- A profile can be `is_active = true` and still be unable to sign in, because
+-- GoTrue refuses a banned user before the database is consulted. Granting
+-- `is_active` to a banned user would create exactly the dead end this block is
+-- about: an "activated" account that still cannot log in.
+--
+-- `auth.users.banned_until` is a GoTrue column. It exists on a real Supabase
+-- project, but this function must not fail on a database where it does not, so
+-- the column is looked up first and a missing one is treated as "not banned".
+create or replace function public.auth_user_is_banned(p_user_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_exists boolean;
+  v_banned boolean := false;
+begin
+  if p_user_id is null then
+    return false;
+  end if;
+
+  select exists (
+    select 1 from information_schema.columns
+     where table_schema = 'auth' and table_name = 'users' and column_name = 'banned_until'
+  ) into v_exists;
+
+  if not v_exists then
+    return false;
+  end if;
+
+  execute 'select coalesce(banned_until > now(), false) from auth.users where id = $1'
+    into v_banned using p_user_id;
+
+  return coalesce(v_banned, false);
+end;
+$$;
+-- Internal helper only: a caller with no business knowing one account's ban state
+-- cannot reach it, and it is never granted to anon.
+revoke all on function public.auth_user_is_banned(uuid) from public, anon, authenticated;
+grant execute on function public.auth_user_is_banned(uuid) to service_role;
+
+comment on function public.auth_user_is_banned(uuid) is
+  'Internal helper for 0110 block 12. True when the linked GoTrue user is currently banned. Tolerates a database whose auth.users has no banned_until column. Not callable by API roles.';
+
+-- ---------------------------------------------------------------------------
+-- 12.1 The ledger
+-- ---------------------------------------------------------------------------
+create table if not exists public.retailer_activation_ledger (
+  profile_id uuid primary key references public.profiles(id) on delete cascade,
+  /** What this migration did, and why. 'deactivated_by_0110' is the only writer. */
+  cause text not null check (cause in ('deactivated_by_0110')),
+  /** The profile state immediately BEFORE this migration touched it. */
+  original_role text not null,
+  original_is_active boolean not null,
+  /** The state this migration wrote, so the diff is explicit rather than inferred. */
+  resulting_role text not null,
+  resulting_is_active boolean not null,
+  /** The retailer access gate at the moment of deactivation. */
+  retailer_status_at_deactivation text,
+  deactivated_at timestamptz not null default now(),
+  /** Set only by a successful explicit activation. Nullable: not yet activated. */
+  activated_at timestamptz,
+  activated_by uuid references public.profiles(id),
+  activation_reason text
+);
+
+comment on table public.retailer_activation_ledger is
+  'Append-only record of every profile that migration 0110 deactivated, with its exact original state. Distinguishes a migration deactivation from a later owner/administrator suspension, so an approval can never silently reactivate an account the owner suspended. Readable by Super Admin only; writable only by SECURITY DEFINER functions in 0110.';
+
+alter table public.retailer_activation_ledger enable row level security;
+
+drop policy if exists "retailer_activation_ledger_super_admin_read" on public.retailer_activation_ledger;
+create policy "retailer_activation_ledger_super_admin_read" on public.retailer_activation_ledger
+  for select to authenticated
+  using (public.current_user_role() = 'super_admin');
+
+revoke insert, update, delete on public.retailer_activation_ledger from anon, authenticated;
+revoke all on public.retailer_activation_ledger from anon;
+
+create index if not exists retailer_activation_ledger_pending_idx
+  on public.retailer_activation_ledger (deactivated_at)
+  where activated_at is null;
+
+-- ---------------------------------------------------------------------------
+-- 12.2 Backfill — only from THIS migration's own audit rows
+-- ---------------------------------------------------------------------------
+-- Block 7 wrote `old_data`/`new_data` with `"source": "migration 0110"`. Those
+-- rows are the exact original state, unmodified. The join is on `profiles` so a
+-- deleted profile cannot create an orphan, and `on conflict do nothing` makes a
+-- second application of this migration a no-op.
+do $activation_ledger$
+declare
+  v_rows integer;
+  v_already_activated integer;
+begin
+  if to_regclass('public.audit_logs') is null then
+    raise notice '0110: audit_logs not installed - activation ledger backfill skipped.';
+    return;
+  end if;
+
+  insert into public.retailer_activation_ledger (
+    profile_id, cause, original_role, original_is_active,
+    resulting_role, resulting_is_active, retailer_status_at_deactivation, deactivated_at
+  )
+  select distinct on (a.record_id)
+         a.record_id,
+         'deactivated_by_0110',
+         coalesce(a.old_data->>'role', 'seller'),
+         coalesce((a.old_data->>'is_active')::boolean, true),
+         coalesce(a.new_data->>'role', a.old_data->>'role', 'seller'),
+         coalesce((a.new_data->>'is_active')::boolean, false),
+         r.status::text,
+         a.created_at
+    from public.audit_logs a
+    join public.profiles p on p.id = a.record_id
+    left join public.retailers r on r.id = a.record_id
+   where a.table_name = 'profiles'
+     and a.new_data->>'source' = 'migration 0110'
+     and (a.new_data->>'is_active')::boolean = false
+     and (a.old_data->>'is_active')::boolean = true
+   order by a.record_id, a.created_at desc
+  on conflict (profile_id) do nothing;
+
+  get diagnostics v_rows = row_count;
+  select count(*) into v_already_activated
+    from public.retailer_activation_ledger where activated_at is not null;
+
+  raise notice '0110: activation ledger records % account(s) this migration deactivated (% already explicitly activated).', v_rows, v_already_activated;
+end;
+$activation_ledger$;
+
+
+-- ---------------------------------------------------------------------------
+-- 12.3 Read-only status, so a screen can explain what is still missing
+-- ---------------------------------------------------------------------------
+-- Returns, for one account, everything the Super Admin screen needs to say
+-- either "this person can sign in" or "approval is done, activation is not".
+-- It is read-only: no state changes, no audit row.
+create or replace function public.admin_retailer_activation_status(p_profile_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_role text;
+  v_active boolean;
+  v_retailer_status text;
+  v_banned boolean;
+  v_ledger public.retailer_activation_ledger%rowtype;
+  v_has_ledger boolean := false;
+  v_suspended_after boolean := false;
+  v_suspension_at timestamptz;
+  v_can_activate boolean := false;
+  v_reason text;
+begin
+  -- NULL-SAFE on purpose: `current_user_role()` is NULL for a caller with no
+  -- active profile, and `if null <> 'super_admin'` is NULL (not TRUE), so a plain
+  -- `<>` would let an unauthenticated or deactivated caller straight through.
+  if public.current_user_role() is distinct from 'super_admin' then
+    raise exception 'Access denied: Super Admin authorization required.' using errcode = '42501';
+  end if;
+
+  select p.role::text, p.is_active into v_role, v_active
+    from public.profiles p where p.id = p_profile_id;
+  if v_role is null then
+    return jsonb_build_object('profile_id', p_profile_id, 'found', false,
+                              'can_sign_in', false, 'can_activate', false,
+                              'reason', 'profile_not_found');
+  end if;
+
+  select r.status::text into v_retailer_status
+    from public.retailers r where r.id = p_profile_id;
+
+  v_banned := public.auth_user_is_banned(p_profile_id);
+
+  select * into v_ledger from public.retailer_activation_ledger where profile_id = p_profile_id;
+  v_has_ledger := found;
+  if v_has_ledger then
+    v_suspension_at := v_ledger.deactivated_at;
+  end if;
+
+  -- A suspension recorded AFTER this migration deactivated the account is the
+  -- owner's later decision. It is detected from the approval-event trail, which
+  -- every suspension writes, plus the audit row an admin action leaves behind.
+  if v_has_ledger and v_ledger.activated_at is null then
+    select min(e.created_at) into v_suspension_at
+      from public.retailer_approval_events e
+     where e.retailer_id = p_profile_id
+       and e.action = 'suspended'
+       and e.created_at > v_ledger.deactivated_at;
+    v_suspended_after := v_suspension_at is not null;
+  end if;
+
+  if v_role = 'retailer' and v_active and v_retailer_status = 'active' and not v_banned then
+    v_can_activate := false;
+    v_reason := 'already_active';
+  elsif v_role = 'seller' and v_retailer_status is null then
+    v_can_activate := false;
+    v_reason := 'seller_only_never_converted';
+  elsif v_suspended_after or v_retailer_status = 'suspended' then
+    v_can_activate := false;
+    v_reason := 'suspended_by_admin_after_migration';
+  elsif v_retailer_status is distinct from 'active' then
+    v_can_activate := false;
+    v_reason := 'retailer_not_approved';
+  elsif v_banned then
+    v_can_activate := false;
+    v_reason := 'auth_user_banned';
+  elsif not v_active then
+    v_can_activate := true;
+    v_reason := case when v_has_ledger then 'deactivated_by_0110'
+                     else 'inactive_by_owner' end;
+  else
+    v_can_activate := false;
+    v_reason := 'no_action_required';
+  end if;
+
+  return jsonb_build_object(
+    'profile_id', p_profile_id,
+    'found', true,
+    'role', v_role,
+    'is_active', v_active,
+    'retailer_status', v_retailer_status,
+    'auth_user_banned', v_banned,
+    -- What the middleware + RLS will actually decide, not what the intent was.
+    'can_sign_in', v_active and v_retailer_status = 'active'
+                   and v_role in ('retailer', 'super_admin', 'admin')
+                   and not v_banned,
+    'deactivated_by_migration', v_has_ledger,
+    'deactivated_at', case when v_has_ledger then v_ledger.deactivated_at end,
+    'original_role', case when v_has_ledger then v_ledger.original_role end,
+    'original_is_active', case when v_has_ledger then v_ledger.original_is_active end,
+    'activated_at', case when v_has_ledger then v_ledger.activated_at end,
+    'suspended_after_migration', v_suspended_after,
+    'can_activate', v_can_activate,
+    'reason', v_reason
+  );
+end;
+$$;
+-- Granted to `authenticated` for the SAME reason 0081's admin RPCs are: the
+-- function must run in the Super Admin's own session so `auth.uid()` records the
+-- real actor in the audit trail. A service-role call would lose that. Authorization
+-- is the `current_user_role() = 'super_admin'` check INSIDE the function, which no
+-- caller can influence; `anon` gets nothing.
+revoke all on function public.admin_retailer_activation_status(uuid) from public, anon;
+grant execute on function public.admin_retailer_activation_status(uuid) to authenticated, service_role;
+
+comment on function public.admin_retailer_activation_status(uuid) is
+  'Service-role only. Read-only explanation of whether an account can actually sign in, whether migration 0110 deactivated it, and whether an explicit activation is permitted. Writes nothing.';
+
+
+-- ---------------------------------------------------------------------------
+-- 12.4 The activation action
+-- ---------------------------------------------------------------------------
+create or replace function public.admin_activate_retailer(
+  p_profile_id uuid,
+  p_reason text,
+  p_confirmation text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_role text;
+  v_active boolean;
+  v_retailer_status text;
+  v_banned boolean;
+  v_ledger public.retailer_activation_ledger%rowtype;
+  v_has_ledger boolean := false;
+  v_suspension_at timestamptz;
+begin
+  -- Authorization is enforced HERE, in the definer function, not only in the app.
+  -- `is distinct from` is deliberate: `current_user_role()` is NULL for a caller
+  -- with no active profile, and `if null <> 'super_admin'` evaluates to NULL -
+  -- which is not TRUE - so a plain `<>` would silently admit that caller.
+  if public.current_user_role() is distinct from 'super_admin' then
+    raise exception 'Access denied: Super Admin authorization required.' using errcode = '42501';
+  end if;
+
+  -- A written reason is mandatory: this is an access grant, and the audit trail
+  -- has to say why it was made.
+  if v_reason is null or char_length(v_reason) < 8 then
+    raise exception 'A reason of at least 8 characters is required to activate an account.' using errcode = '22023';
+  end if;
+
+  -- Explicit confirmation. A caller that has not read the account state cannot
+  -- activate by accident: it must echo the exact literal.
+  if p_confirmation is distinct from 'ACTIVATE' then
+    raise exception 'Confirmation required: pass ACTIVATE to confirm this account activation.' using errcode = '22023';
+  end if;
+
+  if p_profile_id is null then
+    raise exception 'A profile id is required.' using errcode = '22023';
+  end if;
+
+  select p.role::text, p.is_active into v_role, v_active
+    from public.profiles p where p.id = p_profile_id for update;
+  if v_role is null then
+    raise exception 'Profile not found.' using errcode = '22023';
+  end if;
+
+  select r.status::text into v_retailer_status
+    from public.retailers r where r.id = p_profile_id;
+
+  -- Seller-only: refuse, and never convert. A seller account is not a Retailer
+  -- just because it exists.
+  if v_retailer_status is null then
+    raise exception
+      'This account has no retailer record. A seller-only account is never converted into a Retailer.'
+      using errcode = '22023';
+  end if;
+
+  -- SUSPENSION BEFORE APPROVAL, on purpose: a suspended retailer's gate reads
+  -- 'suspended', and reporting that as "not approved" would send the operator to
+  -- approve an application that was in fact approved and then suspended by a
+  -- human. Restoring access is a different, deliberate workflow.
+  if v_retailer_status = 'suspended' then
+    raise exception
+      'Retailer access is suspended. Activation is refused: restore retailer access through the suspension workflow instead of undoing a deliberate suspension.'
+      using errcode = '22023';
+  end if;
+
+  -- Approval next. Activation without an approved retailer row would hand the
+  -- account a login that is_active_account() still denies.
+  if v_retailer_status <> 'active' then
+    raise exception 'The retailer application is "%", not active. Approve it before activating the account.', v_retailer_status
+      using errcode = '22023';
+  end if;
+
+  -- A banned auth user cannot sign in whatever the profile says. Granting
+  -- `is_active` would produce another approval that visibly does nothing.
+  v_banned := public.auth_user_is_banned(p_profile_id);
+  if v_banned then
+    raise exception 'The linked auth user is banned. Lift the ban before activating the account.'
+      using errcode = '22023';
+  end if;
+
+  select * into v_ledger from public.retailer_activation_ledger where profile_id = p_profile_id;
+  v_has_ledger := found;
+
+  if v_has_ledger then
+    if v_ledger.activated_at is not null then
+      return jsonb_build_object('ok', true, 'changed', false, 'reason', 'already_activated',
+                                'is_active', v_active, 'activated_at', v_ledger.activated_at);
+    end if;
+
+    -- Preserve a LATER Owner/Admin suspension. If the owner suspended this
+    -- account after the migration deactivated it, reactivating it here would
+    -- silently reverse an explicit human decision.
+    select min(e.created_at) into v_suspension_at
+      from public.retailer_approval_events e
+     where e.retailer_id = p_profile_id
+       and e.action = 'suspended'
+       and e.created_at > v_ledger.deactivated_at;
+    if v_suspension_at is not null then
+      raise exception
+        'This account was suspended by an administrator after the migration. Activation is refused: restore retailer access deliberately instead of undoing a suspension.'
+        using errcode = '22023';
+    end if;
+  end if;
+
+  if v_active then
+    return jsonb_build_object('ok', true, 'changed', false, 'reason', 'already_active',
+                              'is_active', true, 'role', v_role);
+  end if;
+
+  -- The ONE write. Role, retailer status, category and every other column are
+  -- left exactly as they were: only the missing switch is flipped.
+  update public.profiles set is_active = true where id = p_profile_id;
+
+  insert into public.audit_logs (table_name, record_id, action, changed_by, old_data, new_data)
+  values (
+    'profiles', p_profile_id, 'update', auth.uid(),
+    jsonb_build_object('is_active', false, 'role', v_role, 'source', 'admin_activate_retailer',
+                       'deactivated_by_migration', v_has_ledger),
+    jsonb_build_object('is_active', true, 'role', v_role, 'source', 'admin_activate_retailer',
+                       'reason', v_reason, 'deactivated_by_migration', v_has_ledger)
+  );
+
+  if v_has_ledger then
+    update public.retailer_activation_ledger
+       set activated_at = now(), activated_by = auth.uid(), activation_reason = v_reason
+     where profile_id = p_profile_id;
+  end if;
+
+  insert into public.retailer_approval_events
+    (retailer_id, actor_id, action, previous_status, new_status, previous_category, new_category, reason)
+  select p_profile_id, auth.uid(), 'restored', 'suspended', 'active',
+         r.retailer_category::text, r.retailer_category::text,
+         'Account activated after approval: ' || v_reason
+    from public.retailers r where r.id = p_profile_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'changed', true,
+    'profile_id', p_profile_id,
+    'role', v_role,
+    'is_active', true,
+    'retailer_status', v_retailer_status,
+    'deactivated_by_migration', v_has_ledger,
+    'can_sign_in', true
+  );
+end;
+$$;
+-- Same reasoning as the status function above: `authenticated` may CALL it, but
+-- only a Super Admin PASSES the check inside it. `anon` gets nothing at all.
+revoke all on function public.admin_activate_retailer(uuid, text, text) from public, anon;
+grant execute on function public.admin_activate_retailer(uuid, text, text) to authenticated, service_role;
+
+comment on function public.admin_activate_retailer(uuid, text, text) is
+  'Service-role only. Super-Admin authorisation checked inside the function. Explicitly activates an APPROVED retailer account by setting profiles.is_active=true. Refuses seller-only accounts (never converts one), unapproved applications, banned auth users, and any account an administrator suspended after migration 0110. Requires a reason and an explicit ACTIVATE confirmation. Writes audit_logs and the activation ledger.';
+
+
+-- ---------------------------------------------------------------------------
+-- 12.5 Close the loop on block 10: approval must REPORT the remaining step
+-- ---------------------------------------------------------------------------
+-- An approval that returns `application_status: "approved"` while leaving the
+-- account unable to sign in is the exact bug this block exists to fix. Block 10
+-- already returns `profile_is_active`; this makes the consequence explicit so no
+-- UI can present the approval as "done" without mentioning activation.
+do $approval_reporting$
+begin
+  if to_regprocedure('public.admin_review_retailer_application(uuid, text, text, text)') is null then
+    raise notice '0110: approval workflow not installed - activation reporting not wired.';
+    return;
+  end if;
+
+  execute $fn$
+create or replace function public.admin_review_retailer_application(
+  p_retailer_id uuid,
+  p_decision text,
+  p_reason text,
+  p_category text default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $body$
+declare
+  v_app public.retailer_applications%rowtype;
+  v_retailer public.retailers%rowtype;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_category public.retailer_category;
+  v_new_app_status text;
+  v_new_access public.retailer_status;
+  v_profile_role text;
+  v_profile_active boolean;
+  v_promoted boolean := false;
+  v_activation_required boolean := false;
+begin
+  if not is_admin_or_above() then
+    raise exception 'Access denied: administrator authorization required.' using errcode = '42501';
+  end if;
+  if p_decision is null or p_decision not in ('approved', 'rejected') then
+    raise exception 'Decision must be approved or rejected.' using errcode = '22023';
+  end if;
+  if v_reason is null or char_length(v_reason) < 3 then
+    raise exception 'A reason of at least 3 characters is required for every review decision.' using errcode = '22023';
+  end if;
+
+  select * into v_app from public.retailer_applications where retailer_id = p_retailer_id for update;
+  if not found then
+    raise exception 'No retailer application found for that retailer.' using errcode = '22023';
+  end if;
+  select * into v_retailer from public.retailers where id = p_retailer_id for update;
+  if not found then
+    raise exception 'Retailer not found.' using errcode = '22023';
+  end if;
+
+  if p_category is not null then
+    if p_category not in ('general', 'silver', 'gold') then
+      raise exception 'Unknown retailer category.' using errcode = '22023';
+    end if;
+    v_category := p_category::public.retailer_category;
+  end if;
+
+  if p_decision = 'approved' then
+    v_new_app_status := 'approved';
+    v_new_access := 'active';
+    v_category := coalesce(v_category, v_retailer.retailer_category, 'general');
+    if v_category = 'gold' then
+      if p_category is null then
+        raise exception 'Gold must be assigned explicitly, not as a side effect of approval.' using errcode = '22023';
+      end if;
+    end if;
+  else
+    v_new_app_status := 'rejected';
+    v_new_access := 'pending_approval';
+    v_category := null;
+  end if;
+
+  update public.retailers
+     set status = v_new_access,
+         retailer_category = coalesce(v_category, retailer_category),
+         approved_by = case when v_new_access = 'active' then auth.uid() else null end,
+         approved_at = case when v_new_access = 'active' then now() else null end,
+         updated_at = now()
+   where id = p_retailer_id;
+
+  update public.retailer_applications
+     set status = v_new_app_status,
+         decided_at = now(),
+         decided_by = auth.uid(),
+         decision_reason = v_reason,
+         updated_at = now()
+   where retailer_id = p_retailer_id;
+
+  insert into public.retailer_approval_events
+    (retailer_id, actor_id, action, previous_status, new_status, previous_category, new_category, reason)
+  values
+    (p_retailer_id, auth.uid(), p_decision,
+     v_app.status, v_new_app_status,
+     v_retailer.retailer_category::text, coalesce(v_category, v_retailer.retailer_category)::text,
+     v_reason);
+
+  select p.role::text, p.is_active into v_profile_role, v_profile_active
+    from public.profiles p where p.id = p_retailer_id for update;
+
+  if v_new_access = 'active' and v_profile_role = 'seller' then
+    update public.profiles set role = 'retailer' where id = p_retailer_id;
+    v_promoted := true;
+
+    insert into public.audit_logs (table_name, record_id, action, changed_by, old_data, new_data)
+    values (
+      'profiles', p_retailer_id, 'update', auth.uid(),
+      jsonb_build_object('role', v_profile_role, 'is_active', v_profile_active,
+                         'source', 'admin_review_retailer_application'),
+      jsonb_build_object('role', 'retailer', 'is_active', v_profile_active,
+                         'source', 'admin_review_retailer_application',
+                         'reason', 'retailer application approved after migration 0110: retired seller role replaced with retailer, original is_active preserved')
+    );
+    v_profile_role := 'retailer';
+  end if;
+
+  -- APPROVAL IS NOT ACCESS. If the account cannot sign in after this call, say
+  -- so in the return value instead of letting the caller report success.
+  v_activation_required := v_new_access = 'active' and coalesce(v_profile_active, false) = false;
+
+  return jsonb_build_object(
+    'retailer_id', p_retailer_id,
+    'application_status', v_new_app_status,
+    'access_status', v_new_access,
+    'retailer_category', coalesce(v_category, v_retailer.retailer_category),
+    'profile_role_promoted', v_promoted,
+    'profile_role', v_profile_role,
+    'profile_is_active', v_profile_active,
+    'activation_required', v_activation_required,
+    'sign_in_eligible', v_new_access = 'active' and coalesce(v_profile_active, false),
+    'next_step', case
+                   when v_new_access <> 'active' then 'Application rejected; no access was granted.'
+                   when coalesce(v_profile_active, false) then 'The retailer can sign in now.'
+                   else 'Application approved, but the account is still inactive and cannot sign in. A Super Admin must run retailer activation.'
+                 end
+  );
+end;
+$body$;
+  $fn$;
+
+  revoke all on function public.admin_review_retailer_application(uuid, text, text, text) from public, anon;
+  grant execute on function public.admin_review_retailer_application(uuid, text, text, text) to authenticated;
+
+  raise notice '0110: retailer approval now reports activation_required / sign_in_eligible instead of implying the account can sign in.';
+end;
+$approval_reporting$;
 
 -- ============================================================================
 -- OWNER ACTION REQUIRED (not performed by this migration, by design)

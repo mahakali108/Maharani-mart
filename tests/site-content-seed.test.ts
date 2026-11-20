@@ -80,14 +80,43 @@ describe('starter content for the website content module', () => {
     for (const page of seed.pages) expect(page.internal_notes.length, page.slug).toBeGreaterThan(20);
   });
 
-  it('preserves the owner-provided contact details as editable page content', () => {
+  it('carries only the owner-approved identity facts and the owner-provided contact details', () => {
     const contact = bySlug.get('contact')!;
     const text = JSON.stringify(contact.sections);
-    for (const value of ['AJAY KUMAR', 'AJAY GENERAL', 'MAHARANI TRADERS', 'Plot No. 231', '804403', '8987023959', 'adinathsahu8987@gmail.com']) {
+    // Approved: Ajay General (proprietorship) is the legal seller and invoice
+    // issuer, trading under the Maharani Traders brand, in an app called Maha
+    // Bazar by Maharani.
+    for (const value of [
+      'Legal seller and invoice issuer: AJAY GENERAL (proprietorship)',
+      'Brand and trading style: MAHARANI TRADERS',
+      'Customer-facing app: Maha Bazar by Maharani',
+      '8987023959',
+      'adinathsahu8987@gmail.com',
+    ]) {
       expect(text, value).toContain(value);
     }
     expect(text).toContain('[8987023959](tel:8987023959)');
     expect(text).toContain('[adinathsahu8987@gmail.com](mailto:adinathsahu8987@gmail.com)');
+  });
+
+  it('never publishes an unverified statutory fact, only an owner-supplied placeholder', () => {
+    const text = JSON.stringify(seed.pages);
+    // The proprietor's personal name, the registration status, the named
+    // grievance officer and the registered address were never verified by the
+    // owner. Publishing any of them asserts a statutory fact we do not hold.
+    for (const unverified of ['AJAY KUMAR', 'Plot No. 231', '804403', 'Registered trade name: AJAY GENERAL']) {
+      expect(text, unverified).not.toContain(unverified);
+    }
+    // What replaced them must be visibly a placeholder, not a silent omission:
+    // a customer reading the contact block must see that the fact is missing.
+    for (const placeholder of [
+      'Proprietor name: to be supplied by the owner before publication',
+      'Registered trade name and registration status: to be supplied by the owner before publication',
+      'Grievance officer: to be supplied by the owner before publication',
+      'Registered address: to be supplied by the owner before publication',
+    ]) {
+      expect(text, placeholder).toContain(placeholder);
+    }
   });
 });
 

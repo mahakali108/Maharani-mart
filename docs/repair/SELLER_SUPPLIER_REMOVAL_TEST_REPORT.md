@@ -275,3 +275,72 @@ Additional rollback evidence:
 The migration suite boots a real PostgreSQL 16 (PGlite) and applies **every** migration in the
 repository, including `0110`, then exercises revoke / preserve / idempotency / rollback and the
 website-content rewrite.
+
+---
+
+## Final owner-review corrections (PR #140)
+
+Added on top of the suites above. Counts are from the final full run:
+**235 test files / 3551 tests, exit 0**.
+
+### New: `tests/migration-0110-retailer-activation.test.ts` — 22 tests
+
+Approval ≠ access. Every case asserts the stored state **and** real login eligibility
+(`public.is_active_account()` executed as that user), because `role = 'retailer'` was true throughout
+the bug this suite exists to prevent.
+
+| Case | Assertion |
+| --- | --- |
+| Pending dual-role, deactivated by 0110, then approved | role becomes `retailer`, `is_active` stays `false`, result reports `activation_required: true` / `sign_in_eligible: false`, and the account still cannot sign in |
+| Same account, then activated | `is_active = true`, `is_active_account()` true, role `retailer` |
+| Activation audit | one `audit_logs` row with before `is_active:false` and after `is_active:true`, plus the operator's reason |
+| Second activation | `changed: false`, one audit row total (idempotent) |
+| Seller-only | activation refused; role stays `seller`, no retailer row, never converted |
+| Not approved | activation refused |
+| Suspended by an admin after the migration | activation refused; gate stays `suspended`; status reports `suspended_by_admin_after_migration` |
+| `admin`, the retailer themselves, an ordinary retailer | all refused by the Super Admin check |
+| Short reason / missing `ACTIVATE` | refused |
+| Banned auth user | refused |
+| Approved-but-inactive before 0110 | role changes, active flag does not; not auto-reactivated |
+| Approved-and-active | untouched; activation is a reported no-op |
+| Ledger contents | records `deactivated_by_0110` with the exact original `role`/`is_active`; untouched accounts are absent |
+| `anon` | permission denied for both functions |
+| Non-Super-Admin `authenticated` | rejected by the NULL-safe role check |
+| Ledger RLS | a retailer reads zero rows; a Super Admin reads all |
+| Idempotency | 0110 applied twice: no error, no duplicate ledger rows, no state change |
+| Whole chain | zero `role='seller' and is_active=true` remain |
+| Rollback, activated account | `is_active = true` preserved — a deliberate grant is not revoked |
+| Rollback, functions | block-12 functions and the ledger dropped, profile intact |
+| Rollback, never-activated account | exact before-state replayed |
+
+### Corrected (not deleted): 4 test files
+
+These had been written against the unverified statutory facts and were **updated to the approved
+facts**, with the withdrawal itself now asserted:
+
+| File | Change |
+| --- | --- |
+| `tests/site-content-seed.test.ts` (17 → 18) | asserts the approved identity lines; new test proves no personal name / registration status / registered address is published and that each has a visible placeholder |
+| `tests/public-information.test.ts` (7) | same assertion on the contact page |
+| `tests/business-identity-claims.test.ts` (12 → 14) | grievance-officer test now proves **no** officer is named; new test proves Maa Kali is described only as "a separate business identity" and fails on any stronger relationship claim |
+| `tests/brand-identity.test.ts` (16 → 21) | five new tests: trading style (not the app name) renders as "Trading as"; `Trading as Maha Bazar by Maharani` can never appear; mobile payload keeps `tradingStyle` and `appName` separate; the trading style alone is rejected as legal issuer; the app name alone is rejected as legal issuer |
+
+### Corrected infrastructure fixtures
+
+`tests/brand-identity.test.ts` and `tests/super-admin-bootstrap-db.test.ts` used the unverified
+personal name as a fixture value. A fixture is still a place the name can leak from, so both now use
+neutral placeholders.
+
+### Guard quality check
+
+The invoice test was validated against the real defect: restoring `brandName: BRAND.name` makes it
+fail, and the fix makes it pass. The guard is not vacuous.
+
+### Gates
+
+| Gate | Result |
+| --- | --- |
+| `vitest run` | 235 files / 3551 tests, **exit 0** |
+| `tsc --noEmit` | **exit 0**, no output |
+| `eslint .` | **exit 0**, no output |
+| `next build` | **exit 0** |

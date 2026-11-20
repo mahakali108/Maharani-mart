@@ -11,10 +11,10 @@ import { LEGAL_DOCUMENTS, NOT_APPLICABLE_DOCUMENTS } from '@/lib/legal/documents
  * issuer, the GST registrant or the website owner without the owner's explicit
  * verification:
  *
- *   - Maharani Traders / "Maha Bazar by Maharani"  -> customer-facing BRAND
- *   - Ajay General                                 -> separate business identity
- *   - Maa Kali Enterprises                         -> separate business identity
- *   - Maharani                                     -> a brand, NOT a legal entity
+ *   - Maha Bazar by Maharani   -> the customer-facing website / app name
+ *   - Maharani Traders         -> the brand / trading style (NOT a legal entity)
+ *   - Ajay General             -> the proprietorship: legal seller + invoice issuer
+ *   - Maa Kali Enterprises     -> a separate business identity, nothing more
  *
  * This suite is the mechanical half of that rule: it fails if customer-facing
  * content asserts a legal role for any of those names, or if a GSTIN, address,
@@ -69,7 +69,6 @@ const UNVERIFIED_ROLE_ASSERTIONS = [
   // `[^.]{0,40}` would span the "does not assume ..." disclaimer; require the
   // affirmative form to sit close to the noun it is predicated on.
   /\b(brand|name|entity)\b(?:\s+\w+){0,3}\s+is the legal seller\b/i,
-  /\b(is|are) the (sole|legal) (invoice issuer|seller|GST registrant)\b/i,
   /\boperated by Maharani\b(?! Traders)/i,
   /\bowned by Maharani\b(?! Traders)/i,
   // An invoice-issuer role asserted for the brand rather than for the
@@ -81,7 +80,46 @@ const UNVERIFIED_ROLE_ASSERTIONS = [
   /\b(invoiced|billed) by Maharani\b/i,
 ];
 
+/**
+ * The owner approved ONE legal-role sentence: "AJAY GENERAL is the legal seller
+ * and invoice issuer" (and its contact-block form "Legal seller and invoice
+ * issuer: AJAY GENERAL (proprietorship)"). The claim itself is therefore
+ * allowed; what is forbidden is predicating it of anything other than Ajay
+ * General. Each occurrence is sliced out and the sentence it sits in is checked
+ * for an approved subject. This is stricter than forbidding the phrase: it fails
+ * on a new surface that says "Maharani Traders is the legal seller", and it
+ * still fails on the old "…and is not connected to this business" sentence.
+ */
+const APPROVED_ISSUER_SUBJECTS = [/\bajay\s+general\b/i];
+
+const LEGAL_ROLE_PREDICATE =
+  /(\b(?:is|are|am)\s+the\s+(?:sole\s+|legal\s+)?(?:seller of record|invoice issuer|legal seller|GST registrant)\b|\b(?:invoiced|billed)\s+by\s+\w+)/gi;
+
 describe('no unverified seller-of-record / invoice-issuer / GST claims', () => {
+  it('attributes every legal-role claim to the owner-approved proprietorship', () => {
+    for (const { path, source } of customerFacingSources()) {
+      for (const match of source.matchAll(LEGAL_ROLE_PREDICATE)) {
+        const at = match.index ?? 0;
+        // The subject is what stands at the head of the same sentence/clause,
+        // so look back to the nearest statement boundary.
+        const before = source.slice(Math.max(0, at - 200), at);
+        const boundary = Math.max(
+          before.lastIndexOf('. '),
+          before.lastIndexOf('". '),
+          before.lastIndexOf('\n'),
+          before.lastIndexOf(':'),
+        );
+        const clause = before.slice(boundary + 1).trim();
+        const attributed = APPROVED_ISSUER_SUBJECTS.some((subject) => subject.test(clause));
+        expect(
+          attributed,
+          `${path} predicates a legal role on something other than AJAY GENERAL: ` +
+            `"${clause}${match[0]}"`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it('contains no sentence asserting a legal role for a brand name', () => {
     for (const { path, source } of customerFacingSources()) {
       for (const pattern of UNVERIFIED_ROLE_ASSERTIONS) {
@@ -139,15 +177,46 @@ describe('brand and business identities stay separate', () => {
 
   it('does not conflate Ajay General or Maa Kali Enterprises with the brand', () => {
     const seed = read('content/site-pages.seed.json');
-    // Ajay General is described as a registered TRADE NAME of the proprietorship,
-    // which is what the owner stated — not as a separate seller or entity.
+    // Ajay General is the legal seller and invoice issuer the owner named. It is
+    // NOT described as a registered trade name (registration was never verified)
+    // and not as a separate company or legal entity.
     const ajayMentions = [...seed.matchAll(/AJAY GENERAL/g)].length;
     expect(ajayMentions).toBeGreaterThan(0);
     expect(seed).not.toMatch(/AJAY GENERAL is (a|the) (seller|company|legal entity)/i);
+    expect(seed).not.toMatch(/registered trade name AJAY GENERAL/i);
     // Maa Kali Enterprises must not be introduced as a seller/issuer anywhere.
     for (const { path, source } of customerFacingSources()) {
       if (!/maa kali/i.test(source)) continue;
       expect(source, path).not.toMatch(/Maa Kali[^.]{0,60}(seller of record|invoice issuer|GST registrant)/i);
+    }
+  });
+
+  it('says only that Maa Kali Enterprises is a separate business identity', () => {
+    // The owner approved exactly one statement about Maa Kali Enterprises: it is
+    // a separate business identity. Every stronger reading - that it is legally
+    // unrelated, unconnected, owned by someone else, or bound to another entity -
+    // is a legal conclusion nobody verified, so no surface may assert it.
+    const forbidden = [
+      /Maa Kali[^.]{0,120}(not|never)\s+(legally\s+)?(connected|related|associated|affiliated)/i,
+      /(not|never)\s+(legally\s+)?(connected|related|associated|affiliated)( to| with)?\s+Maa Kali/i,
+      /Maa Kali[^.]{0,120}(owned|operated|controlled|managed)\s+by/i,
+      /Maa Kali[^.]{0,120}(is|as)\s+(a|the)\s+(separate|different|distinct)\s+(legal\s+)?(entity|company|business\s+entity\s+of)/i,
+    ];
+    for (const { path, source } of customerFacingSources()) {
+      for (const pattern of forbidden) {
+        const match = pattern.exec(source);
+        expect(match, `${path} overstates the Maa Kali relationship: "${match?.[0] ?? pattern}"`).toBeNull();
+      }
+    }
+    // And wherever Maa Kali IS mentioned, it is described as a separate business
+    // identity - the approved wording - not left as an unexplained name.
+    for (const { path, source } of customerFacingSources()) {
+      for (const match of source.matchAll(/Maa Kali Enterprises/g)) {
+        const window = source.slice(match.index ?? 0, (match.index ?? 0) + 160);
+        expect(window, `${path} mentions Maa Kali without the approved description`).toMatch(
+          /separate business identity/i,
+        );
+      }
     }
   });
 
@@ -172,11 +241,21 @@ describe('brand and business identities stay separate', () => {
     }
   });
 
-  it('keeps the grievance officer as the owner-provided person only', () => {
+  it('names no grievance officer until the owner supplies the person', () => {
     const seed = read('content/site-pages.seed.json');
-    const officers = [...seed.matchAll(/Grievance Officer:\s*([^\n"]+)/g)].map((m) => m[1]!.trim());
-    expect(officers.length).toBeGreaterThan(0);
-    for (const officer of officers) expect(officer).toBe('AJAY KUMAR, Proprietor');
+    // A grievance officer is a statutory appointment. Naming a person who was
+    // never formally appointed would publish a false statutory fact, so the
+    // block must say the officer is still to be supplied - and must not be
+    // silently empty, because a missing grievance officer is a compliance gap
+    // the owner has to see.
+    expect(seed).not.toMatch(/Grievance [Oo]fficer:\s*[A-Z]/);
+    const placeholders = [
+      ...seed.matchAll(/Grievance officer:\s*([^\n"]+)/g),
+    ].map((m) => m[1]!.trim());
+    expect(placeholders.length).toBeGreaterThan(0);
+    for (const placeholder of placeholders) {
+      expect(placeholder).toBe('to be supplied by the owner before publication');
+    }
   });
 });
 
@@ -202,18 +281,36 @@ describe('statutory disclosures are preserved', () => {
     expect(agreement, 'the historical seller agreement must survive').toBeDefined();
   });
 
-  it('keeps the statutory contact block exactly as the owner supplied it', () => {
+  it('publishes the approved identity facts and withholds the unverified statutory ones', () => {
     const seed = read('content/site-pages.seed.json');
-    for (const required of [
-      'Proprietor: AJAY KUMAR',
-      'Registered trade name: AJAY GENERAL',
-      'Brand: MAHARANI TRADERS',
-      'Grievance Officer: AJAY KUMAR, Proprietor',
-      'Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403',
+    for (const approved of [
+      'Legal seller and invoice issuer: AJAY GENERAL (proprietorship)',
+      'Brand and trading style: MAHARANI TRADERS',
+      'Customer-facing app: Maha Bazar by Maharani',
+      'AJAY GENERAL is the legal seller and invoice issuer',
       '8987023959',
       'adinathsahu8987@gmail.com',
     ]) {
-      expect(seed, required).toContain(required);
+      expect(seed, approved).toContain(approved);
+    }
+    // A statutory fact the owner has not verified must never be published, and
+    // must never be silently dropped either: each one has an explicit
+    // owner-supplied placeholder in the same block.
+    for (const unverified of [
+      'AJAY KUMAR',
+      'Plot No. 231, Ander Bazar, Belaganj, Gaya, Bihar – 804403',
+      'Registered trade name: AJAY GENERAL',
+      'Grievance Officer: AJAY KUMAR, Proprietor',
+    ]) {
+      expect(seed, unverified).not.toContain(unverified);
+    }
+    for (const placeholder of [
+      'Proprietor name: to be supplied by the owner before publication',
+      'Registered trade name and registration status: to be supplied by the owner before publication',
+      'Grievance officer: to be supplied by the owner before publication',
+      'Registered address: to be supplied by the owner before publication',
+    ]) {
+      expect(seed, placeholder).toContain(placeholder);
     }
   });
 

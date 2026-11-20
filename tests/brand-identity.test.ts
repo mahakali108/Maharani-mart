@@ -12,6 +12,7 @@ import {
   statutoryBlock,
   statutoryBlockIsComplete,
 } from '@/lib/legal/issuer';
+import { buildStandaloneInvoiceHtml } from '@/lib/retailer/invoice-html';
 import { getTaxInvoiceReadiness } from '@/lib/retailer/tax-invoice-readiness';
 
 /**
@@ -90,7 +91,7 @@ describe('legal issuer refuses to publish unverified facts', () => {
       COMPANY_GSTIN: '10ABCDE1234F1Z5',
       COMPANY_ADDRESS: 'Verified registered address',
       COMPANY_PHONE: '8987023959',
-      COMPANY_GRIEVANCE_OFFICER: 'AJAY KUMAR, Proprietor',
+      COMPANY_GRIEVANCE_OFFICER: 'Appointed officer',
     });
     expect(statutoryBlockIsComplete(issuer)).toBe(true);
   });
@@ -148,7 +149,100 @@ describe('customer-facing surfaces use the brand constant', () => {
     expect(html).toContain('Trading as');
     expect(html).toContain('brandName');
   });
+});
 
+/**
+ * REGRESSION: the three names an invoice can mix up.
+ *
+ *   app name        Maha Bazar by Maharani   -> a product name, never on a tax document as an issuer
+ *   trading style   Maharani Traders         -> "Trading as ...", never the issuer
+ *   legal issuer    Ajay General             -> the only name that may head a tax invoice
+ *
+ * Real defect this guards: the download route passed `brandName: BRAND.name`, so
+ * every invoice read "Trading as Maha Bazar by Maharani" - asserting to a tax
+ * authority that an installable app name is the trade the proprietorship
+ * operates under.
+ */
+describe('invoice identity cannot conflate issuer, trading style and app name', () => {
+  const downloadRoute = read('app/retailer/orders/[id]/invoice/download/route.ts');
+  const mobileRoute = read('app/api/mobile/v1/orders/[id]/invoice/route.ts');
+
+  it('renders the trading style as "Trading as", never the app name', () => {
+    expect(downloadRoute).toContain('brandName: BRAND.tradingStyle');
+    expect(downloadRoute, 'the app name must never be the "Trading as" value').not.toMatch(
+      /brandName:\s*BRAND\.(name|shortName|brandFamily)\b/,
+    );
+  });
+
+  it('never prints "Trading as Maha Bazar" on a rendered invoice', () => {
+    const html = buildStandaloneInvoiceHtml({
+      orderNumber: 'INV-TEST-1',
+      placedAt: '2026-11-18T00:00:00Z',
+      company: {
+        name: 'Ajay General',
+        gstin: '10ABCDE1234F1Z5',
+        address: 'Verified registered address',
+        phone: '8987023959',
+      },
+      brandName: BRAND.tradingStyle,
+      billedTo: { shopName: 'Test Shop', address: 'Test address', areaName: 'Test', gstin: '' },
+      lines: [],
+      taxMode: 'intra',
+      subtotal: 0,
+      gstTotal: 0,
+      discountTotal: 0,
+      grandTotal: 0,
+    });
+    expect(html).toContain('Trading as Maharani Traders');
+    expect(html).not.toContain(`Trading as ${BRAND.name}`);
+    expect(html).not.toContain(BRAND.name);
+    // The issuer is the entity and is what the document says it was issued by.
+    expect(html).toContain('issued by Ajay General');
+  });
+
+  it('keeps the app name in its own field on the mobile payload', () => {
+    expect(mobileRoute).toContain('biller: issuance.issuer');
+    expect(mobileRoute).toContain('tradingStyle: BRAND.tradingStyle');
+    expect(mobileRoute).toContain('appName: BRAND.name');
+    // A mobile client must not be handed a field that reads like a trade name
+    // while holding the app name.
+    expect(mobileRoute).not.toMatch(/\bbrand:\s*BRAND\.name/);
+  });
+
+  it('never lets the trading style stand alone as the legal issuer', () => {
+    // BRAND.tradingStyle must not be accepted where a legal issuer name is
+    // required - the invoice block would then name a trading style as the entity.
+    for (const tradingStyleOnly of [BRAND.tradingStyle, BRAND.brandFamily]) {
+      const readiness = getTaxInvoiceReadiness({
+        hasMarketplaceSellerLine: false,
+        environment: {
+          COMPANY_NAME: tradingStyleOnly,
+          COMPANY_GSTIN: '10ABCDE1234F1Z5',
+          COMPANY_ADDRESS: 'Verified registered address',
+          COMPANY_PHONE: '8987023959',
+        },
+      });
+      expect(readiness.ready, tradingStyleOnly).toBe(false);
+      expect(readiness.ready ? null : readiness.reason).toBe('issuer_identity_unapproved');
+    }
+  });
+
+  it('ships a fail-closed issuer block even when the app name is configured', () => {
+    const readiness = getTaxInvoiceReadiness({
+      hasMarketplaceSellerLine: false,
+      environment: {
+        COMPANY_NAME: BRAND.name,
+        COMPANY_GSTIN: '10ABCDE1234F1Z5',
+        COMPANY_ADDRESS: 'Verified registered address',
+        COMPANY_PHONE: '8987023959',
+      },
+    });
+    expect(readiness.ready).toBe(false);
+    expect(readiness.ready ? null : readiness.reason).toBe('issuer_identity_unapproved');
+  });
+});
+
+describe('brand identity is never the legal counterparty', () => {
   it('reports the legal entity, not the app name, as the support counterparty', () => {
     const route = read('app/api/mobile/v1/help/route.ts');
     expect(route).toContain('BRAND.legalName');

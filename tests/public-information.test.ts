@@ -128,8 +128,19 @@ describe('public information pages come from managed content', () => {
   it('keeps business contact details in editable content, not in a component', () => {
     const seed = JSON.parse(read('content/site-pages.seed.json')) as { pages: Array<{ slug: string; sections: Array<{ body: string[] }> }> };
     const contact = JSON.stringify(seed.pages.find((page) => page.slug === 'contact'));
-    for (const value of ['AJAY KUMAR', 'Plot No. 231', '8987023959', 'adinathsahu8987@gmail.com']) {
+    // Owner-approved identity facts plus the owner-provided contact details.
+    for (const value of [
+      'Legal seller and invoice issuer: AJAY GENERAL (proprietorship)',
+      'Brand and trading style: MAHARANI TRADERS',
+      'Customer-facing app: Maha Bazar by Maharani',
+      '8987023959',
+      'adinathsahu8987@gmail.com',
+    ]) {
       expect(contact, value).toContain(value);
+    }
+    // Unverified statutory facts stay out of published content entirely.
+    for (const unverified of ['AJAY KUMAR', 'Plot No. 231']) {
+      expect(contact, unverified).not.toContain(unverified);
     }
 
     // Application code must not carry them: only the seed and documentation may.

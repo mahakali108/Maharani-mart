@@ -440,8 +440,47 @@ begin
 end;
 $restore_profiles$;
 
+-- ---------------------------------------------------------------------------
+-- 7b. An EXPLICIT activation outranks the replay
+-- ---------------------------------------------------------------------------
+-- Block 12 lets a Super Admin activate an account that 0110 deactivated. That is
+-- a later human decision, made with a written reason and recorded twice (an
+-- audit row and the activation ledger). Replaying `old_data.is_active` over it
+-- would silently revoke a login the owner deliberately granted - the same class
+-- of bug as blanket-reactivation, in reverse.
+--
+-- The replay loop above skips any profile whose current state no longer matches
+-- what 0110 wrote, so an activation is already protected by the state check.
+-- This block makes the reason explicit and reports it, so the operator is never
+-- left guessing why an account stayed active.
+do $protect_activations$
+declare
+  v_activated integer := 0;
+begin
+  if to_regclass('public.retailer_activation_ledger') is null then
+    return;
+  end if;
+
+  select count(*) into v_activated
+    from public.retailer_activation_ledger
+   where activated_at is not null;
+
+  if v_activated > 0 then
+    raise notice '0110 rollback: % account(s) were explicitly ACTIVATED by a Super Admin after the migration. Their is_active is preserved as-is; the replay above must not revoke a deliberate access grant.', v_activated;
+  end if;
+end;
+$protect_activations$;
+
 -- Block 9's helper and block 10's rewiring only exist while 0110 is applied.
 drop function if exists public.retire_promote_dual_role_seller(uuid);
+drop function if exists public.admin_activate_retailer(uuid, text, text);
+drop function if exists public.admin_retailer_activation_status(uuid);
+drop function if exists public.auth_user_is_banned(uuid);
+
+-- The ledger is 0110's own bookkeeping. Dropping it is safe ONLY because the
+-- rows it held were derived from audit_logs, which is not touched; the explicit
+-- activation grants they recorded are reported above and remain in audit_logs.
+drop table if exists public.retailer_activation_ledger;
 
 -- Restore 0081's ORIGINAL admin_review_retailer_application, without the
 -- dual-role promotion step 0110 added. Leaving 0110's version in place would
@@ -551,7 +590,7 @@ $body$;
   revoke all on function public.admin_review_retailer_application(uuid, text, text, text) from public, anon;
   grant execute on function public.admin_review_retailer_application(uuid, text, text, text) to authenticated;
 
-  raise notice '0110 rollback: admin_review_retailer_application restored to its 0081 body.';
+  raise notice '0110 rollback: admin_review_retailer_application restored to its 0081 body (no role promotion, no activation reporting).';
 end;
 $restore_approval$;
 
