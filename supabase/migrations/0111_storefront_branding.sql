@@ -1,6 +1,6 @@
 -- Review locally; no remote execution. Branding never updates issuer or order data.
 begin;
-create table public.storefront_brand_versions (
+create table if not exists public.storefront_brand_versions (
   id bigint generated always as identity primary key,
   stage text not null check (stage in ('draft','published')),
   operation text not null check (operation in ('draft','publish','restore')),
@@ -13,10 +13,11 @@ create table public.storefront_brand_versions (
 alter table public.storefront_brand_versions enable row level security;
 revoke all on public.storefront_brand_versions from public, anon, authenticated;
 grant select on public.storefront_brand_versions to authenticated;
+drop policy if exists brand_history_admin on public.storefront_brand_versions;
 create policy brand_history_admin on public.storefront_brand_versions for select to authenticated using (public.current_user_role() = 'super_admin');
 
 -- Both publish and rollback copy the exact immutable revision previewed by the editor.
-create function public.record_storefront_brand(p_name text, p_tagline text, p_source bigint, p_expected bigint default null) returns void
+create or replace function public.record_storefront_brand(p_name text, p_tagline text, p_source bigint, p_expected bigint default null) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
   if auth.uid() is null or public.current_user_role() is distinct from 'super_admin' then raise exception 'Super Admin required' using errcode='42501'; end if;
@@ -34,7 +35,7 @@ begin
     if not found then raise exception 'Unknown revision'; end if;
   end if;
 end $$;
-create function public.published_storefront_brand() returns table(display_name text, tagline text)
+create or replace function public.published_storefront_brand() returns table(display_name text, tagline text)
 language sql stable security definer set search_path = '' as $$
   select v.display_name,v.tagline from public.storefront_brand_versions v where auth.uid() is not null and stage='published' order by id desc limit 1;
 $$;

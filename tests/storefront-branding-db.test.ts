@@ -9,6 +9,12 @@ it('keeps draft history private and publishes immutable admin-attributed snapsho
     const draft = "select record_storefront_brand('Store','Hello',null)";
     await expect(as(db, retailer, tx => tx.query(draft))).rejects.toThrow();
     await as(db, admin, tx => tx.query(draft));
+    const ordinaryAdmin = await createUser(db, 'admin');
+    const disabledAdmin = await createUser(db, 'super_admin');
+    await db.query('update profiles set is_active=false where id=$1', [disabledAdmin]);
+    for (const user of ['anon', ordinaryAdmin, disabledAdmin]) {
+      await expect(as(db, user, tx => tx.query('select record_storefront_brand(null,null,1)'))).rejects.toThrow();
+    }
     const publicView = () => as(db, retailer, tx => tx.query('select * from published_storefront_brand()'));
     expect((await publicView()).rows).toEqual([]);
     expect((await as(db, retailer, tx => tx.query('select * from storefront_brand_versions'))).rows).toEqual([]);
@@ -23,10 +29,16 @@ it('keeps draft history private and publishes immutable admin-attributed snapsho
     await as(db, admin, tx => tx.query('select record_storefront_brand(null,null,2,4)'));
     expect((await publicView()).rows).toEqual([{display_name:'Store',tagline:'Hello'}]);
     expect((await db.query('select operation,source_id from storefront_brand_versions where id=5')).rows).toEqual([{operation:'restore',source_id:2}]);
+    const history = 'select * from storefront_brand_versions order by id';
+    const beforeReplay = (await db.query(history)).rows;
+    await db.exec(readFileSync('supabase/migrations/0111_storefront_branding.sql','utf8'));
+    expect((await db.query(history)).rows).toEqual(beforeReplay);
+    await expect(as(db, retailer, tx => tx.query(draft))).rejects.toThrow();
     const down = readFileSync('supabase/rollbacks/0111_storefront_branding.down.sql','utf8');
     await expect(db.exec(down)).rejects.toThrow('Refusing'); await db.exec('rollback');
     expect((await publicView()).rows).toHaveLength(1);
     await db.exec("set maharani.allow_data_loss='true'"); await db.exec(down);
+    await db.exec(down); // replay after removal
     expect((await db.query("select to_regclass('public.storefront_brand_versions') as rel")).rows).toEqual([{rel:null}]);
   } finally { await db.close(); }
 }, 180000);

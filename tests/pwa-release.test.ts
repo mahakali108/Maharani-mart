@@ -15,7 +15,7 @@ function worker() {
   type Event = { data?: string; request?: unknown; waitUntil?: (p: Promise<unknown>) => void; respondWith?: (p: Promise<unknown>) => void };
   const listeners: Record<string, (event: Event) => void> = {};
   const clients = [{ url: origin + '/retailer/home', postMessage: vi.fn() }, { url: origin + '/retailer/checkout', postMessage: vi.fn() }];
-  const store = { put: vi.fn(), match: vi.fn() };
+  const store = { put: vi.fn().mockResolvedValue(undefined), match: vi.fn().mockResolvedValue(undefined) };
   const fetch = vi.fn(), remove = vi.fn(), skipWaiting = vi.fn(), claim = vi.fn();
   const open = vi.fn(async () => store);
   runInNewContext(readFileSync('public/sw.js','utf8'), {
@@ -65,4 +65,15 @@ it('offline miss returns honest 503 without consulting other caches',async()=>{
   const w=worker();w.fetch.mockRejectedValue(Error('offline'));
   const result=await w.fire('fetch',{request:{method:'GET',url:origin+'/retailer/orders',mode:'navigate'}}) as Response;
   expect(result.status).toBe(503);expect(await result.text()).toContain('offline');expect(w.open.mock.calls).toEqual([['mt-static-v3-release']]);
+});
+
+it.each(['open','match','put'])('a cache %s failure does not break a live static chunk', async failure => {
+  const w = worker();
+  const response = new Response('chunk', { headers: { 'Content-Type': 'application/javascript' } });
+  Object.defineProperty(response, 'type', {value: 'basic'});
+  w.fetch.mockResolvedValue(response);
+  if (failure === 'open') w.open.mockRejectedValueOnce(Error('storage unavailable'));
+  else w.store[failure as 'match' | 'put'].mockRejectedValueOnce(Error('storage unavailable'));
+  const result = await w.fire('fetch', {request:{method:'GET',url:origin+'/_next/static/chunks/shop.js',mode:'same-origin'}});
+  expect(result).toBe(response);
 });

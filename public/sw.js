@@ -103,19 +103,21 @@ self.addEventListener('fetch', (event) => {
   // STATIC ASSETS: cache-first (safe — identical for every user).
   if (isStaticAsset(url)) {
     event.respondWith(
-      caches.open(STATIC_CACHE).then(async (cache) => {
-        const cached = await cache.match(request);
+      caches.open(STATIC_CACHE).catch(() => null).then(async (cache) => {
+        // CacheStorage may be unavailable on a constrained device. It is an
+        // optimisation, not a prerequisite for fetching the live application.
+        const cached = cache ? await cache.match(request).catch(() => null) : null;
         if (cached) return cached;
         try {
           const res = await fetch(request);
           const cacheControl = res?.headers?.get('cache-control') || '';
           const contentType = res?.headers?.get('content-type') || '';
-          if (res && res.ok && res.type === 'basic' && !res.redirected
+          if (cache && res && res.ok && res.type === 'basic' && !res.redirected
               && !/private|no-store/i.test(cacheControl)
               && !/text\/html|application\/json/i.test(contentType)) {
             // A redirect or JSON/HTML behind a static-looking URL is still
             // dynamic content. Never persist it in cross-session CacheStorage.
-            cache.put(request, res.clone());
+            try { await cache.put(request, res.clone()); } catch { /* Still serve the network response. */ }
           }
           return res;
         } catch {
